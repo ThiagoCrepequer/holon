@@ -1,0 +1,48 @@
+packages:
+  - apps/*
+  - packages/*
+  - tooling/*
+
+allowBuilds:
+  # Required native build steps, restricted to the two reviewed transitive tools.
+  esbuild: true
+  workerd: true
+
+catalog:
+  "@ai-sdk/openai-compatible": 3.0.40
+  "@ai-sdk/provider-utils": 5.0.33
+  "@cloudflare/sandbox": 0.13.0-next.751.1
+  "@cloudflare/vitest-plugin": 1.1.2
+  "@cloudflare/workers-types": 5.20260829.1
+  "@octokit/auth-app": 8.3.0
+  "@octokit/core": 7.0.7
+  "@octokit/plugin-retry": 8.1.1
+  "@octokit/plugin-throttling": 11.0.5
+  "@octokit/webhooks-methods": 6.0.0
+  "@octokit/openapi-webhooks-types": 12.1.0
+  "@octokit/plugin-paginate-rest": 15.0.0
+  "@vitest/coverage-v8": 4.1.11
+  "@vitest/coverage-istanbul": 4.1.11
+  ai: 7.0.84
+  diff: 9.0.0
+  hono: 4.13.5
+  oxfmt: 0.65.0
+  oxlint: 1.80.0
+  oxlint-tsgolint: 7.0.2001
+  turbo: 2.10.12
+  typescript: 7.0.2
+  vitest: 4.1.11
+  wrangler: 4.127.1
+  zod: 4.5.4
+
+disallowWorkspaceCycles: true
+engineStrict: true
+linkWorkspacePackages: false
+# These exact releases were verified on 2026-08-29 and intentionally bypass the
+# user's global package-age delay. Lockfile integrity still applies.
+minimumReleaseAgeExclude:
+  - "@cloudflare/workers-types@5.20260829.1"
+  - zod@4.5.4
+preferWorkspacePackages: true
+saveExact: true
+strictPeerDependencies: true

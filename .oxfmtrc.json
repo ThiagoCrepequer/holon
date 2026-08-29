@@ -1,0 +1,14 @@
+{
+  "endOfLine": "lf",
+  "ignorePatterns": [
+    "**/coverage/**",
+    "**/dist/**",
+    "**/worker-configuration.d.ts"
+  ],
+  "printWidth": 80,
+  "semi": true,
+  "singleQuote": false,
+  "sortImports": {},
+  "sortPackageJson": true,
+  "trailingComma": "all"
+}
