@@ -1,0 +1,23 @@
+{
+  "name": "@holon/model",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run --config ../../vitest.config.ts --root .",
+    "test:coverage": "vitest run --config ../../vitest.config.ts --root . --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "catalog:",
+    "@ai-sdk/provider-utils": "catalog:",
+    "@holon/application": "workspace:*",
+    "@holon/contracts": "workspace:*",
+    "@holon/domain": "workspace:*",
+    "ai": "catalog:",
+    "zod": "catalog:"
+  }
+}
