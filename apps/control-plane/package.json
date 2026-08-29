@@ -1,0 +1,29 @@
+{
+  "name": "@holon/control-plane",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "vitest run --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "typecheck": "wrangler types --check && tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@holon/application": "workspace:*",
+    "@holon/contracts": "workspace:*",
+    "@holon/domain": "workspace:*",
+    "@holon/github": "workspace:*",
+    "@holon/model": "workspace:*",
+    "@holon/repository-analysis": "workspace:*",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

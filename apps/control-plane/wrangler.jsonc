@@ -1,0 +1,55 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "holon-control-plane",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REVIEW_LEDGERS",
+        "class_name": "ReviewLedgerObject",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ReviewLedgerObject"],
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "REVIEW_QUEUE",
+        "queue": "holon-review-jobs",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "holon-review-jobs",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "holon-review-jobs-dlq",
+      },
+    ],
+  },
+  "workflows": [
+    {
+      "name": "holon-review-workflow",
+      "binding": "REVIEW_WORKFLOW",
+      "class_name": "ReviewWorkflow",
+    },
+  ],
+  "services": [
+    {
+      "binding": "REPOSITORY_EXECUTOR",
+      "service": "holon-repository-executor",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+}
