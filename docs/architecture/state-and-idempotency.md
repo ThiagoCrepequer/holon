@@ -1,0 +1,90 @@
+---
+id: ARCH-STATE-001
+kind: architecture
+status: current
+owners:
+  - core-team
+last-reviewed: 2026-08-29
+---
+
+# Estado e idempotência
+
+Queues entrega mensagens pelo menos uma vez. A arquitetura deve assumir que
+qualquer etapa pode ser repetida após uma falha e que uma API externa pode ter
+concluído uma operação mesmo quando a resposta não chegou.
+
+## Identidades
+
+| Identidade  | Forma implementada                                          | Uso                                     |
+| ----------- | ----------------------------------------------------------- | --------------------------------------- |
+| Delivery    | `github:<delivery_id>`                                      | Detectar redelivery literal do webhook  |
+| Run         | `github:<repo_id>:pr:<number>:head:<sha>`                   | Uma análise lógica de uma revisão do PR |
+| Workflow    | `WorkflowEvent.instanceId`                                  | Dono da execução durável da run         |
+| Finding     | Hash de run + caminho + intervalo + diagnóstico normalizado | Reconciliar o mesmo finding             |
+| Publication | Run + finding ou `summary`                                  | Impedir comentário duplicado            |
+
+IDs devem ser opacos fora do domínio e nunca incluir segredo.
+
+## Máquina de estados implementada
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued
+    queued --> running
+    running --> publishing
+    publishing --> completed
+    queued --> obsolete
+    running --> obsolete
+    publishing --> obsolete
+    running --> failed_retryable
+    publishing --> failed_retryable
+    failed_retryable --> running
+    failed_retryable --> failed_terminal
+    completed --> [*]
+    obsolete --> [*]
+    failed_terminal --> [*]
+```
+
+## Regras
+
+- A run é imutavelmente associada a um head SHA.
+- Um evento novo não altera a run antiga; cria uma nova identidade.
+- Somente a run mais recente do PR pode iniciar publicação.
+- `completed`, `obsolete` e `failed_terminal` são terminais.
+- Retry de etapa não cria nova run.
+- Uma instância diferente do Workflow não assume uma run ativa já pertencente a
+  outra instância.
+- Cada transição possui operation ID; repetir a mesma operação com os mesmos
+  estados é no-op, mas reutilizar o ID com parâmetros diferentes falha fechado.
+- O ledger registra o ID retornado pelo GitHub antes de marcar publicação como
+  concluída sempre que a ordem for controlável.
+- Após timeout ambíguo, o publicador reconcilia por ID persistido ou marcador
+  determinístico antes de tentar criar outro comentário.
+
+## Marcador de comentário
+
+Caso a API não ofereça idempotency key, o corpo pode conter marcador invisível:
+
+```html
+<!-- holon:v1;run=<run-id>;finding=<finding-id> -->
+```
+
+O formato é versionado e o conteúdo visível não depende do marcador.
+
+## Implementação do ledger
+
+A escolha aceita no ADR-0004 é um Durable Object SQLite por `PrKey`. A tabela
+`runs` aplica unicidade por run e registra o owner `workflow_instance_id`,
+`metadata.latest_run_id` identifica o head mais novo observado,
+`transition_operations` torna commits repetidos idempotentes e `publications`
+persiste o claim e o ID retornado pelo GitHub. Updates usam estado esperado na
+cláusula `WHERE`; quando os retries duráveis acabam, estados ativos passam a
+`failed_terminal` de maneira idempotente.
+
+Workflows executa a etapa com retries delimitados. Antes de qualquer publicação,
+o caso de uso exige simultaneamente que a run ainda seja a mais recente no
+ledger e que o GitHub reporte o mesmo `head.sha`. Timeout após efeito externo é
+reconciliado procurando o marcador tanto em comentários inline quanto em Pull
+Request Reviews antes de repetir a criação. Os `POST`s de publicação desativam
+o retry interno do Octokit para que somente essa reconciliação possa decidir
+por uma nova tentativa.
