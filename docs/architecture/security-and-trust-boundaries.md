@@ -55,8 +55,9 @@ demanda, têm vida curta e não entram em fila, logs ou armazenamento persistent
 O executor implementado não executa scripts do repositório:
 
 - instalação de dependências e lifecycle scripts ficam desativados por padrão;
-- rede inicia bloqueada; somente HTTPS para o caminho exato do repositório em
-  `github.com` recebe credencial por outbound handler fora do processo;
+- rede pública inicia bloqueada; Git usa o host virtual interno
+  `github.holon.internal`, e somente o caminho exato do repositório é reescrito
+  para HTTPS em `github.com` e recebe credencial no outbound handler;
 - redirects autenticados são manuais e qualquer acesso ao GitHub é substituído
   por um handler de bloqueio explícito assim que o fetch termina;
 - comandos são registrados sem incluir segredos;

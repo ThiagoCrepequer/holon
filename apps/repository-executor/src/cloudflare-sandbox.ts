@@ -7,7 +7,10 @@ import type {
 } from "@holon/contracts";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import { authenticateGitHubRequest } from "./egress-policy.js";
+import {
+  authenticateGitHubRequest,
+  githubEgressHost,
+} from "./egress-policy.js";
 import {
   RepositoryExecutorService,
   type SandboxPort,
@@ -17,7 +20,6 @@ import { createSandboxId } from "./sandbox-identity.js";
 
 export class HolonSandbox extends Sandbox<Cloudflare.Env> {
   public override enableInternet = false;
-  public override allowedHosts = ["github.com"];
 }
 
 HolonSandbox.outboundHandlers = {
@@ -40,10 +42,14 @@ class CloudflareSandboxPort implements SandboxPort {
     token: string,
     repositoryPath: string,
   ): Promise<void> {
-    return this.sandbox.setOutboundByHost("github.com", "authenticatedGithub", {
-      repositoryPath,
-      token,
-    });
+    return this.sandbox.setOutboundByHost(
+      githubEgressHost,
+      "authenticatedGithub",
+      {
+        repositoryPath,
+        token,
+      },
+    );
   }
 
   public destroy(): Promise<void> {
@@ -64,7 +70,7 @@ class CloudflareSandboxPort implements SandboxPort {
   }
 
   public blockGitHubEgress(): Promise<void> {
-    return this.sandbox.setOutboundByHost("github.com", "blocked", {});
+    return this.sandbox.setOutboundByHost(githubEgressHost, "blocked", {});
   }
 
   public async run(
@@ -81,16 +87,24 @@ class CloudflareSandboxPort implements SandboxPort {
         ? {}
         : { timeout: options.timeoutMs }),
     });
-    const output = await process.output({
-      encoding: "utf8",
-      ...(options.maxOutputBytes === undefined
-        ? {}
-        : { maxBytes: options.maxOutputBytes }),
-      ...(options.timeoutMs === undefined
-        ? {}
-        : { timeout: options.timeoutMs }),
-    });
-    return output;
+    try {
+      return await process.output({
+        encoding: "utf8",
+        ...(options.maxOutputBytes === undefined
+          ? {}
+          : { maxBytes: options.maxOutputBytes }),
+        ...(options.timeoutMs === undefined
+          ? {}
+          : { timeout: options.timeoutMs }),
+      });
+    } catch (error) {
+      try {
+        await process.kill();
+      } catch {
+        // The process may already have exited or the container may be gone.
+      }
+      throw error;
+    }
   }
 }
 
@@ -101,9 +115,8 @@ export class CloudflareSandboxProvider implements SandboxProvider {
     return new CloudflareSandboxPort(
       getSandbox(this.env.SANDBOXES, createSandboxId(runId), {
         normalizeId: true,
-        // The longest model step is 10 minutes. Keep the ephemeral context
-        // alive beyond that single inactive interval without using keepAlive.
-        sleepAfter: "15m",
+        // Tool calls recreate the checkout if this ephemeral context slept.
+        sleepAfter: "2m",
       }),
     );
   }

@@ -92,8 +92,9 @@ O contexto bruto não atravessa o checkpoint de preparação. Ele é validado e
 gravado no filesystem efêmero do Sandbox; apenas contagens, tamanho e flag de
 truncamento voltam ao Workflow. A etapa de análise relê esse arquivo e retorna
 somente a saída estruturada e limitada do modelo. Antes da leitura, o
-control-plane verifica a existência do artefato. Se o container tiver sido
-substituído, repete a preparação exata e idempotente com o mesmo par de SHAs.
+control-plane verifica a existência do artefato antes da leitura e de cada tool
+call. Se o container tiver sido substituído, repete a preparação exata e
+idempotente com o mesmo par de SHAs.
 
 ## Falhas esperadas
 
@@ -109,3 +110,5 @@ substituído, repete a preparação exata e idempotente com o mesmo par de SHAs.
   continuar com o resumo validado.
 - Falha depois de preparar o repositório: marcar terminal e executar cleanup em
   etapas independentes, preservando o erro causal se cleanup também falhar.
+- Checkout transitório: destruir o Sandbox imediatamente e repetir uma vez;
+  checkout permanente: destruir e falhar sem repetição.

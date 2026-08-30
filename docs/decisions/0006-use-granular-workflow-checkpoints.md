@@ -10,6 +10,7 @@ related:
   - 0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../architecture/review-runtime-flow.md
   - ../architecture/state-and-idempotency.md
+  - 0008-bound-sandbox-lifetime-and-use-virtual-github-egress.md
 ---
 
 # Usar checkpoints granulares e manter o contexto grande no Sandbox
@@ -46,9 +47,10 @@ metadados pequenos e tipados. A análise relê o contexto por RPC dentro de sua
 própria etapa; o schema do resultado do modelo limita a saída bem abaixo de 1
 MiB. Antes da leitura, ela consulta a existência do artefato; se o Sandbox tiver
 sido substituído entre checkpoints, repete a preparação idempotente com os
-mesmos SHAs assinados e um novo token de instalação. O Sandbox usa
-`sleepAfter: "15m"`, superior ao timeout de dez minutos da etapa de modelo, e é
-destruído por uma etapa explícita em sucesso, obsolescência ou falha.
+mesmos SHAs assinados e um novo token de instalação. O intervalo original de 15
+minutos e a checagem somente antes da análise foram posteriormente reduzidos e
+ampliados, respectivamente, pela ADR-0008. O Sandbox é destruído por uma etapa
+explícita em sucesso, obsolescência ou falha.
 
 O ledger associa a run ao `WorkflowEvent.instanceId`. Transições possuem
 `operationId` determinístico e uma tabela de operações, de modo que repetir um
@@ -86,7 +88,7 @@ retirar o timeout automático de segurança.
 - O contexto continua efêmero e não sobrevive a uma parada inesperada do
   container; a análise detecta sua ausência e executa a preparação idempotente
   antes de chamar o modelo.
-- Alterar timeout do modelo exige revisar `sleepAfter` e o runbook.
+- Alterar `sleepAfter` exige revisar o custo de reconstrução antes de tool calls.
 - A prova local cobre replay de transições, obsolescência, terminalização,
   cleanup e publicação idempotente; retomada real na plataforma ainda pertence
   ao piloto.

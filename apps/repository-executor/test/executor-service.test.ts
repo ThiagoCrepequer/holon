@@ -172,13 +172,17 @@ describe("RepositoryExecutorService", () => {
       token: "installation-token",
     });
     expect(sandbox.egressBlocked).toBe(true);
+    expect(sandbox.commands.flat()).toContain(
+      "http://github.holon.internal/acme/api.git",
+    );
+    expect(sandbox.commands.flat()).not.toContain(request.cloneUrl);
     expect(
       sandbox.files.get("/workspace/holon-review-context.json"),
     ).toBeDefined();
     expect(sandbox.commands.flat()).not.toContain("npm");
   });
 
-  it("blocks GitHub egress even when checkout fails", async () => {
+  it("destroys the sandbox immediately when checkout fails permanently", async () => {
     const sandbox = new FakeSandbox();
     sandbox.run = () =>
       Promise.resolve({
@@ -191,8 +195,50 @@ describe("RepositoryExecutorService", () => {
 
     await expect(
       service.prepare(request, "installation-token"),
-    ).rejects.toThrow("Repository command failed");
-    expect(sandbox.egressBlocked).toBe(true);
+    ).rejects.toMatchObject({
+      name: "RepositoryPermanentError",
+      retryable: false,
+      stage: "initialize",
+    });
+    expect(sandbox.destroyed).toBe(true);
+    expect(sandbox.egressBlocked).toBe(false);
+  });
+
+  it("classifies a terminated checkout as transient and destroys its sandbox", async () => {
+    const sandbox = new FakeSandbox();
+    sandbox.run = () =>
+      Promise.resolve({
+        exitCode: 143,
+        stderr: "",
+        stdout: "",
+        truncated: false,
+      });
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, "installation-token"),
+    ).rejects.toMatchObject({
+      name: "RepositoryTransientError",
+      retryable: true,
+      stage: "initialize",
+    });
+    expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("classifies sandbox timeouts as transient without leaking their message", async () => {
+    const sandbox = new FakeSandbox();
+    const timeout = new Error("sensitive upstream details");
+    timeout.name = "ProcessWaitTimeoutError";
+    sandbox.run = () => Promise.reject(timeout);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, "installation-token"),
+    ).rejects.toMatchObject({
+      message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
+      name: "RepositoryTransientError",
+    });
+    expect(sandbox.destroyed).toBe(true);
   });
 
   it("rejects an empty installation token before creating external access", async () => {
@@ -247,7 +293,11 @@ describe("RepositoryExecutorService", () => {
 
     await expect(
       service.prepare(request, "installation-token"),
-    ).rejects.toThrow("Resolved head SHA does not match");
+    ).rejects.toMatchObject({
+      name: "RepositoryPermanentError",
+      stage: "prepare-context",
+    });
+    expect(sandbox.destroyed).toBe(true);
   });
 
   it("rejects a repository symlink that resolves outside the checkout", async () => {

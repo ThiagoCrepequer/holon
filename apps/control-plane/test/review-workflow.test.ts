@@ -269,10 +269,12 @@ describe("ReviewWorkflow", () => {
     expect(stepNames).not.toContain("execute-review");
   });
 
-  it("reconstructs an ephemeral context lost between durable checkpoints", async () => {
+  it("reconstructs an ephemeral context lost before a model tool call", async () => {
     const stepNames: string[] = [];
     let prepareCalls = 0;
     let contextExists = false;
+    let contextChecks = 0;
+    let toolCalls = 0;
 
     const result = await executeReviewWorkflow(
       env,
@@ -284,9 +286,15 @@ describe("ReviewWorkflow", () => {
       },
       immediateWorkflowStep(stepNames),
       {
-        createModel: () => ({
-          review: () =>
-            Promise.resolve({ findings: [], summary: "No findings." }),
+        createModel: (toolRunner) => ({
+          review: async () => {
+            contextExists = false;
+            await toolRunner.run({
+              arguments: { maxResults: 1, query: "symbol" },
+              name: "search_text",
+            });
+            return { findings: [], summary: "No findings." };
+          },
         }),
         createSession: () =>
           Promise.resolve({
@@ -301,7 +309,7 @@ describe("ReviewWorkflow", () => {
         executor: {
           cleanup: () => Promise.resolve(),
           hasContext: () => {
-            if (prepareCalls === 1) contextExists = false;
+            contextChecks += 1;
             return Promise.resolve(contextExists);
           },
           loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
@@ -317,7 +325,10 @@ describe("ReviewWorkflow", () => {
               truncated: false,
             });
           },
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
+          runTool: () => {
+            toolCalls += 1;
+            return Promise.resolve({ content: "", truncated: false });
+          },
         },
         now: () => "2026-08-29T12:00:01.000Z",
       },
@@ -325,7 +336,107 @@ describe("ReviewWorkflow", () => {
 
     expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
     expect(prepareCalls).toBe(2);
+    expect(contextChecks).toBe(2);
+    expect(toolCalls).toBe(1);
   });
+
+  it.each([
+    ["RepositoryPermanentError", "permanent failure", 1],
+    [
+      "RepositoryTransientError",
+      "HOLON_REPOSITORY_TRANSIENT:fetch:timed-out",
+      2,
+    ],
+  ])(
+    "retries only a classified transient repository failure: %s",
+    async (failureName, failureMessage, expectedAttempts) => {
+      const stepNames: string[] = [];
+      let prepareAttempts = 0;
+      let repositoryRetryLimit: number | undefined;
+      let repositoryTimeout: string | undefined;
+      const baseStep = immediateWorkflowStep(stepNames) as unknown as {
+        do<T>(
+          name: string,
+          config: unknown,
+          callback: () => Promise<T>,
+        ): Promise<T>;
+      };
+      const retryingStep = {
+        do: async <T>(
+          name: string,
+          config: unknown,
+          callback: () => Promise<T>,
+        ): Promise<T> => {
+          if (name !== "prepare-repository") {
+            return await baseStep.do(name, config, callback);
+          }
+          const repositoryConfig = config as {
+            retries: { limit: number };
+            timeout: string;
+          };
+          repositoryRetryLimit = repositoryConfig.retries.limit;
+          repositoryTimeout = repositoryConfig.timeout;
+          let lastError: unknown;
+          for (
+            let attempt = 0;
+            attempt <= repositoryConfig.retries.limit;
+            attempt += 1
+          ) {
+            try {
+              return await callback();
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          throw lastError;
+        },
+      } as unknown as WorkflowStep;
+
+      await expect(
+        executeReviewWorkflow(
+          env,
+          {
+            instanceId: `repository-failure-${failureName}`,
+            payload: job,
+            timestamp: new Date("2026-08-29T12:00:00.000Z"),
+            workflowName: "holon-review-workflow",
+          },
+          retryingStep,
+          {
+            createSession: () =>
+              Promise.resolve({
+                api: {
+                  paginate: () => Promise.resolve([]),
+                  request: () => Promise.resolve({ data: { id: 1 } }),
+                },
+                currentHeadSha: () => Promise.resolve("a".repeat(40)),
+                expiresAt: "later",
+                token: "token",
+              }),
+            executor: {
+              cleanup: () => Promise.resolve(),
+              hasContext: () => Promise.resolve(false),
+              loadContext: () =>
+                Promise.resolve({ changedLines: [], diff: "" }),
+              prepare: () => {
+                prepareAttempts += 1;
+                const failure = new Error(failureMessage);
+                failure.name = failureName;
+                return Promise.reject(failure);
+              },
+              runTool: () => Promise.resolve({ content: "", truncated: false }),
+            },
+            logger: { emit: () => undefined },
+            now: () => "2026-08-29T12:00:01.000Z",
+          },
+        ),
+      ).rejects.toThrow();
+
+      expect(prepareAttempts).toBe(expectedAttempts);
+      expect(repositoryRetryLimit).toBe(1);
+      expect(repositoryTimeout).toBe("2 minutes");
+    },
+  );
 
   it("terminalizes and cleans a prepared review after durable retries are exhausted", async () => {
     const stepNames: string[] = [];

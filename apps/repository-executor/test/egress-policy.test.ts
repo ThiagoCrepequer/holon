@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { authenticateGitHubRequest } from "../src/egress-policy.js";
+import {
+  authenticateGitHubRequest,
+  createGitHubEgressUrl,
+} from "../src/egress-policy.js";
 
 describe("Sandbox GitHub egress policy", () => {
   const parameters = {
@@ -12,9 +15,13 @@ describe("Sandbox GitHub egress policy", () => {
     "injects the installation credential only for an allowed %s request",
     (method) => {
       const request = authenticateGitHubRequest(
-        new Request("https://github.com/acme/api.git/info/refs", { method }),
+        new Request("http://github.holon.internal/acme/api.git/info/refs", {
+          headers: { authorization: "Bearer attacker-controlled" },
+          method,
+        }),
         parameters,
       );
+      expect(request?.url).toBe("https://github.com/acme/api.git/info/refs");
       expect(request?.headers.get("authorization")).toBe(
         `Basic ${btoa("x-access-token:installation-token")}`,
       );
@@ -22,52 +29,61 @@ describe("Sandbox GitHub egress policy", () => {
     },
   );
 
+  it("maps a validated public clone URL to the internal egress host", () => {
+    expect(createGitHubEgressUrl("https://github.com/acme/api.git")).toBe(
+      "http://github.holon.internal/acme/api.git",
+    );
+    expect(() =>
+      createGitHubEgressUrl("https://token@github.com/acme/api.git"),
+    ).toThrow("credential-free");
+  });
+
   it.each([
     [
       "wrong host",
-      "https://evil.example/acme/api.git/info/refs",
+      "http://evil.example/acme/api.git/info/refs",
       "GET",
       parameters,
     ],
     [
       "wrong repository",
-      "https://github.com/acme/other.git/info/refs",
+      "http://github.holon.internal/acme/other.git/info/refs",
       "GET",
       parameters,
     ],
     [
       "prefix confusion",
-      "https://github.com/acme/api.git-evil/info/refs",
+      "http://github.holon.internal/acme/api.git-evil/info/refs",
       "GET",
       parameters,
     ],
     [
       "insecure protocol",
-      "http://github.com/acme/api.git/info/refs",
+      "https://github.holon.internal/acme/api.git/info/refs",
       "GET",
       parameters,
     ],
     [
       "unsafe method",
-      "https://github.com/acme/api.git/info/refs",
+      "http://github.holon.internal/acme/api.git/info/refs",
       "DELETE",
       parameters,
     ],
     [
       "missing token",
-      "https://github.com/acme/api.git/info/refs",
+      "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
       { repositoryPath: "/acme/api.git" },
     ],
     [
       "invalid path",
-      "https://github.com/acme/api.git/info/refs",
+      "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
       { repositoryPath: "/acme/*", token: "x" },
     ],
     [
       "dot-segment owner",
-      "https://github.com/acme/api.git/info/refs",
+      "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
       { repositoryPath: "/../api.git", token: "x" },
     ],

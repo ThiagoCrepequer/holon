@@ -147,12 +147,31 @@ function createReviewServices(
       );
     return sessionPromise;
   };
+  const prepareRepository = async () => {
+    const github = await session();
+    const request = executorRequestSchema.parse({
+      baseSha: job.envelope.pullRequest.baseSha,
+      cloneUrl: `https://github.com/${job.envelope.repository.fullName}.git`,
+      headSha: job.envelope.pullRequest.headSha,
+      pullRequestNumber: job.envelope.pullRequest.number,
+      repositoryId: job.envelope.repository.id,
+      runId: job.runId,
+      schemaVersion: 1,
+    });
+    return preparedRepositorySchema.parse(
+      await executor.prepare(request, github.token),
+    );
+  };
   const toolRunner = createBoundedRepositoryToolRunner(
     createRedactingRepositoryToolRunner({
-      run: async (call) =>
-        repositoryToolResultSchema.parse(
+      run: async (call) => {
+        if (!(await executor.hasContext(job.runId))) {
+          await prepareRepository();
+        }
+        return repositoryToolResultSchema.parse(
           await executor.runTool(job.runId, call),
-        ),
+        );
+      },
     }),
     12,
   );
@@ -190,21 +209,7 @@ function createReviewServices(
     loadContext: async () =>
       reviewContextSchema.parse(await executor.loadContext(job.runId)),
     model,
-    prepareRepository: async () => {
-      const github = await session();
-      const request = executorRequestSchema.parse({
-        baseSha: job.envelope.pullRequest.baseSha,
-        cloneUrl: `https://github.com/${job.envelope.repository.fullName}.git`,
-        headSha: job.envelope.pullRequest.headSha,
-        pullRequestNumber: job.envelope.pullRequest.number,
-        repositoryId: job.envelope.repository.id,
-        runId: job.runId,
-        schemaVersion: 1,
-      });
-      return preparedRepositorySchema.parse(
-        await executor.prepare(request, github.token),
-      );
-    },
+    prepareRepository,
     publisher,
     readCurrentHead: async () => {
       const github = await session();
@@ -222,8 +227,8 @@ const stateStep = {
   timeout: "30 seconds",
 } as const;
 const repositoryStep = {
-  retries: { backoff: "exponential", delay: "5 seconds", limit: 3 },
-  timeout: "5 minutes",
+  retries: { backoff: "exponential", delay: "5 seconds", limit: 1 },
+  timeout: "2 minutes",
 } as const;
 const modelStep = {
   retries: { backoff: "exponential", delay: "10 seconds", limit: 2 },
@@ -234,6 +239,14 @@ const publicationStep = {
   retries: { backoff: "exponential", delay: "5 seconds", limit: 4 },
   timeout: "2 minutes",
 } as const;
+
+function isRetryableRepositoryError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "RepositoryTransientError" ||
+    error.message.includes("HOLON_REPOSITORY_TRANSIENT:")
+  );
+}
 
 export async function executeReviewWorkflow(
   env: Cloudflare.Env,
@@ -305,9 +318,24 @@ export async function executeReviewWorkflow(
     });
 
     repositoryStarted = true;
-    await step.do("prepare-repository", repositoryStep, () =>
-      services.prepareRepository(),
+    const preparation = await step.do(
+      "prepare-repository",
+      repositoryStep,
+      async () => {
+        try {
+          await services.prepareRepository();
+          return { status: "prepared" } as const;
+        } catch (error) {
+          if (isRetryableRepositoryError(error)) throw error;
+          return { errorKind: errorKind(error), status: "failed" } as const;
+        }
+      },
     );
+    if (preparation.status === "failed") {
+      throw new Error(
+        `Repository preparation failed (${preparation.errorKind})`,
+      );
+    }
 
     const output = await step.do("analyze-review", modelStep, async () => {
       if (!(await services.executor.hasContext(job.runId))) {

@@ -34,6 +34,8 @@ describe("repository execution policy", () => {
           "/workspace/repository",
         ],
         cwd: "/workspace",
+        stage: "initialize",
+        timeoutMs: 10_000,
       },
       {
         argv: [
@@ -46,6 +48,8 @@ describe("repository execution policy", () => {
           "+refs/pull/7/head:refs/holon/head",
         ],
         cwd: "/workspace/repository",
+        stage: "fetch",
+        timeoutMs: 60_000,
       },
       {
         argv: [
@@ -62,6 +66,8 @@ describe("repository execution policy", () => {
           "a".repeat(40),
         ],
         cwd: "/workspace/repository",
+        stage: "checkout",
+        timeoutMs: 20_000,
       },
     ]);
     expect(JSON.stringify(plan)).not.toMatch(/token|npm|pnpm|yarn|shell/iu);

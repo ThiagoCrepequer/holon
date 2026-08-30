@@ -17,6 +17,8 @@ import {
   selectReviewFiles,
 } from "@holon/repository-analysis";
 
+import { createGitHubEgressUrl } from "./egress-policy.js";
+
 export interface SandboxCommandResult {
   readonly exitCode: number;
   readonly stderr: string;
@@ -51,12 +53,82 @@ const maximumFiles = 100;
 const maximumDiffBytes = 2_000_000;
 const maximumChangedLines = 20_000;
 
+type RepositoryPreparationStage =
+  | "block-egress"
+  | "checkout"
+  | "configure-egress"
+  | "fetch"
+  | "initialize"
+  | "prepare-context";
+const transientSandboxErrors = new Set([
+  "ContainerUnavailableError",
+  "OperationInterruptedError",
+  "ProcessReadyTimeoutError",
+  "ProcessWaitTimeoutError",
+  "RPCTransportError",
+  "RuntimeIdentityInactiveError",
+  "ServiceNotRespondingError",
+]);
+
+export class RepositoryPreparationError extends Error {
+  public constructor(
+    public readonly retryable: boolean,
+    public readonly stage: RepositoryPreparationStage,
+    reason: "command-failed" | "terminated" | "timed-out" | "unavailable",
+  ) {
+    super(
+      `${retryable ? "HOLON_REPOSITORY_TRANSIENT" : "HOLON_REPOSITORY_PERMANENT"}:${stage}:${reason}`,
+    );
+    this.name = retryable
+      ? "RepositoryTransientError"
+      : "RepositoryPermanentError";
+  }
+}
+
+function isTransientSandboxError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return transientSandboxErrors.has(error.name);
+}
+
+function preparationFailure(
+  error: unknown,
+  stage: RepositoryPreparationStage,
+): RepositoryPreparationError {
+  if (error instanceof RepositoryPreparationError) return error;
+  const retryable = isTransientSandboxError(error);
+  return new RepositoryPreparationError(
+    retryable,
+    stage,
+    retryable ? "timed-out" : "unavailable",
+  );
+}
+
+async function destroyAfterFailure(sandbox: SandboxPort): Promise<void> {
+  try {
+    await sandbox.destroy();
+  } catch {
+    // Preserve the causal error. The workflow also performs final cleanup.
+  }
+}
+
 function assertSuccessful(result: SandboxCommandResult): void {
   if (result.exitCode !== 0) {
     throw new Error(
       `Repository command failed with exit code ${result.exitCode}`,
     );
   }
+}
+
+function assertPreparationSuccessful(
+  result: SandboxCommandResult,
+  stage: RepositoryPreparationStage,
+): void {
+  if (result.exitCode === 0) return;
+  throw new RepositoryPreparationError(
+    result.exitCode === 143,
+    stage,
+    result.exitCode === 143 ? "terminated" : "command-failed",
+  );
 }
 
 function cloneRepositoryPath(cloneUrl: string): string {
@@ -117,137 +189,148 @@ export class RepositoryExecutorService {
     if (installationToken.length < 1)
       throw new TypeError("installationToken is required");
     const sandbox = this.sandboxes.get(request.runId);
-    await sandbox.configureGitHubEgress(
-      installationToken,
-      cloneRepositoryPath(request.cloneUrl),
-    );
+    let stage: RepositoryPreparationStage = "configure-egress";
     try {
-      for (const execution of buildCheckoutPlan(request, repositoryPath)) {
+      await sandbox.configureGitHubEgress(
+        installationToken,
+        cloneRepositoryPath(request.cloneUrl),
+      );
+      for (const execution of buildCheckoutPlan(
+        request,
+        repositoryPath,
+        createGitHubEgressUrl(request.cloneUrl),
+      )) {
+        stage = execution.stage ?? "prepare-context";
         const result = await sandbox.run(execution.argv, {
           cwd: execution.cwd,
-          timeoutMs: 120_000,
+          ...(execution.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: execution.timeoutMs }),
         });
-        assertSuccessful(result);
+        assertPreparationSuccessful(result, stage);
       }
-    } finally {
+      stage = "block-egress";
       await sandbox.blockGitHubEgress();
-    }
+      stage = "prepare-context";
+      const resolvedHead = await sandbox.run(["git", "rev-parse", "HEAD"], {
+        cwd: repositoryPath,
+        maxOutputBytes: 1_000,
+        timeoutMs: 10_000,
+      });
+      assertPreparationSuccessful(resolvedHead, stage);
+      if (resolvedHead.stdout.trim() !== request.headSha)
+        throw new RepositoryPreparationError(false, stage, "command-failed");
 
-    const resolvedHead = await sandbox.run(["git", "rev-parse", "HEAD"], {
-      cwd: repositoryPath,
-      maxOutputBytes: 1_000,
-      timeoutMs: 10_000,
-    });
-    assertSuccessful(resolvedHead);
-    if (resolvedHead.stdout.trim() !== request.headSha)
-      throw new Error("Resolved head SHA does not match the signed webhook");
-
-    const namesResult = await sandbox.run(
-      [
-        "git",
-        "diff",
-        "--name-only",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-z",
-        request.baseSha,
-        request.headSha,
-        "--",
-      ],
-      { cwd: repositoryPath, maxOutputBytes: 500_000, timeoutMs: 30_000 },
-    );
-    assertSuccessful(namesResult);
-    const allPaths = namesResult.stdout
-      .split("\0")
-      .filter((path) => path.length > 0);
-    const files = selectReviewFiles(allPaths, maximumFiles);
-    let totalBytes = 0;
-    let truncated =
-      namesResult.truncated ||
-      allPaths.filter(isSupportedSourcePath).length > files.length;
-    const reviewFiles: Array<{
-      patch: string;
-      path: string;
-      truncated: boolean;
-    }> = [];
-
-    for (const path of files) {
-      const separatorBytes = reviewFiles.length === 0 ? 0 : 1;
-      const remainingBytes = maximumDiffBytes - totalBytes - separatorBytes;
-      if (remainingBytes <= 0) {
-        truncated = true;
-        break;
-      }
-      const patchResult = await sandbox.run(
+      const namesResult = await sandbox.run(
         [
           "git",
           "diff",
+          "--name-only",
           "--no-ext-diff",
           "--no-textconv",
-          "--unified=80",
+          "-z",
           request.baseSha,
           request.headSha,
           "--",
-          path,
         ],
-        {
-          cwd: repositoryPath,
-          maxOutputBytes: Math.min(remainingBytes, 250_000),
-          timeoutMs: 30_000,
-        },
+        { cwd: repositoryPath, maxOutputBytes: 500_000, timeoutMs: 30_000 },
       );
-      assertSuccessful(patchResult);
-      const boundedPatch = limitUtf8(
-        patchResult.stdout,
-        Math.min(remainingBytes, 250_000),
-      );
-      totalBytes +=
-        separatorBytes +
-        new TextEncoder().encode(boundedPatch.content).byteLength;
-      const patchTruncated = patchResult.truncated || boundedPatch.truncated;
-      truncated ||= patchTruncated;
-      reviewFiles.push({
-        patch: boundedPatch.content,
-        path,
-        truncated: patchTruncated,
-      });
-    }
+      assertPreparationSuccessful(namesResult, stage);
+      const allPaths = namesResult.stdout
+        .split("\0")
+        .filter((path) => path.length > 0);
+      const files = selectReviewFiles(allPaths, maximumFiles);
+      let totalBytes = 0;
+      let truncated =
+        namesResult.truncated ||
+        allPaths.filter(isSupportedSourcePath).length > files.length;
+      const reviewFiles: Array<{
+        patch: string;
+        path: string;
+        truncated: boolean;
+      }> = [];
 
-    const changedLines: Array<{
-      line: number;
-      path: string;
-      side: "RIGHT";
-    }> = [];
-    for (const file of reviewFiles) {
-      const remaining = maximumChangedLines - changedLines.length;
-      if (remaining <= 0) {
-        truncated = true;
-        break;
+      for (const path of files) {
+        const separatorBytes = reviewFiles.length === 0 ? 0 : 1;
+        const remainingBytes = maximumDiffBytes - totalBytes - separatorBytes;
+        if (remainingBytes <= 0) {
+          truncated = true;
+          break;
+        }
+        const patchResult = await sandbox.run(
+          [
+            "git",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--unified=80",
+            request.baseSha,
+            request.headSha,
+            "--",
+            path,
+          ],
+          {
+            cwd: repositoryPath,
+            maxOutputBytes: Math.min(remainingBytes, 250_000),
+            timeoutMs: 30_000,
+          },
+        );
+        assertPreparationSuccessful(patchResult, stage);
+        const boundedPatch = limitUtf8(
+          patchResult.stdout,
+          Math.min(remainingBytes, 250_000),
+        );
+        totalBytes +=
+          separatorBytes +
+          new TextEncoder().encode(boundedPatch.content).byteLength;
+        const patchTruncated = patchResult.truncated || boundedPatch.truncated;
+        truncated ||= patchTruncated;
+        reviewFiles.push({
+          patch: boundedPatch.content,
+          path,
+          truncated: patchTruncated,
+        });
       }
-      const fileLines = collectChangedLines(
-        file.path,
-        file.patch,
-        remaining + 1,
-      );
-      if (fileLines.length > remaining) truncated = true;
-      changedLines.push(...fileLines.slice(0, remaining));
+
+      const changedLines: Array<{
+        line: number;
+        path: string;
+        side: "RIGHT";
+      }> = [];
+      for (const file of reviewFiles) {
+        const remaining = maximumChangedLines - changedLines.length;
+        if (remaining <= 0) {
+          truncated = true;
+          break;
+        }
+        const fileLines = collectChangedLines(
+          file.path,
+          file.patch,
+          remaining + 1,
+        );
+        if (fileLines.length > remaining) truncated = true;
+        changedLines.push(...fileLines.slice(0, remaining));
+      }
+      const context = reviewContextSchema.parse({
+        changedLines,
+        diff: reviewFiles.map((file) => file.patch).join("\n"),
+        surface: mapReviewSurface(reviewFiles),
+        truncated,
+      });
+      const serialized = JSON.stringify(context);
+      await sandbox.writeFile(contextPath, serialized);
+      return preparedRepositorySchema.parse({
+        changedLineCount: context.changedLines.length,
+        contextBytes: new TextEncoder().encode(serialized).byteLength,
+        fileCount: reviewFiles.length,
+        runId: request.runId,
+        schemaVersion: 1,
+        truncated: context.truncated ?? false,
+      });
+    } catch (error) {
+      await destroyAfterFailure(sandbox);
+      throw preparationFailure(error, stage);
     }
-    const context = reviewContextSchema.parse({
-      changedLines,
-      diff: reviewFiles.map((file) => file.patch).join("\n"),
-      surface: mapReviewSurface(reviewFiles),
-      truncated,
-    });
-    const serialized = JSON.stringify(context);
-    await sandbox.writeFile(contextPath, serialized);
-    return preparedRepositorySchema.parse({
-      changedLineCount: context.changedLines.length,
-      contextBytes: new TextEncoder().encode(serialized).byteLength,
-      fileCount: reviewFiles.length,
-      runId: request.runId,
-      schemaVersion: 1,
-      truncated: context.truncated ?? false,
-    });
   }
 
   public async loadContext(runId: string): Promise<ReviewContext> {

@@ -4,6 +4,8 @@ export interface CommandExecution {
   readonly argv: readonly string[];
   readonly cwd: string;
   readonly maxOutputBytes?: number;
+  readonly stage?: "checkout" | "fetch" | "initialize";
+  readonly timeoutMs?: number;
 }
 
 export interface ReadFileExecution {
@@ -55,6 +57,7 @@ function assertAbsoluteNormalizedPath(path: string, name: string): void {
 export function buildCheckoutPlan(
   request: ExecutorRequest,
   repositoryPath: string,
+  cloneUrl = request.cloneUrl,
 ): readonly CommandExecution[] {
   assertAbsoluteNormalizedPath(repositoryPath, "repositoryPath");
   const separator = repositoryPath.lastIndexOf("/");
@@ -63,6 +66,8 @@ export function buildCheckoutPlan(
     {
       argv: ["git", "init", "--initial-branch=holon", repositoryPath],
       cwd: workspacePath,
+      stage: "initialize",
+      timeoutMs: 10_000,
     },
     {
       argv: [
@@ -70,11 +75,13 @@ export function buildCheckoutPlan(
         "fetch",
         "--no-tags",
         "--depth=1",
-        request.cloneUrl,
+        cloneUrl,
         request.baseSha,
         `+refs/pull/${request.pullRequestNumber}/head:refs/holon/head`,
       ],
       cwd: repositoryPath,
+      stage: "fetch",
+      timeoutMs: 60_000,
     },
     {
       argv: [
@@ -91,6 +98,8 @@ export function buildCheckoutPlan(
         request.headSha,
       ],
       cwd: repositoryPath,
+      stage: "checkout",
+      timeoutMs: 20_000,
     },
   ];
 }
