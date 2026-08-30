@@ -39,7 +39,7 @@ import {
   GatewayModelReviewer,
   createBoundedRepositoryToolRunner,
   createRedactingRepositoryToolRunner,
-  isNonRetryableModelProviderError,
+  isNonRetryableModelError,
 } from "@holon/model";
 import {
   WorkflowEntrypoint,
@@ -356,10 +356,10 @@ export async function executeReviewWorkflow(
           ),
         });
       } catch (error) {
-        if (isNonRetryableModelProviderError(error)) {
+        if (isNonRetryableModelError(error)) {
           throw new NonRetryableError(
-            "HOLON_MODEL_PERMANENT",
-            "ModelPermanentError",
+            "HOLON_MODEL_NON_RETRYABLE",
+            "ModelNonRetryableError",
           );
         }
         throw error;

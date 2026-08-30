@@ -616,6 +616,72 @@ describe("ReviewWorkflow", () => {
     },
   );
 
+  it.each([
+    "AI_NoOutputGeneratedError",
+    "AI_NoObjectGeneratedError",
+    "RepositoryToolBudgetExceededError",
+    "ZodError",
+  ])(
+    "does not retry a deterministic model failure: %s",
+    async (failureName) => {
+      const attempts = new Map<string, number>();
+      let modelAttempts = 0;
+      const failure = new Error("deterministic model failure");
+      failure.name = failureName;
+
+      await expect(
+        executeReviewWorkflow(
+          env,
+          {
+            instanceId: `deterministic-model-failure-${failureName}`,
+            payload: job,
+            timestamp: new Date("2026-08-29T12:00:00.000Z"),
+            workflowName: "holon-review-workflow",
+          },
+          retryingWorkflowStep([], attempts),
+          {
+            createModel: () => ({
+              review: () => {
+                modelAttempts += 1;
+                return Promise.reject(failure);
+              },
+            }),
+            createSession: () =>
+              Promise.resolve({
+                api: {
+                  paginate: () => Promise.resolve([]),
+                  request: () => Promise.resolve({ data: { id: 1 } }),
+                },
+                currentHeadSha: () => Promise.resolve("a".repeat(40)),
+                expiresAt: "later",
+                token: "token",
+              }),
+            executor: {
+              cleanup: () => Promise.resolve(),
+              hasContext: () => Promise.resolve(true),
+              loadContext: () =>
+                Promise.resolve({ changedLines: [], diff: "" }),
+              prepare: () =>
+                Promise.resolve({
+                  changedLineCount: 0,
+                  contextBytes: 10,
+                  fileCount: 0,
+                  runId: job.runId,
+                  schemaVersion: 1 as const,
+                  truncated: false,
+                }),
+              runTool: () => Promise.resolve({ content: "", truncated: false }),
+            },
+            now: () => "2026-08-29T12:00:01.000Z",
+          },
+        ),
+      ).rejects.toThrow();
+
+      expect(modelAttempts).toBe(1);
+      expect(attempts.get("analyze-review")).toBe(1);
+    },
+  );
+
   it("records terminalization and cleanup failures without hiding the causal error", async () => {
     const stepNames: string[] = [];
     const events: string[] = [];

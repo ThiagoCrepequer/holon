@@ -10,6 +10,7 @@ supersedes:
 related:
   - ../operations/deployment.md
   - ../research/2026-08-30-ai-gateway-provider-path-incident.md
+  - ../research/2026-08-30-agentic-review-completion-incident.md
 ---
 
 # Usar Dynamic Route para selecionar o modelo de PR review
@@ -65,10 +66,30 @@ AI SDK baseURL=https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat
 upstream model=dynamic/pr-review
 ```
 
-O Worker enviará apenas `cf-aig-authorization` ao AI Gateway. A chave
-OpenRouter permanecerá no BYOK e a rota publicada decidirá o provider e o
-modelo concretos. O AI SDK continuará com `maxRetries: 0`; a política de
-repetição e a classificação de erros permanecem no Workflow.
+O Worker enviará `cf-aig-authorization` e a política `cf-aig-skip-cache` ao AI
+Gateway, mas nenhuma chave do provider. A chave OpenRouter permanecerá no BYOK
+e a rota publicada decidirá o provider e o modelo concretos. O AI SDK
+continuará com `maxRetries: 0`; a política de repetição e a classificação de
+erros permanecem no Workflow.
+
+## Adendo operacional de 2026-08-30
+
+O primeiro review agentivo via OpenRouter demonstrou quatro requisitos do
+adapter que não são responsabilidade da Dynamic Route:
+
+- declarar `supportsStructuredOutputs: true`, para que o AI SDK envie JSON
+  Schema estrito em vez de apenas JSON mode;
+- ignorar o cache exato do Gateway durante o loop agentivo, pois tool results e
+  o estado efêmero do repositório fazem parte da execução corrente;
+- disponibilizar tools por no máximo seis passos e reservar o sétimo para a
+  resposta final estruturada, sem tools;
+- tratar ausência de output, objeto inválido, schema inválido e budget de tools
+  esgotado como falhas determinísticas, sem retry do Workflow.
+
+Retries duráveis continuam válidos para falhas transitórias classificadas do
+provider. A sequência de modelos da Dynamic Route precisa conter apenas modelos
+compatíveis com tool calling e structured outputs; essa configuração permanece
+um binding remoto validado por smoke.
 
 ## Consequências
 
@@ -89,8 +110,10 @@ repetição e a classificação de erros permanecem no Workflow.
 
 ## Critérios de confirmação
 
-- Teste unitário prova base URL `/compat`, modelo `dynamic/pr-review` e ausência
-  de chave do provider.
+- Teste unitário prova base URL `/compat`, modelo `dynamic/pr-review`, JSON
+  Schema estrito, bypass do cache e ausência de chave do provider.
+- Teste unitário prova que o último passo não expõe tools e que erros
+  determinísticos fazem uma única tentativa.
 - O binding remoto `AI_MODEL_ID` contém `dynamic/pr-review` após o deploy.
 - Smoke real registra `cf-aig-provider` como OpenRouter, produz tokens e conclui
   uma review estruturada.
@@ -112,3 +135,6 @@ Verificada em 2026-08-30:
 - [Dynamic routing](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/)
 - [OpenRouter provider](https://developers.cloudflare.com/ai-gateway/usage/providers/openrouter/)
 - [AI Gateway BYOK](https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/)
+- [AI Gateway caching](https://developers.cloudflare.com/ai-gateway/features/caching/)
+- [AI SDK OpenAI-compatible providers](https://ai-sdk.dev/providers/openai-compatible-providers)
+- [AI SDK tools with structured outputs](https://ai-sdk.dev/docs/troubleshooting/tool-calling-with-structured-outputs)

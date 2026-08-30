@@ -51,6 +51,8 @@ import {
   createBoundedRepositoryToolRunner,
   createGatewayProviderSettings,
   createRedactingRepositoryToolRunner,
+  isNonRetryableModelError,
+  isNonRetryableModelProviderError,
   limitUtf8Text,
   parseGatewayModelReference,
   redactModelReviewOutput,
@@ -271,8 +273,12 @@ describe("model review boundary", () => {
       }),
     ).toEqual({
       baseURL: "https://gateway.ai.cloudflare.com/v1/account/holon/compat",
-      headers: { "cf-aig-authorization": "Bearer token" },
+      headers: {
+        "cf-aig-authorization": "Bearer token",
+        "cf-aig-skip-cache": "true",
+      },
       name: "cloudflare-ai-gateway",
+      supportsStructuredOutputs: true,
     });
     expect(parseGatewayModelReference("dynamic/pr-review")).toEqual({
       gatewayPath: "compat",
@@ -291,7 +297,7 @@ describe("model review boundary", () => {
     });
     sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
     sdk.object.mockImplementationOnce((input: unknown) => input);
-    sdk.stepCountIs.mockReturnValueOnce({ steps: 8 });
+    sdk.stepCountIs.mockReturnValueOnce({ steps: 7 });
     const calls: unknown[] = [];
     const usages: unknown[] = [];
     const generator = new AiSdkReviewGenerator(
@@ -316,6 +322,7 @@ describe("model review boundary", () => {
 
     const options = sdk.generateText.mock.calls.at(-1)?.[0] as {
       readonly maxRetries: number;
+      readonly prepareStep: (input: { readonly stepNumber: number }) => unknown;
       readonly stopWhen: unknown;
       readonly tools: Record<
         string,
@@ -347,7 +354,12 @@ describe("model review boundary", () => {
     );
     expect(sdk.model).toHaveBeenCalledWith("dynamic/pr-review");
     expect(options.maxRetries).toBe(0);
-    expect(options.stopWhen).toEqual({ steps: 8 });
+    expect(options.prepareStep({ stepNumber: 5 })).toBeUndefined();
+    expect(options.prepareStep({ stepNumber: 6 })).toEqual({
+      activeTools: [],
+      toolChoice: "none",
+    });
+    expect(options.stopWhen).toEqual({ steps: 7 });
   });
 
   it.each([
@@ -382,4 +394,34 @@ describe("model review boundary", () => {
       } satisfies Partial<ModelProviderRequestError>);
     },
   );
+
+  it("classifies deterministic model failures without treating unknown errors as permanent", () => {
+    const serializedPermanent = new Error("HOLON_MODEL_PERMANENT:401");
+    const invalidOutput = new Error("missing output");
+    invalidOutput.name = "AI_NoOutputGeneratedError";
+
+    expect(isNonRetryableModelProviderError(serializedPermanent)).toBe(true);
+    expect(isNonRetryableModelError(invalidOutput)).toBe(true);
+    expect(isNonRetryableModelError(new Error("unknown failure"))).toBe(false);
+    expect(isNonRetryableModelError("unknown failure")).toBe(false);
+  });
+
+  it("preserves unexpected SDK errors for terminal diagnostics", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
+    sdk.generateText.mockRejectedValueOnce(new TypeError("invalid SDK state"));
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).rejects.toThrow("invalid SDK state");
+  });
 });

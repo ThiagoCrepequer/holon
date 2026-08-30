@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -47,12 +47,14 @@ sequenceDiagram
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
         CO->>RE: step analyze-review + tool handles
-        loop bounded investigation
+        loop at most six investigation steps
             RE->>AN: read/search/parse allowed content
             AN-->>RE: evidence with provenance
             RE->>AI: prompt redigido + selected evidence
             AI-->>RE: tool request or candidate findings
         end
+        RE->>AI: final structured step without tools
+        AI-->>RE: JSON Schema response
         RE-->>CO: validated structured findings
         CO->>GH: fetch current head SHA
         alt head changed
@@ -101,11 +103,13 @@ idempotente com o mesmo par de SHAs.
 - Assinatura inválida: rejeitar sem enfileirar.
 - Evento duplicado: reconhecer sem repetir efeitos.
 - Rate limit GitHub/modelo: retry com backoff e limite.
-- Ferramenta excede orçamento: encerrar com análise parcial explícita.
+- Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
+  resposta estruturada com a evidência já coletada.
 - Head SHA mudou: marcar run obsoleta e aguardar o evento mais novo.
 - Linha não pertence mais ao diff: não publicar aquele finding.
-- Resposta estrutural inválida: retry delimitado da etapa; depois falhar sem
-  comentários especulativos.
+- Resposta ausente ou estruturalmente inválida: falhar sem retry e sem
+  comentários especulativos; repetir a mesma inferência determinística só
+  multiplica tokens e tempo.
 - Finding estruturalmente válido em linha não alterada: descartar o finding e
   continuar com o resumo validado.
 - Falha depois de preparar o repositório: marcar terminal e executar cleanup em

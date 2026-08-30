@@ -16,7 +16,9 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 
 1. No AI Gateway `holon`, adicione a chave OpenRouter em Provider Keys/BYOK,
    habilite Authenticated Gateway e publique a versão desejada do Dynamic Route
-   `pr-review`. Confirme no editor que o nó ativo seleciona OpenRouter.
+   `pr-review`. Confirme no editor que todos os modelos ativos selecionam
+   OpenRouter e suportam tool calling e structured outputs. Modelos sem esses
+   dois contratos não devem permanecer nem como último fallback.
 2. Crie a DLQ e a Queue principal:
 
    ```bash
@@ -87,6 +89,12 @@ Fontes verificadas em 2026-08-30:
 5. Reentregue o mesmo webhook e confirme ausência de novos comentários.
 6. Force-push durante uma análise e confirme outcome `obsolete` sem publicação.
 7. Revogue/desinstale o App e confirme que novas runs falham sem expor segredo.
+8. Nos logs do AI Gateway, confirme `response_format` com JSON Schema, ausência
+   de hit no cache exato de respostas do Gateway durante o loop agentivo e um
+   passo final sem novas tool calls. Cache de prompt do provider é independente.
+9. Induza uma resposta estruturada inválida em ambiente de teste e confirme uma
+   única tentativa de `analyze-review`; apenas erros transitórios classificados
+   podem repetir a etapa.
 
 ## Observabilidade e rollback
 

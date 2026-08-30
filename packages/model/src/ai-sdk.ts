@@ -38,6 +38,8 @@ export interface GatewayModelReference {
 }
 
 const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const maximumInvestigationSteps = 6;
+const maximumModelSteps = maximumInvestigationSteps + 1;
 
 export class ModelProviderRequestError extends Error {
   public constructor(
@@ -56,6 +58,20 @@ export function isNonRetryableModelProviderError(error: unknown): boolean {
     error instanceof Error &&
     (error.name === "ModelPermanentError" ||
       error.message.startsWith("HOLON_MODEL_PERMANENT:"))
+  );
+}
+
+const nonRetryableModelErrorNames = new Set([
+  "AI_NoObjectGeneratedError",
+  "AI_NoOutputGeneratedError",
+  "RepositoryToolBudgetExceededError",
+  "ZodError",
+]);
+
+export function isNonRetryableModelError(error: unknown): boolean {
+  return (
+    isNonRetryableModelProviderError(error) ||
+    (error instanceof Error && nonRetryableModelErrorNames.has(error.name))
   );
 }
 
@@ -78,8 +94,10 @@ export function createGatewayProviderSettings(
     baseURL: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(config.accountId)}/${encodeURIComponent(config.gatewayId)}/${gatewayPath}`,
     headers: {
       "cf-aig-authorization": `Bearer ${config.apiToken}`,
+      "cf-aig-skip-cache": "true",
     },
     name: "cloudflare-ai-gateway",
+    supportsStructuredOutputs: true,
   };
 }
 
@@ -132,8 +150,12 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
           name: "holon_review",
           schema: modelReviewOutputSchema,
         }),
+        prepareStep: ({ stepNumber }) =>
+          stepNumber >= maximumInvestigationSteps
+            ? { activeTools: [], toolChoice: "none" }
+            : undefined,
         prompt: request.prompt,
-        stopWhen: stepCountIs(8),
+        stopWhen: stepCountIs(maximumModelSteps),
         temperature: 0,
         tools,
       });
