@@ -13,6 +13,7 @@ import {
   type SandboxPort,
   type SandboxProvider,
 } from "./executor-service.js";
+import { createSandboxId } from "./sandbox-identity.js";
 
 export class HolonSandbox extends Sandbox<Cloudflare.Env> {
   public override enableInternet = false;
@@ -98,7 +99,7 @@ export class CloudflareSandboxProvider implements SandboxProvider {
 
   public get(runId: string): SandboxPort {
     return new CloudflareSandboxPort(
-      getSandbox(this.env.SANDBOXES, runId, {
+      getSandbox(this.env.SANDBOXES, createSandboxId(runId), {
         normalizeId: true,
         // The longest model step is 10 minutes. Keep the ephemeral context
         // alive beyond that single inactive interval without using keepAlive.
