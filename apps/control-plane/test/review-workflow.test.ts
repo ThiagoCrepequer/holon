@@ -1,8 +1,10 @@
 import { reviewJobSchema } from "@holon/contracts";
 import type { ReviewRun, RunId } from "@holon/domain";
+import { ModelProviderRequestError } from "@holon/model";
 import { introspectWorkflowInstance, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -54,6 +56,42 @@ function immediateWorkflowStep(
       const result = await (callback as () => Promise<T>)();
       if (replaySteps.has(name)) await (callback as () => Promise<T>)();
       return result;
+    },
+  } as unknown as WorkflowStep;
+}
+
+function retryingWorkflowStep(
+  stepNames: string[],
+  attempts: Map<string, number>,
+): WorkflowStep {
+  return {
+    do: async <T>(
+      name: string,
+      configOrCallback: unknown,
+      maybeCallback?: unknown,
+    ): Promise<T> => {
+      stepNames.push(name);
+      const callback =
+        typeof configOrCallback === "function"
+          ? configOrCallback
+          : maybeCallback;
+      if (typeof callback !== "function") throw new TypeError("callback");
+      const limit =
+        typeof configOrCallback === "object" && configOrCallback !== null
+          ? ((configOrCallback as { retries?: { limit?: number } }).retries
+              ?.limit ?? 0)
+          : 0;
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= limit; attempt += 1) {
+        attempts.set(name, (attempts.get(name) ?? 0) + 1);
+        try {
+          return await (callback as () => Promise<T>)();
+        } catch (error) {
+          if (error instanceof NonRetryableError) throw error;
+          lastError = error;
+        }
+      }
+      throw lastError;
     },
   } as unknown as WorkflowStep;
 }
@@ -503,6 +541,80 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toBe("failed_terminal");
   });
+
+  it.each([
+    [401, false, 1],
+    [403, false, 1],
+    [404, false, 1],
+    [500, true, 3],
+  ])(
+    "applies the durable retry policy to provider status %s when retryable=%s",
+    async (statusCode, isRetryable, expectedAttempts) => {
+      const attempts = new Map<string, number>();
+      const stepNames: string[] = [];
+      let modelAttempts = 0;
+      let cleanupAttempts = 0;
+
+      await expect(
+        executeReviewWorkflow(
+          env,
+          {
+            instanceId: `model-status-${statusCode}`,
+            payload: job,
+            timestamp: new Date("2026-08-29T12:00:00.000Z"),
+            workflowName: "holon-review-workflow",
+          },
+          retryingWorkflowStep(stepNames, attempts),
+          {
+            createModel: () => ({
+              review: () => {
+                modelAttempts += 1;
+                return Promise.reject(
+                  new ModelProviderRequestError(isRetryable, statusCode),
+                );
+              },
+            }),
+            createSession: () =>
+              Promise.resolve({
+                api: {
+                  paginate: () => Promise.resolve([]),
+                  request: () => Promise.resolve({ data: { id: 1 } }),
+                },
+                currentHeadSha: () => Promise.resolve("a".repeat(40)),
+                expiresAt: "later",
+                token: "token",
+              }),
+            executor: {
+              cleanup: () => {
+                cleanupAttempts += 1;
+                return Promise.resolve();
+              },
+              hasContext: () => Promise.resolve(true),
+              loadContext: () =>
+                Promise.resolve({ changedLines: [], diff: "" }),
+              prepare: () =>
+                Promise.resolve({
+                  changedLineCount: 0,
+                  contextBytes: 10,
+                  fileCount: 0,
+                  runId: job.runId,
+                  schemaVersion: 1 as const,
+                  truncated: false,
+                }),
+              runTool: () => Promise.resolve({ content: "", truncated: false }),
+            },
+            now: () => "2026-08-29T12:00:01.000Z",
+          },
+        ),
+      ).rejects.toThrow();
+
+      expect(modelAttempts).toBe(expectedAttempts);
+      expect(attempts.get("analyze-review")).toBe(expectedAttempts);
+      expect(cleanupAttempts).toBe(1);
+      expect(stepNames).toContain("mark-review-terminal");
+      expect(stepNames).toContain("cleanup-failed-repository");
+    },
+  );
 
   it("records terminalization and cleanup failures without hiding the causal error", async () => {
     const stepNames: string[] = [];

@@ -39,12 +39,14 @@ import {
   GatewayModelReviewer,
   createBoundedRepositoryToolRunner,
   createRedactingRepositoryToolRunner,
+  isNonRetryableModelProviderError,
 } from "@holon/model";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
 
 import {
   consoleLogger,
@@ -338,20 +340,30 @@ export async function executeReviewWorkflow(
     }
 
     const output = await step.do("analyze-review", modelStep, async () => {
-      if (!(await services.executor.hasContext(job.runId))) {
-        await services.prepareRepository();
+      try {
+        if (!(await services.executor.hasContext(job.runId))) {
+          await services.prepareRepository();
+        }
+        const context = await services.loadContext();
+        const modelOutput = modelReviewOutputSchema.parse(
+          await services.model.review(job, context),
+        );
+        return modelReviewOutputSchema.parse({
+          ...modelOutput,
+          findings: selectValidFindings(
+            modelOutput.findings,
+            context.changedLines,
+          ),
+        });
+      } catch (error) {
+        if (isNonRetryableModelProviderError(error)) {
+          throw new NonRetryableError(
+            "HOLON_MODEL_PERMANENT",
+            "ModelPermanentError",
+          );
+        }
+        throw error;
       }
-      const context = await services.loadContext();
-      const modelOutput = modelReviewOutputSchema.parse(
-        await services.model.review(job, context),
-      );
-      return modelReviewOutputSchema.parse({
-        ...modelOutput,
-        findings: selectValidFindings(
-          modelOutput.findings,
-          context.changedLines,
-        ),
-      });
     });
 
     await moveTo("begin-publication", "running", "publishing");

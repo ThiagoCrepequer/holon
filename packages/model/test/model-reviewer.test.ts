@@ -1,12 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 
-const sdk = vi.hoisted(() => ({
-  createProvider: vi.fn(),
-  generateText: vi.fn(),
-  model: vi.fn(),
-  object: vi.fn((input: unknown) => input),
-  stepCountIs: vi.fn((steps: number) => ({ steps })),
-}));
+const sdk = vi.hoisted(() => {
+  class APICallError extends Error {
+    public readonly isRetryable: boolean;
+    public readonly statusCode: number | undefined;
+
+    public constructor(statusCode: number | undefined, isRetryable: boolean) {
+      super("provider request failed");
+      this.name = "AI_APICallError";
+      this.isRetryable = isRetryable;
+      this.statusCode = statusCode;
+    }
+
+    public static isInstance(error: unknown): error is APICallError {
+      return error instanceof APICallError;
+    }
+  }
+
+  return {
+    APICallError,
+    createProvider: vi.fn(),
+    generateText: vi.fn(),
+    model: vi.fn(),
+    object: vi.fn((input: unknown) => input),
+    stepCountIs: vi.fn((steps: number) => ({ steps })),
+  };
+});
 
 vi.mock("@ai-sdk/openai-compatible", () => ({
   createOpenAICompatible: sdk.createProvider.mockReturnValue(sdk.model),
@@ -15,6 +34,7 @@ vi.mock("@ai-sdk/provider-utils", () => ({
   tool: (definition: unknown) => definition,
 }));
 vi.mock("ai", () => ({
+  APICallError: sdk.APICallError,
   Output: { object: sdk.object },
   generateText: sdk.generateText,
   stepCountIs: sdk.stepCountIs,
@@ -25,12 +45,14 @@ import { reviewJobSchema, type ModelReviewOutput } from "@holon/contracts";
 import {
   GatewayModelReviewer,
   AiSdkReviewGenerator,
+  ModelProviderRequestError,
   RepositoryToolBudgetExceededError,
   buildReviewPrompt,
   createBoundedRepositoryToolRunner,
   createGatewayProviderSettings,
   createRedactingRepositoryToolRunner,
   limitUtf8Text,
+  parseGatewayModelReference,
   redactModelReviewOutput,
   redactSecrets,
 } from "../src/index.js";
@@ -239,7 +261,7 @@ describe("model review boundary", () => {
     ).toThrow();
   });
 
-  it("builds authenticated AI Gateway compatibility settings without forwarding a provider key", () => {
+  it("builds the provider-specific AI Gateway route without forwarding a provider key", () => {
     expect(
       createGatewayProviderSettings({
         accountId: "account",
@@ -248,10 +270,20 @@ describe("model review boundary", () => {
         model: "custom-opencode-zen/deepseek-v4-flash",
       }),
     ).toEqual({
-      baseURL: "https://gateway.ai.cloudflare.com/v1/account/holon/compat",
+      baseURL:
+        "https://gateway.ai.cloudflare.com/v1/account/holon/custom-opencode-zen",
       headers: { "cf-aig-authorization": "Bearer token" },
       name: "cloudflare-ai-gateway",
     });
+    expect(
+      parseGatewayModelReference("custom-opencode-zen/deepseek-v4-flash"),
+    ).toEqual({
+      modelId: "deepseek-v4-flash",
+      providerId: "custom-opencode-zen",
+    });
+    expect(() => parseGatewayModelReference("deepseek-v4-flash")).toThrow(
+      "custom provider",
+    );
   });
 
   it("configures AI SDK structured output and delegates all three bounded tools", async () => {
@@ -260,7 +292,7 @@ describe("model review boundary", () => {
       output,
       usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
     });
-    sdk.model.mockReturnValueOnce({ modelId: "anthropic/model" });
+    sdk.model.mockReturnValueOnce({ modelId: "deepseek-v4-flash" });
     sdk.object.mockImplementationOnce((input: unknown) => input);
     sdk.stepCountIs.mockReturnValueOnce({ steps: 8 });
     const calls: unknown[] = [];
@@ -270,7 +302,7 @@ describe("model review boundary", () => {
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "anthropic/model",
+        model: "custom-opencode-zen/deepseek-v4-flash",
       },
       {
         run: (call) => {
@@ -286,6 +318,7 @@ describe("model review boundary", () => {
     ).resolves.toEqual(output);
 
     const options = sdk.generateText.mock.calls.at(-1)?.[0] as {
+      readonly maxRetries: number;
       readonly stopWhen: unknown;
       readonly tools: Record<
         string,
@@ -312,9 +345,44 @@ describe("model review boundary", () => {
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "anthropic/model",
+        model: "custom-opencode-zen/deepseek-v4-flash",
       }),
     );
+    expect(sdk.model).toHaveBeenCalledWith("deepseek-v4-flash");
+    expect(options.maxRetries).toBe(0);
     expect(options.stopWhen).toEqual({ steps: 8 });
   });
+
+  it.each([
+    [401, false, "ModelPermanentError"],
+    [403, false, "ModelPermanentError"],
+    [404, false, "ModelPermanentError"],
+    [500, true, "ModelTransientError"],
+  ])(
+    "classifies provider status %s before crossing the model boundary",
+    async (statusCode, isRetryable, expectedName) => {
+      sdk.createProvider.mockReturnValue(sdk.model);
+      sdk.model.mockReturnValueOnce({ modelId: "deepseek-v4-flash" });
+      sdk.generateText.mockRejectedValueOnce(
+        new sdk.APICallError(statusCode, isRetryable),
+      );
+      const generator = new AiSdkReviewGenerator(
+        {
+          accountId: "account",
+          apiToken: "token",
+          gatewayId: "holon",
+          model: "custom-opencode-zen/deepseek-v4-flash",
+        },
+        { run: () => Promise.resolve({ content: "", truncated: false }) },
+      );
+
+      await expect(
+        generator.generate({ instructions: "system", prompt: "prompt" }),
+      ).rejects.toMatchObject({
+        isRetryable,
+        name: expectedName,
+        statusCode,
+      } satisfies Partial<ModelProviderRequestError>);
+    },
+  );
 });

@@ -11,7 +11,7 @@ import {
   searchStructureArgumentsSchema,
   searchTextArgumentsSchema,
 } from "@holon/contracts";
-import { Output, generateText, stepCountIs } from "ai";
+import { APICallError, Output, generateText, stepCountIs } from "ai";
 
 import type {
   RepositoryToolRunner,
@@ -32,11 +32,60 @@ export interface ModelUsage {
   readonly totalTokens: number | undefined;
 }
 
+export interface GatewayModelReference {
+  readonly modelId: string;
+  readonly providerId: string;
+}
+
+const customProviderIdPattern = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const modelIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u;
+
+export class ModelProviderRequestError extends Error {
+  public constructor(
+    public readonly isRetryable: boolean,
+    public readonly statusCode: number | undefined,
+  ) {
+    super(
+      `HOLON_MODEL_${isRetryable ? "TRANSIENT" : "PERMANENT"}:${statusCode ?? "network"}`,
+    );
+    this.name = isRetryable ? "ModelTransientError" : "ModelPermanentError";
+  }
+}
+
+export function isNonRetryableModelProviderError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "ModelPermanentError" ||
+      error.message.startsWith("HOLON_MODEL_PERMANENT:"))
+  );
+}
+
+export function parseGatewayModelReference(
+  reference: string,
+): GatewayModelReference {
+  const separator = reference.indexOf("/");
+  const providerId = reference.slice(0, separator);
+  const modelId = reference.slice(separator + 1);
+  if (
+    separator <= 0 ||
+    !customProviderIdPattern.test(providerId) ||
+    modelId.length === 0 ||
+    modelId.length > 256 ||
+    !modelIdPattern.test(modelId)
+  ) {
+    throw new TypeError(
+      "AI_MODEL_ID must use the custom provider format custom-{slug}/{model}",
+    );
+  }
+  return { modelId, providerId };
+}
+
 export function createGatewayProviderSettings(
   config: CloudflareGatewayModelConfig,
 ): OpenAICompatibleProviderSettings {
+  const { providerId } = parseGatewayModelReference(config.model);
   return {
-    baseURL: `https://gateway.ai.cloudflare.com/v1/${config.accountId}/${config.gatewayId}/compat`,
+    baseURL: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(config.accountId)}/${encodeURIComponent(config.gatewayId)}/${providerId}`,
     headers: {
       "cf-aig-authorization": `Bearer ${config.apiToken}`,
     },
@@ -52,6 +101,7 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
+    const { modelId } = parseGatewayModelReference(this.config.model);
     const provider = createOpenAICompatible(
       createGatewayProviderSettings(this.config),
     );
@@ -81,20 +131,31 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
         inputSchema: searchTextArgumentsSchema,
       }),
     };
-    const result = await generateText({
-      instructions: request.instructions,
-      maxOutputTokens: 4_000,
-      maxRetries: 2,
-      model: provider(this.config.model),
-      output: Output.object({
-        name: "holon_review",
-        schema: modelReviewOutputSchema,
-      }),
-      prompt: request.prompt,
-      stopWhen: stepCountIs(8),
-      temperature: 0,
-      tools,
-    });
+    let result;
+    try {
+      result = await generateText({
+        instructions: request.instructions,
+        maxOutputTokens: 4_000,
+        maxRetries: 0,
+        model: provider(modelId),
+        output: Output.object({
+          name: "holon_review",
+          schema: modelReviewOutputSchema,
+        }),
+        prompt: request.prompt,
+        stopWhen: stepCountIs(8),
+        temperature: 0,
+        tools,
+      });
+    } catch (error) {
+      if (APICallError.isInstance(error)) {
+        throw new ModelProviderRequestError(
+          error.isRetryable,
+          error.statusCode,
+        );
+      }
+      throw error;
+    }
     this.onUsage?.({
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
