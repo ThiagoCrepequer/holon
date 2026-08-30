@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Desenvolvimento local
@@ -82,6 +82,17 @@ AI_GATEWAY_ID
 AI_GATEWAY_API_TOKEN
 AI_MODEL_ID
 ```
+
+Para a decisão inicial OpenCode Zen, considerando o slug Cloudflare
+`opencode-zen`, use:
+
+```text
+AI_MODEL_ID=custom-opencode-zen/deepseek-v4-flash
+```
+
+`AI_GATEWAY_API_TOKEN` autentica o gateway e precisa de `AI Gateway Run`. A
+chave OpenCode não entra em `.dev.vars` nem no Worker quando BYOK estiver
+configurado; o gateway a injeta no request ao provider.
 
 O executor recebe somente um token de instalação efêmero por RPC. Ele não
 recebe segredo de webhook, chave do App ou credencial do modelo.

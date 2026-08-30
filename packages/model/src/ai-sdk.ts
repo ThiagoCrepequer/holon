@@ -36,9 +36,10 @@ export function createGatewayProviderSettings(
   config: CloudflareGatewayModelConfig,
 ): OpenAICompatibleProviderSettings {
   return {
-    apiKey: config.apiToken,
-    baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/ai/v1`,
-    headers: { "cf-aig-gateway-id": config.gatewayId },
+    baseURL: `https://gateway.ai.cloudflare.com/v1/${config.accountId}/${config.gatewayId}/compat`,
+    headers: {
+      "cf-aig-authorization": `Bearer ${config.apiToken}`,
+    },
     name: "cloudflare-ai-gateway",
   };
 }

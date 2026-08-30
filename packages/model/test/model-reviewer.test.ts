@@ -239,18 +239,17 @@ describe("model review boundary", () => {
     ).toThrow();
   });
 
-  it("builds the current AI Gateway REST provider settings without putting gateway identity in the URL", () => {
+  it("builds authenticated AI Gateway compatibility settings without forwarding a provider key", () => {
     expect(
       createGatewayProviderSettings({
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "anthropic/model",
+        model: "custom-opencode-zen/deepseek-v4-flash",
       }),
     ).toEqual({
-      apiKey: "token",
-      baseURL: "https://api.cloudflare.com/client/v4/accounts/account/ai/v1",
-      headers: { "cf-aig-gateway-id": "holon" },
+      baseURL: "https://gateway.ai.cloudflare.com/v1/account/holon/compat",
+      headers: { "cf-aig-authorization": "Bearer token" },
       name: "cloudflare-ai-gateway",
     });
   });

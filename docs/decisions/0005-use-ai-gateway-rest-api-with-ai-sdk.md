@@ -1,17 +1,21 @@
 ---
 id: ADR-0005
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-29
 owners:
   - core-team
 supersedes: []
 related:
   - 0003-adopt-initial-typescript-application-stack.md
+  - 0007-use-ai-gateway-compat-with-byok.md
   - ../research/2026-08-29-typescript-monorepo-toolchain.md
 ---
 
 # Usar a API REST atual do AI Gateway com AI SDK
+
+> Substituída por [ADR-0007](0007-use-ai-gateway-compat-with-byok.md) para
+> suportar o OpenCode Zen como Custom Provider com BYOK.
 
 ## Contexto
 

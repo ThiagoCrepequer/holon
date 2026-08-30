@@ -4,18 +4,19 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Provisionamento e deploy
 
-Nenhum deploy remoto foi executado durante o bootstrap. Os comandos abaixo são
+O primeiro deploy remoto foi executado em 2026-08-29. Os comandos abaixo são
 um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-los.
 
 ## Recursos
 
-1. Crie um AI Gateway e escolha um modelo compatível com a API OpenAI-style do
-   endpoint REST atual `/accounts/{account_id}/ai/v1`.
+1. No AI Gateway `holon`, crie o Custom Provider com slug `opencode-zen`, base
+   URL `https://opencode.ai/zen/v1` e estado habilitado. Adicione a chave
+   OpenCode em Provider Keys/BYOK e habilite Authenticated Gateway.
 2. Crie a DLQ e a Queue principal:
 
    ```bash
@@ -34,7 +35,10 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 5. Configure no control plane os sete nomes listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
    `wrangler secret put` para credenciais; App/account/gateway/model IDs também
-   podem ser variáveis por ambiente sem valores reais versionados.
+   podem ser variáveis por ambiente sem valores reais versionados. Para a
+   configuração inicial, `AI_MODEL_ID` é
+   `custom-opencode-zen/deepseek-v4-flash`; o token Cloudflare precisa de
+   `AI Gateway Run` e a chave OpenCode permanece no BYOK.
 6. Faça deploy do control plane:
 
    ```bash
@@ -43,6 +47,36 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 
 O Wrangler aplica a migration v1 do Durable Object SQLite e registra Workflow,
 Queue bindings e service binding definidos nos respectivos `wrangler.jsonc`.
+
+## Deploy automático com Workers Builds
+
+O repositório remoto é `ThiagoCrepequer/holon` e sua branch padrão é `main`.
+Cada deployable precisa de uma conexão própria com o mesmo monorepo:
+
+| Worker                      | Root | Branch | Build command                                        | Deploy command                                    |
+| --------------------------- | ---- | ------ | ---------------------------------------------------- | ------------------------------------------------- |
+| `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` | `pnpm --filter @holon/repository-executor deploy` |
+| `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       | `pnpm --filter @holon/control-plane deploy`       |
+
+O root permanece no topo porque ambos os apps dependem do workspace e do
+lockfile do monorepo. O executor deve manter `wrangler deploy` na branch de
+produção: `wrangler versions upload` não atualiza imagens de Containers.
+Na configuração inicial, desabilite builds de branches não produtivas nos dois
+Workers e mantenha o include watch path `*`, para que mudanças em pacotes
+compartilhados ou arquivos raiz também disparem os deploys.
+
+A autorização inicial do Cloudflare GitHub App é interativa no dashboard. Após
+essa autorização única, as conexões, triggers e variáveis de build também podem
+ser administradas pela Workers Builds API com um token de usuário que tenha
+`Workers Builds Configuration: Edit`. Runtime secrets continuam nas
+configurações do Worker; build variables não os substituem.
+
+Fontes verificadas em 2026-08-30:
+
+- [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
+- [Configuração de builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+- [Monorepos](https://developers.cloudflare.com/workers/ci-cd/builds/advanced-setups/)
+- [Builds API](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)
 
 ## Smoke test controlado
 
