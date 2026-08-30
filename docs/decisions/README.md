@@ -22,8 +22,9 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0004](0004-adopt-workflows-do-ledger-and-sandbox-executor.md)       | Adotar Workflows, ledger por PR e executor Sandbox isolado      | `accepted`   | 2026-08-29 |
 | [ADR-0005](0005-use-ai-gateway-rest-api-with-ai-sdk.md)                  | Usar a API REST atual do AI Gateway com AI SDK                  | `superseded` | 2026-08-29 |
 | [ADR-0006](0006-use-granular-workflow-checkpoints.md)                    | Usar checkpoints granulares e contexto efêmero no Sandbox       | `accepted`   | 2026-08-29 |
-| [ADR-0007](0007-use-ai-gateway-compat-with-byok.md)                      | Usar AI Gateway Compat com Custom Provider e BYOK               | `accepted`   | 2026-08-30 |
+| [ADR-0007](0007-use-ai-gateway-compat-with-byok.md)                      | Usar AI Gateway Compat com Custom Provider e BYOK               | `superseded` | 2026-08-30 |
 | [ADR-0008](0008-bound-sandbox-lifetime-and-use-virtual-github-egress.md) | Limitar vida do Sandbox e usar egress GitHub por host virtual   | `accepted`   | 2026-08-30 |
+| [ADR-0009](0009-use-provider-specific-ai-gateway-route.md)               | Usar rota específica do Custom Provider e uma camada de retries | `accepted`   | 2026-08-30 |
 
 ## Regras
 

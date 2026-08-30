@@ -1,7 +1,7 @@
 ---
 id: ADR-0007
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-30
 owners:
   - core-team
@@ -9,10 +9,15 @@ supersedes:
   - 0005-use-ai-gateway-rest-api-with-ai-sdk.md
 related:
   - 0003-adopt-initial-typescript-application-stack.md
+  - 0009-use-provider-specific-ai-gateway-route.md
   - ../operations/deployment.md
 ---
 
 # Usar AI Gateway Compat com Custom Provider e BYOK
+
+> Substituída por
+> [ADR-0009](0009-use-provider-specific-ai-gateway-route.md) após o smoke real
+> demonstrar que `/compat` não preservou o prefixo `/zen/v1` do OpenCode Zen.
 
 ## Contexto e problema
 

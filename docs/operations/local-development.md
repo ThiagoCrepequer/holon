@@ -90,6 +90,10 @@ Para a decisão inicial OpenCode Zen, considerando o slug Cloudflare
 AI_MODEL_ID=custom-opencode-zen/deepseek-v4-flash
 ```
 
+O prefixo `custom-opencode-zen/` é obrigatório: ele seleciona a rota específica
+do Custom Provider no AI Gateway. O adapter remove esse prefixo antes de enviar
+`deepseek-v4-flash` no campo `model` ao OpenCode.
+
 `AI_GATEWAY_API_TOKEN` autentica o gateway e precisa de `AI Gateway Run`. A
 chave OpenCode não entra em `.dev.vars` nem no Worker quando BYOK estiver
 configurado; o gateway a injeta no request ao provider.

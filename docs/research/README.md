@@ -18,6 +18,7 @@ Nao criam uma decisao por si so.
 - [Viabilidade da plataforma Cloudflare para review de PRs](2026-08-29-cloudflare-pr-review-feasibility.md)
 - [Ecossistema TypeScript e monorepo](2026-08-29-typescript-monorepo-toolchain.md)
 - [Incidente de egress e retries do Sandbox](2026-08-30-sandbox-egress-and-retry-incident.md)
+- [Incidente de path e retries do AI Gateway](2026-08-30-ai-gateway-provider-path-incident.md)
 
 ## Politica de manutencao
 
