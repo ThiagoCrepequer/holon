@@ -83,20 +83,20 @@ AI_GATEWAY_API_TOKEN
 AI_MODEL_ID
 ```
 
-Para a decisão inicial OpenCode Zen, considerando o slug Cloudflare
-`opencode-zen`, use:
+O control plane espera a rota de review neste binding:
 
 ```text
-AI_MODEL_ID=custom-opencode-zen/deepseek-v4-flash
+AI_MODEL_ID=dynamic/pr-review
 ```
 
-O prefixo `custom-opencode-zen/` é obrigatório: ele seleciona a rota específica
-do Custom Provider no AI Gateway. O adapter remove esse prefixo antes de enviar
-`deepseek-v4-flash` no campo `model` ao OpenCode.
+Em desenvolvimento, defina esse nome em `.dev.vars`. Em produção, mantenha o
+mesmo valor no secret binding já provisionado. O prefixo `dynamic/` é
+obrigatório: o adapter usa `/compat` e envia o identificador completo no campo
+`model`.
 
 `AI_GATEWAY_API_TOKEN` autentica o gateway e precisa de `AI Gateway Run`. A
-chave OpenCode não entra em `.dev.vars` nem no Worker quando BYOK estiver
-configurado; o gateway a injeta no request ao provider.
+chave OpenRouter não entra em `.dev.vars` nem no Worker quando BYOK estiver
+configurado; o gateway a injeta depois que a rota seleciona o provider.
 
 O executor recebe somente um token de instalação efêmero por RPC. Ele não
 recebe segredo de webhook, chave do App ou credencial do modelo.

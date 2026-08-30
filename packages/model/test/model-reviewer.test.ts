@@ -261,28 +261,25 @@ describe("model review boundary", () => {
     ).toThrow();
   });
 
-  it("builds the provider-specific AI Gateway route without forwarding a provider key", () => {
+  it("builds the AI Gateway compat route for a dynamic model without forwarding a provider key", () => {
     expect(
       createGatewayProviderSettings({
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "custom-opencode-zen/deepseek-v4-flash",
+        model: "dynamic/pr-review",
       }),
     ).toEqual({
-      baseURL:
-        "https://gateway.ai.cloudflare.com/v1/account/holon/custom-opencode-zen",
+      baseURL: "https://gateway.ai.cloudflare.com/v1/account/holon/compat",
       headers: { "cf-aig-authorization": "Bearer token" },
       name: "cloudflare-ai-gateway",
     });
-    expect(
-      parseGatewayModelReference("custom-opencode-zen/deepseek-v4-flash"),
-    ).toEqual({
-      modelId: "deepseek-v4-flash",
-      providerId: "custom-opencode-zen",
+    expect(parseGatewayModelReference("dynamic/pr-review")).toEqual({
+      gatewayPath: "compat",
+      modelId: "dynamic/pr-review",
     });
-    expect(() => parseGatewayModelReference("deepseek-v4-flash")).toThrow(
-      "custom provider",
+    expect(() => parseGatewayModelReference("pr-review")).toThrow(
+      "dynamic route",
     );
   });
 
@@ -292,7 +289,7 @@ describe("model review boundary", () => {
       output,
       usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
     });
-    sdk.model.mockReturnValueOnce({ modelId: "deepseek-v4-flash" });
+    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
     sdk.object.mockImplementationOnce((input: unknown) => input);
     sdk.stepCountIs.mockReturnValueOnce({ steps: 8 });
     const calls: unknown[] = [];
@@ -302,7 +299,7 @@ describe("model review boundary", () => {
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "custom-opencode-zen/deepseek-v4-flash",
+        model: "dynamic/pr-review",
       },
       {
         run: (call) => {
@@ -345,10 +342,10 @@ describe("model review boundary", () => {
         accountId: "account",
         apiToken: "token",
         gatewayId: "holon",
-        model: "custom-opencode-zen/deepseek-v4-flash",
+        model: "dynamic/pr-review",
       }),
     );
-    expect(sdk.model).toHaveBeenCalledWith("deepseek-v4-flash");
+    expect(sdk.model).toHaveBeenCalledWith("dynamic/pr-review");
     expect(options.maxRetries).toBe(0);
     expect(options.stopWhen).toEqual({ steps: 8 });
   });
@@ -362,7 +359,7 @@ describe("model review boundary", () => {
     "classifies provider status %s before crossing the model boundary",
     async (statusCode, isRetryable, expectedName) => {
       sdk.createProvider.mockReturnValue(sdk.model);
-      sdk.model.mockReturnValueOnce({ modelId: "deepseek-v4-flash" });
+      sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
       sdk.generateText.mockRejectedValueOnce(
         new sdk.APICallError(statusCode, isRetryable),
       );
@@ -371,7 +368,7 @@ describe("model review boundary", () => {
           accountId: "account",
           apiToken: "token",
           gatewayId: "holon",
-          model: "custom-opencode-zen/deepseek-v4-flash",
+          model: "dynamic/pr-review",
         },
         { run: () => Promise.resolve({ content: "", truncated: false }) },
       );

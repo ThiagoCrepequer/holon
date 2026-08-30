@@ -33,12 +33,11 @@ export interface ModelUsage {
 }
 
 export interface GatewayModelReference {
+  readonly gatewayPath: "compat";
   readonly modelId: string;
-  readonly providerId: string;
 }
 
-const customProviderIdPattern = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const modelIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u;
+const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 export class ModelProviderRequestError extends Error {
   public constructor(
@@ -63,29 +62,20 @@ export function isNonRetryableModelProviderError(error: unknown): boolean {
 export function parseGatewayModelReference(
   reference: string,
 ): GatewayModelReference {
-  const separator = reference.indexOf("/");
-  const providerId = reference.slice(0, separator);
-  const modelId = reference.slice(separator + 1);
-  if (
-    separator <= 0 ||
-    !customProviderIdPattern.test(providerId) ||
-    modelId.length === 0 ||
-    modelId.length > 256 ||
-    !modelIdPattern.test(modelId)
-  ) {
+  if (reference.length > 256 || !dynamicRoutePattern.test(reference)) {
     throw new TypeError(
-      "AI_MODEL_ID must use the custom provider format custom-{slug}/{model}",
+      "AI_MODEL_ID must use the dynamic route format dynamic/{route}",
     );
   }
-  return { modelId, providerId };
+  return { gatewayPath: "compat", modelId: reference };
 }
 
 export function createGatewayProviderSettings(
   config: CloudflareGatewayModelConfig,
 ): OpenAICompatibleProviderSettings {
-  const { providerId } = parseGatewayModelReference(config.model);
+  const { gatewayPath } = parseGatewayModelReference(config.model);
   return {
-    baseURL: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(config.accountId)}/${encodeURIComponent(config.gatewayId)}/${providerId}`,
+    baseURL: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(config.accountId)}/${encodeURIComponent(config.gatewayId)}/${gatewayPath}`,
     headers: {
       "cf-aig-authorization": `Bearer ${config.apiToken}`,
     },

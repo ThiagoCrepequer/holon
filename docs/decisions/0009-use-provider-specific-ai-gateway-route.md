@@ -1,18 +1,25 @@
 ---
 id: ADR-0009
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-30
 owners:
   - core-team
 supersedes:
   - 0007-use-ai-gateway-compat-with-byok.md
 related:
+  - 0010-use-dynamic-route-for-pr-review.md
   - ../operations/deployment.md
   - ../research/2026-08-30-ai-gateway-provider-path-incident.md
 ---
 
 # Usar rota específica do Custom Provider e uma camada de retries
+
+> Substituída por
+> [ADR-0010](0010-use-dynamic-route-for-pr-review.md) após os smokes mostrarem
+> que o prefixo não padrão do OpenCode Zen também não era representado pelo
+> Dynamic Route, enquanto a rota `dynamic/pr-review` com OpenRouter usa o
+> contrato `/compat` esperado pela Cloudflare.
 
 ## Contexto e problema
 

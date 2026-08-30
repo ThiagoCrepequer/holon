@@ -14,9 +14,9 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 
 ## Recursos
 
-1. No AI Gateway `holon`, crie o Custom Provider com slug `opencode-zen`, base
-   URL `https://opencode.ai/zen/v1` e estado habilitado. Adicione a chave
-   OpenCode em Provider Keys/BYOK e habilite Authenticated Gateway.
+1. No AI Gateway `holon`, adicione a chave OpenRouter em Provider Keys/BYOK,
+   habilite Authenticated Gateway e publique a versão desejada do Dynamic Route
+   `pr-review`. Confirme no editor que o nó ativo seleciona OpenRouter.
 2. Crie a DLQ e a Queue principal:
 
    ```bash
@@ -32,16 +32,12 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    pnpm --filter @holon/repository-executor deploy
    ```
 
-5. Configure no control plane os sete nomes listados em
+5. Configure no control plane os nomes externos listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
-   `wrangler secret put` para credenciais; App/account/gateway/model IDs também
-   podem ser variáveis por ambiente sem valores reais versionados. Para a
-   configuração inicial, `AI_MODEL_ID` é
-   `custom-opencode-zen/deepseek-v4-flash`; o token Cloudflare precisa de
-   `AI Gateway Run` e a chave OpenCode permanece no BYOK.
-   O adapter separa esse valor em provider `custom-opencode-zen` e modelo
-   upstream `deepseek-v4-flash`, usando a rota específica do Custom Provider.
-   Não troque o valor por apenas `deepseek-v4-flash`.
+   `wrangler secret put` para credenciais; App, account e gateway IDs podem ser
+   variáveis por ambiente. Configure o binding existente como
+   `AI_MODEL_ID=dynamic/pr-review`; o token Cloudflare precisa de
+   `AI Gateway Run`. A chave OpenRouter permanece exclusivamente no BYOK.
 6. Faça deploy do control plane:
 
    ```bash
@@ -76,6 +72,7 @@ configurações do Worker; build variables não os substituem.
 
 Fontes verificadas em 2026-08-30:
 
+- [Using a dynamic route](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/)
 - [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
 - [Configuração de builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
 - [Monorepos](https://developers.cloudflare.com/workers/ci-cd/builds/advanced-setups/)

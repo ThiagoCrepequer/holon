@@ -7,6 +7,7 @@ owners:
   - core-team
 related:
   - ../decisions/0009-use-provider-specific-ai-gateway-route.md
+  - ../decisions/0010-use-dynamic-route-for-pr-review.md
 ---
 
 # Incidente de path e retries do AI Gateway
@@ -71,3 +72,17 @@ Verificadas em 2026-08-30:
 - Deploy do control plane com a rota específica.
 - Smoke real confirmando tokens, resposta estruturada e publicação no PR.
 - Inspeção de uma falha `401` induzida para confirmar uma única chamada remota.
+
+## Desdobramento posterior
+
+Ainda em 2026-08-30, um Dynamic Route publicado selecionou corretamente o
+OpenCode Zen, mas recebeu a mesma página HTML `404`. O nó de modelo não oferecia
+um campo para representar o prefixo `/zen/v1`, e a rota antiga
+`api.opencode.ai/v1/chat/completions` respondeu apenas `Not Found` em reprodução
+controlada.
+
+Como o gateway já possuía uma chave OpenRouter e esse provider usa o contrato
+OpenAI-compatible esperado pelo `/compat`, a decisão vigente passou a ser
+`dynamic/pr-review`, registrada na ADR-0010. Este adendo preserva a investigação
+original; ele não transforma o smoke da rota específica, que continuou
+pendente, em evidência de sucesso.
