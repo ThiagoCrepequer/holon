@@ -1,19 +1,26 @@
 ---
 id: ADR-0010
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-30
 owners:
   - core-team
 supersedes:
   - 0009-use-provider-specific-ai-gateway-route.md
 related:
+  - 0011-centralize-model-fallback-in-dynamic-route.md
   - ../operations/deployment.md
   - ../research/2026-08-30-ai-gateway-provider-path-incident.md
   - ../research/2026-08-30-agentic-review-completion-incident.md
 ---
 
 # Usar Dynamic Route para selecionar o modelo de PR review
+
+> Substituída por
+> [ADR-0011](0011-centralize-model-fallback-in-dynamic-route.md) depois que a
+> validação em produção mostrou que repetir `analyze-review` reiniciava toda a
+> sessão agentiva mesmo quando o provider já havia devolvido uma resposta HTTP
+> bem-sucedida, porém semanticamente inválida.
 
 ## Contexto e problema
 

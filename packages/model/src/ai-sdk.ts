@@ -61,18 +61,33 @@ export function isNonRetryableModelProviderError(error: unknown): boolean {
   );
 }
 
-const nonRetryableModelErrorNames = new Set([
-  "AI_NoObjectGeneratedError",
-  "AI_NoOutputGeneratedError",
-  "RepositoryToolBudgetExceededError",
-  "ZodError",
+export type NonRetryableModelFailureCode =
+  | "object_invalid"
+  | "output_missing"
+  | "provider_permanent"
+  | "schema_invalid"
+  | "tool_budget_exhausted";
+
+const nonRetryableModelErrorCodes = new Map<
+  string,
+  NonRetryableModelFailureCode
+>([
+  ["AI_NoObjectGeneratedError", "object_invalid"],
+  ["AI_NoOutputGeneratedError", "output_missing"],
+  ["RepositoryToolBudgetExceededError", "tool_budget_exhausted"],
+  ["ZodError", "schema_invalid"],
 ]);
 
+export function nonRetryableModelFailureCode(
+  error: unknown,
+): NonRetryableModelFailureCode | undefined {
+  if (isNonRetryableModelProviderError(error)) return "provider_permanent";
+  if (!(error instanceof Error)) return undefined;
+  return nonRetryableModelErrorCodes.get(error.name);
+}
+
 export function isNonRetryableModelError(error: unknown): boolean {
-  return (
-    isNonRetryableModelProviderError(error) ||
-    (error instanceof Error && nonRetryableModelErrorNames.has(error.name))
-  );
+  return nonRetryableModelFailureCode(error) !== undefined;
 }
 
 export function parseGatewayModelReference(

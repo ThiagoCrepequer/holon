@@ -102,7 +102,10 @@ idempotente com o mesmo par de SHAs.
 
 - Assinatura inválida: rejeitar sem enfileirar.
 - Evento duplicado: reconhecer sem repetir efeitos.
-- Rate limit GitHub/modelo: retry com backoff e limite.
+- Rate limit do GitHub: retry com backoff e limite nos steps pequenos e
+  idempotentes de leitura/publicação.
+- Falha de provider/modelo: a Dynamic Route tenta seus fallbacks por requisição;
+  o Workflow não reinicia a sessão agentiva completa.
 - Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
   resposta estruturada com a evidência já coletada.
 - Head SHA mudou: marcar run obsoleta e aguardar o evento mais novo.

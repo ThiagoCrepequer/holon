@@ -20,6 +20,7 @@ Nao criam uma decisao por si so.
 - [Incidente de egress e retries do Sandbox](2026-08-30-sandbox-egress-and-retry-incident.md)
 - [Incidente de path e retries do AI Gateway](2026-08-30-ai-gateway-provider-path-incident.md)
 - [Incidente de conclusão do review agentivo](2026-08-30-agentic-review-completion-incident.md)
+- [Incidente de output truncado e replay da sessão agentiva](2026-08-30-model-output-and-retry-incident.md)
 
 ## Politica de manutencao
 

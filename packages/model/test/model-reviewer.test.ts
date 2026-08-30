@@ -54,6 +54,7 @@ import {
   isNonRetryableModelError,
   isNonRetryableModelProviderError,
   limitUtf8Text,
+  nonRetryableModelFailureCode,
   parseGatewayModelReference,
   redactModelReviewOutput,
   redactSecrets,
@@ -401,7 +402,14 @@ describe("model review boundary", () => {
     invalidOutput.name = "AI_NoOutputGeneratedError";
 
     expect(isNonRetryableModelProviderError(serializedPermanent)).toBe(true);
+    expect(nonRetryableModelFailureCode(serializedPermanent)).toBe(
+      "provider_permanent",
+    );
+    expect(nonRetryableModelFailureCode(invalidOutput)).toBe("output_missing");
     expect(isNonRetryableModelError(invalidOutput)).toBe(true);
+    expect(nonRetryableModelFailureCode(new Error("unknown failure"))).toBe(
+      undefined,
+    );
     expect(isNonRetryableModelError(new Error("unknown failure"))).toBe(false);
     expect(isNonRetryableModelError("unknown failure")).toBe(false);
   });

@@ -12,6 +12,15 @@ related:
 
 # Incidente de conclusão do review agentivo
 
+## Errata após validação em produção
+
+A política descrita abaixo impediu retries para erros determinísticos nos
+testes locais, mas não no runtime publicado: uma resposta truncada e inválida
+foi executada três vezes pelo step. A investigação posterior está em
+[Incidente de output truncado e replay da sessão agentiva](2026-08-30-model-output-and-retry-incident.md),
+e a política de retry foi substituída pela
+[ADR-0011](../decisions/0011-centralize-model-fallback-in-dynamic-route.md).
+
 ## Pergunta
 
 Por que o review alcançou o modelo correto no OpenRouter, executou ferramentas

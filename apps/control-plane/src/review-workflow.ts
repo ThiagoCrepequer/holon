@@ -39,7 +39,7 @@ import {
   GatewayModelReviewer,
   createBoundedRepositoryToolRunner,
   createRedactingRepositoryToolRunner,
-  isNonRetryableModelError,
+  nonRetryableModelFailureCode,
 } from "@holon/model";
 import {
   WorkflowEntrypoint,
@@ -233,7 +233,7 @@ const repositoryStep = {
   timeout: "2 minutes",
 } as const;
 const modelStep = {
-  retries: { backoff: "exponential", delay: "10 seconds", limit: 2 },
+  retries: { backoff: "constant", delay: "1 second", limit: 0 },
   sensitive: "output",
   timeout: "10 minutes",
 } as const;
@@ -356,10 +356,10 @@ export async function executeReviewWorkflow(
           ),
         });
       } catch (error) {
-        if (isNonRetryableModelError(error)) {
+        const failureCode = nonRetryableModelFailureCode(error);
+        if (failureCode !== undefined) {
           throw new NonRetryableError(
-            "HOLON_MODEL_NON_RETRYABLE",
-            "ModelNonRetryableError",
+            `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
           );
         }
         throw error;

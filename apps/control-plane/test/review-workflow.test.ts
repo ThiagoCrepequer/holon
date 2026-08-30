@@ -543,73 +543,73 @@ describe("ReviewWorkflow", () => {
   });
 
   it.each([
-    [401, false, 1],
-    [403, false, 1],
-    [404, false, 1],
-    [500, true, 3],
+    [401, false, "NonRetryableError"],
+    [403, false, "NonRetryableError"],
+    [404, false, "NonRetryableError"],
+    [500, true, "ModelTransientError"],
   ])(
-    "applies the durable retry policy to provider status %s when retryable=%s",
-    async (statusCode, isRetryable, expectedAttempts) => {
+    "delegates provider fallback without replaying status %s when retryable=%s",
+    async (statusCode, isRetryable, expectedErrorName) => {
       const attempts = new Map<string, number>();
       const stepNames: string[] = [];
       let modelAttempts = 0;
       let cleanupAttempts = 0;
 
-      await expect(
-        executeReviewWorkflow(
-          env,
-          {
-            instanceId: `model-status-${statusCode}`,
-            payload: job,
-            timestamp: new Date("2026-08-29T12:00:00.000Z"),
-            workflowName: "holon-review-workflow",
-          },
-          retryingWorkflowStep(stepNames, attempts),
-          {
-            createModel: () => ({
-              review: () => {
-                modelAttempts += 1;
-                return Promise.reject(
-                  new ModelProviderRequestError(isRetryable, statusCode),
-                );
-              },
-            }),
-            createSession: () =>
-              Promise.resolve({
-                api: {
-                  paginate: () => Promise.resolve([]),
-                  request: () => Promise.resolve({ data: { id: 1 } }),
-                },
-                currentHeadSha: () => Promise.resolve("a".repeat(40)),
-                expiresAt: "later",
-                token: "token",
-              }),
-            executor: {
-              cleanup: () => {
-                cleanupAttempts += 1;
-                return Promise.resolve();
-              },
-              hasContext: () => Promise.resolve(true),
-              loadContext: () =>
-                Promise.resolve({ changedLines: [], diff: "" }),
-              prepare: () =>
-                Promise.resolve({
-                  changedLineCount: 0,
-                  contextBytes: 10,
-                  fileCount: 0,
-                  runId: job.runId,
-                  schemaVersion: 1 as const,
-                  truncated: false,
-                }),
-              runTool: () => Promise.resolve({ content: "", truncated: false }),
+      const execution = executeReviewWorkflow(
+        env,
+        {
+          instanceId: `model-status-${statusCode}`,
+          payload: job,
+          timestamp: new Date("2026-08-29T12:00:00.000Z"),
+          workflowName: "holon-review-workflow",
+        },
+        retryingWorkflowStep(stepNames, attempts),
+        {
+          createModel: () => ({
+            review: () => {
+              modelAttempts += 1;
+              return Promise.reject(
+                new ModelProviderRequestError(isRetryable, statusCode),
+              );
             },
-            now: () => "2026-08-29T12:00:01.000Z",
+          }),
+          createSession: () =>
+            Promise.resolve({
+              api: {
+                paginate: () => Promise.resolve([]),
+                request: () => Promise.resolve({ data: { id: 1 } }),
+              },
+              currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              expiresAt: "later",
+              token: "token",
+            }),
+          executor: {
+            cleanup: () => {
+              cleanupAttempts += 1;
+              return Promise.resolve();
+            },
+            hasContext: () => Promise.resolve(true),
+            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            prepare: () =>
+              Promise.resolve({
+                changedLineCount: 0,
+                contextBytes: 10,
+                fileCount: 0,
+                runId: job.runId,
+                schemaVersion: 1 as const,
+                truncated: false,
+              }),
+            runTool: () => Promise.resolve({ content: "", truncated: false }),
           },
-        ),
-      ).rejects.toThrow();
+          now: () => "2026-08-29T12:00:01.000Z",
+        },
+      );
 
-      expect(modelAttempts).toBe(expectedAttempts);
-      expect(attempts.get("analyze-review")).toBe(expectedAttempts);
+      await expect(execution).rejects.toMatchObject({
+        name: expectedErrorName,
+      });
+      expect(modelAttempts).toBe(1);
+      expect(attempts.get("analyze-review")).toBe(1);
       expect(cleanupAttempts).toBe(1);
       expect(stepNames).toContain("mark-review-terminal");
       expect(stepNames).toContain("cleanup-failed-repository");
@@ -617,66 +617,67 @@ describe("ReviewWorkflow", () => {
   );
 
   it.each([
-    "AI_NoOutputGeneratedError",
-    "AI_NoObjectGeneratedError",
-    "RepositoryToolBudgetExceededError",
-    "ZodError",
+    ["AI_NoOutputGeneratedError", "output_missing"],
+    ["AI_NoObjectGeneratedError", "object_invalid"],
+    ["RepositoryToolBudgetExceededError", "tool_budget_exhausted"],
+    ["ZodError", "schema_invalid"],
   ])(
     "does not retry a deterministic model failure: %s",
-    async (failureName) => {
+    async (failureName, failureCode) => {
       const attempts = new Map<string, number>();
       let modelAttempts = 0;
       const failure = new Error("deterministic model failure");
       failure.name = failureName;
 
-      await expect(
-        executeReviewWorkflow(
-          env,
-          {
-            instanceId: `deterministic-model-failure-${failureName}`,
-            payload: job,
-            timestamp: new Date("2026-08-29T12:00:00.000Z"),
-            workflowName: "holon-review-workflow",
-          },
-          retryingWorkflowStep([], attempts),
-          {
-            createModel: () => ({
-              review: () => {
-                modelAttempts += 1;
-                return Promise.reject(failure);
-              },
-            }),
-            createSession: () =>
-              Promise.resolve({
-                api: {
-                  paginate: () => Promise.resolve([]),
-                  request: () => Promise.resolve({ data: { id: 1 } }),
-                },
-                currentHeadSha: () => Promise.resolve("a".repeat(40)),
-                expiresAt: "later",
-                token: "token",
-              }),
-            executor: {
-              cleanup: () => Promise.resolve(),
-              hasContext: () => Promise.resolve(true),
-              loadContext: () =>
-                Promise.resolve({ changedLines: [], diff: "" }),
-              prepare: () =>
-                Promise.resolve({
-                  changedLineCount: 0,
-                  contextBytes: 10,
-                  fileCount: 0,
-                  runId: job.runId,
-                  schemaVersion: 1 as const,
-                  truncated: false,
-                }),
-              runTool: () => Promise.resolve({ content: "", truncated: false }),
+      const execution = executeReviewWorkflow(
+        env,
+        {
+          instanceId: `deterministic-model-failure-${failureName}`,
+          payload: job,
+          timestamp: new Date("2026-08-29T12:00:00.000Z"),
+          workflowName: "holon-review-workflow",
+        },
+        retryingWorkflowStep([], attempts),
+        {
+          createModel: () => ({
+            review: () => {
+              modelAttempts += 1;
+              return Promise.reject(failure);
             },
-            now: () => "2026-08-29T12:00:01.000Z",
+          }),
+          createSession: () =>
+            Promise.resolve({
+              api: {
+                paginate: () => Promise.resolve([]),
+                request: () => Promise.resolve({ data: { id: 1 } }),
+              },
+              currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              expiresAt: "later",
+              token: "token",
+            }),
+          executor: {
+            cleanup: () => Promise.resolve(),
+            hasContext: () => Promise.resolve(true),
+            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            prepare: () =>
+              Promise.resolve({
+                changedLineCount: 0,
+                contextBytes: 10,
+                fileCount: 0,
+                runId: job.runId,
+                schemaVersion: 1 as const,
+                truncated: false,
+              }),
+            runTool: () => Promise.resolve({ content: "", truncated: false }),
           },
-        ),
-      ).rejects.toThrow();
+          now: () => "2026-08-29T12:00:01.000Z",
+        },
+      );
 
+      await expect(execution).rejects.toMatchObject({
+        message: `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
+        name: "NonRetryableError",
+      });
       expect(modelAttempts).toBe(1);
       expect(attempts.get("analyze-review")).toBe(1);
     },
