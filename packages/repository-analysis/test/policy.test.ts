@@ -13,6 +13,7 @@ import {
 
 const request = executorRequestSchema.parse({
   baseSha: "b".repeat(40),
+  canonicalDiff: "",
   cloneUrl: "https://github.com/acme/api.git",
   headSha: "a".repeat(40),
   pullRequestNumber: 7,
@@ -44,7 +45,7 @@ describe("repository execution policy", () => {
           "--no-tags",
           "--depth=1",
           "https://github.com/acme/api.git",
-          "b".repeat(40),
+          "a".repeat(40),
           "+refs/pull/7/head:refs/holon/head",
         ],
         cwd: "/workspace/repository",

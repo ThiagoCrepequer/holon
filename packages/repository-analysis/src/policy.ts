@@ -76,7 +76,7 @@ export function buildCheckoutPlan(
         "--no-tags",
         "--depth=1",
         cloneUrl,
-        request.baseSha,
+        request.headSha,
         `+refs/pull/${request.pullRequestNumber}/head:refs/holon/head`,
       ],
       cwd: repositoryPath,

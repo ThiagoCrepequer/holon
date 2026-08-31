@@ -116,7 +116,7 @@ export class CloudflareSandboxProvider implements SandboxProvider {
       getSandbox(this.env.SANDBOXES, createSandboxId(runId), {
         normalizeId: true,
         // Tool calls recreate the checkout if this ephemeral context slept.
-        sleepAfter: "2m",
+        sleepAfter: "30s",
       }),
     );
   }

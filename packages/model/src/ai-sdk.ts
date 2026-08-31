@@ -23,12 +23,16 @@ export interface CloudflareGatewayModelConfig {
   readonly accountId: string;
   readonly apiToken: string;
   readonly gatewayId: string;
+  readonly metadata?: Readonly<Record<string, string>>;
   readonly model: string;
 }
 
 export interface ModelUsage {
+  readonly attempt: "investigation" | "recovery";
+  readonly finishReason: string | undefined;
   readonly inputTokens: number | undefined;
   readonly outputTokens: number | undefined;
+  readonly toolCallCount: number;
   readonly totalTokens: number | undefined;
 }
 
@@ -40,6 +44,11 @@ export interface GatewayModelReference {
 const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const maximumInvestigationSteps = 6;
 const maximumModelSteps = maximumInvestigationSteps + 1;
+const recoverableSemanticErrors = new Set([
+  "AI_NoObjectGeneratedError",
+  "AI_NoOutputGeneratedError",
+  "ZodError",
+]);
 
 export class ModelProviderRequestError extends Error {
   public constructor(
@@ -109,6 +118,10 @@ export function createGatewayProviderSettings(
     baseURL: `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(config.accountId)}/${encodeURIComponent(config.gatewayId)}/${gatewayPath}`,
     headers: {
       "cf-aig-authorization": `Bearer ${config.apiToken}`,
+      "cf-aig-collect-log-payload": "false",
+      ...(config.metadata === undefined
+        ? {}
+        : { "cf-aig-metadata": JSON.stringify(config.metadata) }),
       "cf-aig-skip-cache": "true",
     },
     name: "cloudflare-ai-gateway",
@@ -154,10 +167,14 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
         inputSchema: searchTextArgumentsSchema,
       }),
     };
-    let result;
-    try {
-      result = await generateText({
-        instructions: request.instructions,
+    const runAttempt = async (
+      attempt: "investigation" | "recovery",
+    ): Promise<unknown> => {
+      const investigation = attempt === "investigation";
+      const result = await generateText({
+        instructions: investigation
+          ? request.instructions
+          : `${request.instructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`,
         maxOutputTokens: 4_000,
         maxRetries: 0,
         model: provider(modelId),
@@ -165,15 +182,58 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
           name: "holon_review",
           schema: modelReviewOutputSchema,
         }),
-        prepareStep: ({ stepNumber }) =>
-          stepNumber >= maximumInvestigationSteps
-            ? { activeTools: [], toolChoice: "none" }
-            : undefined,
+        ...(investigation
+          ? {
+              prepareStep: ({ stepNumber }: { stepNumber: number }) =>
+                stepNumber >= maximumInvestigationSteps
+                  ? { activeTools: [], toolChoice: "none" as const }
+                  : undefined,
+              stopWhen: stepCountIs(maximumModelSteps),
+              tools,
+            }
+          : { stopWhen: stepCountIs(1) }),
         prompt: request.prompt,
-        stopWhen: stepCountIs(maximumModelSteps),
+        providerOptions: {
+          cloudflareAiGateway: {
+            provider: {
+              data_collection: "deny",
+              require_parameters: true,
+            },
+            reasoningEffort: "low",
+          },
+        },
         temperature: 0,
-        tools,
       });
+      this.onUsage?.({
+        attempt,
+        finishReason: result.finishReason,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        toolCallCount: result.toolCalls?.length ?? 0,
+        totalTokens: result.usage.totalTokens,
+      });
+      return modelReviewOutputSchema.parse(result.output);
+    };
+
+    try {
+      return await runAttempt("investigation");
+    } catch (error) {
+      if (APICallError.isInstance(error)) {
+        throw new ModelProviderRequestError(
+          error.isRetryable,
+          error.statusCode,
+        );
+      }
+      if (
+        !(error instanceof Error) ||
+        !recoverableSemanticErrors.has(error.name)
+      ) {
+        throw error;
+      }
+    }
+
+    try {
+      return await runAttempt("recovery");
     } catch (error) {
       if (APICallError.isInstance(error)) {
         throw new ModelProviderRequestError(
@@ -183,11 +243,5 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
       }
       throw error;
     }
-    this.onUsage?.({
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      totalTokens: result.usage.totalTokens,
-    });
-    return result.output;
   }
 }

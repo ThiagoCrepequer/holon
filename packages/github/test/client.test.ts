@@ -75,6 +75,19 @@ describe("GitHub installation client", () => {
     await expect(session.currentHeadSha("acme", "api", 7)).resolves.toBe(
       "a".repeat(40),
     );
+    sdk.request.mockResolvedValueOnce({ data: "diff --git a/a.ts b/a.ts" });
+    await expect(session.pullRequestDiff("acme", "api", 7)).resolves.toBe(
+      "diff --git a/a.ts b/a.ts",
+    );
+    expect(sdk.request).toHaveBeenLastCalledWith(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        mediaType: { format: "diff" },
+        owner: "acme",
+        pull_number: 7,
+        repo: "api",
+      },
+    );
 
     const options = sdk.octokitOptions as {
       readonly auth: string;
@@ -83,5 +96,19 @@ describe("GitHub installation client", () => {
     expect(options.auth).toBe("installation-token");
     expect(options.throttle.onRateLimit()).toBeUndefined();
     expect(options.throttle.onSecondaryRateLimit()).toBeUndefined();
+  });
+
+  it("rejects a pull request diff that exceeds the executor boundary", async () => {
+    const session = await createInstallationSession(
+      { appId: 123, privateKey: "private-key" },
+      99,
+    );
+    sdk.request.mockResolvedValueOnce({ data: "x".repeat(2_000_001) });
+
+    await expect(
+      session.pullRequestDiff("acme", "api", 7),
+    ).rejects.toMatchObject({
+      name: "GitHubDiffTooLargeError",
+    });
   });
 });

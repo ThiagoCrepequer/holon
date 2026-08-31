@@ -41,14 +41,14 @@ describe("queue consumer", () => {
     });
   });
 
-  it("retries invalid messages and transient workflow failures independently", async () => {
+  it("acknowledges poison messages and retries only transient workflow failures", async () => {
     const invalid = message({ invalid: true });
     const transient = message(envelope);
     await dispatchReviewMessages([invalid.value, transient.value], {
       create: () => Promise.reject(new Error("unavailable")),
     });
 
-    expect(invalid.state.retried).toBe(true);
+    expect(invalid.state).toEqual({ acked: true, retried: false });
     expect(transient.state.retried).toBe(true);
   });
 

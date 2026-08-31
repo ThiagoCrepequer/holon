@@ -11,6 +11,13 @@ import {
 
 const request = executorRequestSchema.parse({
   baseSha: "b".repeat(40),
+  canonicalDiff: [
+    "diff --git a/src/index.ts b/src/index.ts",
+    "--- a/src/index.ts",
+    "+++ b/src/index.ts",
+    "@@ -9,0 +10,1 @@",
+    "+return null;",
+  ].join("\n"),
   cloneUrl: "https://github.com/acme/api.git",
   headSha: "a".repeat(40),
   pullRequestNumber: 7,
@@ -155,7 +162,7 @@ describe("RepositoryExecutorService", () => {
     });
     await expect(service.loadContext(request.runId)).resolves.toEqual({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
-      diff: "@@ -9,0 +10,1 @@\n+return null;",
+      diff: request.canonicalDiff,
       surface: [
         {
           change: "added",
@@ -334,33 +341,23 @@ describe("RepositoryExecutorService", () => {
 
   it("marks oversized diffs and file reads as truncated", async () => {
     const sandbox = new FakeSandbox();
-    const original = sandbox.run.bind(sandbox);
-    sandbox.run = (argv, options) => {
-      if (argv.includes("--name-only")) {
-        return Promise.resolve({
-          exitCode: 0,
-          stderr: "",
-          stdout: "src/a.ts\0src/b.ts\0",
-          truncated: true,
-        });
-      }
-      if (argv.includes("--unified=80")) {
-        return Promise.resolve({
-          exitCode: 0,
-          stderr: "",
-          stdout: `@@ -0,0 +1,1 @@\n+${"x".repeat(2_000_000)}`,
-          truncated: true,
-        });
-      }
-      return original(argv, options);
-    };
     const service = new RepositoryExecutorService({ get: () => sandbox });
+    const oversizedRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/src/huge.ts b/src/huge.ts",
+        "--- a/src/huge.ts",
+        "+++ b/src/huge.ts",
+        "@@ -0,0 +1,1 @@",
+        `+${"x".repeat(60_001)}`,
+      ].join("\n"),
+    });
 
-    const prepared = await service.prepare(request, "token");
+    const prepared = await service.prepare(oversizedRequest, "token");
     const context = await service.loadContext(request.runId);
     expect(prepared.truncated).toBe(true);
-    expect(prepared.fileCount).toBe(2);
-    expect(context.diff.length).toBeLessThanOrEqual(500_001);
+    expect(prepared.fileCount).toBe(0);
+    expect(context.diff).toBe("");
     sandbox.readFile = () => Promise.resolve("x".repeat(100_001));
     await expect(
       service.runTool(
@@ -393,27 +390,27 @@ describe("RepositoryExecutorService", () => {
 
   it("bounds changed-line coordinate amplification before persisting context", async () => {
     const sandbox = new FakeSandbox();
-    const original = sandbox.run.bind(sandbox);
-    sandbox.run = (argv, options) => {
-      if (argv.includes("--unified=80")) {
-        return Promise.resolve({
-          exitCode: 0,
-          stderr: "",
-          stdout: `@@ -0,0 +1,20001 @@\n${Array.from({ length: 20_001 }, () => "+x").join("\n")}`,
-          truncated: false,
-        });
-      }
-      return original(argv, options);
-    };
     const service = new RepositoryExecutorService({ get: () => sandbox });
+    const amplifiedRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/src/index.ts b/src/index.ts",
+        "--- a/src/index.ts",
+        "+++ b/src/index.ts",
+        "@@ -0,0 +1,5001 @@",
+        Array.from({ length: 5_001 }, () => "+x").join("\n"),
+      ].join("\n"),
+    });
 
-    await expect(service.prepare(request, "token")).resolves.toMatchObject({
-      changedLineCount: 20_000,
+    await expect(
+      service.prepare(amplifiedRequest, "token"),
+    ).resolves.toMatchObject({
+      changedLineCount: 5_000,
       truncated: true,
     });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: expect.arrayContaining([
-        { line: 20_000, path: "src/index.ts", side: "RIGHT" },
+        { line: 5_000, path: "src/index.ts", side: "RIGHT" },
       ]),
       truncated: true,
     });

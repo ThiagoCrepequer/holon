@@ -14,7 +14,7 @@ import {
   buildToolExecution,
   isSupportedSourcePath,
   mapReviewSurface,
-  selectReviewFiles,
+  splitPullRequestDiff,
 } from "@holon/repository-analysis";
 
 import { createGitHubEgressUrl } from "./egress-policy.js";
@@ -49,9 +49,10 @@ export interface SandboxProvider {
 
 const repositoryPath = "/workspace/repository";
 const contextPath = "/workspace/holon-review-context.json";
-const maximumFiles = 100;
-const maximumDiffBytes = 2_000_000;
-const maximumChangedLines = 20_000;
+const maximumFiles = 50;
+const maximumDiffBytes = 120_000;
+const maximumFileDiffBytes = 60_000;
+const maximumChangedLines = 5_000;
 
 type RepositoryPreparationStage =
   | "block-egress"
@@ -221,74 +222,39 @@ export class RepositoryExecutorService {
       if (resolvedHead.stdout.trim() !== request.headSha)
         throw new RepositoryPreparationError(false, stage, "command-failed");
 
-      const namesResult = await sandbox.run(
-        [
-          "git",
-          "diff",
-          "--name-only",
-          "--no-ext-diff",
-          "--no-textconv",
-          "-z",
-          request.baseSha,
-          request.headSha,
-          "--",
-        ],
-        { cwd: repositoryPath, maxOutputBytes: 500_000, timeoutMs: 30_000 },
-      );
-      assertPreparationSuccessful(namesResult, stage);
-      const allPaths = namesResult.stdout
-        .split("\0")
-        .filter((path) => path.length > 0);
-      const files = selectReviewFiles(allPaths, maximumFiles);
+      const supportedFiles = splitPullRequestDiff(request.canonicalDiff)
+        .filter((file) => isSupportedSourcePath(file.path))
+        .toSorted((left, right) => left.path.localeCompare(right.path));
       let totalBytes = 0;
-      let truncated =
-        namesResult.truncated ||
-        allPaths.filter(isSupportedSourcePath).length > files.length;
+      let truncated = supportedFiles.length > maximumFiles;
       const reviewFiles: Array<{
         patch: string;
         path: string;
         truncated: boolean;
       }> = [];
+      const selectedPaths = new Set<string>();
 
-      for (const path of files) {
-        const separatorBytes = reviewFiles.length === 0 ? 0 : 1;
-        const remainingBytes = maximumDiffBytes - totalBytes - separatorBytes;
-        if (remainingBytes <= 0) {
+      for (const file of supportedFiles) {
+        if (selectedPaths.has(file.path)) continue;
+        if (reviewFiles.length === maximumFiles) {
           truncated = true;
           break;
         }
-        const patchResult = await sandbox.run(
-          [
-            "git",
-            "diff",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--unified=80",
-            request.baseSha,
-            request.headSha,
-            "--",
-            path,
-          ],
-          {
-            cwd: repositoryPath,
-            maxOutputBytes: Math.min(remainingBytes, 250_000),
-            timeoutMs: 30_000,
-          },
-        );
-        assertPreparationSuccessful(patchResult, stage);
-        const boundedPatch = limitUtf8(
-          patchResult.stdout,
-          Math.min(remainingBytes, 250_000),
-        );
-        totalBytes +=
-          separatorBytes +
-          new TextEncoder().encode(boundedPatch.content).byteLength;
-        const patchTruncated = patchResult.truncated || boundedPatch.truncated;
-        truncated ||= patchTruncated;
+        const separatorBytes = reviewFiles.length === 0 ? 0 : 1;
+        const patchBytes = new TextEncoder().encode(file.patch).byteLength;
+        if (
+          patchBytes > maximumFileDiffBytes ||
+          totalBytes + separatorBytes + patchBytes > maximumDiffBytes
+        ) {
+          truncated = true;
+          continue;
+        }
+        selectedPaths.add(file.path);
+        totalBytes += separatorBytes + patchBytes;
         reviewFiles.push({
-          patch: boundedPatch.content,
-          path,
-          truncated: patchTruncated,
+          patch: file.patch,
+          path: file.path,
+          truncated: false,
         });
       }
 
@@ -314,7 +280,7 @@ export class RepositoryExecutorService {
       const context = reviewContextSchema.parse({
         changedLines,
         diff: reviewFiles.map((file) => file.patch).join("\n"),
-        surface: mapReviewSurface(reviewFiles),
+        surface: mapReviewSurface(reviewFiles, 50),
         truncated,
       });
       const serialized = JSON.stringify(context);

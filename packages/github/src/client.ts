@@ -21,6 +21,11 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<string>;
+  pullRequestDiff(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<string>;
   readonly expiresAt: string;
   readonly token: string;
 }
@@ -75,6 +80,26 @@ export async function createInstallationSession(
         },
       );
       return gitShaSchema.parse(response.data.head.sha);
+    },
+    async pullRequestDiff(owner, repo, pullNumber) {
+      const response = await octokit.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+        {
+          mediaType: { format: "diff" },
+          owner,
+          pull_number: pullNumber,
+          repo,
+        },
+      );
+      if (typeof response.data !== "string") {
+        throw new TypeError("GitHub pull request diff response was not text");
+      }
+      if (new TextEncoder().encode(response.data).byteLength > 2_000_000) {
+        const error = new Error("HOLON_GITHUB_DIFF_TOO_LARGE");
+        error.name = "GitHubDiffTooLargeError";
+        throw error;
+      }
+      return response.data;
     },
     expiresAt: authentication.expiresAt,
     token: authentication.token,

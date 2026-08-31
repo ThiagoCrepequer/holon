@@ -86,8 +86,8 @@ export const reviewContextSchema = z.strictObject({
         side: z.literal("RIGHT"),
       }),
     )
-    .max(20_000),
-  diff: z.string().max(2_000_000),
+    .max(5_000),
+  diff: z.string().max(120_000),
   surface: z
     .array(
       z.strictObject({
@@ -98,15 +98,15 @@ export const reviewContextSchema = z.strictObject({
         path: repositoryPathSchema,
       }),
     )
-    .max(100)
+    .max(50)
     .optional(),
   truncated: z.boolean().optional(),
 });
 
 export const preparedRepositorySchema = z.strictObject({
-  changedLineCount: z.number().int().nonnegative().max(20_000),
-  contextBytes: positiveIntegerSchema.max(30_000_000),
-  fileCount: z.number().int().nonnegative().max(100),
+  changedLineCount: z.number().int().nonnegative().max(5_000),
+  contextBytes: positiveIntegerSchema.max(500_000),
+  fileCount: z.number().int().nonnegative().max(50),
   runId: runIdSchema,
   schemaVersion: z.literal(1),
   truncated: z.boolean(),
@@ -122,6 +122,7 @@ const githubCloneUrlSchema = z
 export const executorRequestSchema = z
   .strictObject({
     baseSha: gitShaSchema,
+    canonicalDiff: z.string().max(2_000_000),
     cloneUrl: githubCloneUrlSchema,
     headSha: gitShaSchema,
     pullRequestNumber: positiveIntegerSchema,

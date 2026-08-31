@@ -13,6 +13,8 @@ import {
 
 const sha = "a".repeat(40);
 const runId = `github:42:pr:7:head:${sha}`;
+const canonicalDiff =
+  "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
 describe("webhook envelope v1", () => {
   const envelope = {
@@ -84,6 +86,7 @@ describe("review job and executor contracts", () => {
     expect(
       executorRequestSchema.parse({
         baseSha: "b".repeat(40),
+        canonicalDiff,
         cloneUrl: "https://github.com/acme/api.git",
         headSha: sha,
         pullRequestNumber: 7,
@@ -98,6 +101,7 @@ describe("review job and executor contracts", () => {
     expect(
       executorRequestSchema.safeParse({
         baseSha: "b".repeat(40),
+        canonicalDiff,
         cloneUrl: "https://github.com/acme/api.git",
         headSha: sha,
         pullRequestNumber: 7,
@@ -117,6 +121,7 @@ describe("review job and executor contracts", () => {
     expect(
       executorRequestSchema.safeParse({
         baseSha: "b".repeat(40),
+        canonicalDiff,
         cloneUrl,
         headSha: sha,
         pullRequestNumber: 7,
@@ -249,20 +254,20 @@ describe("model output and publication ledger", () => {
   it("keeps the largest valid model result below the Workflow step limit", () => {
     const maximumFinding = {
       confidence: 1,
-      diagnostic: "d".repeat(2_000),
-      evidence: Array.from({ length: 5 }, () => ({
-        excerpt: "e".repeat(2_000),
+      diagnostic: "d".repeat(600),
+      evidence: Array.from({ length: 2 }, () => ({
+        excerpt: "e".repeat(300),
         path: "p".repeat(1_024),
-        reason: "r".repeat(500),
+        reason: "r".repeat(200),
         startLine: 1,
       })),
       location: { line: 1, path: "p".repeat(1_024), side: "RIGHT" },
       severity: "critical",
-      suggestion: "s".repeat(4_000),
+      suggestion: "s".repeat(800),
     };
     const maximumOutput = modelReviewOutputSchema.parse({
-      findings: Array.from({ length: 20 }, () => maximumFinding),
-      summary: "s".repeat(4_000),
+      findings: Array.from({ length: 3 }, () => maximumFinding),
+      summary: "s".repeat(800),
     });
     expect(JSON.stringify(maximumOutput).length).toBeLessThan(1_000_000);
   });

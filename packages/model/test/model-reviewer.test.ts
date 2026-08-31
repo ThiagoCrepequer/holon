@@ -114,7 +114,7 @@ describe("model review boundary", () => {
     expect(prompt).toContain("[REDACTED_SECRET]");
     expect(prompt).toContain("Initial diff truncated for model: true");
     expect(new TextEncoder().encode(prompt).byteLength).toBeLessThanOrEqual(
-      500_000,
+      100_000,
     );
   });
 
@@ -276,6 +276,7 @@ describe("model review boundary", () => {
       baseURL: "https://gateway.ai.cloudflare.com/v1/account/holon/compat",
       headers: {
         "cf-aig-authorization": "Bearer token",
+        "cf-aig-collect-log-payload": "false",
         "cf-aig-skip-cache": "true",
       },
       name: "cloudflare-ai-gateway",
@@ -288,12 +289,26 @@ describe("model review boundary", () => {
     expect(() => parseGatewayModelReference("pr-review")).toThrow(
       "dynamic route",
     );
+    expect(
+      createGatewayProviderSettings({
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        metadata: { run_id: "run-1", stage: "review" },
+        model: "dynamic/pr-review",
+      }).headers,
+    ).toMatchObject({
+      "cf-aig-collect-log-payload": "false",
+      "cf-aig-metadata": '{"run_id":"run-1","stage":"review"}',
+    });
   });
 
   it("configures AI SDK structured output and delegates all three bounded tools", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.generateText.mockResolvedValueOnce({
+      finishReason: "stop",
       output,
+      toolCalls: [],
       usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
     });
     sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
@@ -324,6 +339,7 @@ describe("model review boundary", () => {
     const options = sdk.generateText.mock.calls.at(-1)?.[0] as {
       readonly maxRetries: number;
       readonly prepareStep: (input: { readonly stepNumber: number }) => unknown;
+      readonly providerOptions: unknown;
       readonly stopWhen: unknown;
       readonly tools: Record<
         string,
@@ -343,7 +359,14 @@ describe("model review boundary", () => {
 
     expect(calls).toHaveLength(3);
     expect(usages).toEqual([
-      { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+      {
+        attempt: "investigation",
+        finishReason: "stop",
+        inputTokens: 100,
+        outputTokens: 20,
+        toolCallCount: 0,
+        totalTokens: 120,
+      },
     ]);
     expect(sdk.createProvider).toHaveBeenCalledWith(
       createGatewayProviderSettings({
@@ -355,12 +378,65 @@ describe("model review boundary", () => {
     );
     expect(sdk.model).toHaveBeenCalledWith("dynamic/pr-review");
     expect(options.maxRetries).toBe(0);
+    expect(options.providerOptions).toEqual({
+      cloudflareAiGateway: {
+        provider: { data_collection: "deny", require_parameters: true },
+        reasoningEffort: "low",
+      },
+    });
     expect(options.prepareStep({ stepNumber: 5 })).toBeUndefined();
     expect(options.prepareStep({ stepNumber: 6 })).toEqual({
       activeTools: [],
       toolChoice: "none",
     });
     expect(options.stopWhen).toEqual({ steps: 7 });
+  });
+
+  it("performs one tool-free recovery for a semantically empty successful response", async () => {
+    const missingOutput = new Error("missing output");
+    missingOutput.name = "AI_NoOutputGeneratedError";
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "length",
+        get output() {
+          throw missingOutput;
+        },
+        toolCalls: [],
+        usage: { inputTokens: 100, outputTokens: 4_000, totalTokens: 4_100 },
+      })
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        output,
+        toolCalls: [],
+        usage: { inputTokens: 80, outputTokens: 20, totalTokens: 100 },
+      });
+    const usages: unknown[] = [];
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+      (usage) => usages.push(usage),
+    );
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).resolves.toEqual(output);
+    expect(sdk.generateText).toHaveBeenCalledTimes(2);
+    const recovery = sdk.generateText.mock.calls[1]?.[0] as {
+      readonly instructions: string;
+      readonly stopWhen: unknown;
+      readonly tools?: unknown;
+    };
+    expect(recovery.instructions).toContain("single recovery attempt");
+    expect(recovery.stopWhen).toEqual({ steps: 1 });
+    expect(recovery.tools).toBeUndefined();
+    expect(usages).toHaveLength(2);
   });
 
   it.each([

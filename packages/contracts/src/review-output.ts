@@ -12,15 +12,15 @@ import {
 
 export const reviewFindingSchema = z.strictObject({
   confidence: z.number().min(0).max(1),
-  diagnostic: z.string().trim().min(30).max(2_000),
+  diagnostic: z.string().trim().min(30).max(600),
   evidence: z
     .array(
       z
         .strictObject({
           endLine: positiveIntegerSchema.optional(),
-          excerpt: z.string().min(1).max(2_000),
+          excerpt: z.string().min(1).max(300),
           path: repositoryPathSchema,
-          reason: z.string().min(1).max(500),
+          reason: z.string().min(1).max(200),
           startLine: positiveIntegerSchema,
         })
         .refine(
@@ -34,7 +34,7 @@ export const reviewFindingSchema = z.strictObject({
         ),
     )
     .min(1)
-    .max(5),
+    .max(2),
   location: z
     .strictObject({
       line: positiveIntegerSchema,
@@ -51,12 +51,12 @@ export const reviewFindingSchema = z.strictObject({
       },
     ),
   severity: z.enum(["critical", "high", "medium", "low"]),
-  suggestion: z.string().trim().min(1).max(4_000).optional(),
+  suggestion: z.string().trim().min(1).max(800).optional(),
 });
 
 export const modelReviewOutputSchema = z.strictObject({
-  findings: z.array(reviewFindingSchema).max(20),
-  summary: z.string().trim().min(1).max(4_000),
+  findings: z.array(reviewFindingSchema).max(3),
+  summary: z.string().trim().min(1).max(800),
 });
 
 export const runStateSchema = z.enum([

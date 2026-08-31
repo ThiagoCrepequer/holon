@@ -10,6 +10,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   executeReviewJob,
   executeReviewWorkflow,
+  executeGitHubOperation,
+  markPartialReviewSummary,
   markReviewTerminal,
   parseAppId,
 } from "../src/review-workflow.js";
@@ -34,6 +36,18 @@ const job = reviewJobSchema.parse({
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
   schemaVersion: 1,
 });
+
+const canonicalDiff = [
+  "diff --git a/src/index.ts b/src/index.ts",
+  "--- a/src/index.ts",
+  "+++ b/src/index.ts",
+  "@@ -9,0 +10,1 @@",
+  "+return null;",
+].join("\n");
+const modelContext = {
+  changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" as const }],
+  diff: canonicalDiff,
+};
 
 function immediateWorkflowStep(
   stepNames: string[],
@@ -97,6 +111,26 @@ function retryingWorkflowStep(
 }
 
 describe("ReviewWorkflow", () => {
+  it("stops deterministic GitHub 4xx failures without suppressing transient statuses", async () => {
+    await expect(
+      executeGitHubOperation(() => Promise.reject({ status: 422 })),
+    ).rejects.toMatchObject({
+      message: "HOLON_GITHUB_NON_RETRYABLE:422",
+      name: "NonRetryableError",
+    });
+    await expect(
+      executeGitHubOperation(() => Promise.reject({ status: 429 })),
+    ).rejects.toEqual({ status: 429 });
+  });
+
+  it("marks bounded reviews as partial without overflowing the summary contract", () => {
+    expect(markPartialReviewSummary("Evidence was reviewed.", true)).toContain(
+      "Partial review",
+    );
+    expect(markPartialReviewSummary("x".repeat(800), true)).toHaveLength(800);
+    expect(markPartialReviewSummary("Complete.", false)).toBe("Complete.");
+  });
+
   it("runs the durable step and exits without credentials or executor calls for a duplicate run", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await ledger.claimRun(
@@ -127,6 +161,7 @@ describe("ReviewWorkflow", () => {
 
   it("composes executor, model, Durable Object ledger and GitHub publication", async () => {
     const calls: string[] = [];
+    let executorRequest: unknown;
     let githubId = 100;
     const result = await executeReviewJob(env, job, {
       createModel: (toolRunner) => ({
@@ -168,6 +203,7 @@ describe("ReviewWorkflow", () => {
             },
           },
           currentHeadSha: () => Promise.resolve("a".repeat(40)),
+          pullRequestDiff: () => Promise.resolve(canonicalDiff),
           expiresAt: "2026-08-29T13:00:00.000Z",
           token: "installation-token",
         }),
@@ -182,15 +218,17 @@ describe("ReviewWorkflow", () => {
             changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
             diff: "@@ -9,0 +10,1 @@\n+return null;",
           }),
-        prepare: () =>
-          Promise.resolve({
+        prepare: (request) => {
+          executorRequest = request;
+          return Promise.resolve({
             changedLineCount: 1,
             contextBytes: 100,
             fileCount: 1,
             runId: job.runId,
             schemaVersion: 1 as const,
             truncated: false,
-          }),
+          });
+        },
         runTool: () => {
           calls.push("tool");
           return Promise.resolve({
@@ -203,12 +241,65 @@ describe("ReviewWorkflow", () => {
     });
 
     expect(result).toEqual({ findingsPublished: 1, outcome: "completed" });
+    expect(executorRequest).toMatchObject({ canonicalDiff });
     expect(calls).toEqual([
       "tool",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       "cleanup",
     ]);
+  });
+
+  it("publishes a deterministic summary without model cost for unsupported changes", async () => {
+    let modelCalls = 0;
+    const result = await executeReviewWorkflow(
+      env,
+      {
+        instanceId: "documentation-only-workflow",
+        payload: job,
+        timestamp: new Date("2026-08-29T12:00:00.000Z"),
+        workflowName: "holon-review-workflow",
+      },
+      immediateWorkflowStep([]),
+      {
+        createModel: () => ({
+          review: () => {
+            modelCalls += 1;
+            return Promise.reject(new Error("model must not be called"));
+          },
+        }),
+        createSession: () =>
+          Promise.resolve({
+            api: {
+              paginate: () => Promise.resolve([]),
+              request: () => Promise.resolve({ data: { id: 1 } }),
+            },
+            currentHeadSha: () => Promise.resolve("a".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(""),
+            expiresAt: "later",
+            token: "token",
+          }),
+        executor: {
+          cleanup: () => Promise.resolve(),
+          hasContext: () => Promise.resolve(true),
+          loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+          prepare: () =>
+            Promise.resolve({
+              changedLineCount: 0,
+              contextBytes: 10,
+              fileCount: 0,
+              runId: job.runId,
+              schemaVersion: 1 as const,
+              truncated: false,
+            }),
+          runTool: () => Promise.resolve({ content: "", truncated: false }),
+        },
+        now: () => "2026-08-29T12:00:01.000Z",
+      },
+    );
+
+    expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
+    expect(modelCalls).toBe(0);
   });
 
   it("checkpoints the production review as granular, bounded durable steps", async () => {
@@ -263,6 +354,7 @@ describe("ReviewWorkflow", () => {
               request: () => Promise.resolve({ data: { id: ++githubId } }),
             },
             currentHeadSha: () => Promise.resolve("a".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(canonicalDiff),
             expiresAt: "2026-08-29T13:00:00.000Z",
             token: "installation-token",
           }),
@@ -295,6 +387,7 @@ describe("ReviewWorkflow", () => {
     expect(stepNames).toEqual([
       "claim-run",
       "start-run",
+      "revalidate-initial-head",
       "prepare-repository",
       "analyze-review",
       "begin-publication",
@@ -341,6 +434,7 @@ describe("ReviewWorkflow", () => {
               request: () => Promise.resolve({ data: { id: 1 } }),
             },
             currentHeadSha: () => Promise.resolve("a".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(canonicalDiff),
             expiresAt: "later",
             token: "token",
           }),
@@ -350,7 +444,7 @@ describe("ReviewWorkflow", () => {
             contextChecks += 1;
             return Promise.resolve(contextExists);
           },
-          loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+          loadContext: () => Promise.resolve(modelContext),
           prepare: () => {
             prepareCalls += 1;
             contextExists = true;
@@ -448,14 +542,14 @@ describe("ReviewWorkflow", () => {
                   request: () => Promise.resolve({ data: { id: 1 } }),
                 },
                 currentHeadSha: () => Promise.resolve("a".repeat(40)),
+                pullRequestDiff: () => Promise.resolve(canonicalDiff),
                 expiresAt: "later",
                 token: "token",
               }),
             executor: {
               cleanup: () => Promise.resolve(),
               hasContext: () => Promise.resolve(false),
-              loadContext: () =>
-                Promise.resolve({ changedLines: [], diff: "" }),
+              loadContext: () => Promise.resolve(modelContext),
               prepare: () => {
                 prepareAttempts += 1;
                 const failure = new Error(failureMessage);
@@ -500,6 +594,7 @@ describe("ReviewWorkflow", () => {
                 request: () => Promise.resolve({ data: { id: 1 } }),
               },
               currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              pullRequestDiff: () => Promise.resolve(canonicalDiff),
               expiresAt: "2026-08-29T13:00:00.000Z",
               token: "installation-token",
             }),
@@ -580,6 +675,7 @@ describe("ReviewWorkflow", () => {
                 request: () => Promise.resolve({ data: { id: 1 } }),
               },
               currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              pullRequestDiff: () => Promise.resolve(canonicalDiff),
               expiresAt: "later",
               token: "token",
             }),
@@ -589,7 +685,7 @@ describe("ReviewWorkflow", () => {
               return Promise.resolve();
             },
             hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            loadContext: () => Promise.resolve(modelContext),
             prepare: () =>
               Promise.resolve({
                 changedLineCount: 0,
@@ -613,6 +709,10 @@ describe("ReviewWorkflow", () => {
       expect(cleanupAttempts).toBe(1);
       expect(stepNames).toContain("mark-review-terminal");
       expect(stepNames).toContain("cleanup-failed-repository");
+      expect(stepNames).toContain("publish-failure-notice");
+      expect(stepNames.indexOf("cleanup-failed-repository")).toBeLessThan(
+        stepNames.indexOf("publish-failure-notice"),
+      );
     },
   );
 
@@ -652,13 +752,14 @@ describe("ReviewWorkflow", () => {
                 request: () => Promise.resolve({ data: { id: 1 } }),
               },
               currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              pullRequestDiff: () => Promise.resolve(canonicalDiff),
               expiresAt: "later",
               token: "token",
             }),
           executor: {
             cleanup: () => Promise.resolve(),
             hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            loadContext: () => Promise.resolve(modelContext),
             prepare: () =>
               Promise.resolve({
                 changedLineCount: 0,
@@ -710,13 +811,14 @@ describe("ReviewWorkflow", () => {
                 request: () => Promise.resolve({ data: { id: 1 } }),
               },
               currentHeadSha: () => Promise.resolve("a".repeat(40)),
+              pullRequestDiff: () => Promise.resolve(canonicalDiff),
               expiresAt: "later",
               token: "token",
             }),
           executor: {
             cleanup: () => Promise.resolve(),
             hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            loadContext: () => Promise.resolve(modelContext),
             prepare: () =>
               Promise.resolve({
                 changedLineCount: 0,
@@ -775,7 +877,7 @@ describe("ReviewWorkflow", () => {
               return Promise.resolve();
             },
             hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+            loadContext: () => Promise.resolve(modelContext),
             prepare: () => Promise.reject(new Error("must not prepare")),
             runTool: () => Promise.resolve({ content: "", truncated: false }),
           },
@@ -787,9 +889,10 @@ describe("ReviewWorkflow", () => {
     expect(cleaned).toBe(false);
   });
 
-  it("marks a review obsolete and cleans up when the live head changed", async () => {
+  it("marks a review obsolete and cleans up when the head changes after analysis", async () => {
     const stepNames: string[] = [];
     let cleaned = false;
+    let headReads = 0;
     const result = await executeReviewWorkflow(
       env,
       {
@@ -810,7 +913,11 @@ describe("ReviewWorkflow", () => {
               paginate: () => Promise.resolve([]),
               request: () => Promise.resolve({ data: { id: 1 } }),
             },
-            currentHeadSha: () => Promise.resolve("c".repeat(40)),
+            currentHeadSha: () =>
+              Promise.resolve(
+                ++headReads === 1 ? "a".repeat(40) : "c".repeat(40),
+              ),
+            pullRequestDiff: () => Promise.resolve(canonicalDiff),
             expiresAt: "later",
             token: "token",
           }),
@@ -820,7 +927,7 @@ describe("ReviewWorkflow", () => {
             return Promise.resolve();
           },
           hasContext: () => Promise.resolve(true),
-          loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+          loadContext: () => Promise.resolve(modelContext),
           prepare: () =>
             Promise.resolve({
               changedLineCount: 0,
@@ -842,6 +949,53 @@ describe("ReviewWorkflow", () => {
     expect(stepNames).toContain("cleanup-obsolete-repository");
   });
 
+  it("marks an already stale event obsolete before starting a billable sandbox", async () => {
+    const stepNames: string[] = [];
+    let prepared = false;
+    const result = await executeReviewWorkflow(
+      env,
+      {
+        instanceId: "initially-obsolete-workflow",
+        payload: job,
+        timestamp: new Date("2026-08-29T12:00:00.000Z"),
+        workflowName: "holon-review-workflow",
+      },
+      immediateWorkflowStep(stepNames),
+      {
+        createModel: () => ({
+          review: () => Promise.resolve({ findings: [], summary: "unused" }),
+        }),
+        createSession: () =>
+          Promise.resolve({
+            api: {
+              paginate: () => Promise.resolve([]),
+              request: () => Promise.resolve({ data: { id: 1 } }),
+            },
+            currentHeadSha: () => Promise.resolve("c".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(canonicalDiff),
+            expiresAt: "later",
+            token: "token",
+          }),
+        executor: {
+          cleanup: () => Promise.resolve(),
+          hasContext: () => Promise.resolve(false),
+          loadContext: () => Promise.resolve(modelContext),
+          prepare: () => {
+            prepared = true;
+            return Promise.reject(new Error("must not prepare"));
+          },
+          runTool: () => Promise.resolve({ content: "", truncated: false }),
+        },
+        now: () => "2026-08-29T12:00:01.000Z",
+      },
+    );
+
+    expect(result).toEqual({ findingsPublished: 0, outcome: "obsolete" });
+    expect(prepared).toBe(false);
+    expect(stepNames).toContain("mark-obsolete-before-preparation");
+    expect(stepNames).not.toContain("prepare-repository");
+  });
+
   it("cleans up a prepared repository when its returned contract is invalid", async () => {
     let cleaned = false;
     await expect(
@@ -853,6 +1007,7 @@ describe("ReviewWorkflow", () => {
               request: () => Promise.resolve({ data: { id: 1 } }),
             },
             currentHeadSha: () => Promise.resolve("a".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(canonicalDiff),
             expiresAt: "later",
             token: "token",
           }),

@@ -151,8 +151,14 @@ function createReviewServices(
   };
   const prepareRepository = async () => {
     const github = await session();
+    const canonicalDiff = await github.pullRequestDiff(
+      job.envelope.repository.owner,
+      job.envelope.repository.name,
+      job.envelope.pullRequest.number,
+    );
     const request = executorRequestSchema.parse({
       baseSha: job.envelope.pullRequest.baseSha,
+      canonicalDiff,
       cloneUrl: `https://github.com/${job.envelope.repository.fullName}.git`,
       headSha: job.envelope.pullRequest.headSha,
       pullRequestNumber: job.envelope.pullRequest.number,
@@ -185,6 +191,13 @@ function createReviewServices(
           accountId: env.AI_GATEWAY_ACCOUNT_ID,
           apiToken: env.AI_GATEWAY_API_TOKEN,
           gatewayId: env.AI_GATEWAY_ID,
+          metadata: {
+            pr_number: String(job.envelope.pullRequest.number),
+            repository_id: String(job.envelope.repository.id),
+            run_id: job.runId,
+            schema_version: "1",
+            stage: "review",
+          },
           model: env.AI_MODEL_ID,
         },
         toolRunner,
@@ -250,6 +263,55 @@ function isRetryableRepositoryError(error: unknown): boolean {
   );
 }
 
+function githubStatusCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("status" in error)) {
+    return undefined;
+  }
+  return typeof error.status === "number" ? error.status : undefined;
+}
+
+export async function executeGitHubOperation<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const status = githubStatusCode(error);
+    if (
+      status !== undefined &&
+      status >= 400 &&
+      status < 500 &&
+      ![408, 409, 429].includes(status)
+    ) {
+      throw new NonRetryableError(`HOLON_GITHUB_NON_RETRYABLE:${status}`);
+    }
+    throw error;
+  }
+}
+
+const partialReviewPrefix =
+  "Partial review: the pull request exceeded the bounded analysis context. ";
+
+export function markPartialReviewSummary(
+  summary: string,
+  truncated: boolean,
+): string {
+  if (!truncated) return summary;
+  return `${partialReviewPrefix}${summary}`.slice(0, 800).trim();
+}
+
+async function publishFailureNotice(
+  publisher: ReviewPublisher,
+  runId: RunId,
+): Promise<void> {
+  const marker = `<!-- holon:v1;run=${runId};finding=system-failure -->`;
+  if ((await publisher.findCommentByMarker(marker)) !== undefined) return;
+  await publisher.publish({
+    body: "Holon could not complete this automated review. The run was stopped and its repository sandbox was scheduled for cleanup. Push a new commit or synchronize the pull request to start a fresh run.",
+    marker,
+  });
+}
+
 export async function executeReviewWorkflow(
   env: Cloudflare.Env,
   rawEvent: Readonly<WorkflowEvent<ReviewJob>>,
@@ -271,6 +333,7 @@ export async function executeReviewWorkflow(
   const services = createReviewServices(env, job, runtime, logger, logContext);
   const run = createReviewRun(job);
   let repositoryStarted = false;
+  let runClaimed = false;
   logger.emit("review.started", logContext);
 
   const moveTo = async (
@@ -303,6 +366,7 @@ export async function executeReviewWorkflow(
     if (claim === "duplicate") {
       return { findingsPublished: 0, outcome: "duplicate" } as const;
     }
+    runClaimed = true;
 
     await step.do("start-run", stateStep, async () => {
       const current = await services.ledger.runState(run.id);
@@ -319,13 +383,41 @@ export async function executeReviewWorkflow(
       );
     });
 
+    const initialHeadIsCurrent = await step.do(
+      "revalidate-initial-head",
+      publicationStep,
+      () =>
+        executeGitHubOperation(
+          async () =>
+            (await services.readCurrentHead()) ===
+            job.envelope.pullRequest.headSha,
+        ),
+    );
+    if (!initialHeadIsCurrent) {
+      await moveTo("mark-obsolete-before-preparation", "running", "obsolete");
+      logger.emit("review.completed", {
+        ...logContext,
+        durationMs: Math.max(0, milliseconds() - startedAt),
+        findingsPublished: 0,
+        outcome: "obsolete",
+      });
+      return { findingsPublished: 0, outcome: "obsolete" } as const;
+    }
+
     repositoryStarted = true;
     const preparation = await step.do(
       "prepare-repository",
       repositoryStep,
       async () => {
         try {
-          await services.prepareRepository();
+          const prepared = await services.prepareRepository();
+          logger.emit("repository.prepared", {
+            ...logContext,
+            changedLineCount: prepared.changedLineCount,
+            contextBytes: prepared.contextBytes,
+            fileCount: prepared.fileCount,
+            truncated: prepared.truncated,
+          });
           return { status: "prepared" } as const;
         } catch (error) {
           if (isRetryableRepositoryError(error)) throw error;
@@ -345,14 +437,34 @@ export async function executeReviewWorkflow(
           await services.prepareRepository();
         }
         const context = await services.loadContext();
+        logger.emit("model.input", {
+          ...logContext,
+          changedLineCount: context.changedLines.length,
+          diffBytes: new TextEncoder().encode(context.diff).byteLength,
+          estimatedDiffTokens: Math.ceil(
+            new TextEncoder().encode(context.diff).byteLength / 4,
+          ),
+          surfaceCount: context.surface?.length ?? 0,
+          truncated: context.truncated ?? false,
+        });
         const modelOutput = modelReviewOutputSchema.parse(
-          await services.model.review(job, context),
+          context.changedLines.length === 0
+            ? {
+                findings: [],
+                summary:
+                  "No supported TypeScript or JavaScript changes require an automated review.",
+              }
+            : await services.model.review(job, context),
         );
         return modelReviewOutputSchema.parse({
           ...modelOutput,
           findings: selectValidFindings(
             modelOutput.findings,
             context.changedLines,
+          ),
+          summary: markPartialReviewSummary(
+            modelOutput.summary,
+            context.truncated ?? false,
           ),
         });
       } catch (error) {
@@ -370,9 +482,13 @@ export async function executeReviewWorkflow(
     const isCurrent = await step.do(
       "revalidate-current-head",
       publicationStep,
-      async () =>
-        (await services.ledger.isLatestRun(run.id)) &&
-        (await services.readCurrentHead()) === job.envelope.pullRequest.headSha,
+      () =>
+        executeGitHubOperation(
+          async () =>
+            (await services.ledger.isLatestRun(run.id)) &&
+            (await services.readCurrentHead()) ===
+              job.envelope.pullRequest.headSha,
+        ),
     );
     if (!isCurrent) {
       await moveTo("mark-obsolete", "publishing", "obsolete");
@@ -394,42 +510,45 @@ export async function executeReviewWorkflow(
       const published = await step.do(
         `publish-inline-${index + 1}`,
         publicationStep,
-        async () => {
-          const findingId = await createFindingId(run.id, {
-            diagnostic: finding.diagnostic,
-            endLine: finding.location.line,
-            path: finding.location.path,
-            startLine: finding.location.startLine ?? finding.location.line,
-          });
-          return await publishOnce(
-            services.ledger,
-            services.publisher,
-            run.id,
-            findingId,
-            "inline",
-            renderFinding(finding),
-            {
-              line: finding.location.line,
+        () =>
+          executeGitHubOperation(async () => {
+            const findingId = await createFindingId(run.id, {
+              diagnostic: finding.diagnostic,
+              endLine: finding.location.line,
               path: finding.location.path,
-              side: finding.location.side,
-              ...(finding.location.startLine === undefined
-                ? {}
-                : { startLine: finding.location.startLine }),
-            },
-          );
-        },
+              startLine: finding.location.startLine ?? finding.location.line,
+            });
+            return await publishOnce(
+              services.ledger,
+              services.publisher,
+              run.id,
+              findingId,
+              "inline",
+              renderFinding(finding),
+              {
+                line: finding.location.line,
+                path: finding.location.path,
+                side: finding.location.side,
+                ...(finding.location.startLine === undefined
+                  ? {}
+                  : { startLine: finding.location.startLine }),
+              },
+            );
+          }),
       );
       if (published) findingsPublished += 1;
     }
     await step.do("publish-summary", publicationStep, () =>
-      publishOnce(
-        services.ledger,
-        services.publisher,
-        run.id,
-        "summary",
-        "summary",
-        output.summary,
-        {},
+      executeGitHubOperation(() =>
+        publishOnce(
+          services.ledger,
+          services.publisher,
+          run.id,
+          "summary",
+          "summary",
+          output.summary,
+          {},
+        ),
       ),
     );
     await moveTo("complete-run", "publishing", "completed");
@@ -468,6 +587,20 @@ export async function executeReviewWorkflow(
         logger.emit("review.cleanup_failed", {
           ...logContext,
           errorKind: errorKind(cleanupError),
+        });
+      }
+    }
+    if (runClaimed) {
+      try {
+        await step.do("publish-failure-notice", publicationStep, () =>
+          executeGitHubOperation(() =>
+            publishFailureNotice(services.publisher, run.id),
+          ),
+        );
+      } catch (publicationError) {
+        logger.emit("review.failure_notice_failed", {
+          ...logContext,
+          errorKind: errorKind(publicationError),
         });
       }
     }

@@ -21,6 +21,7 @@ export async function dispatchReviewMessages(
   workflow: WorkflowCreator,
 ): Promise<void> {
   for (const message of messages) {
+    let job: ReviewJob;
     try {
       const envelope: WebhookEnvelope = webhookEnvelopeSchema.parse(
         message.body,
@@ -30,11 +31,18 @@ export async function dispatchReviewMessages(
         pullRequestNumber: envelope.pullRequest.number,
         repositoryId: envelope.repository.id,
       });
-      const job = reviewJobSchema.parse({
+      job = reviewJobSchema.parse({
         envelope,
         runId: createRunId(prKey, envelope.pullRequest.headSha),
         schemaVersion: 1,
       });
+    } catch {
+      // Invalid messages cannot become valid through redelivery. Acknowledge
+      // them so poison payloads do not consume the queue retry budget.
+      message.ack();
+      continue;
+    }
+    try {
       await workflow.create({ params: job });
       message.ack();
     } catch {
