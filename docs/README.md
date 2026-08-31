@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 ---
 
 # Mapa da documentacao
@@ -26,6 +26,7 @@ normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 | Trabalhar com seguranca                      | [Trust boundaries](architecture/security-and-trust-boundaries.md)                 | [Ciclo de vida dos dados](architecture/data-lifecycle.md)                                                                                 |
 | Desenvolver e operar                         | [Operação](operations/README.md)                                                  | [GitHub App](operations/github-app.md) e [deploy](operations/deployment.md)                                                               |
 | Planejar a entrega                           | [Plano do MVP](planning/mvp-delivery-plan.md)                                     | [Bootstrap tecnico](planning/technical-bootstrap.md) e [questoes em aberto](planning/open-questions.md)                                   |
+| Evoluir o core de review                     | [Roadmap do core](planning/review-core-evolution-roadmap.md)                      | [Contrato de qualidade](product/review-quality-contract.md) e [fluxo de execucao](architecture/review-runtime-flow.md)                    |
 | Entender payloads estáveis                   | [Contratos](contracts/README.md)                                                  | `packages/contracts/src`                                                                                                                  |
 
 ## Semantica dos documentos
