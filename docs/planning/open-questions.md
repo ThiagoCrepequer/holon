@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 ---
 
 # Questões em aberto
@@ -27,9 +27,11 @@ por marcador foram definidos e implementados.
 - Como o usuário desabilita review por repositório, caminho ou PR?
 - Qual orçamento monetário e de tokens por run no modelo escolhido? O limite
   técnico atual é 4.000 tokens de saída, oito passos e doze tool calls.
-- O rollout bidirecional broker/executor, inclusive bootstrap de conta vazia,
-  passa no smoke com Workers, Sandbox e GitHub App reais? O fluxo está provado
-  localmente e documentado, mas ainda não foi validado nessa integração.
+- O rollout bidirecional broker/executor preserva compatibilidade durante uma
+  atualização real, inclusive bootstrap de conta vazia? Os smokes de 2026-08-31
+  comprovaram o fluxo já implantado, mas não a janela de rollout.
+- Redelivery, force-push concorrente, múltiplos findings, repositório privado e
+  rate limits passam no smoke remoto sem duplicação ou publicação obsoleta?
 
 ## P2 — Qualidade e evolução
 

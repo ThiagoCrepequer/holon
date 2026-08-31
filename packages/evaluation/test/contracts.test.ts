@@ -1,0 +1,139 @@
+import { describe, expect, it } from "vitest";
+
+import { evalCaseSchema } from "../src/index.js";
+import { createEvalCase } from "./fixtures.js";
+
+describe("evalCaseSchema", () => {
+  it("accepts a reviewed synthetic case", () => {
+    expect(evalCaseSchema.parse(createEvalCase()).schemaVersion).toBe(1);
+  });
+
+  it("requires license and HTTPS provenance for public cases", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        source: {
+          kind: "public",
+          license: "MIT",
+          reviewedAt: "2026-08-31",
+          url: "http://example.com/case",
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        source: {
+          kind: "public",
+          reviewedAt: "2026-08-31",
+          url: "https://example.com/case",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects credentials embedded in public provenance URLs", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        source: {
+          kind: "public",
+          license: "MIT",
+          reviewedAt: "2026-08-31",
+          url: "https://user:password@example.com/case",
+        },
+      }),
+    ).toThrow(/must not contain credentials/u);
+  });
+
+  it("rejects duplicate expected finding identifiers", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        expected: {
+          ...evalCase.expected,
+          findings: [
+            evalCase.expected.findings[0],
+            evalCase.expected.findings[0],
+          ],
+        },
+      }),
+    ).toThrow(/finding ids must be unique/u);
+  });
+
+  it("caps expectations at the current publication contract", () => {
+    const evalCase = createEvalCase();
+    const finding = evalCase.expected.findings[0];
+    if (finding === undefined)
+      throw new TypeError("fixture finding is required");
+
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        expected: {
+          ...evalCase.expected,
+          findings: [
+            finding,
+            { ...finding, id: "second" },
+            { ...finding, id: "third" },
+            { ...finding, id: "fourth" },
+          ],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an expected finding outside the canonical changed lines", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        expected: {
+          ...evalCase.expected,
+          findings: [
+            {
+              ...evalCase.expected.findings[0],
+              location: {
+                line: 11,
+                path: "src/index.ts",
+                side: "RIGHT",
+              },
+            },
+          ],
+        },
+      }),
+    ).toThrow(/target a changed line/u);
+  });
+
+  it("rejects case-insensitive duplicate diagnostic terms", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        expected: {
+          ...evalCase.expected,
+          requiredSummaryTerms: ["Finding", "finding"],
+        },
+      }),
+    ).toThrow(/terms must be unique/u);
+  });
+
+  it("rejects a run identity for a different head SHA", () => {
+    const evalCase = createEvalCase();
+    expect(() =>
+      evalCaseSchema.parse({
+        ...evalCase,
+        input: {
+          ...evalCase.input,
+          job: {
+            ...evalCase.input.job,
+            runId: evalCase.input.job.runId.replace(/a{40}$/u, "c".repeat(40)),
+          },
+        },
+      }),
+    ).toThrow();
+  });
+});

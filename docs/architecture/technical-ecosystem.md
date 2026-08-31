@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -37,6 +37,7 @@ holon/
 |   |-- domain/
 |   |-- application/
 |   |-- contracts/
+|   |-- evaluation/
 |   |-- github/
 |   |-- model/
 |   |-- repository-analysis/
@@ -66,6 +67,7 @@ flowchart TD
     MO[packages/model]
     RA[packages/repository-analysis]
     CT[packages/contracts]
+    EV[packages/evaluation]
     AP[packages/application]
     DO[packages/domain]
     TK[packages/test-kit]
@@ -81,6 +83,9 @@ flowchart TD
     MO --> AP
     MO --> CT
     RA --> CT
+    EV --> CT
+    EV --> AP
+    EV -. somente testes .-> TK
     CT --> DO
     AP --> DO
     TK -. somente testes .-> CT
@@ -88,20 +93,23 @@ flowchart TD
 
 Em texto: aplicações compõem casos de uso e adapters. Adapters implementam portas
 definidas por `application`. `application` depende de contratos e domínio;
-`contracts` usa Zod nas fronteiras e tipos puros do domínio. O domínio nunca
-depende de schemas runtime. `test-kit` é somente para fixtures de teste.
+`contracts` usa Zod nas fronteiras e tipos puros do domínio. `evaluation`
+valida corpus sintético e mede outputs por oráculos determinísticos sem acessar
+infraestrutura. O domínio nunca depende de schemas runtime. `test-kit` é
+somente para fixtures de teste.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR   |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                 |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                          |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                              |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                 |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                |
+| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR     |
+| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                   |
+| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                            |
+| `@holon/evaluation`          | Contratos do corpus, runner offline e graders determinísticos                                      | Aplicação, contratos e Zod; sem infraestrutura |
+| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                |
+| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                   |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura   |
+| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                  |
 
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
@@ -132,15 +140,16 @@ dependência de pacote do executor sobre adapters do control plane.
 
 ## Fronteiras de validacao
 
-| Entrada          | Validacao obrigatoria                                 | Saida interna              |
-| ---------------- | ----------------------------------------------------- | -------------------------- |
-| Webhook GitHub   | HMAC do body bruto, headers, tamanho, evento e schema | `WebhookEnvelopeV2`        |
-| Queue            | Versao do envelope e tipos runtime                    | comando de caso de uso     |
-| Workflow         | Schema V1/V2 de params em cada entrada externa        | tipos de aplicacao         |
-| Credential RPC   | container, run, repo, instalação e ledger             | token JIT repo-scoped      |
-| Ferramenta       | Schema, autorizacao, path normalizado e budget        | evidencia com proveniencia |
-| Modelo           | Schema estrutural, policy e coordenadas no diff       | candidatos a `Finding`     |
-| GitHub publisher | head SHA atual, dedupe e `line`/`side`                | IDs externos persistiveis  |
+| Entrada           | Validacao obrigatoria                                  | Saida interna              |
+| ----------------- | ------------------------------------------------------ | -------------------------- |
+| Webhook GitHub    | HMAC do body bruto, headers, tamanho, evento e schema  | `WebhookEnvelopeV2`        |
+| Queue             | Versao do envelope e tipos runtime                     | comando de caso de uso     |
+| Workflow          | Schema V1/V2 de params em cada entrada externa         | tipos de aplicacao         |
+| Credential RPC    | container, run, repo, instalação e ledger              | token JIT repo-scoped      |
+| Ferramenta        | Schema, autorizacao, path normalizado e budget         | evidencia com proveniencia |
+| Modelo            | Schema estrutural, policy e coordenadas no diff        | candidatos a `Finding`     |
+| Caso de avaliação | Schema, proveniência pública/sintética e changed lines | oráculo offline versionado |
+| GitHub publisher  | head SHA atual, dedupe e `line`/`side`                 | IDs externos persistiveis  |
 
 TypeScript nao substitui essas validacoes porque payloads, filas, storage e
 modelos existem fora do compilador.

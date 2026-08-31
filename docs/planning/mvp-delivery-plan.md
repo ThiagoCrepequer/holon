@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 related:
   - ../product/mvp-scope.md
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
@@ -17,8 +17,9 @@ related:
 # Plano de entrega do MVP
 
 O plano privilegia provas baratas antes de integrações caras. As fases 0 a 5
-possuem implementação e provas locais; a validação externa da fase 5 e o piloto
-da fase 6 ainda não foram executados.
+possuem implementação e provas locais. A fase 5 foi parcialmente comprovada em
+ambiente remoto com zero finding, um finding inline e encerramento parcial de PR
+grande; os demais cenários e o piloto da fase 6 ainda não foram executados.
 
 O [estado do bootstrap técnico](technical-bootstrap.md) registra as provas e os
 limites atuais.
@@ -30,7 +31,7 @@ limites atuais.
 | 2 — idempotência | Implementada com Workflow + Durable Object SQLite         |
 | 3 — analisador   | Implementada; imagem e CLIs validadas localmente          |
 | 4 — motor        | Implementada com schemas, budgets e AI Gateway atual      |
-| 5 — publicação   | Simulada verticalmente; GitHub real ainda pendente        |
+| 5 — publicação   | Parcialmente comprovada com GitHub e Cloudflare reais     |
 | 6 — piloto       | Não iniciada                                              |
 
 ## Fase 0 — Contratos e conjunto de avaliação
@@ -96,6 +97,12 @@ porque dependem de casos representativos aprovados.
 - Executar end-to-end com zero, um e múltiplos findings.
 
 Saída: fatia vertical completa e auditável.
+
+Estado remoto: o [smoke de 2026-08-31](../research/2026-08-31-live-github-app-review-smoke.md)
+comprovou publicação com zero e um finding e bounded completion de um PR grande.
+Redelivery, head obsoleto, múltiplos findings, falhas ambíguas e rate limits
+continuam pendentes; portanto a saída da fase ainda não foi atingida por
+completo.
 
 ## Fase 6 — Piloto restrito
 

@@ -4,7 +4,7 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 ---
 
 # Contrato de qualidade da review
@@ -69,9 +69,23 @@ Remoções, renames e metadata-only elegíveis ainda recebem review. Sem uma lin
 adicionada no lado `RIGHT`, o modelo deve retornar zero findings e registrar no
 resumo apenas riscos comprovados que não podem ser ancorados inline.
 
-## Avaliacao futura
+## Avaliação
 
-O conjunto de avaliacao deve conter:
+O pacote `@holon/evaluation` inicia a baseline offline com schema estrito,
+proveniência somente sintética ou pública, partições `development`/`holdout`,
+matching one-to-one de findings, precisão, recall, severidade, confiança,
+parcialidade e termos obrigatórios/proibidos. A configuração registra versões
+de corpus, política, prompt e subject. O pacote não chama modelo, GitHub ou
+Cloudflare; o subject é injetado e toda saída é revalidada.
+Findings com evidência ausente do patch canônico são rejeitados antes do
+grading e contabilizados separadamente.
+
+O corpus V1 inicial recria dois smokes como fixtures sintéticas: regressão do
+limiar de confiança e controle negativo de documentação. Essa amostra prova o
+runner, não representa uma métrica de qualidade do produto nem autoriza gates
+numéricos.
+
+O conjunto de avaliação deve crescer com:
 
 - PRs com regressao conhecida;
 - PRs corretos que testem falsos positivos;

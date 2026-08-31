@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 ---
 
 # Desenvolvimento local
@@ -26,7 +26,7 @@ pnpm verify
 O gate executa Oxfmt, Oxlint, TypeScript, cobertura, testes Workerd, dry-run dos
 Workers e build da imagem. Ele não usa GitHub, AI Gateway nem Cloudflare remotos.
 
-Última prova local em 2026-08-31: 347 testes passaram, todos os pacotes
+Última prova local em 2026-08-31: 374 testes passaram, todos os pacotes
 respeitaram 90% de statements/lines/functions e 85% de branches, ambos os
 Workers produziram bundle em dry-run e a imagem fixada por digest foi
 construída. Esses números são snapshot, não meta de produto.
@@ -39,6 +39,7 @@ Comandos focados:
 
 ```bash
 pnpm --filter @holon/application test:coverage
+pnpm --filter @holon/evaluation test:coverage
 pnpm --filter @holon/control-plane test
 pnpm --filter @holon/repository-executor test:coverage
 pnpm --filter @holon/control-plane build
@@ -124,5 +125,8 @@ credencial do modelo.
 - Fakes provam a composição executor -> modelo -> publisher e a idempotência.
 - O dry-run prova bundle e construção do Dockerfile; o smoke prova `rg`,
   `ast-grep run` e a paginação `sed` dentro dessa imagem.
-- Nada disso prova um webhook público, GitHub App real, modelo compatível, cota,
-  latência, retenção ou publicação remota.
+- O gate local não prova webhook público, GitHub App real, modelo compatível,
+  cota, latência, retenção ou publicação remota. Smokes separados comprovaram
+  parcialmente o caminho remoto em 2026-08-31; consulte o
+  [snapshot datado](../research/2026-08-31-live-github-app-review-smoke.md) sem
+  generalizar essa amostra para o gate local.
