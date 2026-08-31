@@ -1,7 +1,7 @@
 ---
 id: ADR-0011
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-30
 owners:
   - core-team
@@ -10,6 +10,8 @@ supersedes:
 related:
   - ../architecture/review-runtime-flow.md
   - ../research/2026-08-30-model-output-and-retry-incident.md
+superseded-by:
+  - 0012-use-canonical-diff-and-bounded-semantic-recovery.md
 ---
 
 # Centralizar fallback de modelo na Dynamic Route

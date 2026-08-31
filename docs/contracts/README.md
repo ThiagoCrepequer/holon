@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Contratos
@@ -18,7 +18,7 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 | Modulo             | Contratos principais                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `webhook.ts`       | Envelope GitHub v1 e job associado a repo, PR e head SHA                    |
-| `executor.ts`      | Pedido exact-SHA, contexto limitado, tool calls e resultados                |
+| `executor.ts`      | Pedido exact-SHA com diff canônico, contexto limitado, tools e resultados   |
 | `review-output.ts` | Findings estruturados, evidências, resumo e registro de publicação          |
 | `shared.ts`        | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
 
@@ -31,3 +31,8 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
   explícita em contrário.
 - Exemplos válidos e inválidos acompanham cada schema.
 - Testes de contrato devem provar serialização, validação e compatibilidade.
+
+O pedido do executor aceita no máximo 2 MB de diff canônico na fronteira. O
+contexto persistido seleciona até 50 arquivos TypeScript/JavaScript, 120 kB de
+patches completos e 5.000 linhas alteradas. A saída do modelo contém até três
+findings, duas evidências por finding e um resumo de até 800 caracteres.

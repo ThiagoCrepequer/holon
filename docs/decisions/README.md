@@ -26,7 +26,8 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0008](0008-bound-sandbox-lifetime-and-use-virtual-github-egress.md) | Limitar vida do Sandbox e usar egress GitHub por host virtual   | `accepted`   | 2026-08-30 |
 | [ADR-0009](0009-use-provider-specific-ai-gateway-route.md)               | Usar rota específica do Custom Provider e uma camada de retries | `superseded` | 2026-08-30 |
 | [ADR-0010](0010-use-dynamic-route-for-pr-review.md)                      | Usar Dynamic Route para selecionar o modelo de PR review        | `superseded` | 2026-08-30 |
-| [ADR-0011](0011-centralize-model-fallback-in-dynamic-route.md)           | Centralizar fallback de modelo na Dynamic Route                 | `accepted`   | 2026-08-30 |
+| [ADR-0011](0011-centralize-model-fallback-in-dynamic-route.md)           | Centralizar fallback de modelo na Dynamic Route                 | `superseded` | 2026-08-30 |
+| [ADR-0012](0012-use-canonical-diff-and-bounded-semantic-recovery.md)     | Usar diff canônico e recuperação semântica limitada             | `accepted`   | 2026-08-30 |
 
 ## Regras
 

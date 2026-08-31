@@ -4,7 +4,7 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Contrato de qualidade da review
@@ -51,6 +51,11 @@ No MVP, confiança abaixo de 0,8 é descartada; severidade `low` fica somente no
 resumo; `medium`, `high` e `critical` podem virar inline comment. Todo finding
 precisa de evidência e sua linha final deve pertencer às linhas adicionadas no
 lado `RIGHT` do diff atual.
+
+Uma execução publica no máximo os três findings de maior confiança. Se limites
+de arquivos, bytes ou coordenadas forem atingidos, o resumo precisa declarar
+que a review foi parcial. Alterações sem arquivos TypeScript/JavaScript recebem
+um resumo determinístico sem consumo de modelo.
 
 ## Avaliacao futura
 

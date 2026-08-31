@@ -57,7 +57,7 @@ são transitórios. Exit codes determinísticos, validação, autenticação e d
 falhas não são repetidos. Toda falha de preparação destrói o Sandbox antes de o
 Workflow aguardar um backoff.
 
-O `sleepAfter` passa de 15 para 2 minutos. Antes da leitura inicial e antes de
+O `sleepAfter` passa de 15 minutos para 30 segundos. Antes da leitura inicial e antes de
 cada ferramenta do modelo, o control-plane verifica o contexto; se o container
 hibernou, refaz o checkout idempotente com os SHAs assinados.
 
@@ -95,5 +95,5 @@ deve descartar um review válido.
 - Uma falha permanente executa uma tentativa e destrói o Sandbox.
 - Uma falha transitória executa no máximo duas tentativas, cada uma com Sandbox
   novo.
-- Nenhum container permanece ativo dois minutos após o último uso bem-sucedido.
+- Nenhum container permanece ativo 30 segundos após o último uso bem-sucedido.
 - Uma tool call após hibernação reconstrói o contexto e mantém o review válido.

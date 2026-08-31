@@ -9,6 +9,7 @@ related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0006-use-granular-workflow-checkpoints.md
+  - ../decisions/0012-use-canonical-diff-and-bounded-semantic-recovery.md
 ---
 
 # Fluxo de execução de uma review
@@ -43,6 +44,7 @@ sequenceDiagram
         LE-->>CO: duplicate/obsolete
         CO-->>Q: acknowledge without effects
     else new run
+        CO->>GH: fetch canonical PR diff
         CO->>AN: step prepare-repository
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
@@ -55,6 +57,10 @@ sequenceDiagram
         end
         RE->>AI: final structured step without tools
         AI-->>RE: JSON Schema response
+        opt successful transport without usable object
+            RE->>AI: one tool-free recovery
+            AI-->>RE: bounded JSON Schema response
+        end
         RE-->>CO: validated structured findings
         CO->>GH: fetch current head SHA
         alt head changed
@@ -73,7 +79,8 @@ sequenceDiagram
 1. **Authenticate:** nenhuma informação do payload é confiável antes do HMAC.
 2. **Normalize:** a fila recebe um envelope pequeno, versionado e sem token.
 3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica.
-4. **Acquire:** código é obtido com token de instalação emitido sob demanda.
+4. **Acquire:** o diff canônico é obtido pela API do PR; código é obtido no
+   head exato com token de instalação emitido sob demanda.
 5. **Investigate:** ferramentas são read-only por padrão e o loop tem orçamento.
 6. **Validate:** a saída do modelo é validada contra contrato estrutural e diff.
 7. **Reconcile:** o head SHA é relido imediatamente antes da publicação.
@@ -84,13 +91,19 @@ sequenceDiagram
 ## Checkpoints implementados
 
 Na ordem normal, o Workflow executa `claim-run`, `start-run`,
-`prepare-repository`, `analyze-review`, `begin-publication`,
+`revalidate-initial-head`, `prepare-repository`, `analyze-review`, `begin-publication`,
 `revalidate-current-head`, zero ou mais `publish-inline-N`, `publish-summary`,
 `complete-run` e `cleanup-completed-repository`. Obsolescência e falha possuem
 cleanup próprio. Os nomes são determinísticos; transições usam operation IDs
 derivados da instância e do nome da etapa.
 
-O contexto bruto não atravessa o checkpoint de preparação. Ele é validado e
+Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
+run antes de iniciar um container faturável. A revalidação final continua
+obrigatória para cobrir force-push durante a análise.
+
+O contexto bruto não atravessa o checkpoint de preparação. O control-plane
+obtém o diff canônico do GitHub e o executor o divide em patches completos; não
+executa `git diff baseSha headSha`. O contexto é validado e
 gravado no filesystem efêmero do Sandbox; apenas contagens, tamanho e flag de
 truncamento voltam ao Workflow. A etapa de análise relê esse arquivo e retorna
 somente a saída estruturada e limitada do modelo. Antes da leitura, o
@@ -104,15 +117,19 @@ idempotente com o mesmo par de SHAs.
 - Evento duplicado: reconhecer sem repetir efeitos.
 - Rate limit do GitHub: retry com backoff e limite nos steps pequenos e
   idempotentes de leitura/publicação.
-- Falha de provider/modelo: a Dynamic Route tenta seus fallbacks por requisição;
-  o Workflow não reinicia a sessão agentiva completa.
+- Falha de provider/modelo: a Dynamic Route tenta fallbacks de transporte por
+  requisição; o Workflow não reinicia a sessão agentiva completa.
 - Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
   resposta estruturada com a evidência já coletada.
 - Head SHA mudou: marcar run obsoleta e aguardar o evento mais novo.
 - Linha não pertence mais ao diff: não publicar aquele finding.
-- Resposta ausente ou estruturalmente inválida: falhar sem retry e sem
-  comentários especulativos; repetir a mesma inferência determinística só
-  multiplica tokens e tempo.
+- Resposta ausente ou estruturalmente inválida depois de HTTP 200: executar no
+  máximo uma síntese sem tools; uma segunda falha encerra a run e publica uma
+  notificação idempotente sem detalhes sensíveis.
+- Nenhuma mudança TypeScript/JavaScript: publicar resumo determinístico sem
+  chamar o modelo.
+- Contexto acima do budget: analisar somente patches completos selecionados e
+  marcar o resumo como parcial.
 - Finding estruturalmente válido em linha não alterada: descartar o finding e
   continuar com o resumo validado.
 - Falha depois de preparar o repositório: marcar terminal e executar cleanup em

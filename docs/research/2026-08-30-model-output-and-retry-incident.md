@@ -6,7 +6,7 @@ date: 2026-08-30
 owners:
   - core-team
 related:
-  - ../decisions/0011-centralize-model-fallback-in-dynamic-route.md
+  - ../decisions/0012-use-canonical-diff-and-bounded-semantic-recovery.md
   - ../architecture/review-runtime-flow.md
 ---
 
@@ -55,12 +55,14 @@ nome customizado do `NonRetryableError` também não foi reconhecido como termin
 na execução observada. Mesmo que esse comportamento do runtime seja corrigido,
 um teto de custo não deve depender exclusivamente dessa classificação especial.
 
-## Conclusão
+## Conclusão original e revisão posterior
 
-Fallback de provider/modelo pertence à Dynamic Route. O step agentivo deve ter
-uma única tentativa, enquanto steps menores e idempotentes podem manter retries
-próprios. Erros conhecidos recebem códigos seguros para diagnóstico sem
-registrar conteúdo do repositório ou do modelo.
+Fallback de transporte entre provider/modelo pertence à Dynamic Route. O step
+agentivo deve ter uma única tentativa, enquanto steps menores e idempotentes
+podem manter retries próprios. Investigação posterior provou que HTTP 200 com
+output inválido exige uma recuperação semântica local, limitada a uma chamada
+sem tools; ver ADR-0012. Erros conhecidos recebem códigos seguros sem registrar
+conteúdo do repositório ou do modelo.
 
 ## Limites da validação
 

@@ -90,20 +90,26 @@ Fontes verificadas em 2026-08-30:
 6. Force-push durante uma análise e confirme outcome `obsolete` sem publicação.
 7. Revogue/desinstale o App e confirme que novas runs falham sem expor segredo.
 8. Nos logs do AI Gateway, confirme `response_format` com JSON Schema, ausência
-   de hit no cache exato de respostas do Gateway durante o loop agentivo e um
-   passo final sem novas tool calls. Cache de prompt do provider é independente.
-9. Induza uma resposta estruturada inválida em ambiente de teste e confirme uma
-   única tentativa de `analyze-review`; apenas erros transitórios classificados
-   podem repetir a etapa.
+   de payload armazenado e presença apenas dos cinco metadados seguros. Confirme
+   em Workers Logs `finishReason`, tokens, tentativa e contagem de tools. Cache
+   de prompt do provider é independente.
+9. Induza uma resposta estruturada inválida em ambiente de teste e confirme um
+   único `analyze-review`, com no máximo uma inferência adicional marcada como
+   `recovery` e sem tools. O Workflow não pode repetir a sessão.
+10. Abra um PR cuja base avançou depois da criação da branch e compare a
+    contagem de linhas do GitHub com `repository.prepared`.
+11. Abra um PR somente de documentação e confirme zero tokens de modelo.
 
 ## Observabilidade e rollback
 
-O código emite JSON estruturado para `review.started`, `model.usage`,
+O código emite JSON estruturado para `review.started`, `repository.prepared`,
+`model.input`, `model.usage`,
 `review.completed`, `review.failed` e falhas secundárias de cleanup ou
 terminalização. Os campos incluem run, IDs não secretos, duração, outcome,
 tokens e quantidade publicada; não incluem prompt, diff, arquivo ou mensagem
 arbitrária de erro. Antes do piloto, configure retenção e acesso aos logs e ao
-AI Gateway.
+AI Gateway. O header `cf-aig-collect-log-payload=false` é obrigatório; removê-lo
+expõe código do repositório nos logs do Gateway.
 
 Uma versão anterior pode ser reimplantada, mas migrations de Durable Objects não
 devem ser removidas ou reutilizadas. O executor é efêmero; runs em andamento

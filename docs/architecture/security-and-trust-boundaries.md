@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Segurança e trust boundaries
@@ -62,6 +62,8 @@ O executor implementado não executa scripts do repositório:
   por um handler de bloqueio explícito assim que o fetch termina;
 - comandos são registrados sem incluir segredos;
 - filesystem é descartado ao final da run;
+- inatividade coloca o container para dormir após 30 segundos; a próxima tool
+  reconstrói o checkout canônico se o contexto efêmero tiver desaparecido;
 - fork bombs, processos em background e serviços expostos são proibidos;
 - submódulos não são obtidos; filtros Git LFS são desativados no checkout.
 
@@ -69,8 +71,9 @@ Os únicos comandos construídos pelo host são `git`, `rg`, `ast-grep run` e
 `realpath`, com argv tipado, diretório fixo, timeout e limites de saída. Não
 existe ferramenta shell genérica. A imagem fixa as versões do Sandbox, ripgrep
 e ast-grep; a base também é fixada por digest e o smoke local executa ambas as
-ferramentas contra uma fixture TypeScript. `git diff` desativa ext-diff e
-textconv.
+ferramentas contra uma fixture TypeScript. O diff não é calculado dentro do
+checkout: vem do endpoint canônico do Pull Request e é validado antes de entrar
+no Sandbox.
 
 Antes de `read_file`, o host resolve symlinks com `realpath` e rejeita qualquer
 destino fora de `/workspace/repository`; paths lexicais seguros sozinhos não são
@@ -84,7 +87,14 @@ podem sair da trust boundary. Texto encontrado em README, comentários ou códig
 não pode ampliar permissões.
 
 Antes de prompt, resultado de ferramenta e saída publicável, o host redige
-formatos conhecidos de credenciais. O prompt inicial é limitado a 500 kB, tool
-calls a doze, leituras a 500 linhas/100 kB e coordenadas a 20.000. Redação
+formatos conhecidos de credenciais. O prompt inicial é limitado a 100 kB, o
+diff persistido a 120 kB, tool calls a doze, leituras a 500 linhas/100 kB e
+coordenadas a 5.000. Redação
 heurística reduz exposição acidental, mas não substitui a política de dados do
 provedor nem garante detectar todo segredo possível.
+
+Requests ao AI Gateway enviam `cf-aig-collect-log-payload: false`; prompts,
+diffs, tool outputs e respostas não ficam persistidos nos logs. Até cinco
+metadados seguros correlacionam run, PR, repositório, etapa e versão do schema.
+Para OpenRouter, a chamada exige endpoints que aceitem todos os parâmetros e
+nega providers que coletem dados.
