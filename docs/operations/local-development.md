@@ -26,7 +26,7 @@ pnpm verify
 O gate executa Oxfmt, Oxlint, TypeScript, cobertura, testes Workerd, dry-run dos
 Workers e build da imagem. Ele não usa GitHub, AI Gateway nem Cloudflare remotos.
 
-Última prova local em 2026-08-30: 259 testes passaram, todos os pacotes
+Última prova local em 2026-08-31: 347 testes passaram, todos os pacotes
 respeitaram 90% de statements/lines/functions e 85% de branches, ambos os
 Workers produziram bundle em dry-run e a imagem fixada por digest foi
 construída. Esses números são snapshot, não meta de produto.
@@ -57,7 +57,7 @@ docker run --rm --entrypoint rg \
 docker run --rm --entrypoint ast-grep \
   -v "$PWD/apps/repository-executor/test/fixtures/tool-smoke.ts:/workspace/tool-smoke.ts:ro" \
   holon-repository-executor-holonsandbox:worker \
-  run --json=stream --lang typescript --pattern 'return $A' -- \
+  run --config /opt/holon/sgconfig.yml --json=stream --lang typescript --pattern 'return $A' -- \
   /workspace/tool-smoke.ts
 
 docker run --rm --entrypoint sed \
@@ -88,6 +88,7 @@ Nomes esperados pelo control plane:
 ```text
 GITHUB_WEBHOOK_SECRET
 GITHUB_APP_ID
+GITHUB_APP_SLUG
 GITHUB_APP_PRIVATE_KEY
 AI_GATEWAY_ACCOUNT_ID
 AI_GATEWAY_ID
@@ -110,8 +111,12 @@ obrigatório: o adapter usa `/compat` e envia o identificador completo no campo
 chave OpenRouter não entra em `.dev.vars` nem no Worker quando BYOK estiver
 configurado; o gateway a injeta depois que a rota seleciona o provider.
 
-O executor recebe somente um token de instalação efêmero por RPC. Ele não
-recebe segredo de webhook, chave do App ou credencial do modelo.
+O executor V2 recebe somente identidades não secretas. O outbound handler pede
+um token repo-scoped JIT ao broker nomeado do control plane usando o
+`containerId` da plataforma; o token não entra em parâmetros ou filesystem do
+Sandbox. O argumento token de V1 existe apenas para N-1 e é ignorado pelo
+executor dual-stack. O executor não recebe segredo de webhook, chave do App ou
+credencial do modelo.
 
 ## Limites da prova local
 

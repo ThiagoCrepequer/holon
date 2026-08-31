@@ -1,24 +1,19 @@
-import { reviewJobSchema } from "@holon/contracts";
-import type { ReviewRun, RunId } from "@holon/domain";
-import { ModelProviderRequestError } from "@holon/model";
-import { introspectWorkflowInstance, reset } from "cloudflare:test";
+import { reviewJobV2Schema, type ReviewContextV2 } from "@holon/contracts";
+import type { RunId } from "@holon/domain";
+import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
-import { NonRetryableError } from "cloudflare:workflows";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  executeReviewJob,
   executeReviewWorkflow,
-  executeGitHubOperation,
-  markPartialReviewSummary,
-  markReviewTerminal,
   parseAppId,
+  type ReviewRuntime,
 } from "../src/review-workflow.js";
 
 afterEach(() => reset());
 
-const job = reviewJobSchema.parse({
+const job = reviewJobV2Schema.parse({
   envelope: {
     action: "opened",
     deliveryId: "github:delivery-123",
@@ -28,33 +23,53 @@ const job = reviewJobSchema.parse({
       baseSha: "b".repeat(40),
       headSha: "a".repeat(40),
       number: 7,
+      updatedAt: "2026-08-29T12:00:00.000Z",
     },
-    receivedAt: "2026-08-29T12:00:00.000Z",
-    repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-    schemaVersion: 1,
+    receivedAt: "2026-08-29T12:00:01.000Z",
+    repository: {
+      fullName: "acme/api",
+      id: 42,
+      name: "api",
+      owner: "acme",
+    },
+    schemaVersion: 2,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 
-const canonicalDiff = [
+const canonicalPatch = [
   "diff --git a/src/index.ts b/src/index.ts",
   "--- a/src/index.ts",
   "+++ b/src/index.ts",
   "@@ -9,0 +10,1 @@",
   "+return null;",
 ].join("\n");
-const modelContext = {
-  changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" as const }],
-  diff: canonicalDiff,
-  reviewedFiles: [{ mode: "structural" as const, path: "src/index.ts" }],
+
+const context: ReviewContextV2 = {
+  changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+  files: [{ mode: "structural", patch: canonicalPatch, path: "src/index.ts" }],
+  schemaVersion: 2,
+  truncated: false,
 };
 
-function immediateWorkflowStep(
-  stepNames: string[],
-  failingSteps: ReadonlySet<string> = new Set(),
-  replaySteps: ReadonlySet<string> = new Set(),
-): WorkflowStep {
+const finding = {
+  confidence: 0.95,
+  diagnostic:
+    "The changed return value breaks the caller's non-null runtime contract.",
+  evidence: [
+    {
+      excerpt: "return null;",
+      path: "src/index.ts",
+      reason: "The new return is null",
+      startLine: 10,
+    },
+  ],
+  location: { line: 10, path: "src/index.ts", side: "RIGHT" as const },
+  severity: "high" as const,
+};
+
+function immediateStep(stepNames: string[]): WorkflowStep {
   return {
     do: async <T>(
       name: string,
@@ -62,656 +77,361 @@ function immediateWorkflowStep(
       maybeCallback?: unknown,
     ): Promise<T> => {
       stepNames.push(name);
-      if (failingSteps.has(name)) throw new Error(`${name} failed`);
       const callback =
         typeof configOrCallback === "function"
           ? configOrCallback
           : maybeCallback;
       if (typeof callback !== "function") throw new TypeError("callback");
-      const result = await (callback as () => Promise<T>)();
-      if (replaySteps.has(name)) await (callback as () => Promise<T>)();
-      return result;
+      return await (callback as () => Promise<T>)();
     },
   } as unknown as WorkflowStep;
 }
 
-function retryingWorkflowStep(
-  stepNames: string[],
-  attempts: Map<string, number>,
-): WorkflowStep {
+function session(
+  posts: Array<{ readonly route: string; readonly body: unknown }>,
+  readHead: () => string = () => "a".repeat(40),
+) {
   return {
-    do: async <T>(
-      name: string,
-      configOrCallback: unknown,
-      maybeCallback?: unknown,
-    ): Promise<T> => {
-      stepNames.push(name);
-      const callback =
-        typeof configOrCallback === "function"
-          ? configOrCallback
-          : maybeCallback;
-      if (typeof callback !== "function") throw new TypeError("callback");
-      const limit =
-        typeof configOrCallback === "object" && configOrCallback !== null
-          ? ((configOrCallback as { retries?: { limit?: number } }).retries
-              ?.limit ?? 0)
-          : 0;
-      let lastError: unknown;
-      for (let attempt = 0; attempt <= limit; attempt += 1) {
-        attempts.set(name, (attempts.get(name) ?? 0) + 1);
-        try {
-          return await (callback as () => Promise<T>)();
-        } catch (error) {
-          if (error instanceof NonRetryableError) throw error;
-          lastError = error;
-        }
-      }
-      throw lastError;
+    api: {
+      async *iterate() {
+        yield [];
+      },
+      request: (route: string, parameters: Record<string, unknown>) => {
+        posts.push({ body: parameters.body, route });
+        return Promise.resolve({ data: { id: posts.length } });
+      },
     },
-  } as unknown as WorkflowStep;
+    currentHeadSha: () => Promise.resolve(readHead()),
+    expectedAuthorLogin: "holon-reviewer[bot]",
+    expiresAt: "2026-08-29T13:00:00.000Z",
+    pullRequestDiff: () => Promise.resolve(canonicalPatch),
+    token: "installation-token-long-enough",
+  };
+}
+
+function runtime(
+  options: {
+    readonly context?: ReviewContextV2;
+    readonly head?: () => string;
+    readonly model?: ReviewRuntime["createModel"];
+    readonly posts?: Array<{ readonly route: string; readonly body: unknown }>;
+  } = {},
+) {
+  const posts = options.posts ?? [];
+  const cleanup = vi.fn(() => Promise.resolve());
+  const prepareRepositoryV2 = vi.fn(() =>
+    Promise.resolve({
+      changedLineCount: (options.context ?? context).changedLines.length,
+      contextBytes: 100,
+      fileCount: (options.context ?? context).files.length,
+      runId: job.runId,
+      schemaVersion: 2 as const,
+      truncated: false,
+    }),
+  );
+  const value: ReviewRuntime = {
+    createModel:
+      options.model ??
+      (() => ({
+        review: () =>
+          Promise.resolve({
+            output: { findings: [finding], summary: "One regression found." },
+            promptTruncated: false,
+          }),
+      })),
+    createSession: () => Promise.resolve(session(posts, options.head)),
+    executor: {
+      cleanup,
+      hasContext: () => Promise.resolve(true),
+      loadContextV2: () => Promise.resolve(options.context ?? context),
+      prepareRepositoryV2,
+      runTool: () => Promise.resolve({ content: "", truncated: false }),
+    },
+    logger: { emit: () => undefined },
+    now: () => "2026-08-29T12:00:05.000Z",
+    wait: () => Promise.resolve(),
+  };
+  return { cleanup, posts, prepareRepositoryV2, value };
+}
+
+function event(instanceId: string) {
+  return {
+    instanceId,
+    payload: job,
+    timestamp: new Date("2026-08-29T12:00:00.000Z"),
+    workflowName: "holon-review-workflow",
+  };
 }
 
 describe("ReviewWorkflow", () => {
-  it("stops deterministic GitHub 4xx failures without suppressing transient statuses", async () => {
-    await expect(
-      executeGitHubOperation(() => Promise.reject({ status: 422 })),
-    ).rejects.toMatchObject({
-      message: "HOLON_GITHUB_NON_RETRYABLE:422",
-      name: "NonRetryableError",
+  it("publishes with fresh ledger and head authorization before each mutation", async () => {
+    const stepNames: string[] = [];
+    let headReads = 0;
+    const setup = runtime({
+      head: () => {
+        headReads += 1;
+        return "a".repeat(40);
+      },
     });
+
     await expect(
-      executeGitHubOperation(() => Promise.reject({ status: 429 })),
-    ).rejects.toEqual({ status: 429 });
+      executeReviewWorkflow(
+        env,
+        event("complete-workflow"),
+        immediateStep(stepNames),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
+
+    expect(headReads).toBe(4);
+    expect(setup.posts.map((post) => post.route)).toEqual([
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+    ]);
+    expect(setup.cleanup).not.toHaveBeenCalled();
+    expect(stepNames).toContain("complete-run-and-schedule-cleanup");
+    expect(stepNames.some((name) => name.startsWith("cleanup-"))).toBe(false);
+    await expect(
+      env.REVIEW_LEDGERS.getByName("github:42:pr:7").cleanupState(
+        job.runId as RunId,
+      ),
+    ).resolves.toMatchObject({ state: "pending" });
   });
 
-  it("marks bounded reviews as partial without overflowing the summary contract", () => {
-    expect(markPartialReviewSummary("Evidence was reviewed.", true)).toContain(
-      "Partial review",
-    );
-    expect(markPartialReviewSummary("x".repeat(800), true)).toHaveLength(800);
-    expect(markPartialReviewSummary("Complete.", false)).toBe("Complete.");
+  it("stops between GitHub mutations when the head becomes stale", async () => {
+    let headReads = 0;
+    const setup = runtime({
+      head: () => {
+        headReads += 1;
+        return headReads < 4 ? "a".repeat(40) : "c".repeat(40);
+      },
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("stale-during-publication"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+    expect(setup.posts).toHaveLength(1);
+    expect(setup.posts[0]?.route).toContain("/comments");
+    expect(
+      setup.posts.some((post) =>
+        String(post.body).includes("could not complete"),
+      ),
+    ).toBe(false);
   });
 
-  it("runs the durable step and exits without credentials or executor calls for a duplicate run", async () => {
+  it("does not persist a credential scope when the initial head is stale", async () => {
+    const setup = runtime({ head: () => "c".repeat(40) });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("stale-before-preparation"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+    expect(setup.prepareRepositoryV2).not.toHaveBeenCalled();
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    await ledger.claimRun(
-      {
-        attempt: 0,
-        createdAt: job.envelope.receivedAt,
-        id: job.runId as RunId,
-        prKey: "github:42:pr:7",
-        state: "queued",
-      } satisfies ReviewRun,
-      "existing-workflow",
-    );
-    const instance = await introspectWorkflowInstance(
-      env.REVIEW_WORKFLOW,
-      "duplicate-run",
-    );
-    try {
-      await env.REVIEW_WORKFLOW.create({ id: "duplicate-run", params: job });
-      await instance.waitForStatus("complete");
-      await expect(instance.getOutput()).resolves.toEqual({
-        findingsPublished: 0,
-        outcome: "duplicate",
-      });
-    } finally {
-      await instance.dispose();
-    }
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>(
+            "SELECT COUNT(*) AS count FROM credential_scopes WHERE run_id = ?",
+            job.runId,
+          )
+          .one().count,
+      ).toBe(0);
+    });
   });
 
-  it("composes executor, model, Durable Object ledger and GitHub publication", async () => {
-    const calls: string[] = [];
-    let executorRequest: unknown;
-    let githubId = 100;
-    const result = await executeReviewJob(env, job, {
-      createModel: (toolRunner) => ({
+  it("becomes obsolete when the head changes before the first publication", async () => {
+    let headReads = 0;
+    const setup = runtime({
+      head: () => {
+        headReads += 1;
+        return headReads === 1 ? "a".repeat(40) : "c".repeat(40);
+      },
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("stale-before-publication"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+    expect(setup.posts).toHaveLength(0);
+  });
+
+  it("skips the model for a context with no eligible files", async () => {
+    const review = vi.fn();
+    const setup = runtime({
+      context: {
+        changedLines: [],
+        files: [],
+        schemaVersion: 2,
+        truncated: false,
+      },
+      model: () => ({ review }),
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("no-eligible-files"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+    expect(review).not.toHaveBeenCalled();
+    expect(setup.posts[0]?.body).toContain("No eligible changes were found");
+  });
+
+  it("returns duplicate without rerunning a completed head", async () => {
+    const first = runtime();
+    await executeReviewWorkflow(
+      env,
+      event("first-completed-instance"),
+      immediateStep([]),
+      first.value,
+    );
+    const duplicate = runtime();
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("redelivered-instance"),
+        immediateStep([]),
+        duplicate.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "duplicate" });
+    expect(duplicate.prepareRepositoryV2).not.toHaveBeenCalled();
+  });
+
+  it("reprepares lost model context with fresh sessions and a bounded retry", async () => {
+    const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
+    let contextExists = true;
+    let sessions = 0;
+    let preparations = 0;
+    const waits: number[] = [];
+    const setup = runtime({
+      model: (toolRunner) => ({
         review: async () => {
+          contextExists = false;
           await toolRunner.run({
-            arguments: { maxResults: 1, query: "result" },
+            arguments: { maxResults: 1, query: "return" },
             name: "search_text",
           });
           return {
-            findings: [
-              {
-                confidence: 0.95,
-                diagnostic:
-                  "The changed return value breaks the unchanged caller contract at runtime.",
-                evidence: [
-                  {
-                    excerpt: "result.id",
-                    path: "src/caller.ts",
-                    reason: "No null guard",
-                    startLine: 20,
-                  },
-                ],
-                location: { line: 10, path: "src/index.ts", side: "RIGHT" },
-                severity: "high",
-                suggestion: "Preserve the non-null contract.",
-              },
-            ],
-            summary: "One contract regression found.",
+            output: { findings: [], summary: "No finding." },
+            promptTruncated: false,
           };
         },
       }),
-      createSession: () =>
-        Promise.resolve({
-          api: {
-            paginate: () => Promise.resolve([]),
-            request: (route) => {
-              calls.push(route);
-              return Promise.resolve({ data: { id: ++githubId } });
-            },
-          },
-          currentHeadSha: () => Promise.resolve("a".repeat(40)),
-          pullRequestDiff: () => Promise.resolve(canonicalDiff),
-          expiresAt: "2026-08-29T13:00:00.000Z",
-          token: "installation-token",
-        }),
+      posts,
+    });
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        sessions += 1;
+        return Promise.resolve(session(posts));
+      },
       executor: {
-        cleanup: () => {
-          calls.push("cleanup");
-          return Promise.resolve();
-        },
-        hasContext: () => Promise.resolve(true),
-        loadContext: () =>
-          Promise.resolve({
-            changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
-            diff: "@@ -9,0 +10,1 @@\n+return null;",
-            reviewedFiles: [
-              { mode: "structural" as const, path: "src/index.ts" },
-            ],
-          }),
-        prepare: (request) => {
-          executorRequest = request;
+        ...setup.value.executor!,
+        hasContext: () => Promise.resolve(contextExists),
+        prepareRepositoryV2: () => {
+          preparations += 1;
+          if (preparations === 2) {
+            const error = new Error(
+              "HOLON_REPOSITORY_TRANSIENT:fetch:timed-out",
+            );
+            error.name = "RepositoryTransientError";
+            return Promise.reject(error);
+          }
+          contextExists = true;
           return Promise.resolve({
             changedLineCount: 1,
             contextBytes: 100,
             fileCount: 1,
             runId: job.runId,
-            schemaVersion: 1 as const,
-            truncated: false,
-          });
-        },
-        runTool: () => {
-          calls.push("tool");
-          return Promise.resolve({
-            content: "src/caller.ts:20:result.id",
+            schemaVersion: 2 as const,
             truncated: false,
           });
         },
       },
-      now: () => "2026-08-29T12:00:01.000Z",
-    });
-
-    expect(result).toEqual({ findingsPublished: 1, outcome: "completed" });
-    expect(executorRequest).toMatchObject({ canonicalDiff });
-    expect(calls).toEqual([
-      "tool",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-      "cleanup",
-    ]);
-  });
-
-  it("publishes a deterministic summary without model cost when every change is ignored", async () => {
-    let modelCalls = 0;
-    const result = await executeReviewWorkflow(
-      env,
-      {
-        instanceId: "documentation-only-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
+      wait: (delay) => {
+        waits.push(delay);
+        return Promise.resolve();
       },
-      immediateWorkflowStep([]),
-      {
-        createModel: () => ({
-          review: () => {
-            modelCalls += 1;
-            return Promise.reject(new Error("model must not be called"));
-          },
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () => Promise.resolve("a".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(""),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => Promise.resolve(),
-          hasContext: () => Promise.resolve(true),
-          loadContext: () =>
-            Promise.resolve({ changedLines: [], diff: "", reviewedFiles: [] }),
-          prepare: () =>
-            Promise.resolve({
-              changedLineCount: 0,
-              contextBytes: 10,
-              fileCount: 0,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            }),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
-    );
+    };
 
-    expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
-    expect(modelCalls).toBe(0);
-  });
-
-  it("sends deletion-only changes to the model even without inline coordinates", async () => {
-    let modelCalls = 0;
-    const deletionDiff = [
-      "diff --git a/src/policy.ts b/src/policy.ts",
-      "--- a/src/policy.ts",
-      "+++ b/src/policy.ts",
-      "@@ -1 +0,0 @@",
-      "-assertAuthorized(request);",
-    ].join("\n");
-    const result = await executeReviewWorkflow(
-      env,
-      {
-        instanceId: "deletion-only-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
-      },
-      immediateWorkflowStep([]),
-      {
-        createModel: () => ({
-          review: (_job, context) => {
-            modelCalls += 1;
-            expect(context.changedLines).toEqual([]);
-            expect(context.diff).toContain("-assertAuthorized(request);");
-            return Promise.resolve({
-              findings: [],
-              summary: "A security guard was removed and requires review.",
-            });
-          },
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () => Promise.resolve("a".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(deletionDiff),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => Promise.resolve(),
-          hasContext: () => Promise.resolve(true),
-          loadContext: () =>
-            Promise.resolve({
-              changedLines: [],
-              diff: deletionDiff,
-              reviewedFiles: [
-                { mode: "structural" as const, path: "src/policy.ts" },
-              ],
-            }),
-          prepare: () =>
-            Promise.resolve({
-              changedLineCount: 0,
-              contextBytes: 200,
-              fileCount: 1,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            }),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
-    );
-
-    expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
-    expect(modelCalls).toBe(1);
-  });
-
-  it("checkpoints the production review as granular, bounded durable steps", async () => {
-    const stepNames: string[] = [];
-    const fakeStep = immediateWorkflowStep(
-      stepNames,
-      new Set(),
-      new Set(["start-run", "begin-publication", "complete-run"]),
-    );
-    let githubId = 200;
-    const result = await executeReviewWorkflow(
-      env,
-      {
-        instanceId: "granular-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
-      },
-      fakeStep,
-      {
-        createModel: () => ({
-          review: () =>
-            Promise.resolve({
-              findings: [
-                {
-                  confidence: 0.95,
-                  diagnostic:
-                    "The changed return value breaks the unchanged caller contract at runtime.",
-                  evidence: [
-                    {
-                      excerpt: "result.id",
-                      path: "src/caller.ts",
-                      reason: "No null guard",
-                      startLine: 20,
-                    },
-                  ],
-                  location: {
-                    line: 10,
-                    path: "src/index.ts",
-                    side: "RIGHT" as const,
-                  },
-                  severity: "high" as const,
-                },
-              ],
-              summary: "One contract regression found.",
-            }),
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: ++githubId } }),
-            },
-            currentHeadSha: () => Promise.resolve("a".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(canonicalDiff),
-            expiresAt: "2026-08-29T13:00:00.000Z",
-            token: "installation-token",
-          }),
-        executor: {
-          cleanup: () => Promise.resolve(),
-          hasContext: () => Promise.resolve(true),
-          loadContext: () =>
-            Promise.resolve({
-              changedLines: [
-                { line: 10, path: "src/index.ts", side: "RIGHT" as const },
-              ],
-              diff: "@@ -9,0 +10,1 @@\n+return null;",
-              reviewedFiles: [
-                { mode: "structural" as const, path: "src/index.ts" },
-              ],
-            }),
-          prepare: () =>
-            Promise.resolve({
-              changedLineCount: 1,
-              contextBytes: 100,
-              fileCount: 1,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            }),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
-    );
-
-    expect(result).toEqual({ findingsPublished: 1, outcome: "completed" });
-    expect(stepNames).toEqual([
-      "claim-run",
-      "start-run",
-      "revalidate-initial-head",
-      "prepare-repository",
-      "analyze-review",
-      "begin-publication",
-      "revalidate-current-head",
-      "publish-inline-1",
-      "publish-summary",
-      "complete-run",
-      "cleanup-completed-repository",
-    ]);
-    expect(stepNames).not.toContain("execute-review");
-  });
-
-  it("reconstructs an ephemeral context lost before a model tool call", async () => {
-    const stepNames: string[] = [];
-    let prepareCalls = 0;
-    let contextExists = false;
-    let contextChecks = 0;
-    let toolCalls = 0;
-
-    const result = await executeReviewWorkflow(
-      env,
-      {
-        instanceId: "recovered-sandbox-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
-      },
-      immediateWorkflowStep(stepNames),
-      {
-        createModel: (toolRunner) => ({
-          review: async () => {
-            contextExists = false;
-            await toolRunner.run({
-              arguments: { maxResults: 1, query: "symbol" },
-              name: "search_text",
-            });
-            return { findings: [], summary: "No findings." };
-          },
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () => Promise.resolve("a".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(canonicalDiff),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => Promise.resolve(),
-          hasContext: () => {
-            contextChecks += 1;
-            return Promise.resolve(contextExists);
-          },
-          loadContext: () => Promise.resolve(modelContext),
-          prepare: () => {
-            prepareCalls += 1;
-            contextExists = true;
-            return Promise.resolve({
-              changedLineCount: 0,
-              contextBytes: 10,
-              fileCount: 0,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            });
-          },
-          runTool: () => {
-            toolCalls += 1;
-            return Promise.resolve({ content: "", truncated: false });
-          },
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
-    );
-
-    expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
-    expect(prepareCalls).toBe(2);
-    expect(contextChecks).toBe(2);
-    expect(toolCalls).toBe(1);
-  });
-
-  it.each([
-    ["RepositoryPermanentError", "permanent failure", 1],
-    [
-      "RepositoryTransientError",
-      "HOLON_REPOSITORY_TRANSIENT:fetch:timed-out",
-      2,
-    ],
-  ])(
-    "retries only a classified transient repository failure: %s",
-    async (failureName, failureMessage, expectedAttempts) => {
-      const stepNames: string[] = [];
-      let prepareAttempts = 0;
-      let repositoryRetryLimit: number | undefined;
-      let repositoryTimeout: string | undefined;
-      const baseStep = immediateWorkflowStep(stepNames) as unknown as {
-        do<T>(
-          name: string,
-          config: unknown,
-          callback: () => Promise<T>,
-        ): Promise<T>;
-      };
-      const retryingStep = {
-        do: async <T>(
-          name: string,
-          config: unknown,
-          callback: () => Promise<T>,
-        ): Promise<T> => {
-          if (name !== "prepare-repository") {
-            return await baseStep.do(name, config, callback);
-          }
-          const repositoryConfig = config as {
-            retries: { limit: number };
-            timeout: string;
-          };
-          repositoryRetryLimit = repositoryConfig.retries.limit;
-          repositoryTimeout = repositoryConfig.timeout;
-          let lastError: unknown;
-          for (
-            let attempt = 0;
-            attempt <= repositoryConfig.retries.limit;
-            attempt += 1
-          ) {
-            try {
-              return await callback();
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          throw lastError;
-        },
-      } as unknown as WorkflowStep;
-
-      await expect(
-        executeReviewWorkflow(
-          env,
-          {
-            instanceId: `repository-failure-${failureName}`,
-            payload: job,
-            timestamp: new Date("2026-08-29T12:00:00.000Z"),
-            workflowName: "holon-review-workflow",
-          },
-          retryingStep,
-          {
-            createSession: () =>
-              Promise.resolve({
-                api: {
-                  paginate: () => Promise.resolve([]),
-                  request: () => Promise.resolve({ data: { id: 1 } }),
-                },
-                currentHeadSha: () => Promise.resolve("a".repeat(40)),
-                pullRequestDiff: () => Promise.resolve(canonicalDiff),
-                expiresAt: "later",
-                token: "token",
-              }),
-            executor: {
-              cleanup: () => Promise.resolve(),
-              hasContext: () => Promise.resolve(false),
-              loadContext: () => Promise.resolve(modelContext),
-              prepare: () => {
-                prepareAttempts += 1;
-                const failure = new Error(failureMessage);
-                failure.name = failureName;
-                return Promise.reject(failure);
-              },
-              runTool: () => Promise.resolve({ content: "", truncated: false }),
-            },
-            logger: { emit: () => undefined },
-            now: () => "2026-08-29T12:00:01.000Z",
-          },
-        ),
-      ).rejects.toThrow();
-
-      expect(prepareAttempts).toBe(expectedAttempts);
-      expect(repositoryRetryLimit).toBe(1);
-      expect(repositoryTimeout).toBe("2 minutes");
-    },
-  );
-
-  it("terminalizes and cleans a prepared review after durable retries are exhausted", async () => {
-    const stepNames: string[] = [];
-    let cleaned = false;
     await expect(
       executeReviewWorkflow(
         env,
-        {
-          instanceId: "failing-workflow",
-          payload: job,
-          timestamp: new Date("2026-08-29T12:00:00.000Z"),
-          workflowName: "holon-review-workflow",
-        },
-        immediateWorkflowStep(stepNames),
-        {
-          createModel: () => ({
-            review: () => Promise.reject(new Error("model unavailable")),
-          }),
-          createSession: () =>
-            Promise.resolve({
-              api: {
-                paginate: () => Promise.resolve([]),
-                request: () => Promise.resolve({ data: { id: 1 } }),
-              },
-              currentHeadSha: () => Promise.resolve("a".repeat(40)),
-              pullRequestDiff: () => Promise.resolve(canonicalDiff),
-              expiresAt: "2026-08-29T13:00:00.000Z",
-              token: "installation-token",
-            }),
-          executor: {
-            cleanup: () => {
-              cleaned = true;
-              return Promise.resolve();
+        event("reprepare-context"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+    expect(preparations).toBe(3);
+    expect(sessions).toBeGreaterThanOrEqual(6);
+    expect(waits).toEqual([1_000]);
+  });
+
+  it("renders summary-only findings deterministically instead of dropping them", async () => {
+    const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
+    const setup = runtime({
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: [{ ...finding, severity: "low" as const }],
+              summary: "Review complete.",
             },
-            hasContext: () => Promise.resolve(true),
-            loadContext: () =>
-              Promise.resolve({
-                changedLines: [
-                  { line: 10, path: "src/index.ts", side: "RIGHT" as const },
-                ],
-                diff: "@@ -9,0 +10,1 @@\n+return null;",
-                reviewedFiles: [
-                  { mode: "structural" as const, path: "src/index.ts" },
-                ],
-              }),
-            prepare: () =>
-              Promise.resolve({
-                changedLineCount: 1,
-                contextBytes: 100,
-                fileCount: 1,
-                runId: job.runId,
-                schemaVersion: 1 as const,
-                truncated: false,
-              }),
-            runTool: () => Promise.resolve({ content: "", truncated: false }),
-          },
-          now: () => "2026-08-29T12:00:01.000Z",
-        },
+            promptTruncated: false,
+          }),
+      }),
+      posts,
+    });
+
+    await executeReviewWorkflow(
+      env,
+      event("low-summary"),
+      immediateStep([]),
+      setup.value,
+    );
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.body).toContain("Low-severity observations:");
+    expect(posts[0]?.body).toContain(finding.diagnostic);
+  });
+
+  it("does not publish a failure notice when the failed run is no longer fresh", async () => {
+    let headReads = 0;
+    const setup = runtime({
+      head: () => {
+        headReads += 1;
+        return headReads === 1 ? "a".repeat(40) : "d".repeat(40);
+      },
+      model: () => ({
+        review: () => Promise.reject(new Error("model unavailable")),
+      }),
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("failed-stale"),
+        immediateStep([]),
+        setup.value,
       ),
     ).rejects.toThrow("model unavailable");
-
-    expect(cleaned).toBe(true);
-    expect(stepNames).toContain("mark-review-terminal");
-    expect(stepNames).toContain("cleanup-failed-repository");
+    expect(setup.posts).toHaveLength(0);
     await expect(
       env.REVIEW_LEDGERS.getByName("github:42:pr:7").runState(
         job.runId as RunId,
@@ -719,444 +439,40 @@ describe("ReviewWorkflow", () => {
     ).resolves.toBe("failed_terminal");
   });
 
-  it.each([
-    [401, false, "NonRetryableError"],
-    [403, false, "NonRetryableError"],
-    [404, false, "NonRetryableError"],
-    [500, true, "ModelTransientError"],
-  ])(
-    "delegates provider fallback without replaying status %s when retryable=%s",
-    async (statusCode, isRetryable, expectedErrorName) => {
-      const attempts = new Map<string, number>();
-      const stepNames: string[] = [];
-      let modelAttempts = 0;
-      let cleanupAttempts = 0;
-
-      const execution = executeReviewWorkflow(
-        env,
-        {
-          instanceId: `model-status-${statusCode}`,
-          payload: job,
-          timestamp: new Date("2026-08-29T12:00:00.000Z"),
-          workflowName: "holon-review-workflow",
-        },
-        retryingWorkflowStep(stepNames, attempts),
-        {
-          createModel: () => ({
-            review: () => {
-              modelAttempts += 1;
-              return Promise.reject(
-                new ModelProviderRequestError(isRetryable, statusCode),
-              );
-            },
-          }),
-          createSession: () =>
-            Promise.resolve({
-              api: {
-                paginate: () => Promise.resolve([]),
-                request: () => Promise.resolve({ data: { id: 1 } }),
-              },
-              currentHeadSha: () => Promise.resolve("a".repeat(40)),
-              pullRequestDiff: () => Promise.resolve(canonicalDiff),
-              expiresAt: "later",
-              token: "token",
-            }),
-          executor: {
-            cleanup: () => {
-              cleanupAttempts += 1;
-              return Promise.resolve();
-            },
-            hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve(modelContext),
-            prepare: () =>
-              Promise.resolve({
-                changedLineCount: 0,
-                contextBytes: 10,
-                fileCount: 0,
-                runId: job.runId,
-                schemaVersion: 1 as const,
-                truncated: false,
-              }),
-            runTool: () => Promise.resolve({ content: "", truncated: false }),
-          },
-          now: () => "2026-08-29T12:00:01.000Z",
-        },
-      );
-
-      await expect(execution).rejects.toMatchObject({
-        name: expectedErrorName,
-      });
-      expect(modelAttempts).toBe(1);
-      expect(attempts.get("analyze-review")).toBe(1);
-      expect(cleanupAttempts).toBe(1);
-      expect(stepNames).toContain("mark-review-terminal");
-      expect(stepNames).toContain("cleanup-failed-repository");
-      expect(stepNames).toContain("publish-failure-notice");
-      expect(stepNames.indexOf("cleanup-failed-repository")).toBeLessThan(
-        stepNames.indexOf("publish-failure-notice"),
-      );
-    },
-  );
-
-  it.each([
-    ["AI_NoOutputGeneratedError", "output_missing"],
-    ["AI_NoObjectGeneratedError", "object_invalid"],
-    ["RepositoryToolBudgetExceededError", "tool_budget_exhausted"],
-    ["ZodError", "schema_invalid"],
-  ])(
-    "does not retry a deterministic model failure: %s",
-    async (failureName, failureCode) => {
-      const attempts = new Map<string, number>();
-      let modelAttempts = 0;
-      const failure = new Error("deterministic model failure");
-      failure.name = failureName;
-
-      const execution = executeReviewWorkflow(
-        env,
-        {
-          instanceId: `deterministic-model-failure-${failureName}`,
-          payload: job,
-          timestamp: new Date("2026-08-29T12:00:00.000Z"),
-          workflowName: "holon-review-workflow",
-        },
-        retryingWorkflowStep([], attempts),
-        {
-          createModel: () => ({
-            review: () => {
-              modelAttempts += 1;
-              return Promise.reject(failure);
-            },
-          }),
-          createSession: () =>
-            Promise.resolve({
-              api: {
-                paginate: () => Promise.resolve([]),
-                request: () => Promise.resolve({ data: { id: 1 } }),
-              },
-              currentHeadSha: () => Promise.resolve("a".repeat(40)),
-              pullRequestDiff: () => Promise.resolve(canonicalDiff),
-              expiresAt: "later",
-              token: "token",
-            }),
-          executor: {
-            cleanup: () => Promise.resolve(),
-            hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve(modelContext),
-            prepare: () =>
-              Promise.resolve({
-                changedLineCount: 0,
-                contextBytes: 10,
-                fileCount: 0,
-                runId: job.runId,
-                schemaVersion: 1 as const,
-                truncated: false,
-              }),
-            runTool: () => Promise.resolve({ content: "", truncated: false }),
-          },
-          now: () => "2026-08-29T12:00:01.000Z",
-        },
-      );
-
-      await expect(execution).rejects.toMatchObject({
-        message: `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
-        name: "NonRetryableError",
-      });
-      expect(modelAttempts).toBe(1);
-      expect(attempts.get("analyze-review")).toBe(1);
-    },
-  );
-
-  it("records terminalization and cleanup failures without hiding the causal error", async () => {
-    const stepNames: string[] = [];
-    const events: string[] = [];
-    await expect(
-      executeReviewWorkflow(
-        env,
-        {
-          instanceId: "double-failure-workflow",
-          payload: job,
-          timestamp: new Date("2026-08-29T12:00:00.000Z"),
-          workflowName: "holon-review-workflow",
-        },
-        immediateWorkflowStep(
-          stepNames,
-          new Set(["mark-review-terminal", "cleanup-failed-repository"]),
-        ),
-        {
-          createModel: () => ({
-            review: () => Promise.reject(new TypeError("causal model error")),
-          }),
-          createSession: () =>
-            Promise.resolve({
-              api: {
-                paginate: () => Promise.resolve([]),
-                request: () => Promise.resolve({ data: { id: 1 } }),
-              },
-              currentHeadSha: () => Promise.resolve("a".repeat(40)),
-              pullRequestDiff: () => Promise.resolve(canonicalDiff),
-              expiresAt: "later",
-              token: "token",
-            }),
-          executor: {
-            cleanup: () => Promise.resolve(),
-            hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve(modelContext),
-            prepare: () =>
-              Promise.resolve({
-                changedLineCount: 0,
-                contextBytes: 10,
-                fileCount: 0,
-                runId: job.runId,
-                schemaVersion: 1 as const,
-                truncated: false,
-              }),
-            runTool: () => Promise.resolve({ content: "", truncated: false }),
-          },
-          logger: { emit: (event) => events.push(event) },
-          now: () => "2026-08-29T12:00:01.000Z",
-        },
-      ),
-    ).rejects.toThrow("causal model error");
-
-    expect(events).toContain("review.terminalization_failed");
-    expect(events).toContain("review.cleanup_failed");
-  });
-
-  it("fails closed when a claimed run is missing from the ledger", async () => {
-    let cleaned = false;
-    const baseStep = immediateWorkflowStep([]) as unknown as {
-      do<T>(
-        name: string,
-        config: unknown,
-        callback: () => Promise<T>,
-      ): Promise<T>;
+  it("emits deterministic event ids and transition-based durations", async () => {
+    const events: Array<{
+      readonly event: string;
+      readonly fields: Readonly<Record<string, unknown>>;
+    }> = [];
+    const setup = runtime();
+    setup.value = {
+      ...setup.value,
+      logger: {
+        emit: (name, fields) => events.push({ event: name, fields }),
+      },
     };
-    const inconsistentStep = {
-      do: <T>(name: string, config: unknown, callback: () => Promise<T>) =>
-        name === "claim-run"
-          ? Promise.resolve("claimed" as T)
-          : baseStep.do(name, config, callback),
-    } as unknown as WorkflowStep;
-
-    await expect(
-      executeReviewWorkflow(
-        env,
-        {
-          instanceId: "missing-ledger-run",
-          payload: job,
-          timestamp: new Date("2026-08-29T12:00:00.000Z"),
-          workflowName: "holon-review-workflow",
-        },
-        inconsistentStep,
-        {
-          createModel: () => ({
-            review: () =>
-              Promise.resolve({ findings: [], summary: "No findings." }),
-          }),
-          executor: {
-            cleanup: () => {
-              cleaned = true;
-              return Promise.resolve();
-            },
-            hasContext: () => Promise.resolve(true),
-            loadContext: () => Promise.resolve(modelContext),
-            prepare: () => Promise.reject(new Error("must not prepare")),
-            runTool: () => Promise.resolve({ content: "", truncated: false }),
-          },
-          logger: { emit: () => undefined },
-          now: () => "2026-08-29T12:00:01.000Z",
-        },
-      ),
-    ).rejects.toThrow("cannot start from missing");
-    expect(cleaned).toBe(false);
-  });
-
-  it("marks a review obsolete and cleans up when the head changes after analysis", async () => {
-    const stepNames: string[] = [];
-    let cleaned = false;
-    let headReads = 0;
-    const result = await executeReviewWorkflow(
+    await executeReviewWorkflow(
       env,
-      {
-        instanceId: "obsolete-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
-      },
-      immediateWorkflowStep(stepNames),
-      {
-        createModel: () => ({
-          review: () =>
-            Promise.resolve({ findings: [], summary: "No findings." }),
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () =>
-              Promise.resolve(
-                ++headReads === 1 ? "a".repeat(40) : "c".repeat(40),
-              ),
-            pullRequestDiff: () => Promise.resolve(canonicalDiff),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => {
-            cleaned = true;
-            return Promise.resolve();
-          },
-          hasContext: () => Promise.resolve(true),
-          loadContext: () => Promise.resolve(modelContext),
-          prepare: () =>
-            Promise.resolve({
-              changedLineCount: 0,
-              contextBytes: 10,
-              fileCount: 0,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            }),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
+      event("observable-workflow"),
+      immediateStep([]),
+      setup.value,
     );
 
-    expect(result).toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(cleaned).toBe(true);
-    expect(stepNames).toContain("mark-obsolete");
-    expect(stepNames).toContain("cleanup-obsolete-repository");
-  });
-
-  it("marks an already stale event obsolete before starting a billable sandbox", async () => {
-    const stepNames: string[] = [];
-    let prepared = false;
-    const result = await executeReviewWorkflow(
-      env,
-      {
-        instanceId: "initially-obsolete-workflow",
-        payload: job,
-        timestamp: new Date("2026-08-29T12:00:00.000Z"),
-        workflowName: "holon-review-workflow",
-      },
-      immediateWorkflowStep(stepNames),
-      {
-        createModel: () => ({
-          review: () => Promise.resolve({ findings: [], summary: "unused" }),
-        }),
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () => Promise.resolve("c".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(canonicalDiff),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => Promise.resolve(),
-          hasContext: () => Promise.resolve(false),
-          loadContext: () => Promise.resolve(modelContext),
-          prepare: () => {
-            prepared = true;
-            return Promise.reject(new Error("must not prepare"));
-          },
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-        now: () => "2026-08-29T12:00:01.000Z",
-      },
+    const completed = events.find(
+      (entry) => entry.event === "review.completed",
     );
-
-    expect(result).toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(prepared).toBe(false);
-    expect(stepNames).toContain("mark-obsolete-before-preparation");
-    expect(stepNames).not.toContain("prepare-repository");
-  });
-
-  it("cleans up a prepared repository when its returned contract is invalid", async () => {
-    let cleaned = false;
-    await expect(
-      executeReviewJob(env, job, {
-        createSession: () =>
-          Promise.resolve({
-            api: {
-              paginate: () => Promise.resolve([]),
-              request: () => Promise.resolve({ data: { id: 1 } }),
-            },
-            currentHeadSha: () => Promise.resolve("a".repeat(40)),
-            pullRequestDiff: () => Promise.resolve(canonicalDiff),
-            expiresAt: "later",
-            token: "token",
-          }),
-        executor: {
-          cleanup: () => {
-            cleaned = true;
-            return Promise.resolve();
-          },
-          hasContext: () => Promise.resolve(true),
-          loadContext: () =>
-            Promise.resolve({
-              changedLines: [],
-              diff: "",
-              surface: [
-                {
-                  change: "added",
-                  excerpt: "unsafe",
-                  kind: "security",
-                  line: 1,
-                  path: "../escape",
-                },
-              ],
-            } as never),
-          prepare: () =>
-            Promise.resolve({
-              changedLineCount: 0,
-              contextBytes: 10,
-              fileCount: 1,
-              runId: job.runId,
-              schemaVersion: 1 as const,
-              truncated: false,
-            }),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
-        },
-      }),
-    ).rejects.toThrow();
-    expect(cleaned).toBe(true);
-  });
-
-  it("terminalizes an exhausted retryable run and safely ignores an absent run", async () => {
-    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    const retryableRun = {
-      attempt: 1,
-      createdAt: job.envelope.receivedAt,
-      id: job.runId as RunId,
-      prKey: "github:42:pr:7",
-      state: "failed_retryable",
-    } satisfies ReviewRun;
-    await ledger.claimRun(retryableRun, "terminal-test");
-    await markReviewTerminal(env, job, () => "2026-08-29T12:05:00.000Z");
-    await expect(ledger.claimRun(retryableRun, "terminal-test")).resolves.toBe(
-      "duplicate",
-    );
-
-    const absent = reviewJobSchema.parse({
-      ...job,
-      envelope: {
-        ...job.envelope,
-        pullRequest: { ...job.envelope.pullRequest, number: 8 },
-      },
-      runId: `github:42:pr:8:head:${"a".repeat(40)}`,
+    expect(completed?.fields).toMatchObject({
+      durationMs: 5_000,
+      eventId: "observable-workflow:review.completed",
     });
-    await expect(markReviewTerminal(env, absent)).resolves.toBeUndefined();
+    expect(
+      events.every((entry) => typeof entry.fields.eventId === "string"),
+    ).toBe(true);
   });
 
   it("validates the GitHub App identifier", () => {
     expect(parseAppId("123")).toBe(123);
     expect(() => parseAppId("0")).toThrow("positive integer");
+    expect(() => parseAppId("not-a-number")).toThrow("positive integer");
   });
 });

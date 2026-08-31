@@ -26,6 +26,13 @@
       "new_sqlite_classes": ["HolonSandbox"],
     },
   ],
+  "services": [
+    {
+      "binding": "GITHUB_CREDENTIAL_BROKER",
+      "service": "holon-control-plane",
+      "entrypoint": "GitHubCredentialBrokerEntrypoint",
+    },
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

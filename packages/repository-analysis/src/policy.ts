@@ -4,10 +4,24 @@ import type {
   ReviewFileMode,
 } from "@holon/contracts";
 
+import {
+  classifyReviewPath,
+  repositorySearchGlobs,
+} from "./review-path-policy.js";
+
+export {
+  classifyPullRequestDiffFile,
+  classifyReviewPath,
+  isReviewablePullRequestDiffFile,
+  isReviewablePath,
+  repositorySearchGlobs,
+  selectReviewableFiles,
+} from "./review-path-policy.js";
+
 export interface CommandExecution {
   readonly argv: readonly string[];
   readonly cwd: string;
-  readonly maxOutputBytes?: number;
+  readonly maxOutputBytes: number;
   readonly stage?: "checkout" | "fetch" | "initialize";
   readonly timeoutMs?: number;
 }
@@ -21,105 +35,7 @@ export interface ReadFileExecution {
 
 export type ToolExecution = CommandExecution | ReadFileExecution;
 
-const structuralExtension = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/iu;
-const excludedDirectory =
-  /(?:^|\/)(?:\.git|\.hg|\.svn|node_modules|bower_components|dist|build|coverage|generated|__generated__|vendor|vendors|third[_-]party|pods|target|\.next|\.nuxt|\.output|\.turbo|\.cache|\.terraform|\.venv|venv|site-packages)(?:\/|$)/iu;
-const generatedCodeFile =
-  /(?:\.(?:generated|gen|pb|designer)|-generated)\.(?:[cm]?[jt]sx?|c|cc|cpp|cs|dart|go|java|kt|kts|php|proto|py|rb|rs|scala|swift|vue)$|\.(?:freezed|g)\.dart$/iu;
-const minifiedFile =
-  /(?:\.min\.(?:[cm]?[jt]s|[jt]sx|css|html|json|svg)|\.map)$/iu;
-const binaryExtension =
-  /\.(?:7z|a|ai|apk|avi|avif|bin|bmp|bz2|class|db|der|dll|docx?|dylib|ear|eot|exe|gif|gz|ico|iso|jar|jpe?g|jks|keystore|mov|mp3|mp4|o|ogg|otf|p12|pdf|pfx|png|pptx?|psd|pyc|rar|so|sqlite3?|tar|tiff?|tgz|ttf|war|wasm|wav|webm|webp|woff2?|xlsx?|xz|zip)$/iu;
-const secretFile =
-  /(?:^|\/)(?:\.env(?:\.(?!example$|sample$|template$)[^/]*)?|\.netrc|\.npmrc|\.pypirc|credentials\.json|id_(?:dsa|ecdsa|ed25519|rsa)|.*\.(?:key|pem))$/iu;
-const lockFile =
-  /(?:^|\/)(?:\.terraform\.lock\.hcl|bun\.lockb?|cargo\.lock|composer\.lock|deno\.lock|flake\.lock|gemfile\.lock|go\.(?:sum|work\.sum)|gradle\.lockfile|mix\.lock|npm-shrinkwrap\.json|package-lock\.json|package\.resolved|packages\.lock\.json|pipfile\.lock|pnpm-lock\.yaml|podfile\.lock|poetry\.lock|pubspec\.lock|uv\.lock|yarn\.lock|[^/]+\.lock|[^/]+-lock\.json)$/iu;
-const ignoredSearchGlobs = [
-  "!**/.git/**",
-  "!**/.hg/**",
-  "!**/.svn/**",
-  "!**/node_modules/**",
-  "!**/bower_components/**",
-  "!**/dist/**",
-  "!**/build/**",
-  "!**/coverage/**",
-  "!**/generated/**",
-  "!**/__generated__/**",
-  "!**/vendor/**",
-  "!**/vendors/**",
-  "!**/third_party/**",
-  "!**/third-party/**",
-  "!**/Pods/**",
-  "!**/target/**",
-  "!**/.next/**",
-  "!**/.nuxt/**",
-  "!**/.output/**",
-  "!**/.turbo/**",
-  "!**/.cache/**",
-  "!**/.terraform/**",
-  "!**/.venv/**",
-  "!**/venv/**",
-  "!**/site-packages/**",
-  "!**/*.generated.*",
-  "!**/*.gen.*",
-  "!**/*.pb.*",
-  "!**/*.designer.*",
-  "!**/*.min.js",
-  "!**/*.min.mjs",
-  "!**/*.min.cjs",
-  "!**/*.min.ts",
-  "!**/*.min.mts",
-  "!**/*.min.cts",
-  "!**/*.min.jsx",
-  "!**/*.min.tsx",
-  "!**/*.min.css",
-  "!**/*.min.html",
-  "!**/*.min.json",
-  "!**/*.min.svg",
-  "!**/*.map",
-  "!**/.netrc",
-  "!**/.npmrc",
-  "!**/.pypirc",
-  "!**/credentials.json",
-  "!**/id_dsa",
-  "!**/id_ecdsa",
-  "!**/id_ed25519",
-  "!**/id_rsa",
-  "!**/*.key",
-  "!**/*.pem",
-  "!**/*-lock.json",
-  "!**/*.lock",
-  "!**/go.sum",
-  "!**/go.work.sum",
-  "!**/pnpm-lock.yaml",
-  "!**/yarn.lock",
-  "!**/.terraform.lock.hcl",
-  "!**/Package.resolved",
-  "!**/Podfile.lock",
-  "!**/pubspec.lock",
-] as const;
-
-function containsControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if (codePoint <= 31 || codePoint === 127) return true;
-  }
-  return false;
-}
-
-function isNormalizedRepositoryPath(path: string): boolean {
-  if (
-    path.length === 0 ||
-    path.length > 1_024 ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    containsControlCharacter(path)
-  )
-    return false;
-  return path
-    .split("/")
-    .every((segment) => segment !== "" && segment !== "." && segment !== "..");
-}
+export const trustedAstGrepConfigPath = "/opt/holon/sgconfig.yml";
 
 function assertAbsoluteNormalizedPath(path: string, name: string): void {
   if (
@@ -144,6 +60,7 @@ export function buildCheckoutPlan(
     {
       argv: ["git", "init", "--initial-branch=holon", repositoryPath],
       cwd: workspacePath,
+      maxOutputBytes: 10_000,
       stage: "initialize",
       timeoutMs: 10_000,
     },
@@ -158,6 +75,7 @@ export function buildCheckoutPlan(
         `+refs/pull/${request.pullRequestNumber}/head:refs/holon/head`,
       ],
       cwd: repositoryPath,
+      maxOutputBytes: 20_000,
       stage: "fetch",
       timeoutMs: 60_000,
     },
@@ -176,42 +94,11 @@ export function buildCheckoutPlan(
         request.headSha,
       ],
       cwd: repositoryPath,
+      maxOutputBytes: 10_000,
       stage: "checkout",
       timeoutMs: 20_000,
     },
   ];
-}
-
-export function classifyReviewPath(path: string): ReviewFileMode | undefined {
-  const basename = path.slice(path.lastIndexOf("/") + 1);
-  if (
-    !isNormalizedRepositoryPath(path) ||
-    excludedDirectory.test(path) ||
-    generatedCodeFile.test(basename) ||
-    minifiedFile.test(path) ||
-    binaryExtension.test(path) ||
-    secretFile.test(path) ||
-    lockFile.test(path)
-  ) {
-    return undefined;
-  }
-  return structuralExtension.test(path) ? "structural" : "textual";
-}
-
-export function isReviewablePath(path: string): boolean {
-  return classifyReviewPath(path) !== undefined;
-}
-
-export function selectReviewableFiles(
-  paths: readonly string[],
-  maximumFiles: number,
-): readonly string[] {
-  if (!Number.isSafeInteger(maximumFiles) || maximumFiles <= 0) {
-    throw new TypeError("maximumFiles must be a positive safe integer");
-  }
-  return [...new Set(paths.filter(isReviewablePath))]
-    .toSorted()
-    .slice(0, maximumFiles);
 }
 
 function searchRoots(paths: readonly string[] | undefined): readonly string[] {
@@ -236,7 +123,11 @@ function assertReviewablePaths(
 }
 
 function searchGlobArguments(flag: "--glob" | "--globs"): readonly string[] {
-  return ignoredSearchGlobs.flatMap((glob) => [flag, glob]);
+  const globs =
+    flag === "--glob"
+      ? repositorySearchGlobs
+      : repositorySearchGlobs.filter((glob) => glob.startsWith("!"));
+  return globs.flatMap((glob) => [flag, glob]);
 }
 
 function structuralGlob(language: "javascript" | "jsx" | "tsx" | "typescript") {
@@ -291,6 +182,8 @@ export function buildToolExecution(
     argv: [
       "ast-grep",
       "run",
+      "--config",
+      trustedAstGrepConfigPath,
       "--json=stream",
       "--lang",
       call.arguments.language,

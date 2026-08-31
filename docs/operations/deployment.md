@@ -27,44 +27,55 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    ```
 
 3. Configure o GitHub App conforme [github-app.md](github-app.md).
-4. Faça deploy primeiro do executor, porque o control plane possui um service
-   binding para ele:
-
-   ```bash
-   pnpm --filter @holon/repository-executor deploy
-   ```
-
-5. Configure no control plane os nomes externos listados em
+4. Configure no control plane os nomes externos listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
    `wrangler secret put` para credenciais; App, account e gateway IDs podem ser
    variáveis por ambiente. Configure o binding existente como
    `AI_MODEL_ID=dynamic/pr-review`; o token Cloudflare precisa de
    `AI Gateway Run`. A chave OpenRouter permanece exclusivamente no BYOK.
-6. Faça deploy do control plane:
+5. Somente em uma conta vazia, crie o alvo do binding com o executor bootstrap.
+   Ele não possui broker e não deve receber tráfego de review:
+
+   ```bash
+   pnpm --filter @holon/repository-executor deploy:bootstrap
+   ```
+
+6. Faça deploy do control plane dual-stack. Em ambiente já provisionado, este é
+   o primeiro deploy da atualização: ele oferece o broker e continua operando
+   com executor V1 por fallback estrito de método ausente.
 
    ```bash
    pnpm --filter @holon/control-plane deploy
    ```
 
+7. Faça deploy do executor final com o binding para o entrypoint nomeado do
+   broker:
+
+   ```bash
+   pnpm --filter @holon/repository-executor deploy
+   ```
+
 O Wrangler aplica a migration v1 do Durable Object SQLite e registra Workflow,
-Queue bindings e service binding definidos nos respectivos `wrangler.jsonc`.
+Queue bindings e os dois service bindings definidos nos `wrangler.jsonc`. Não
+abra tráfego no bootstrap; confirme os dois deploys finais antes do smoke.
 
 ## Deploy automático com Workers Builds
 
 O repositório remoto é `ThiagoCrepequer/holon` e sua branch padrão é `main`.
-Cada deployable precisa de uma conexão própria com o mesmo monorepo:
+Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 
-| Worker                      | Root | Branch | Build command                                        | Deploy command                                    |
-| --------------------------- | ---- | ------ | ---------------------------------------------------- | ------------------------------------------------- |
-| `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` | `pnpm --filter @holon/repository-executor deploy` |
-| `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       | `pnpm --filter @holon/control-plane deploy`       |
+| Worker                      | Root | Branch | Build command                                        |
+| --------------------------- | ---- | ------ | ---------------------------------------------------- |
+| `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` |
+| `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       |
 
 O root permanece no topo porque ambos os apps dependem do workspace e do
-lockfile do monorepo. O executor deve manter `wrangler deploy` na branch de
-produção: `wrangler versions upload` não atualiza imagens de Containers.
-Na configuração inicial, desabilite builds de branches não produtivas nos dois
-Workers e mantenha o include watch path `*`, para que mudanças em pacotes
-compartilhados ou arquivos raiz também disparem os deploys.
+lockfile do monorepo. Deploy automático independente dos dois Workers fica
+desabilitado: os bindings são bidirecionais e a ordem control plane -> executor
+é parte do contrato de rollout. Uma pipeline futura pode automatizar exatamente
+essa sequência com aprovação. O executor final usa `wrangler deploy`, pois
+`wrangler versions upload` não atualiza imagens de Containers. Mantenha o
+include watch path `*` para validar mudanças compartilhadas.
 
 A autorização inicial do Cloudflare GitHub App é interativa no dashboard. Após
 essa autorização única, as conexões, triggers e variáveis de build também podem
@@ -79,6 +90,7 @@ Fontes verificadas em 2026-08-30:
 - [Configuração de builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
 - [Monorepos](https://developers.cloudflare.com/workers/ci-cd/builds/advanced-setups/)
 - [Builds API](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)
+- [Service bindings: ordem de primeiro deploy](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/#deployment)
 
 ## Smoke test controlado
 
@@ -113,6 +125,22 @@ Fontes verificadas em 2026-08-30:
 15. Solicite duas páginas consecutivas de um arquivo grande e confirme que cada
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
+16. Durante o rollout, mantenha o executor N-1 enquanto sobe o control plane
+    dual-stack; confirme fallback apenas para método V2 ausente. Depois suba o
+    executor V2, confirme uso do broker e verifique que seus parâmetros não
+    contêm token. Um erro funcional V2 deve falhar fechado, sem downgrade.
+17. Entregue eventos sintéticos B e depois A para o mesmo PR, com `updatedAt`
+    de B mais novo; confirme que A fica obsoleto. Repita com `updatedAt`
+    empatado e `receivedAt` distinto para confirmar o desempate causal.
+18. Faça force-push entre um comentário inline e a review-resumo; confirme que
+    a segunda mutação é bloqueada pela nova leitura de head e pela autorização
+    do ledger.
+19. Induza falha transitória na destruição do Sandbox; confirme tarefa de
+    cleanup pendente, nova tentativa por alarm e remoção do credential scope
+    somente depois da destruição confirmada.
+20. Use um rename de caminho potencialmente sensível para caminho comum e uma
+    `.sgconfig.yml` hostil no repositório; confirme que nenhum lado aparece em
+    leitura/busca e que ast-grep continua usando `/opt/holon/sgconfig.yml`.
 
 ## Observabilidade e rollback
 

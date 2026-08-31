@@ -14,6 +14,7 @@ export type RunState = (typeof runStates)[number];
 
 export interface ReviewRun {
   readonly attempt: number;
+  readonly causalVersion?: string;
   readonly createdAt: string;
   readonly id: RunId;
   readonly prKey: PrKey;

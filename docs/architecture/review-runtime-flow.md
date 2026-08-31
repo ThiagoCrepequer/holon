@@ -10,6 +10,9 @@ related:
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0006-use-granular-workflow-checkpoints.md
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
+  - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
+  - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
+  - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
 ---
 
 # Fluxo de execução de uma review
@@ -83,7 +86,8 @@ sequenceDiagram
    head exato com token de instalação emitido sob demanda.
 5. **Investigate:** ferramentas são read-only por padrão e o loop tem orçamento.
 6. **Validate:** a saída do modelo é validada contra contrato estrutural e diff.
-7. **Reconcile:** o head SHA é relido imediatamente antes da publicação.
+7. **Reconcile:** o head SHA e a autoridade da run são relidos antes de cada
+   mutação externa.
 8. **Publish:** inline comments e uma review `COMMENT` têm identidade
    determinística e são registrados.
 9. **Complete:** métricas registram cobertura e limitações, inclusive zero findings.
@@ -93,9 +97,10 @@ sequenceDiagram
 Na ordem normal, o Workflow executa `claim-run`, `start-run`,
 `revalidate-initial-head`, `prepare-repository`, `analyze-review`, `begin-publication`,
 `revalidate-current-head`, zero ou mais `publish-inline-N`, `publish-summary`,
-`complete-run` e `cleanup-completed-repository`. Obsolescência e falha possuem
-cleanup próprio. Os nomes são determinísticos; transições usam operation IDs
-derivados da instância e do nome da etapa.
+`complete-run` e o registro durável de cleanup. Obsolescência e falha registram
+a mesma obrigação. Um alarm do ledger executa cleanup idempotente até sucesso,
+independentemente do resultado do Workflow. Os nomes são determinísticos;
+transições usam operation IDs derivados da instância e do nome da etapa.
 
 Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
 run antes de iniciar um container faturável. A revalidação final continua
@@ -105,7 +110,7 @@ O control-plane obtém do GitHub o diff canônico bruto e o transporta no reques
 do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
 checkpoint: o executor o divide em patches completos, sem executar
 `git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+contexto V2. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -118,6 +123,11 @@ executa no container uma página fixa construída pelo host com `sed`, limitada 
 heurísticas reduzem ruído e exposição, mas não são um secret scanner e não
 tornam conteúdo elegível confiável.
 
+O contexto filtrado preserva patches completos por arquivo. O prompt escolhe
+arquivos inteiros até 64 kB; nunca corta hunk ou arquivo e propaga `partial`
+quando omite conteúdo. O host só aceita evidência publicável quando path,
+intervalo e excerpt existem nas linhas new-file do patch canônico.
+
 O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
 contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise
 relê esse arquivo e retorna somente a saída estruturada e limitada do modelo.
@@ -125,12 +135,18 @@ Antes da leitura e de cada tool call, o control-plane verifica a existência do
 artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.
 
+O request V2 leva apenas identidades não secretas ao executor. No outbound
+handler, o `containerId` fornecido pela plataforma e o scope registrado no
+ledger autorizam uma credencial JIT no broker do control plane. O token é
+restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
+Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
+
 ## Falhas esperadas
 
 - Assinatura inválida: rejeitar sem enfileirar.
 - Evento duplicado: reconhecer sem repetir efeitos.
-- Rate limit do GitHub: retry com backoff e limite nos steps pequenos e
-  idempotentes de leitura/publicação.
+- Rate limit do GitHub: retry com `Retry-After` ou reset de quota e limite nos
+  steps pequenos e idempotentes; 4xx permanente não é repetido.
 - Falha de provider/modelo: a Dynamic Route tenta fallbacks de transporte por
   requisição; o Workflow não reinicia a sessão agentiva completa.
 - Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
@@ -147,7 +163,7 @@ idempotente com o mesmo par de SHAs.
   marcar o resumo como parcial.
 - Finding estruturalmente válido em linha não alterada: descartar o finding e
   continuar com o resumo validado.
-- Falha depois de preparar o repositório: marcar terminal e executar cleanup em
-  etapas independentes, preservando o erro causal se cleanup também falhar.
+- Falha depois de preparar o repositório: marcar terminal e persistir a tarefa
+  de cleanup na mesma transação; alarm repete sem substituir o erro causal.
 - Checkout transitório: destruir o Sandbox imediatamente e repetir uma vez;
   checkout permanente: destruir e falhar sem repetição.

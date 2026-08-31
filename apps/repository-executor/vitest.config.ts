@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     clearMocks: true,
+    exclude: ["test/**/*.worker.test.ts"],
+    include: ["test/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],

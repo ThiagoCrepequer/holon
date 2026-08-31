@@ -1,0 +1,7 @@
+ruleDirs: []
+customLanguages:
+  untrusted:
+    libraryPath: ./missing-untrusted-parser.so
+    extensions:
+      - untrusted
+    expandoChar: _

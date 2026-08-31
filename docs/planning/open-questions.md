@@ -27,6 +27,9 @@ por marcador foram definidos e implementados.
 - Como o usuário desabilita review por repositório, caminho ou PR?
 - Qual orçamento monetário e de tokens por run no modelo escolhido? O limite
   técnico atual é 4.000 tokens de saída, oito passos e doze tool calls.
+- O rollout bidirecional broker/executor, inclusive bootstrap de conta vazia,
+  passa no smoke com Workers, Sandbox e GitHub App reais? O fluxo está provado
+  localmente e documentado, mas ainda não foi validado nessa integração.
 
 ## P2 — Qualidade e evolução
 

@@ -2,12 +2,40 @@ import type { ChangedLine } from "@holon/domain";
 import { parsePatch } from "diff";
 
 export interface PullRequestDiffFile {
+  readonly changeType: PullRequestDiffChangeType;
+  readonly newPath?: string;
+  readonly oldPath?: string;
   readonly patch: string;
   readonly path: string;
 }
 
+export type PullRequestDiffChangeType =
+  | "added"
+  | "copied"
+  | "deleted"
+  | "modified"
+  | "renamed";
+
 function normalizeDiffPath(path: string): string {
   return path.replace(/^[ab]\//u, "");
+}
+
+function repositoryPath(path: string | undefined): string | undefined {
+  return path === undefined || path === "/dev/null"
+    ? undefined
+    : normalizeDiffPath(path);
+}
+
+function changeType(
+  parsed: ReturnType<typeof parsePatch>[number],
+  oldPath: string | undefined,
+  newPath: string | undefined,
+): PullRequestDiffChangeType {
+  if (parsed?.isCopy === true) return "copied";
+  if (parsed?.isRename === true) return "renamed";
+  if (parsed?.isCreate === true || oldPath === undefined) return "added";
+  if (parsed?.isDelete === true || newPath === undefined) return "deleted";
+  return "modified";
 }
 
 /**
@@ -26,19 +54,28 @@ export function splitPullRequestDiff(
     throw new TypeError("Expected a canonical GitHub pull request diff");
   }
   return starts.map((start, index) => {
-    const patch = diff.slice(start, starts[index + 1] ?? diff.length).trimEnd();
+    const patch = diff.slice(start, starts[index + 1] ?? diff.length);
     const parsed = parsePatch(patch);
     if (parsed.length !== 1) {
       throw new TypeError("Expected one repository path per diff section");
     }
-    const candidate =
-      parsed[0]?.newFileName === "/dev/null"
-        ? parsed[0]?.oldFileName
-        : parsed[0]?.newFileName;
-    if (candidate === undefined || candidate === "/dev/null") {
+    const parsedFile = parsed[0];
+    if (parsedFile === undefined) {
+      throw new TypeError("Expected one repository path per diff section");
+    }
+    const oldPath = repositoryPath(parsedFile.oldFileName);
+    const newPath = repositoryPath(parsedFile.newFileName);
+    const path = newPath ?? oldPath;
+    if (path === undefined) {
       throw new TypeError("Diff section does not identify a repository path");
     }
-    return { patch, path: normalizeDiffPath(candidate) };
+    return {
+      changeType: changeType(parsedFile, oldPath, newPath),
+      ...(newPath === undefined ? {} : { newPath }),
+      ...(oldPath === undefined ? {} : { oldPath }),
+      patch,
+      path,
+    };
   });
 }
 

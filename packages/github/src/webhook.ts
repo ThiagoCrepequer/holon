@@ -72,6 +72,7 @@ export function mapPullRequestWebhook(
       baseSha: base.sha,
       headSha: head.sha,
       number: root.number,
+      updatedAt: pullRequest.updated_at,
     },
     receivedAt,
     repository: {
@@ -80,6 +81,6 @@ export function mapPullRequestWebhook(
       name: repository.name,
       owner: owner.login,
     },
-    schemaVersion: 1,
+    schemaVersion: 2,
   });
 }

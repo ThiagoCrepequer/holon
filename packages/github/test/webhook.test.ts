@@ -56,6 +56,7 @@ describe("GitHub webhook boundary", () => {
         pull_request: {
           base: { sha: "b".repeat(40) },
           head: { sha: "a".repeat(40) },
+          updated_at: "2026-08-29T11:59:59.000Z",
         },
         repository: {
           full_name: "acme/api",
@@ -77,10 +78,11 @@ describe("GitHub webhook boundary", () => {
         baseSha: "b".repeat(40),
         headSha: "a".repeat(40),
         number: 7,
+        updatedAt: "2026-08-29T11:59:59.000Z",
       },
       receivedAt: "2026-08-29T12:00:00.000Z",
       repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
     expect(envelope).not.toHaveProperty("sender");
   });

@@ -1,6 +1,6 @@
 import {
   reviewJobSchema,
-  type ReviewContext,
+  type ReviewContextV2,
   type ReviewJob,
 } from "@holon/contracts";
 
@@ -41,11 +41,13 @@ export function createReviewJob(
   });
 }
 
-export function createReviewContext(): ReviewContext {
-  const patch = "@@ -9,0 +10,1 @@\n+return null;";
+export function createReviewContext(): ReviewContextV2 {
+  const patch =
+    "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -9,0 +10,1 @@\n+return null;\n";
   return {
     changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
-    diff: patch,
-    reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
+    files: [{ mode: "structural", patch, path: "src/index.ts" }],
+    schemaVersion: 2,
+    truncated: false,
   };
 }

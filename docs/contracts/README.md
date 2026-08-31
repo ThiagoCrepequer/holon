@@ -17,8 +17,8 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 | Modulo             | Contratos principais                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
-| `webhook.ts`       | Envelope GitHub v1 e job associado a repo, PR e head SHA                    |
-| `executor.ts`      | Pedido exact-SHA com diff canônico, contexto limitado, tools e resultados   |
+| `webhook.ts`       | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                      |
+| `executor.ts`      | RPC V1/V2 exact-SHA, contexto por patch, broker, tools e resultados         |
 | `review-output.ts` | Findings estruturados, evidências, resumo e registro de publicação          |
 | `shared.ts`        | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
 
@@ -32,13 +32,14 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 - Exemplos válidos e inválidos acompanham cada schema.
 - Testes de contrato devem provar serialização, validação e compatibilidade.
 
-O pedido do executor aceita no máximo 2 MB de diff canônico bruto na fronteira;
+O pedido V2 do executor aceita no máximo 2 MB UTF-8 de diff canônico bruto;
 portanto, o request precede a classificação e pode conter seções que serão
 excluídas. O contexto persistido seleciona até 50 patches textuais elegíveis,
-120 kB e 5.000 linhas alteradas. Cada arquivo registra modo `structural` para
+60 kB por arquivo, 120 kB agregados e 5.000 linhas alteradas. Cada arquivo registra modo `structural` para
 JS/TS ou `textual` para os demais formatos. Binários, lockfiles, artefatos
 gerados e caminhos potencialmente sensíveis reconhecidos pelas heurísticas não
-entram nesse contexto nem são enviados ao modelo. A mesma política autoriza
+entram nesse contexto nem são enviados ao modelo. O contexto V2 preserva cada
+patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
 paths e resultados das tools. A saída contém até três findings, duas evidências
 por finding e um resumo de até 800 caracteres.
 
@@ -46,3 +47,8 @@ por finding e um resumo de até 800 caracteres.
 resolver e autorizar o path real, o executor traduz essa janela para um comando
 `sed` construído pelo host dentro do container. O resultado é limitado a 100 kB
 e informa truncamento; o Worker não lê nem materializa o arquivo completo.
+
+O credential request contém somente container, run, instalação e identidade do
+repositório. `containerId` vem do contexto da plataforma; resposta com token e
+expiração existe apenas no broker/outbound handler. V1 permanece aceito para
+rollout N-1, mas seu argumento token é ignorado pelo executor dual-stack.

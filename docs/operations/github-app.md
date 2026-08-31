@@ -41,9 +41,11 @@ brutos antes de fazer parsing. A entrega vira um envelope mínimo sem token.
 
 ## Credenciais
 
-Guarde o App ID, a chave privada e o webhook secret em bindings externos ao
-código. Tokens de instalação são emitidos sob demanda, não entram na Queue ou
-SQLite e são injetados no tráfego Git fora do processo Sandbox.
+Guarde App ID, App slug, chave privada e webhook secret em bindings externos ao
+código. Tokens de instalação são emitidos sob demanda e restritos ao repository
+ID da run. Eles não entram na Queue, SQLite, parâmetros ou filesystem do Sandbox
+e são injetados no tráfego Git somente pelo outbound handler após autorização
+do credential broker.
 
 O diff inicial é obtido por `GET /repos/{owner}/{repo}/pulls/{pull_number}` com
 media type `diff`. Não substituir essa leitura por comparação direta entre

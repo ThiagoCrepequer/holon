@@ -1,76 +1,185 @@
-import { ContainerProxy, Sandbox, getSandbox } from "@cloudflare/sandbox";
+import {
+  ContainerProxy,
+  ContainerUnavailableError,
+  OperationInterruptedError,
+  ProcessReadyTimeoutError,
+  ProcessWaitTimeoutError,
+  RPCTransportError,
+  RuntimeIdentityInactiveError,
+  Sandbox,
+  StaleProcessHandleError,
+  getSandbox,
+  isPlatformTransientError,
+} from "@cloudflare/sandbox";
 import type {
-  ExecutorRequest,
-  PreparedRepository,
+  ExecutorRequestV1,
+  ExecutorRequestV2,
+  GitHubCredentialRequest,
+  GitHubCredentialResponse,
+  PreparedRepositoryV1,
+  PreparedRepositoryV2,
   RepositoryToolCall,
-  ReviewContext,
+  ReviewContextV1,
+  ReviewContextV2,
+} from "@holon/contracts";
+import {
+  githubCredentialRequestSchema,
+  githubCredentialResponseSchema,
 } from "@holon/contracts";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
   authenticateGitHubRequest,
   githubEgressHost,
+  validateGitHubEgressRequest,
+  type GitHubEgressAuthorization,
 } from "./egress-policy.js";
-import {
-  RepositoryExecutorService,
-  type SandboxPort,
-  type SandboxProvider,
-} from "./executor-service.js";
+import { RepositoryExecutorService } from "./executor-service.js";
+import { SandboxRuntimeError } from "./sandbox-errors.js";
 import { createSandboxId } from "./sandbox-identity.js";
+import type { SandboxPort, SandboxProvider } from "./sandbox-port.js";
 
-export class HolonSandbox extends Sandbox<Cloudflare.Env> {
+export interface GitHubCredentialBroker {
+  getInstallationToken(
+    request: GitHubCredentialRequest,
+  ): Promise<GitHubCredentialResponse>;
+}
+
+type RepositoryExecutorEnv = Cloudflare.Env & {
+  readonly GITHUB_CREDENTIAL_BROKER: GitHubCredentialBroker;
+};
+
+interface RepositoryOutboundHandlerContext {
+  readonly containerId: string;
+  readonly params?: unknown;
+}
+
+export function mapSandboxSdkError(error: unknown): SandboxRuntimeError {
+  if (error instanceof SandboxRuntimeError) return error;
+  if (
+    error instanceof ProcessWaitTimeoutError ||
+    error instanceof ProcessReadyTimeoutError
+  ) {
+    return new SandboxRuntimeError(true, "timed-out");
+  }
+  if (error instanceof OperationInterruptedError) {
+    return new SandboxRuntimeError(error.retryable, "unavailable");
+  }
+  if (
+    error instanceof ContainerUnavailableError ||
+    error instanceof RPCTransportError ||
+    error instanceof RuntimeIdentityInactiveError ||
+    error instanceof StaleProcessHandleError ||
+    isPlatformTransientError(error)
+  ) {
+    return new SandboxRuntimeError(true, "unavailable");
+  }
+  return new SandboxRuntimeError(false, "unavailable");
+}
+
+async function runSandboxOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw mapSandboxSdkError(error);
+  }
+}
+
+export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
   public override enableInternet = false;
 }
 
+async function authenticatedGithubHandler(
+  request: Request,
+  env: RepositoryExecutorEnv,
+  context: RepositoryOutboundHandlerContext,
+): Promise<Response> {
+  const authorization = validateGitHubEgressRequest(request, context.params);
+  if (authorization === undefined) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  const credentialRequest = githubCredentialRequestSchema.safeParse({
+    containerId: context.containerId,
+    ...(authorization.installationId === undefined
+      ? {}
+      : { installationId: authorization.installationId }),
+    repositoryId: authorization.repositoryId,
+    repositoryName: authorization.repositoryName,
+    repositoryOwner: authorization.repositoryOwner,
+    runId: authorization.runId,
+  });
+  if (!credentialRequest.success) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  let installationToken: string;
+  try {
+    const response = githubCredentialResponseSchema.parse(
+      await env.GITHUB_CREDENTIAL_BROKER.getInstallationToken(
+        credentialRequest.data,
+      ),
+    );
+    installationToken = response.token;
+  } catch {
+    return new Response("Credential service unavailable", { status: 503 });
+  }
+  const authenticated = authenticateGitHubRequest(
+    request,
+    authorization,
+    installationToken,
+  );
+  if (authenticated === undefined) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  return fetch(authenticated);
+}
+
 HolonSandbox.outboundHandlers = {
-  authenticatedGithub: async (request, _env, context) => {
-    const authenticated = authenticateGitHubRequest(request, context.params);
-    if (authenticated === undefined) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    return fetch(authenticated);
-  },
+  authenticatedGithub: authenticatedGithubHandler,
   blocked: async () => new Response("Forbidden", { status: 403 }),
 };
 
-class CloudflareSandboxPort implements SandboxPort {
+export class CloudflareSandboxPort implements SandboxPort {
   public constructor(
     private readonly sandbox: ReturnType<typeof getSandbox<HolonSandbox>>,
   ) {}
 
   public configureGitHubEgress(
-    token: string,
-    repositoryPath: string,
+    authorization: GitHubEgressAuthorization,
   ): Promise<void> {
-    return this.sandbox.setOutboundByHost(
-      githubEgressHost,
-      "authenticatedGithub",
-      {
-        repositoryPath,
-        token,
-      },
+    return runSandboxOperation(() =>
+      this.sandbox.setOutboundByHost(
+        githubEgressHost,
+        "authenticatedGithub",
+        authorization,
+      ),
     );
   }
 
   public destroy(): Promise<void> {
-    return this.sandbox.destroy();
+    return runSandboxOperation(() => this.sandbox.destroy());
   }
 
   public async exists(path: string): Promise<boolean> {
-    return (await this.sandbox.exists(path)).exists;
+    return await runSandboxOperation(
+      async () => (await this.sandbox.exists(path)).exists,
+    );
   }
 
   public async readFile(path: string): Promise<string> {
-    const result = await this.sandbox.readFile(path, { encoding: "utf8" });
-    return result.content;
+    return await runSandboxOperation(async () => {
+      const result = await this.sandbox.readFile(path, { encoding: "utf8" });
+      return result.content;
+    });
   }
 
   public async writeFile(path: string, content: string): Promise<void> {
-    await this.sandbox.writeFile(path, content);
+    await runSandboxOperation(() => this.sandbox.writeFile(path, content));
   }
 
   public blockGitHubEgress(): Promise<void> {
-    return this.sandbox.setOutboundByHost(githubEgressHost, "blocked", {});
+    return runSandboxOperation(() =>
+      this.sandbox.setOutboundByHost(githubEgressHost, "blocked", {}),
+    );
   }
 
   public async run(
@@ -81,14 +190,15 @@ class CloudflareSandboxPort implements SandboxPort {
       readonly timeoutMs?: number;
     } = {},
   ) {
-    const process = await this.sandbox.exec(argv as [string, ...string[]], {
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      ...(options.timeoutMs === undefined
-        ? {}
-        : { timeout: options.timeoutMs }),
-    });
+    let process: Awaited<ReturnType<typeof this.sandbox.exec>> | undefined;
     try {
-      return await process.output({
+      process = await this.sandbox.exec(argv as [string, ...string[]], {
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        ...(options.timeoutMs === undefined
+          ? {}
+          : { timeout: options.timeoutMs }),
+      });
+      const output = await process.output({
         encoding: "utf8",
         ...(options.maxOutputBytes === undefined
           ? {}
@@ -97,19 +207,26 @@ class CloudflareSandboxPort implements SandboxPort {
           ? {}
           : { timeout: options.timeoutMs }),
       });
+      return {
+        exitCode: output.exitCode,
+        stderr: output.stderr,
+        stdout: output.stdout,
+        timedOut: output.timedOut,
+        truncated: output.truncated,
+      };
     } catch (error) {
       try {
-        await process.kill();
+        await process?.kill();
       } catch {
         // The process may already have exited or the container may be gone.
       }
-      throw error;
+      throw mapSandboxSdkError(error);
     }
   }
 }
 
 export class CloudflareSandboxProvider implements SandboxProvider {
-  public constructor(private readonly env: Cloudflare.Env) {}
+  public constructor(private readonly env: RepositoryExecutorEnv) {}
 
   public get(runId: string): SandboxPort {
     return new CloudflareSandboxPort(
@@ -122,7 +239,7 @@ export class CloudflareSandboxProvider implements SandboxProvider {
   }
 }
 
-export class RepositoryExecutorEntrypoint extends WorkerEntrypoint {
+export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExecutorEnv> {
   private service(): RepositoryExecutorService {
     return new RepositoryExecutorService(
       new CloudflareSandboxProvider(this.env),
@@ -130,14 +247,24 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint {
   }
 
   public prepare(
-    request: ExecutorRequest,
+    request: ExecutorRequestV1,
     installationToken: string,
-  ): Promise<PreparedRepository> {
+  ): Promise<PreparedRepositoryV1> {
     return this.service().prepare(request, installationToken);
   }
 
-  public loadContext(runId: string): Promise<ReviewContext> {
+  public prepareRepositoryV2(
+    request: ExecutorRequestV2,
+  ): Promise<PreparedRepositoryV2> {
+    return this.service().prepareRepositoryV2(request);
+  }
+
+  public loadContext(runId: string): Promise<ReviewContextV1> {
     return this.service().loadContext(runId);
+  }
+
+  public loadContextV2(runId: string): Promise<ReviewContextV2> {
+    return this.service().loadContextV2(runId);
   }
 
   public hasContext(runId: string): Promise<boolean> {

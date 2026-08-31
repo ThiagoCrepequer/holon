@@ -1,6 +1,6 @@
 import type {
   ModelReviewOutput,
-  ReviewContext,
+  ReviewContextV2,
   ReviewJob,
 } from "@holon/contracts";
 import type {
@@ -11,22 +11,15 @@ import type {
   RunState,
 } from "@holon/domain";
 
-export interface Clock {
-  now(): string;
-}
+export type { ReviewContextV2 as ReviewContext } from "@holon/contracts";
 
-export interface RepositoryContextLoader {
-  loadContext(job: ReviewJob): Promise<ReviewContext>;
+export interface ModelReviewResult {
+  readonly output: ModelReviewOutput;
+  readonly promptTruncated: boolean;
 }
-
-export type { ReviewContext } from "@holon/contracts";
 
 export interface ModelReviewer {
-  review(job: ReviewJob, context: ReviewContext): Promise<ModelReviewOutput>;
-}
-
-export interface PullRequestHeadReader {
-  currentHeadSha(job: ReviewJob): Promise<string>;
+  review(job: ReviewJob, context: ReviewContextV2): Promise<ModelReviewResult>;
 }
 
 export type ClaimedPublication =
@@ -64,6 +57,9 @@ export interface PublishCommentInput {
 }
 
 export interface ReviewPublisher {
-  findCommentByMarker(marker: string): Promise<number | undefined>;
+  findCommentByMarker(
+    marker: string,
+    kind: "inline" | "summary",
+  ): Promise<number | undefined>;
   publish(input: PublishCommentInput): Promise<number>;
 }

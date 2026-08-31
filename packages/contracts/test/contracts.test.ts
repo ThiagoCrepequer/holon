@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   executorRequestSchema,
+  executorRequestV1Schema,
+  executorRequestV2Schema,
+  githubCredentialRequestSchema,
   modelReviewOutputSchema,
+  preparedRepositorySchema,
   publicationRecordSchema,
   repositoryToolCallSchema,
   repositoryToolResultSchema,
   reviewContextSchema,
+  reviewContextV1Schema,
+  reviewContextV2Schema,
   reviewJobSchema,
   webhookEnvelopeSchema,
 } from "../src/index.js";
@@ -58,6 +64,39 @@ describe("webhook envelope v1", () => {
   );
 });
 
+describe("webhook envelope and review job v2", () => {
+  const envelope = {
+    action: "synchronize",
+    deliveryId: "github:delivery-newer",
+    event: "pull_request",
+    installationId: 99,
+    pullRequest: {
+      baseSha: "b".repeat(40),
+      headSha: sha,
+      number: 7,
+      updatedAt: "2026-08-29T12:01:00.000Z",
+    },
+    receivedAt: "2026-08-29T12:01:01.000Z",
+    repository: {
+      fullName: "acme/api",
+      id: 42,
+      name: "api",
+      owner: "acme",
+    },
+    schemaVersion: 2,
+  } as const;
+
+  it("carries a provider causal timestamp without invalidating drainable v1 messages", () => {
+    expect(webhookEnvelopeSchema.parse(envelope)).toEqual(envelope);
+    expect(
+      reviewJobSchema.parse({ envelope, runId, schemaVersion: 2 }),
+    ).toMatchObject({ schemaVersion: 2 });
+    expect(
+      reviewJobSchema.safeParse({ envelope, runId, schemaVersion: 1 }).success,
+    ).toBe(false);
+  });
+});
+
 describe("review job and executor contracts", () => {
   const job = {
     envelope: {
@@ -95,6 +134,85 @@ describe("review job and executor contracts", () => {
         schemaVersion: 1,
       }),
     ).not.toHaveProperty("token");
+  });
+
+  it("keeps the deployed v1 RPC shapes valid while introducing an explicit v2", () => {
+    const v1 = {
+      baseSha: "b".repeat(40),
+      canonicalDiff,
+      cloneUrl: "https://github.com/acme/api.git",
+      headSha: sha,
+      pullRequestNumber: 7,
+      repositoryId: 42,
+      runId,
+      schemaVersion: 1,
+    } as const;
+    const v2 = {
+      ...v1,
+      installationId: 99,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      schemaVersion: 2,
+    } as const;
+
+    expect(executorRequestV1Schema.parse(v1)).toEqual(v1);
+    expect(executorRequestV2Schema.parse(v2)).toEqual(v2);
+    expect(executorRequestSchema.parse(v1)).toEqual(v1);
+    expect(executorRequestSchema.parse(v2)).toEqual(v2);
+    expect(
+      executorRequestV2Schema.safeParse({ ...v2, repositoryName: "other" })
+        .success,
+    ).toBe(false);
+    expect(
+      preparedRepositorySchema.parse({
+        changedLineCount: 1,
+        contextBytes: 100,
+        fileCount: 1,
+        runId,
+        schemaVersion: 2,
+        truncated: false,
+      }),
+    ).toMatchObject({ schemaVersion: 2 });
+  });
+
+  it("enforces the v2 canonical diff budget in UTF-8 bytes", () => {
+    expect(
+      executorRequestV2Schema.safeParse({
+        baseSha: "b".repeat(40),
+        canonicalDiff: "😀".repeat(500_001),
+        cloneUrl: "https://github.com/acme/api.git",
+        headSha: sha,
+        installationId: 99,
+        pullRequestNumber: 7,
+        repositoryId: 42,
+        repositoryName: "api",
+        repositoryOwner: "acme",
+        runId,
+        schemaVersion: 2,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates the non-secret identity passed to the credential broker", () => {
+    const request = {
+      containerId: "sandbox-123",
+      installationId: 99,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      runId,
+    } as const;
+    expect(githubCredentialRequestSchema.parse(request)).toEqual(request);
+    const { installationId: _installationId, ...legacyRequest } = request;
+    expect(githubCredentialRequestSchema.parse(legacyRequest)).toEqual(
+      legacyRequest,
+    );
+    expect(
+      githubCredentialRequestSchema.safeParse({
+        ...request,
+        token: "must-never-cross-this-boundary",
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects executor coordinates that do not describe the run", () => {
@@ -185,11 +303,26 @@ describe("bounded repository tools", () => {
   it("validates bounded executor results before they reach the model", () => {
     const context = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
-      diff: "+const safe = true;",
-      reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
+      files: [
+        {
+          mode: "structural",
+          patch:
+            "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -9,0 +10,1 @@\n+const safe = true;\n",
+          path: "src/index.ts",
+        },
+      ],
+      schemaVersion: 2,
       truncated: false,
-    };
+    } as const;
+    expect(reviewContextV2Schema.parse(context)).toEqual(context);
     expect(reviewContextSchema.parse(context)).toEqual(context);
+    expect(
+      reviewContextV1Schema.parse({
+        changedLines: context.changedLines,
+        diff: context.files[0].patch,
+        truncated: false,
+      }),
+    ).toMatchObject({ diff: context.files[0].patch });
     expect(
       repositoryToolResultSchema.parse({ content: "match", truncated: false }),
     ).toEqual({
@@ -214,7 +347,7 @@ describe("bounded repository tools", () => {
       reviewContextSchema.safeParse({
         ...context,
         changedLines: [{ line: 10, path: "README.md", side: "RIGHT" }],
-        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+        files: [{ mode: "textual", patch: "+heading\n", path: "README.md" }],
         surface: [
           {
             change: "added",
@@ -229,15 +362,26 @@ describe("bounded repository tools", () => {
     expect(
       reviewContextSchema.safeParse({
         ...context,
-        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+        files: [{ mode: "textual", patch: "+heading\n", path: "README.md" }],
       }).success,
     ).toBe(false);
     expect(
       reviewContextSchema.safeParse({
         ...context,
-        reviewedFiles: [
-          { mode: "structural", path: "src/index.ts" },
-          { mode: "textual", path: "src/index.ts" },
+        files: [
+          { mode: "structural", patch: "+a\n", path: "src/index.ts" },
+          { mode: "textual", patch: "+b\n", path: "src/index.ts" },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      reviewContextV2Schema.safeParse({
+        ...context,
+        files: [
+          {
+            ...context.files[0],
+            patch: "x".repeat(120_001),
+          },
         ],
       }).success,
     ).toBe(false);

@@ -7,8 +7,12 @@ import {
 
 describe("Sandbox GitHub egress policy", () => {
   const parameters = {
+    installationId: 99,
+    repositoryId: 42,
+    repositoryName: "api",
+    repositoryOwner: "acme",
     repositoryPath: "/acme/api.git",
-    token: "installation-token",
+    runId: `github:42:pr:7:head:${"a".repeat(40)}`,
   };
 
   it.each(["GET", "POST"])(
@@ -20,6 +24,7 @@ describe("Sandbox GitHub egress policy", () => {
           method,
         }),
         parameters,
+        "installation-token",
       );
       expect(request?.url).toBe("https://github.com/acme/api.git/info/refs");
       expect(request?.headers.get("authorization")).toBe(
@@ -70,7 +75,7 @@ describe("Sandbox GitHub egress policy", () => {
       parameters,
     ],
     [
-      "missing token",
+      "missing installation identity",
       "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
       { repositoryPath: "/acme/api.git" },
@@ -79,17 +84,37 @@ describe("Sandbox GitHub egress policy", () => {
       "invalid path",
       "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
-      { repositoryPath: "/acme/*", token: "x" },
+      { ...parameters, repositoryPath: "/acme/*" },
     ],
     [
       "dot-segment owner",
       "http://github.holon.internal/acme/api.git/info/refs",
       "GET",
-      { repositoryPath: "/../api.git", token: "x" },
+      { ...parameters, repositoryPath: "/../api.git" },
+    ],
+    [
+      "credential smuggled in persisted parameters",
+      "http://github.holon.internal/acme/api.git/info/refs",
+      "GET",
+      { ...parameters, token: "must-not-be-persisted" },
     ],
   ])("rejects %s", (_name, url, method, rawParameters) => {
     expect(
-      authenticateGitHubRequest(new Request(url, { method }), rawParameters),
+      authenticateGitHubRequest(
+        new Request(url, { method }),
+        rawParameters,
+        "installation-token",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("rejects an empty just-in-time credential", () => {
+    expect(
+      authenticateGitHubRequest(
+        new Request("http://github.holon.internal/acme/api.git/info/refs"),
+        parameters,
+        "",
+      ),
     ).toBeUndefined();
   });
 });

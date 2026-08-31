@@ -5,6 +5,8 @@ status: current
 owners:
   - core-team
 last-reviewed: 2026-08-29
+related:
+  - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
 ---
 
 # Estado e idempotência
@@ -19,7 +21,7 @@ concluído uma operação mesmo quando a resposta não chegou.
 | ----------- | ----------------------------------------------------------- | --------------------------------------- |
 | Delivery    | `github:<delivery_id>`                                      | Detectar redelivery literal do webhook  |
 | Run         | `github:<repo_id>:pr:<number>:head:<sha>`                   | Uma análise lógica de uma revisão do PR |
-| Workflow    | `WorkflowEvent.instanceId`                                  | Dono da execução durável da run         |
+| Workflow    | `review-<sha256(run-id)>`                                   | Criação idempotente e dono da execução  |
 | Finding     | Hash de run + caminho + intervalo + diagnóstico normalizado | Reconciliar o mesmo finding             |
 | Publication | Run + finding ou `summary`                                  | Impedir comentário duplicado            |
 
@@ -49,7 +51,10 @@ stateDiagram-v2
 
 - A run é imutavelmente associada a um head SHA.
 - Um evento novo não altera a run antiga; cria uma nova identidade.
-- Somente a run mais recente do PR pode iniciar publicação.
+- A run mais nova é ordenada por `pull_request.updated_at`, depois por
+  `receivedAt`; run ID apenas desempata valores idênticos.
+- Somente a run mais recente do PR em estado `publishing` pode iniciar ou
+  continuar publicação.
 - `completed`, `obsolete` e `failed_terminal` são terminais.
 - Retry de etapa não cria nova run.
 - Uma instância diferente do Workflow não assume uma run ativa já pertencente a
@@ -83,8 +88,14 @@ cláusula `WHERE`; quando os retries duráveis acabam, estados ativos passam a
 
 Workflows executa a etapa com retries delimitados. Antes de qualquer publicação,
 o caso de uso exige simultaneamente que a run ainda seja a mais recente no
-ledger e que o GitHub reporte o mesmo `head.sha`. Timeout após efeito externo é
-reconciliado procurando o marcador tanto em comentários inline quanto em Pull
-Request Reviews antes de repetir a criação. Os `POST`s de publicação desativam
+ledger e que o GitHub reporte o mesmo `head.sha`; a verificação é repetida antes
+de cada mutação externa. Timeout após efeito externo é reconciliado no endpoint
+correspondente ao tipo de publicação. A busca tem paginação limitada e só
+aceita o login exato do GitHub App com tipo `Bot`. Os `POST`s desativam
 o retry interno do Octokit para que somente essa reconciliação possa decidir
 por uma nova tentativa.
+
+O schema evolui por `schema_migrations` transacional. Tarefas de cleanup ficam
+em tabela própria; terminalização e criação da tarefa acontecem atomicamente.
+Um alarm tenta uma tarefa pending por vez, registra tentativas e remove o
+credential scope somente após o executor confirmar cleanup.
