@@ -11,10 +11,12 @@ import {
   evalSubjectOutputSchema,
   type EvalCase,
   type EvalRunConfiguration,
+  type EvalSubjectTelemetry,
 } from "./contracts.js";
 import { gradeEvaluationCase, type EvalGrade } from "./grader.js";
 
 export interface EvaluationSubjectInput {
+  readonly caseId: string;
   readonly context: ReviewContextV2;
   readonly job: ReviewJob;
 }
@@ -23,16 +25,32 @@ export type EvaluationSubject = (
   input: EvaluationSubjectInput,
 ) => Promise<unknown>;
 
+export type EvaluationSubjectFailureReason =
+  | "model_output"
+  | "provider_permanent"
+  | "provider_transient"
+  | "tool_budget"
+  | "unknown";
+
+export class EvaluationSubjectError extends Error {
+  public constructor(public readonly reason: EvaluationSubjectFailureReason) {
+    super(`EVALUATION_SUBJECT:${reason}`);
+    this.name = "EvaluationSubjectError";
+  }
+}
+
 export type EvalCaseRun =
   | {
       readonly caseId: string;
       readonly grade: EvalGrade;
       readonly outcome: "completed";
       readonly rejectedFindings: number;
+      readonly telemetry?: EvalSubjectTelemetry;
     }
   | {
       readonly caseId: string;
       readonly outcome: "invalid_output" | "subject_error";
+      readonly reason?: EvaluationSubjectFailureReason;
     };
 
 export interface EvalSuiteResult {
@@ -76,9 +94,15 @@ async function runCase(
 ): Promise<EvalCaseRun> {
   let candidate: unknown;
   try {
-    candidate = await subject(evalCase.input);
-  } catch {
-    return { caseId: evalCase.id, outcome: "subject_error" };
+    candidate = await subject({ caseId: evalCase.id, ...evalCase.input });
+  } catch (error) {
+    return {
+      caseId: evalCase.id,
+      outcome: "subject_error",
+      ...(error instanceof EvaluationSubjectError
+        ? { reason: error.reason }
+        : { reason: "unknown" as const }),
+    };
   }
 
   const parsed = evalSubjectOutputSchema.safeParse(candidate);
@@ -101,6 +125,9 @@ async function runCase(
     }),
     outcome: "completed",
     rejectedFindings: parsed.data.output.findings.length - validFindings.length,
+    ...(parsed.data.telemetry === undefined
+      ? {}
+      : { telemetry: parsed.data.telemetry }),
   };
 }
 

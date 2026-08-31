@@ -3,6 +3,7 @@ node_modules/
 .turbo/
 coverage/
 dist/
+artifacts/
 .wrangler/
 .cache/
 *.tsbuildinfo

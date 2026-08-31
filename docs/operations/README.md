@@ -4,12 +4,13 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-31
 ---
 
 # Operação
 
 - [Desenvolvimento local](local-development.md)
+- [Execução das avaliações](evaluations.md)
 - [Configuração do GitHub App](github-app.md)
 - [Provisionamento e deploy](deployment.md)
 
