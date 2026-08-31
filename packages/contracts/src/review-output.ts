@@ -72,6 +72,7 @@ export const runStateSchema = z.enum([
 export const reviewRunSchema = z
   .strictObject({
     attempt: z.number().int().nonnegative().safe(),
+    causalVersion: timestampSchema.optional(),
     createdAt: timestampSchema,
     id: runIdSchema,
     prKey: prKeySchema,

@@ -30,8 +30,16 @@ describe("unified diff mapping", () => {
     ].join("\n");
 
     expect(splitPullRequestDiff(diff)).toEqual([
-      { path: "src/a.ts", patch: expect.stringContaining("+new") },
       {
+        changeType: "modified",
+        newPath: "src/a.ts",
+        oldPath: "src/a.ts",
+        path: "src/a.ts",
+        patch: expect.stringContaining("+new"),
+      },
+      {
+        changeType: "added",
+        newPath: "src/b.ts",
         path: "src/b.ts",
         patch: expect.stringContaining("+export const b = true;"),
       },
@@ -50,8 +58,97 @@ describe("unified diff mapping", () => {
 
     expect(splitPullRequestDiff(diff)).toEqual([
       {
+        changeType: "modified",
+        newPath: "docs/visão geral.md",
+        oldPath: "docs/visão geral.md",
         patch: expect.stringContaining("+new"),
         path: "docs/visão geral.md",
+      },
+    ]);
+  });
+
+  it("preserves every patch byte, including separators and trailing whitespace", () => {
+    const firstPatch = [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+      "",
+      "",
+    ].join("\n");
+    const secondPatch = [
+      "diff --git a/src/b.ts b/src/b.ts",
+      "--- a/src/b.ts",
+      "+++ b/src/b.ts",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+      "",
+      "  ",
+    ].join("\n");
+
+    const files = splitPullRequestDiff(firstPatch + secondPatch);
+
+    expect(files.map(({ patch }) => patch)).toEqual([firstPatch, secondPatch]);
+  });
+
+  it("returns compatible paths and change metadata for every Git change type", () => {
+    const diff = [
+      "diff --git a/src/old.ts b/src/new.ts",
+      "similarity index 100%",
+      "rename from src/old.ts",
+      "rename to src/new.ts",
+      "diff --git a/src/source.ts b/src/copy.ts",
+      "similarity index 100%",
+      "copy from src/source.ts",
+      "copy to src/copy.ts",
+      "diff --git a/src/deleted.ts b/src/deleted.ts",
+      "deleted file mode 100644",
+      "--- a/src/deleted.ts",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-old",
+      "diff --git a/src/added.ts b/src/added.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/added.ts",
+      "@@ -0,0 +1 @@",
+      "+new",
+    ].join("\n");
+
+    expect(
+      splitPullRequestDiff(diff).map(
+        ({ changeType, newPath, oldPath, path }) => ({
+          changeType,
+          newPath,
+          oldPath,
+          path,
+        }),
+      ),
+    ).toEqual([
+      {
+        changeType: "renamed",
+        newPath: "src/new.ts",
+        oldPath: "src/old.ts",
+        path: "src/new.ts",
+      },
+      {
+        changeType: "copied",
+        newPath: "src/copy.ts",
+        oldPath: "src/source.ts",
+        path: "src/copy.ts",
+      },
+      {
+        changeType: "deleted",
+        oldPath: "src/deleted.ts",
+        path: "src/deleted.ts",
+      },
+      {
+        changeType: "added",
+        newPath: "src/added.ts",
+        path: "src/added.ts",
       },
     ]);
   });

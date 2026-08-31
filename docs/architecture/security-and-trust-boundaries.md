@@ -5,6 +5,9 @@ status: current
 owners:
   - core-team
 last-reviewed: 2026-08-30
+related:
+  - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
+  - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
 ---
 
 # Segurança e trust boundaries
@@ -39,7 +42,9 @@ Conjunto mínimo exigido pelos endpoints implementados:
 - Webhook `pull_request` para eventos selecionados.
 
 Não solicitar escrita em Contents no MVP. Tokens de instalação são emitidos sob
-demanda, têm vida curta e não entram em fila, logs ou armazenamento persistente.
+demanda e restritos ao repository ID. O credential broker autoriza run,
+container, instalação e repositório no ledger; token não entra em fila, logs,
+SQLite, filesystem ou parâmetros persistidos do Sandbox.
 
 ## Segredos
 
@@ -60,6 +65,8 @@ O executor implementado não executa scripts do repositório:
   para HTTPS em `github.com` e recebe credencial no outbound handler;
 - redirects autenticados são manuais e qualquer acesso ao GitHub é substituído
   por um handler de bloqueio explícito assim que o fetch termina;
+- o outbound handler recebe `containerId` da plataforma e busca credencial JIT
+  no entrypoint RPC nomeado do control plane;
 - comandos são registrados sem incluir segredos;
 - filesystem é descartado ao final da run;
 - inatividade coloca o container para dormir após 30 segundos; a próxima tool
@@ -89,6 +96,9 @@ ferramentas de análise contra fixtures controladas. O diff não é calculado
 dentro do checkout: vem do endpoint canônico do Pull Request e é validado antes
 de entrar no Sandbox.
 
+ast-grep recebe sempre `--config /opt/holon/sgconfig.yml`; configuração do
+repositório não pode alterar regras, linguagem ou execução.
+
 Antes de `read_file`, o host resolve symlinks com `realpath` e rejeita qualquer
 destino fora de `/workspace/repository`; paths lexicais seguros sozinhos não são
 considerados isolamento suficiente. Depois dessa autorização, o host constrói
@@ -110,6 +120,12 @@ diff persistido a 120 kB, tool calls a doze, leituras a 500 linhas/100 kB e
 coordenadas a 5.000. Redação
 heurística reduz exposição acidental, mas não substitui a política de dados do
 provedor nem garante detectar todo segredo possível.
+
+O host envia somente patches completos ao modelo e valida cada evidência contra
+path, intervalo e linhas new-file do diff canônico. Evidência exclusiva de tool
+orienta investigação, mas não é publicável até ter proveniência verificável. Na
+publicação, texto com aparência de marcador é neutralizado e reconciliação exige
+autor GitHub App exato no endpoint correspondente.
 
 Requests ao AI Gateway enviam `cf-aig-collect-log-payload: false`; prompts,
 diffs, tool outputs e respostas não ficam persistidos nos logs. Até cinco

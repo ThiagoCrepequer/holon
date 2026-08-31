@@ -1,15 +1,20 @@
 import {
   executorRequestSchema,
+  executorRequestV1Schema,
   repositoryToolCallSchema,
+  reviewContextV1Schema,
+  type ReviewContextV1,
 } from "@holon/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { GitHubEgressAuthorization } from "../src/egress-policy.js";
 import {
   RepositoryExecutorService,
+  SandboxRuntimeError,
   type SandboxPort,
 } from "../src/executor-service.js";
 
-const request = executorRequestSchema.parse({
+const request = executorRequestV1Schema.parse({
   baseSha: "b".repeat(40),
   canonicalDiff: [
     "diff --git a/src/index.ts b/src/index.ts",
@@ -25,6 +30,7 @@ const request = executorRequestSchema.parse({
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
   schemaVersion: 1,
 });
+const legacyInstallationToken = "installation-token-value";
 
 function ripgrepMatch(index: number, path = "src/index.ts"): string {
   return JSON.stringify({
@@ -34,21 +40,23 @@ function ripgrepMatch(index: number, path = "src/index.ts"): string {
 }
 
 class FakeSandbox implements SandboxPort {
-  public configured?: {
-    readonly repositoryPath: string;
-    readonly token: string;
-  };
+  public configured?: GitHubEgressAuthorization;
   public destroyed = false;
   public egressBlocked = false;
   public readonly commands: string[][] = [];
-  public readonly files = new Map<string, string>();
+  public readonly commandOptions: Array<Parameters<SandboxPort["run"]>[1]> = [];
+  public readonly files = new Map<string, string>([
+    [
+      "/workspace/holon-review-scope.json",
+      JSON.stringify({ deniedPaths: [], schemaVersion: 1 }),
+    ],
+  ]);
   public readonly readPaths: string[] = [];
 
   public configureGitHubEgress(
-    token: string,
-    repositoryPath: string,
+    authorization: GitHubEgressAuthorization,
   ): Promise<void> {
-    this.configured = { repositoryPath, token };
+    this.configured = authorization;
     return Promise.resolve();
   }
 
@@ -94,6 +102,7 @@ class FakeSandbox implements SandboxPort {
     readonly truncated: boolean;
   }> {
     this.commands.push([...argv]);
+    this.commandOptions.push(_options);
     if (argv.includes("rev-parse"))
       return Promise.resolve({
         exitCode: 0,
@@ -156,22 +165,31 @@ class FakeSandbox implements SandboxPort {
   }
 }
 
+async function loadLegacyContext(
+  service: RepositoryExecutorService,
+): Promise<ReviewContextV1> {
+  return reviewContextV1Schema.parse(await service.loadContext(request.runId));
+}
+
 describe("RepositoryExecutorService", () => {
   it("reports whether the ephemeral review context still exists", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(service.hasContext(request.runId)).resolves.toBe(false);
-    await service.prepare(request, "installation-token");
+    await service.prepare(request, legacyInstallationToken);
     await expect(service.hasContext(request.runId)).resolves.toBe(true);
   });
 
   it("checks out exact commits, blocks clone egress and persists a bounded structural context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
+    const consoleSpies = (
+      ["debug", "error", "info", "log", "warn"] as const
+    ).map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
 
     await expect(
-      service.prepare(request, "installation-token"),
+      service.prepare(request, legacyInstallationToken),
     ).resolves.toMatchObject({
       changedLineCount: 1,
       fileCount: 1,
@@ -182,7 +200,6 @@ describe("RepositoryExecutorService", () => {
     await expect(service.loadContext(request.runId)).resolves.toEqual({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       diff: request.canonicalDiff,
-      reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
       surface: [
         {
           change: "added",
@@ -195,9 +212,21 @@ describe("RepositoryExecutorService", () => {
       truncated: false,
     });
     expect(sandbox.configured).toEqual({
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
       repositoryPath: "/acme/api.git",
-      token: "installation-token",
+      runId: request.runId,
     });
+    expect(sandbox.configured).not.toHaveProperty("token");
+    expect(
+      JSON.stringify({
+        commands: sandbox.commands,
+        configured: sandbox.configured,
+        files: [...sandbox.files.entries()],
+        logs: consoleSpies.flatMap((spy) => spy.mock.calls),
+      }),
+    ).not.toContain(legacyInstallationToken);
     expect(sandbox.egressBlocked).toBe(true);
     expect(sandbox.commands.flat()).toContain(
       "http://github.holon.internal/acme/api.git",
@@ -207,12 +236,147 @@ describe("RepositoryExecutorService", () => {
       sandbox.files.get("/workspace/holon-review-context.json"),
     ).toBeDefined();
     expect(sandbox.commands.flat()).not.toContain("npm");
+    expect(sandbox.commandOptions.slice(0, 3)).toEqual([
+      {
+        cwd: "/workspace",
+        maxOutputBytes: 10_000,
+        timeoutMs: 10_000,
+      },
+      {
+        cwd: "/workspace/repository",
+        maxOutputBytes: 20_000,
+        timeoutMs: 60_000,
+      },
+      {
+        cwd: "/workspace/repository",
+        maxOutputBytes: 10_000,
+        timeoutMs: 20_000,
+      },
+    ]);
+  });
+
+  it("prepares and loads the non-duplicated v2 context without a credential argument", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const requestV2 = executorRequestSchema.parse({
+      ...request,
+      installationId: 99,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      schemaVersion: 2,
+    });
+    if (requestV2.schemaVersion !== 2) throw new TypeError("Expected v2");
+
+    await expect(service.prepareRepositoryV2(requestV2)).resolves.toMatchObject(
+      {
+        fileCount: 1,
+        schemaVersion: 2,
+      },
+    );
+    await expect(service.loadContextV2(request.runId)).resolves.toMatchObject({
+      changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+      files: [
+        {
+          mode: "structural",
+          patch: request.canonicalDiff,
+          path: "src/index.ts",
+        },
+      ],
+      schemaVersion: 2,
+      truncated: false,
+    });
+    expect(sandbox.configured).toMatchObject({
+      installationId: 99,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+    });
+  });
+
+  it("omits sensitive renames and denies their safe-looking destination for the run", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const requestV2 = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/.env.production b/config.txt",
+        "similarity index 50%",
+        "rename from .env.production",
+        "rename to config.txt",
+        "--- a/.env.production",
+        "+++ b/config.txt",
+        "@@ -1 +1 @@",
+        "-DATABASE_PASSWORD=super-secret",
+        "+DATABASE_PASSWORD=rotated-secret",
+      ].join("\n"),
+      installationId: 99,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      schemaVersion: 2,
+    });
+    if (requestV2.schemaVersion !== 2) throw new TypeError("Expected v2");
+
+    await expect(service.prepareRepositoryV2(requestV2)).resolves.toMatchObject(
+      {
+        fileCount: 0,
+        schemaVersion: 2,
+      },
+    );
+    const context = await service.loadContextV2(request.runId);
+    expect(context.files).toEqual([]);
+    expect(JSON.stringify(context)).not.toMatch(
+      /\.env\.production|super-secret|rotated-secret/u,
+    );
+    const policy = sandbox.files.get("/workspace/holon-review-scope.json");
+    expect(policy).toBe('{"deniedPaths":["config.txt"],"schemaVersion":1}');
+    expect(policy).not.toMatch(/\.env\.production|secret/u);
+
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { path: "config.txt" },
+          name: "read_file",
+        }),
+      ),
+    ).rejects.toThrow("excluded by the run policy");
+
+    const originalRun = sandbox.run.bind(sandbox);
+    let searchArgv: readonly string[] | undefined;
+    sandbox.run = (argv, options) => {
+      if (argv[0] === "rg") {
+        searchArgv = argv;
+        return Promise.resolve({
+          exitCode: 0,
+          stderr: "",
+          stdout: [
+            ripgrepMatch(1, "config.txt"),
+            ripgrepMatch(2, "src/index.ts"),
+          ].join("\n"),
+          truncated: false,
+        });
+      }
+      return originalRun(argv, options);
+    };
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { maxResults: 5, query: "DATABASE_PASSWORD" },
+          name: "search_text",
+        }),
+      ),
+    ).resolves.toEqual({
+      content: ripgrepMatch(2, "src/index.ts"),
+      truncated: false,
+    });
+    expect(searchArgv).toContain("!config.txt");
   });
 
   it("includes safe textual patches while ignoring binary, lock, generated, vendored and minified files", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const textualRequest = executorRequestSchema.parse({
+    const textualRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/README.md b/README.md",
@@ -253,14 +417,13 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(textualRequest, "installation-token"),
+      service.prepare(textualRequest, legacyInstallationToken),
     ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
-      reviewedFiles: [{ mode: "textual", path: "README.md" }],
       surface: [],
     });
-    const context = await service.loadContext(request.runId);
+    const context = await loadLegacyContext(service);
     expect(context.diff).toContain("README.md");
     expect(context.diff).not.toMatch(
       /package-lock|generated\/client|vendor\/library|app\.min|logo\.png/u,
@@ -279,7 +442,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(
-      service.prepare(request, "installation-token"),
+      service.prepare(request, legacyInstallationToken),
     ).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
@@ -301,7 +464,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(
-      service.prepare(request, "installation-token"),
+      service.prepare(request, legacyInstallationToken),
     ).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
@@ -310,15 +473,62 @@ describe("RepositoryExecutorService", () => {
     expect(sandbox.destroyed).toBe(true);
   });
 
-  it("classifies sandbox timeouts as transient without leaking their message", async () => {
+  it("retries a fetch rejected by a transient GitHub or broker response", async () => {
     const sandbox = new FakeSandbox();
-    const timeout = new Error("sensitive upstream details");
-    timeout.name = "ProcessWaitTimeoutError";
-    sandbox.run = () => Promise.reject(timeout);
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv.includes("fetch")
+        ? Promise.resolve({
+            exitCode: 128,
+            stderr: "The requested URL returned error: 503",
+            stdout: "",
+            truncated: false,
+          })
+        : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(
-      service.prepare(request, "installation-token"),
+      service.prepare(request, legacyInstallationToken),
+    ).rejects.toMatchObject({
+      name: "RepositoryTransientError",
+      retryable: true,
+      stage: "fetch",
+    });
+    expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("does not retry a permanent GitHub authentication failure", async () => {
+    const sandbox = new FakeSandbox();
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv.includes("fetch")
+        ? Promise.resolve({
+            exitCode: 128,
+            stderr: "The requested URL returned error: 401",
+            stdout: "",
+            truncated: false,
+          })
+        : originalRun(argv, options);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, legacyInstallationToken),
+    ).rejects.toMatchObject({
+      name: "RepositoryPermanentError",
+      retryable: false,
+      stage: "fetch",
+    });
+    expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("classifies mapped sandbox timeouts as transient without leaking details", async () => {
+    const sandbox = new FakeSandbox();
+    sandbox.run = () =>
+      Promise.reject(new SandboxRuntimeError(true, "timed-out"));
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, legacyInstallationToken),
     ).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
@@ -326,7 +536,29 @@ describe("RepositoryExecutorService", () => {
     expect(sandbox.destroyed).toBe(true);
   });
 
-  it("rejects an empty installation token before creating external access", async () => {
+  it("preserves an output timeout even when the process exposes an exit code", async () => {
+    const sandbox = new FakeSandbox();
+    sandbox.run = () =>
+      Promise.resolve({
+        exitCode: 137,
+        stderr: "",
+        stdout: "",
+        timedOut: true,
+        truncated: false,
+      });
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, legacyInstallationToken),
+    ).rejects.toMatchObject({
+      message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
+      name: "RepositoryTransientError",
+      retryable: true,
+    });
+    expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("rejects an invalid installation identity before creating external access", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     await expect(service.prepare(request, "")).rejects.toThrow(
@@ -366,7 +598,14 @@ describe("RepositoryExecutorService", () => {
       content: "line 10\nline 11\nline 12",
       truncated: false,
     });
-    expect(sandbox.readPaths).toEqual([]);
+    expect(sandbox.readPaths).not.toContain(
+      "/workspace/repository/src/index.ts",
+    );
+    expect(
+      sandbox.readPaths.every(
+        (path) => path === "/workspace/holon-review-scope.json",
+      ),
+    ).toBe(true);
     expect(sandbox.commands).toContainEqual([
       "sed",
       "-n",
@@ -384,7 +623,7 @@ describe("RepositoryExecutorService", () => {
   it("reviews deletion-only patches instead of treating them as an empty scope", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const deletionRequest = executorRequestSchema.parse({
+    const deletionRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/policy.ts b/src/policy.ts",
@@ -396,13 +635,12 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(deletionRequest, "installation-token"),
+      service.prepare(deletionRequest, legacyInstallationToken),
     ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [],
-      reviewedFiles: [{ mode: "structural", path: "src/policy.ts" }],
     });
-    expect((await service.loadContext(request.runId)).diff).toContain(
+    expect((await loadLegacyContext(service)).diff).toContain(
       "-assertAuthorized(request);",
     );
   });
@@ -412,7 +650,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const largeLine = "x".repeat(58_000);
     const documentationLine = "d".repeat(5_000);
-    const mixedRequest = executorRequestSchema.parse({
+    const mixedRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/a.ts b/src/a.ts",
@@ -434,14 +672,12 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(mixedRequest, "installation-token"),
+      service.prepare(mixedRequest, legacyInstallationToken),
     ).resolves.toMatchObject({ fileCount: 2, truncated: true });
-    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
-      reviewedFiles: [
-        { mode: "structural", path: "src/a.ts" },
-        { mode: "textual", path: "README.md" },
-      ],
-    });
+    const context = await loadLegacyContext(service);
+    expect(context.diff).toContain("src/a.ts");
+    expect(context.diff).toContain("README.md");
+    expect(context.diff).not.toContain("src/b.ts");
   });
 
   it("enforces review exclusions on tool capabilities and search results", async () => {
@@ -451,8 +687,13 @@ describe("RepositoryExecutorService", () => {
       "/workspace/holon-review-context.json",
       JSON.stringify({
         changedLines: [{ line: 1, path: "README.md", side: "RIGHT" }],
-        diff: "+documentation",
-        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+        diff: [
+          "diff --git a/README.md b/README.md",
+          "--- a/README.md",
+          "+++ b/README.md",
+          "@@ -0,0 +1 @@",
+          "+documentation",
+        ].join("\n"),
       }),
     );
 
@@ -511,8 +752,13 @@ describe("RepositoryExecutorService", () => {
       "/workspace/holon-review-context.json",
       JSON.stringify({
         changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
-        diff: "+export const value = 1;",
-        reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
+        diff: [
+          "diff --git a/src/index.ts b/src/index.ts",
+          "--- a/src/index.ts",
+          "+++ b/src/index.ts",
+          "@@ -0,0 +1 @@",
+          "+export const value = 1;",
+        ].join("\n"),
       }),
     );
     const allowed = JSON.stringify({ file: "src/index.ts", text: "value" });
@@ -558,7 +804,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(
-      service.prepare(request, "installation-token"),
+      service.prepare(request, legacyInstallationToken),
     ).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       stage: "prepare-context",
@@ -626,7 +872,7 @@ describe("RepositoryExecutorService", () => {
   it("marks oversized diffs and file reads as truncated", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const oversizedRequest = executorRequestSchema.parse({
+    const oversizedRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/huge.ts b/src/huge.ts",
@@ -637,8 +883,11 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepare(oversizedRequest, "token");
-    const context = await service.loadContext(request.runId);
+    const prepared = await service.prepare(
+      oversizedRequest,
+      legacyInstallationToken,
+    );
+    const context = await loadLegacyContext(service);
     expect(prepared.truncated).toBe(true);
     expect(prepared.fileCount).toBe(0);
     expect(context.diff).toBe("");
@@ -693,7 +942,7 @@ describe("RepositoryExecutorService", () => {
   it("bounds changed-line coordinate amplification before persisting context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const amplifiedRequest = executorRequestSchema.parse({
+    const amplifiedRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/index.ts b/src/index.ts",
@@ -705,7 +954,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(amplifiedRequest, "token"),
+      service.prepare(amplifiedRequest, legacyInstallationToken),
     ).resolves.toMatchObject({
       changedLineCount: 5_000,
       truncated: true,
@@ -722,7 +971,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const longPath = `src/${"coordinate".repeat(10)}.ts`;
-    const amplifiedRequest = executorRequestSchema.parse({
+    const amplifiedRequest = executorRequestV1Schema.parse({
       ...request,
       canonicalDiff: [
         `diff --git a/${longPath} b/${longPath}`,
@@ -733,7 +982,10 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepare(amplifiedRequest, "token");
+    const prepared = await service.prepare(
+      amplifiedRequest,
+      legacyInstallationToken,
+    );
     const context = await service.loadContext(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
@@ -771,6 +1023,34 @@ describe("RepositoryExecutorService", () => {
     await expect(service.runTool(request.runId, call)).rejects.toThrow(
       "Repository command failed",
     );
+  });
+
+  it("does not treat timed-out tool output as a successful partial result", async () => {
+    const sandbox = new FakeSandbox();
+    sandbox.run = (argv) =>
+      argv[0] === "rg"
+        ? Promise.resolve({
+            exitCode: 0,
+            stderr: "",
+            stdout: ripgrepMatch(1),
+            timedOut: true,
+            truncated: true,
+          })
+        : FakeSandbox.prototype.run.call(sandbox, argv);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { maxResults: 5, query: "symbol" },
+          name: "search_text",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      message: "HOLON_SANDBOX_TRANSIENT:timed-out",
+      retryable: true,
+    });
   });
 
   it("enforces a global result and byte bound even when a search command overproduces", async () => {

@@ -9,3 +9,11 @@ RUN apt-get update \
     && sed --version \
     && rg --version \
     && ast-grep --version
+
+COPY ast-grep.sgconfig.yml /opt/holon/sgconfig.yml
+COPY test/fixtures/hostile-sgconfig /tmp/holon-hostile-sgconfig
+
+RUN chmod 0444 /opt/holon/sgconfig.yml \
+    && cd /tmp/holon-hostile-sgconfig \
+    && ast-grep run --config /opt/holon/sgconfig.yml --json=stream --lang typescript --pattern 'const $A = $B' -- source.ts >/dev/null \
+    && rm -rf /tmp/holon-hostile-sgconfig

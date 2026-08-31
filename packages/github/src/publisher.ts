@@ -3,13 +3,28 @@ import type { PublishCommentInput, ReviewPublisher } from "@holon/application";
 export interface GitHubComment {
   readonly body?: string | undefined;
   readonly id: number;
+  readonly user: {
+    readonly login: string;
+    readonly type: string;
+  } | null;
+}
+
+export type GitHubCommentListRoute =
+  | "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments"
+  | "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
+
+export interface GitHubCommentListParameters {
+  readonly owner: string;
+  readonly per_page: number;
+  readonly pull_number: number;
+  readonly repo: string;
 }
 
 export interface GitHubApi {
-  paginate(
-    route: string,
-    parameters: Record<string, unknown>,
-  ): Promise<readonly GitHubComment[]>;
+  iterate(
+    route: GitHubCommentListRoute,
+    parameters: GitHubCommentListParameters,
+  ): AsyncIterable<readonly GitHubComment[]>;
   request(
     route: string,
     parameters: Record<string, unknown>,
@@ -17,6 +32,7 @@ export interface GitHubApi {
 }
 
 export interface PullRequestTarget {
+  readonly expectedAuthorLogin: string;
   readonly headSha: string;
   readonly owner: string;
   readonly pullNumber: number;
@@ -24,42 +40,47 @@ export interface PullRequestTarget {
 }
 
 function withMarker(body: string, marker: string): string {
-  return `${body}\n\n${marker}`;
+  const safeBody = body.replaceAll("<!-- holon:", "&lt;!-- holon:");
+  return `${safeBody}\n\n${marker}`;
 }
 
 export class GitHubReviewPublisher implements ReviewPublisher {
   public constructor(
     private readonly api: GitHubApi,
     private readonly target: PullRequestTarget,
-  ) {}
+  ) {
+    if (!/^[A-Za-z0-9-]+\[bot\]$/u.test(target.expectedAuthorLogin)) {
+      throw new TypeError("expectedAuthorLogin must identify a GitHub App bot");
+    }
+  }
 
   public async findCommentByMarker(
     marker: string,
+    kind: "inline" | "summary",
   ): Promise<number | undefined> {
+    const route =
+      kind === "summary"
+        ? "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+        : "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments";
     const common = {
       owner: this.target.owner,
       per_page: 100,
+      pull_number: this.target.pullNumber,
       repo: this.target.repo,
     };
-    const [reviewComments, reviews] = await Promise.all([
-      this.api.paginate(
-        "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-        {
-          ...common,
-          pull_number: this.target.pullNumber,
-        },
-      ),
-      this.api.paginate(
-        "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-        {
-          ...common,
-          pull_number: this.target.pullNumber,
-        },
-      ),
-    ]);
-    return [...reviewComments, ...reviews].find(
-      (comment) => comment.body?.includes(marker) === true,
-    )?.id;
+    let pages = 0;
+    for await (const page of this.api.iterate(route, common)) {
+      pages += 1;
+      const match = page.find(
+        (comment) =>
+          comment.user?.type === "Bot" &&
+          comment.user.login === this.target.expectedAuthorLogin &&
+          comment.body?.includes(marker) === true,
+      );
+      if (match !== undefined) return match.id;
+      if (pages >= 20) break;
+    }
+    return undefined;
   }
 
   public async publish(input: PublishCommentInput): Promise<number> {

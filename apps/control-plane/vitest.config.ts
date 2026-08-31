@@ -6,9 +6,25 @@ export default defineConfig({
     cloudflareTest({
       miniflare: {
         serviceBindings: {
-          REPOSITORY_EXECUTOR: () =>
-            new Response("executor test stub", { status: 501 }),
+          REPOSITORY_EXECUTOR: "repository-executor-v1",
         },
+        workers: [
+          {
+            compatibilityDate: "2026-08-29",
+            modules: true,
+            name: "repository-executor-v1",
+            script: `
+              import { WorkerEntrypoint } from "cloudflare:workers";
+              export default class RepositoryExecutorV1 extends WorkerEntrypoint {
+                cleanup() {}
+                hasContext() { return false; }
+                loadContext() { throw new Error("unused"); }
+                prepare() { throw new Error("unused"); }
+                runTool() { throw new Error("unused"); }
+              }
+            `,
+          },
+        ],
       },
       wrangler: { configPath: "./wrangler.jsonc" },
     }),

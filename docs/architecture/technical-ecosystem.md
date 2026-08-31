@@ -9,6 +9,7 @@ related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
+  - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../planning/technical-bootstrap.md
 ---
 
@@ -124,13 +125,19 @@ classifica patches e aplica a mesma elegibilidade a tools, persiste contexto
 efêmero e retorna evidência limitada com proveniência. Nenhum token de modelo ou
 autoridade de publicação GitHub deve entrar nesse deployable.
 
+Em runtime há dois service bindings tipados: control plane -> executor para RPC
+de análise e executor -> entrypoint nomeado do credential broker no control
+plane. O segundo só emite token após autorização no ledger; ele não cria uma
+dependência de pacote do executor sobre adapters do control plane.
+
 ## Fronteiras de validacao
 
 | Entrada          | Validacao obrigatoria                                 | Saida interna              |
 | ---------------- | ----------------------------------------------------- | -------------------------- |
-| Webhook GitHub   | HMAC do body bruto, headers, tamanho, evento e schema | `ReviewRequestedV1`        |
+| Webhook GitHub   | HMAC do body bruto, headers, tamanho, evento e schema | `WebhookEnvelopeV2`        |
 | Queue            | Versao do envelope e tipos runtime                    | comando de caso de uso     |
-| Workflow         | Schema de params em cada entrada externa              | tipos de aplicacao         |
+| Workflow         | Schema V1/V2 de params em cada entrada externa        | tipos de aplicacao         |
+| Credential RPC   | container, run, repo, instalação e ledger             | token JIT repo-scoped      |
 | Ferramenta       | Schema, autorizacao, path normalizado e budget        | evidencia com proveniencia |
 | Modelo           | Schema estrutural, policy e coordenadas no diff       | candidatos a `Finding`     |
 | GitHub publisher | head SHA atual, dedupe e `line`/`side`                | IDs externos persistiveis  |

@@ -1,46 +1,20 @@
 import {
-  ExecuteReview,
+  composeReviewSummary,
   createReviewRun,
-  publishOnce,
   renderFinding,
   selectValidFindings,
-  type ModelReviewer,
-  type ReviewLedger,
-  type ReviewPublisher,
 } from "@holon/application";
 import {
-  executorRequestSchema,
   modelReviewOutputSchema,
-  repositoryToolResultSchema,
-  preparedRepositorySchema,
-  reviewContextSchema,
   reviewJobSchema,
-  type ExecutorRequest,
-  type RepositoryToolCall,
-  type RepositoryToolResult,
-  type PreparedRepository,
-  type ReviewContext,
   type ReviewJob,
 } from "@holon/contracts";
 import {
   classifyFindingPublication,
   createFindingId,
-  createPrKey,
-  type RunId,
   type RunState,
 } from "@holon/domain";
-import {
-  createInstallationSession,
-  GitHubReviewPublisher,
-  type GitHubInstallationSession,
-} from "@holon/github";
-import {
-  AiSdkReviewGenerator,
-  GatewayModelReviewer,
-  createBoundedRepositoryToolRunner,
-  createRedactingRepositoryToolRunner,
-  nonRetryableModelFailureCode,
-} from "@holon/model";
+import { nonRetryableModelFailureCode } from "@holon/model";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -49,44 +23,28 @@ import {
 import { NonRetryableError } from "cloudflare:workflows";
 
 import {
-  consoleLogger,
-  errorKind,
-  type StructuredLogger,
-} from "./observability.js";
+  isReviewMutationNotAuthorizedError,
+  publishAuthorized,
+  publishFailureNoticeAuthorized,
+} from "./authorized-publication.js";
+import { consoleLogger, errorKind } from "./observability.js";
+import {
+  createReviewServices,
+  type GitHubMutationContext,
+  type ReviewRuntime,
+} from "./review-services.js";
+import {
+  causalVersionForJob,
+  durationFrom,
+  eventId,
+  modelStep,
+  publicationStep,
+  repositoryStep,
+  stateStep,
+} from "./workflow-policy.js";
 
-export interface RepositoryExecutorBinding {
-  cleanup(runId: string): Promise<void>;
-  hasContext(runId: string): Promise<boolean>;
-  loadContext(runId: string): Promise<ReviewContext>;
-  prepare(
-    request: ExecutorRequest,
-    installationToken: string,
-  ): Promise<PreparedRepository>;
-  runTool(
-    runId: string,
-    call: RepositoryToolCall,
-  ): Promise<RepositoryToolResult>;
-}
-
-export interface ReviewRuntime {
-  readonly createModel?: (
-    toolRunner: ReturnType<typeof createBoundedRepositoryToolRunner>,
-  ) => ModelReviewer;
-  readonly createSession?: (
-    installationId: number,
-  ) => Promise<GitHubInstallationSession>;
-  readonly executor?: RepositoryExecutorBinding;
-  readonly logger?: StructuredLogger;
-  readonly milliseconds?: () => number;
-  readonly now?: () => string;
-}
-
-export function parseAppId(value: string): number {
-  const appId = Number(value);
-  if (!Number.isSafeInteger(appId) || appId <= 0)
-    throw new TypeError("GITHUB_APP_ID must be a positive integer");
-  return appId;
-}
+export type { ReviewRuntime } from "./review-services.js";
+export { parseAppId } from "./credential-broker.js";
 
 export class ReviewWorkflow extends WorkflowEntrypoint<
   Cloudflare.Env,
@@ -100,216 +58,13 @@ export class ReviewWorkflow extends WorkflowEntrypoint<
   }
 }
 
-function prKeyFor(job: ReviewJob) {
-  return createPrKey({
-    provider: "github",
-    pullRequestNumber: job.envelope.pullRequest.number,
-    repositoryId: job.envelope.repository.id,
-  });
-}
-
-interface WorkflowLedger extends ReviewLedger {
-  markTerminal(runId: RunId, occurredAt: string): boolean | Promise<boolean>;
-  runState(runId: RunId): Promise<RunState | undefined> | RunState | undefined;
-}
-
-interface ReviewServices {
-  readonly executor: RepositoryExecutorBinding;
-  readonly ledger: WorkflowLedger;
-  readonly loadContext: () => Promise<ReviewContext>;
-  readonly model: ModelReviewer;
-  readonly prepareRepository: () => Promise<PreparedRepository>;
-  readonly publisher: ReviewPublisher;
-  readonly readCurrentHead: () => Promise<string>;
-}
-
-function createReviewServices(
-  env: Cloudflare.Env,
-  job: ReviewJob,
-  runtime: ReviewRuntime,
-  logger: StructuredLogger,
-  logContext: Record<string, number | string>,
-): ReviewServices {
-  const executor =
-    runtime.executor ??
-    (env.REPOSITORY_EXECUTOR as unknown as RepositoryExecutorBinding);
-  const ledger = env.REVIEW_LEDGERS.getByName(
-    prKeyFor(job),
-  ) as unknown as WorkflowLedger;
-  let sessionPromise: Promise<GitHubInstallationSession> | undefined;
-  const session = () => {
-    sessionPromise ??=
-      runtime.createSession?.(job.envelope.installationId) ??
-      createInstallationSession(
-        {
-          appId: parseAppId(env.GITHUB_APP_ID),
-          privateKey: env.GITHUB_APP_PRIVATE_KEY,
-        },
-        job.envelope.installationId,
-      );
-    return sessionPromise;
-  };
-  const prepareRepository = async () => {
-    const github = await session();
-    const canonicalDiff = await github.pullRequestDiff(
-      job.envelope.repository.owner,
-      job.envelope.repository.name,
-      job.envelope.pullRequest.number,
-    );
-    const request = executorRequestSchema.parse({
-      baseSha: job.envelope.pullRequest.baseSha,
-      canonicalDiff,
-      cloneUrl: `https://github.com/${job.envelope.repository.fullName}.git`,
-      headSha: job.envelope.pullRequest.headSha,
-      pullRequestNumber: job.envelope.pullRequest.number,
-      repositoryId: job.envelope.repository.id,
-      runId: job.runId,
-      schemaVersion: 1,
-    });
-    return preparedRepositorySchema.parse(
-      await executor.prepare(request, github.token),
-    );
-  };
-  const toolRunner = createBoundedRepositoryToolRunner(
-    createRedactingRepositoryToolRunner({
-      run: async (call) => {
-        if (!(await executor.hasContext(job.runId))) {
-          await prepareRepository();
-        }
-        return repositoryToolResultSchema.parse(
-          await executor.runTool(job.runId, call),
-        );
-      },
-    }),
-    12,
+function contextBytes(context: {
+  readonly files: readonly { readonly patch: string }[];
+}): number {
+  return context.files.reduce(
+    (total, file) => total + new TextEncoder().encode(file.patch).byteLength,
+    0,
   );
-  const model =
-    runtime.createModel?.(toolRunner) ??
-    new GatewayModelReviewer(
-      new AiSdkReviewGenerator(
-        {
-          accountId: env.AI_GATEWAY_ACCOUNT_ID,
-          apiToken: env.AI_GATEWAY_API_TOKEN,
-          gatewayId: env.AI_GATEWAY_ID,
-          metadata: {
-            pr_number: String(job.envelope.pullRequest.number),
-            repository_id: String(job.envelope.repository.id),
-            run_id: job.runId,
-            schema_version: "1",
-            stage: "review",
-          },
-          model: env.AI_MODEL_ID,
-        },
-        toolRunner,
-        (usage) => logger.emit("model.usage", { ...logContext, ...usage }),
-      ),
-    );
-  const githubPublisher = async () => {
-    const github = await session();
-    return new GitHubReviewPublisher(github.api, {
-      headSha: job.envelope.pullRequest.headSha,
-      owner: job.envelope.repository.owner,
-      pullNumber: job.envelope.pullRequest.number,
-      repo: job.envelope.repository.name,
-    });
-  };
-  const publisher: ReviewPublisher = {
-    findCommentByMarker: async (marker) =>
-      (await githubPublisher()).findCommentByMarker(marker),
-    publish: async (input) => (await githubPublisher()).publish(input),
-  };
-  return {
-    executor,
-    ledger,
-    loadContext: async () =>
-      reviewContextSchema.parse(await executor.loadContext(job.runId)),
-    model,
-    prepareRepository,
-    publisher,
-    readCurrentHead: async () => {
-      const github = await session();
-      return await github.currentHeadSha(
-        job.envelope.repository.owner,
-        job.envelope.repository.name,
-        job.envelope.pullRequest.number,
-      );
-    },
-  };
-}
-
-const stateStep = {
-  retries: { backoff: "exponential", delay: "1 second", limit: 3 },
-  timeout: "30 seconds",
-} as const;
-const repositoryStep = {
-  retries: { backoff: "exponential", delay: "5 seconds", limit: 1 },
-  timeout: "2 minutes",
-} as const;
-const modelStep = {
-  retries: { backoff: "constant", delay: "1 second", limit: 0 },
-  sensitive: "output",
-  timeout: "10 minutes",
-} as const;
-const publicationStep = {
-  retries: { backoff: "exponential", delay: "5 seconds", limit: 4 },
-  timeout: "2 minutes",
-} as const;
-
-function isRetryableRepositoryError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return (
-    error.name === "RepositoryTransientError" ||
-    error.message.includes("HOLON_REPOSITORY_TRANSIENT:")
-  );
-}
-
-function githubStatusCode(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
-    return undefined;
-  }
-  return typeof error.status === "number" ? error.status : undefined;
-}
-
-export async function executeGitHubOperation<T>(
-  operation: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    const status = githubStatusCode(error);
-    if (
-      status !== undefined &&
-      status >= 400 &&
-      status < 500 &&
-      ![408, 409, 429].includes(status)
-    ) {
-      throw new NonRetryableError(`HOLON_GITHUB_NON_RETRYABLE:${status}`);
-    }
-    throw error;
-  }
-}
-
-const partialReviewPrefix =
-  "Partial review: the pull request exceeded the bounded analysis context. ";
-
-export function markPartialReviewSummary(
-  summary: string,
-  truncated: boolean,
-): string {
-  if (!truncated) return summary;
-  return `${partialReviewPrefix}${summary}`.slice(0, 800).trim();
-}
-
-async function publishFailureNotice(
-  publisher: ReviewPublisher,
-  runId: RunId,
-): Promise<void> {
-  const marker = `<!-- holon:v1;run=${runId};finding=system-failure -->`;
-  if ((await publisher.findCommentByMarker(marker)) !== undefined) return;
-  await publisher.publish({
-    body: "Holon could not complete this automated review. The run was stopped and its repository sandbox was scheduled for cleanup. Push a new commit or synchronize the pull request to start a fresh run.",
-    marker,
-  });
 }
 
 export async function executeReviewWorkflow(
@@ -321,29 +76,53 @@ export async function executeReviewWorkflow(
   const job = reviewJobSchema.parse(rawEvent.payload);
   const workflowInstanceId = rawEvent.instanceId;
   const logger = runtime.logger ?? consoleLogger;
-  const milliseconds = runtime.milliseconds ?? Date.now;
   const now = runtime.now ?? (() => new Date().toISOString());
-  const startedAt = milliseconds();
   const logContext = {
     pullRequestNumber: job.envelope.pullRequest.number,
     repositoryId: job.envelope.repository.id,
     runId: job.runId,
     workflowInstanceId,
   };
-  const services = createReviewServices(env, job, runtime, logger, logContext);
+  const emit = (
+    event: string,
+    fields: Readonly<
+      Record<string, boolean | number | string | undefined>
+    > = {},
+    suffix?: number | string,
+  ) =>
+    logger.emit(event, {
+      eventId: eventId(workflowInstanceId, event, suffix),
+      ...logContext,
+      ...fields,
+    });
+  const services = createReviewServices(env, job, runtime, logger, {
+    eventId: eventId(workflowInstanceId, "model.usage"),
+    ...logContext,
+  });
   const run = createReviewRun(job);
   let repositoryStarted = false;
   let runClaimed = false;
-  logger.emit("review.started", logContext);
 
   const moveTo = async (
     stepName: string,
     expected: RunState,
     next: RunState,
-  ): Promise<void> => {
+    cleanup: boolean,
+  ): Promise<string> =>
     await step.do(stepName, stateStep, async () => {
+      const occurredAt = now();
+      if (cleanup) {
+        await services.ledger.transitionAndRequestCleanup(
+          run.id,
+          expected,
+          next,
+          occurredAt,
+          `${workflowInstanceId}:${stepName}`,
+        );
+        return occurredAt;
+      }
       const current = await services.ledger.runState(run.id);
-      if (current === next) return;
+      if (current === next) return occurredAt;
       if (current !== expected) {
         throw new Error(
           `Review run cannot execute ${stepName} from ${current ?? "missing"}`,
@@ -353,16 +132,48 @@ export async function executeReviewWorkflow(
         run.id,
         expected,
         next,
-        now(),
+        occurredAt,
         `${workflowInstanceId}:${stepName}`,
       );
+      return occurredAt;
     });
+
+  const authorizeMutation = async (
+    github: GitHubMutationContext,
+    purpose: "failure" | "review",
+  ): Promise<boolean> => {
+    if ((await github.readCurrentHead()) !== job.envelope.pullRequest.headSha) {
+      return false;
+    }
+    return await services.ledger.authorizeMutation(run.id, purpose);
+  };
+
+  const completeObsolete = async (
+    expected: "publishing" | "running",
+    stepName: string,
+    cleanup: boolean,
+  ) => {
+    const occurredAt = await moveTo(stepName, expected, "obsolete", cleanup);
+    const result = { findingsPublished: 0, outcome: "obsolete" } as const;
+    emit("review.completed", {
+      durationMs: durationFrom(rawEvent.timestamp, occurredAt),
+      ...result,
+    });
+    return result;
   };
 
   try {
-    const claim = await step.do("claim-run", stateStep, () =>
-      services.ledger.claimRun(run, workflowInstanceId),
-    );
+    const claim = await step.do("claim-run", stateStep, async () => {
+      const outcome = await services.ledger.claimRun(
+        run,
+        workflowInstanceId,
+        causalVersionForJob(job),
+      );
+      emit("review.started", {
+        eventTimestamp: rawEvent.timestamp.toISOString(),
+      });
+      return outcome;
+    });
     if (claim === "duplicate") {
       return { findingsPublished: 0, outcome: "duplicate" } as const;
     }
@@ -370,107 +181,86 @@ export async function executeReviewWorkflow(
 
     await step.do("start-run", stateStep, async () => {
       const current = await services.ledger.runState(run.id);
-      if (current === "running" || current === "publishing") return;
-      if (current !== "queued" && current !== "failed_retryable") {
-        throw new Error(`Review run cannot start from ${current ?? "missing"}`);
+      if (current !== "running" && current !== "publishing") {
+        if (current !== "queued" && current !== "failed_retryable") {
+          throw new Error(
+            `Review run cannot start from ${current ?? "missing"}`,
+          );
+        }
+        await services.ledger.transition(
+          run.id,
+          current,
+          "running",
+          now(),
+          `${workflowInstanceId}:start-run:${current}`,
+        );
       }
-      await services.ledger.transition(
-        run.id,
-        current,
-        "running",
-        now(),
-        `${workflowInstanceId}:start-run:${current}`,
-      );
     });
 
     const initialHeadIsCurrent = await step.do(
       "revalidate-initial-head",
       publicationStep,
-      () =>
-        executeGitHubOperation(
-          async () =>
-            (await services.readCurrentHead()) ===
-            job.envelope.pullRequest.headSha,
-        ),
+      async () =>
+        (await services.ledger.isLatestRun(run.id)) &&
+        (await services.readCurrentHead()) === job.envelope.pullRequest.headSha,
     );
     if (!initialHeadIsCurrent) {
-      await moveTo("mark-obsolete-before-preparation", "running", "obsolete");
-      logger.emit("review.completed", {
-        ...logContext,
-        durationMs: Math.max(0, milliseconds() - startedAt),
-        findingsPublished: 0,
-        outcome: "obsolete",
-      });
-      return { findingsPublished: 0, outcome: "obsolete" } as const;
-    }
-
-    repositoryStarted = true;
-    const preparation = await step.do(
-      "prepare-repository",
-      repositoryStep,
-      async () => {
-        try {
-          const prepared = await services.prepareRepository();
-          logger.emit("repository.prepared", {
-            ...logContext,
-            changedLineCount: prepared.changedLineCount,
-            contextBytes: prepared.contextBytes,
-            fileCount: prepared.fileCount,
-            truncated: prepared.truncated,
-          });
-          return { status: "prepared" } as const;
-        } catch (error) {
-          if (isRetryableRepositoryError(error)) throw error;
-          return { errorKind: errorKind(error), status: "failed" } as const;
-        }
-      },
-    );
-    if (preparation.status === "failed") {
-      throw new Error(
-        `Repository preparation failed (${preparation.errorKind})`,
+      return await completeObsolete(
+        "running",
+        "mark-obsolete-before-preparation",
+        false,
       );
     }
 
+    repositoryStarted = true;
+    await step.do("prepare-repository", repositoryStep, async () => {
+      await services.registerCredentialScope();
+      const prepared = await services.prepareRepository(1);
+      emit("repository.prepared", {
+        changedLineCount: prepared.changedLineCount,
+        contextBytes: prepared.contextBytes,
+        fileCount: prepared.fileCount,
+        truncated: prepared.truncated,
+      });
+    });
+
     const output = await step.do("analyze-review", modelStep, async () => {
       try {
-        if (!(await services.executor.hasContext(job.runId))) {
-          await services.prepareRepository();
-        }
+        await services.ensureContext(2);
         const context = await services.loadContext();
-        logger.emit("model.input", {
-          ...logContext,
+        const patchBytes = contextBytes(context);
+        emit("model.input", {
           changedLineCount: context.changedLines.length,
-          diffBytes: new TextEncoder().encode(context.diff).byteLength,
-          estimatedDiffTokens: Math.ceil(
-            new TextEncoder().encode(context.diff).byteLength / 4,
-          ),
-          structuralFileCount: context.reviewedFiles.filter(
+          estimatedPatchTokens: Math.ceil(patchBytes / 4),
+          patchBytes,
+          structuralFileCount: context.files.filter(
             (file) => file.mode === "structural",
           ).length,
           surfaceCount: context.surface?.length ?? 0,
-          textualFileCount: context.reviewedFiles.filter(
+          textualFileCount: context.files.filter(
             (file) => file.mode === "textual",
           ).length,
-          truncated: context.truncated ?? false,
+          truncated: context.truncated,
         });
-        const modelOutput = modelReviewOutputSchema.parse(
-          context.reviewedFiles.length === 0
+        const reviewResult =
+          context.files.length === 0
             ? {
-                findings: [],
-                summary:
-                  "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
+                output: {
+                  findings: [],
+                  summary:
+                    "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
+                },
+                promptTruncated: false,
               }
-            : await services.model.review(job, context),
-        );
+            : await services.model.review(job, context);
+        const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
+        const findings = selectValidFindings(modelOutput.findings, context);
         return modelReviewOutputSchema.parse({
-          ...modelOutput,
-          findings: selectValidFindings(
-            modelOutput.findings,
-            context.changedLines,
-          ),
-          summary: markPartialReviewSummary(
+          findings,
+          summary: composeReviewSummary(
             modelOutput.summary,
-            context.truncated ?? false,
+            findings,
+            context.truncated || reviewResult.promptTruncated,
           ),
         });
       } catch (error) {
@@ -484,49 +274,40 @@ export async function executeReviewWorkflow(
       }
     });
 
-    await moveTo("begin-publication", "running", "publishing");
-    const isCurrent = await step.do(
+    await moveTo("begin-publication", "running", "publishing", false);
+    const currentBeforePublication = await step.do(
       "revalidate-current-head",
       publicationStep,
-      () =>
-        executeGitHubOperation(
-          async () =>
-            (await services.ledger.isLatestRun(run.id)) &&
-            (await services.readCurrentHead()) ===
-              job.envelope.pullRequest.headSha,
-        ),
+      async () =>
+        (await services.ledger.isLatestRun(run.id)) &&
+        (await services.readCurrentHead()) === job.envelope.pullRequest.headSha,
     );
-    if (!isCurrent) {
-      await moveTo("mark-obsolete", "publishing", "obsolete");
-      await step.do("cleanup-obsolete-repository", repositoryStep, () =>
-        services.executor.cleanup(job.runId),
+    if (!currentBeforePublication) {
+      return await completeObsolete(
+        "publishing",
+        "mark-obsolete-and-schedule-cleanup",
+        true,
       );
-      logger.emit("review.completed", {
-        ...logContext,
-        durationMs: Math.max(0, milliseconds() - startedAt),
-        findingsPublished: 0,
-        outcome: "obsolete",
-      });
-      return { findingsPublished: 0, outcome: "obsolete" } as const;
     }
 
     let findingsPublished = 0;
     for (const [index, finding] of output.findings.entries()) {
       if (classifyFindingPublication(finding) !== "inline") continue;
-      const published = await step.do(
+      const result = await step.do(
         `publish-inline-${index + 1}`,
         publicationStep,
-        () =>
-          executeGitHubOperation(async () => {
+        async () => {
+          const github = await services.createMutationContext();
+          try {
             const findingId = await createFindingId(run.id, {
               diagnostic: finding.diagnostic,
               endLine: finding.location.line,
               path: finding.location.path,
               startLine: finding.location.startLine ?? finding.location.line,
             });
-            return await publishOnce(
+            const published = await publishAuthorized(
               services.ledger,
-              services.publisher,
+              github.publisher,
               run.id,
               findingId,
               "inline",
@@ -539,142 +320,110 @@ export async function executeReviewWorkflow(
                   ? {}
                   : { startLine: finding.location.startLine }),
               },
+              () => authorizeMutation(github, "review"),
             );
-          }),
+            return { authorized: true, published } as const;
+          } catch (error) {
+            if (isReviewMutationNotAuthorizedError(error)) {
+              return { authorized: false, published: false } as const;
+            }
+            throw error;
+          }
+        },
       );
-      if (published) findingsPublished += 1;
+      if (!result.authorized) {
+        return await completeObsolete(
+          "publishing",
+          "mark-obsolete-during-publication",
+          true,
+        );
+      }
+      if (result.published) findingsPublished += 1;
     }
-    await step.do("publish-summary", publicationStep, () =>
-      executeGitHubOperation(() =>
-        publishOnce(
-          services.ledger,
-          services.publisher,
-          run.id,
-          "summary",
-          "summary",
-          output.summary,
-          {},
-        ),
-      ),
+
+    const summaryResult = await step.do(
+      "publish-summary",
+      publicationStep,
+      async () => {
+        const github = await services.createMutationContext();
+        try {
+          const published = await publishAuthorized(
+            services.ledger,
+            github.publisher,
+            run.id,
+            "summary",
+            "summary",
+            output.summary,
+            {},
+            () => authorizeMutation(github, "review"),
+          );
+          return { authorized: true, published } as const;
+        } catch (error) {
+          if (isReviewMutationNotAuthorizedError(error)) {
+            return { authorized: false, published: false } as const;
+          }
+          throw error;
+        }
+      },
     );
-    await moveTo("complete-run", "publishing", "completed");
-    await step.do("cleanup-completed-repository", repositoryStep, () =>
-      services.executor.cleanup(job.runId),
+    if (!summaryResult.authorized) {
+      return await completeObsolete(
+        "publishing",
+        "mark-obsolete-before-summary",
+        true,
+      );
+    }
+
+    const completedAt = await moveTo(
+      "complete-run-and-schedule-cleanup",
+      "publishing",
+      "completed",
+      true,
     );
     const result = { findingsPublished, outcome: "completed" } as const;
-    logger.emit("review.completed", {
-      ...logContext,
-      durationMs: Math.max(0, milliseconds() - startedAt),
+    emit("review.completed", {
+      durationMs: durationFrom(rawEvent.timestamp, completedAt),
       ...result,
     });
     return result;
   } catch (error) {
-    logger.emit("review.failed", {
-      ...logContext,
-      durationMs: Math.max(0, milliseconds() - startedAt),
-      errorKind: errorKind(error),
-    });
-    try {
-      await step.do("mark-review-terminal", stateStep, () =>
-        Promise.resolve(services.ledger.markTerminal(run.id, now())),
-      );
-    } catch (terminalError) {
-      logger.emit("review.terminalization_failed", {
-        ...logContext,
-        errorKind: errorKind(terminalError),
+    const terminal = await step
+      .do("mark-review-terminal-and-schedule-cleanup", stateStep, async () => {
+        const occurredAt = now();
+        const changed = await services.ledger.markTerminalAndRequestCleanup(
+          run.id,
+          occurredAt,
+          repositoryStarted,
+        );
+        return { changed, occurredAt };
+      })
+      .catch((terminalError: unknown) => {
+        emit("review.terminalization_failed", {
+          errorKind: errorKind(terminalError),
+        });
+        return undefined;
       });
-    }
-    if (repositoryStarted) {
-      try {
-        await step.do("cleanup-failed-repository", repositoryStep, () =>
-          services.executor.cleanup(job.runId),
-        );
-      } catch (cleanupError) {
-        logger.emit("review.cleanup_failed", {
-          ...logContext,
-          errorKind: errorKind(cleanupError),
-        });
-      }
-    }
-    if (runClaimed) {
-      try {
-        await step.do("publish-failure-notice", publicationStep, () =>
-          executeGitHubOperation(() =>
-            publishFailureNotice(services.publisher, run.id),
-          ),
-        );
-      } catch (publicationError) {
-        logger.emit("review.failure_notice_failed", {
-          ...logContext,
-          errorKind: errorKind(publicationError),
-        });
-      }
-    }
-    throw error;
-  }
-}
-
-export async function markReviewTerminal(
-  env: Cloudflare.Env,
-  job: ReviewJob,
-  now = () => new Date().toISOString(),
-) {
-  const ledger = env.REVIEW_LEDGERS.getByName(
-    prKeyFor(job),
-  ) as unknown as WorkflowLedger;
-  await ledger.markTerminal(job.runId as RunId, now());
-}
-
-export async function executeReviewJob(
-  env: Cloudflare.Env,
-  job: ReviewJob,
-  runtime: ReviewRuntime = {},
-) {
-  const logger = runtime.logger ?? consoleLogger;
-  const milliseconds = runtime.milliseconds ?? Date.now;
-  const startedAt = milliseconds();
-  const logContext = {
-    pullRequestNumber: job.envelope.pullRequest.number,
-    repositoryId: job.envelope.repository.id,
-    runId: job.runId,
-  };
-  logger.emit("review.started", logContext);
-  const services = createReviewServices(env, job, runtime, logger, logContext);
-  let prepared = false;
-  const repository = {
-    loadContext: async () => {
-      prepared = true;
-      await services.prepareRepository();
-      return services.loadContext();
-    },
-  };
-  const useCase = new ExecuteReview({
-    clock: { now: runtime.now ?? (() => new Date().toISOString()) },
-    ledger: services.ledger,
-    model: services.model,
-    publisher: services.publisher,
-    pullRequest: {
-      currentHeadSha: services.readCurrentHead,
-    },
-    repository,
-  });
-  try {
-    const result = await useCase.execute(job, job.envelope.deliveryId);
-    logger.emit("review.completed", {
-      ...logContext,
-      durationMs: Math.max(0, milliseconds() - startedAt),
-      findingsPublished: result.findingsPublished,
-      outcome: result.outcome,
-    });
-    return result;
-  } catch (error) {
-    logger.emit("review.failed", {
-      ...logContext,
-      durationMs: Math.max(0, milliseconds() - startedAt),
+    emit("review.failed", {
+      durationMs:
+        terminal === undefined
+          ? 0
+          : durationFrom(rawEvent.timestamp, terminal.occurredAt),
       errorKind: errorKind(error),
     });
+    if (runClaimed && terminal?.changed === true) {
+      await step
+        .do("publish-failure-notice", publicationStep, async () => {
+          const github = await services.createMutationContext();
+          await publishFailureNoticeAuthorized(github.publisher, run.id, () =>
+            authorizeMutation(github, "failure"),
+          );
+        })
+        .catch((publicationError: unknown) => {
+          emit("review.failure_notice_failed", {
+            errorKind: errorKind(publicationError),
+          });
+        });
+    }
     throw error;
-  } finally {
-    if (prepared) await services.executor.cleanup(job.runId);
   }
 }

@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "holon-repository-executor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "containers": [
+    {
+      "class_name": "HolonSandbox",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 10,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SANDBOXES",
+        "class_name": "HolonSandbox",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["HolonSandbox"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+}

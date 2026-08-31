@@ -55,6 +55,21 @@ PR.
 : SHA do commit mais recente da branch de origem do PR no momento em que a run
 foi criada.
 
+**Causal admission**
+: Política que decide qual run pode agir usando, nesta ordem, o relógio causal
+do PR (`updatedAt`), o recebimento do webhook e o run ID como desempate
+determinístico. Ordem de consumo da Queue não concede autoridade.
+
+**Credential broker**
+: Entrypoint confiável do control plane que autoriza container, run e
+repositório antes de emitir uma credencial GitHub efêmera e restrita a um único
+repository ID. A credencial não é persistida nem entregue ao Sandbox.
+
+**Durable cleanup**
+: Obrigação persistida atomicamente ao terminalizar uma run que criou Sandbox.
+Um alarm do ledger repete a destruição idempotente até confirmação e só então
+remove o credential scope.
+
 **Idempotency key**
 : Identificador estavel que impede que a mesma entrega ou efeito externo seja
 processado mais de uma vez.

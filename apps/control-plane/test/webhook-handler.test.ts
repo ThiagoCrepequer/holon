@@ -26,6 +26,7 @@ const validPayload = {
   pull_request: {
     base: { sha: "b".repeat(40) },
     head: { sha: "a".repeat(40) },
+    updated_at: "2026-08-29T12:00:00Z",
   },
   repository: {
     full_name: "acme/api",
@@ -76,7 +77,7 @@ describe("GitHub webhook HTTP boundary", () => {
     expect(result.sent).toHaveLength(1);
     expect(result.sent[0]).toMatchObject({
       deliveryId: "github:delivery-123",
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
   });
 

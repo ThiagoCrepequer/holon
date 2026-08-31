@@ -7,9 +7,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildCheckoutPlan,
   buildToolExecution,
+  classifyPullRequestDiffFile,
   classifyReviewPath,
+  isReviewablePullRequestDiffFile,
   isReviewablePath,
   selectReviewableFiles,
+  splitPullRequestDiff,
+  trustedAstGrepConfigPath,
 } from "../src/index.js";
 
 const request = executorRequestSchema.parse({
@@ -43,6 +47,7 @@ describe("repository execution policy", () => {
           "/workspace/repository",
         ],
         cwd: "/workspace",
+        maxOutputBytes: 10_000,
         stage: "initialize",
         timeoutMs: 10_000,
       },
@@ -57,6 +62,7 @@ describe("repository execution policy", () => {
           "+refs/pull/7/head:refs/holon/head",
         ],
         cwd: "/workspace/repository",
+        maxOutputBytes: 20_000,
         stage: "fetch",
         timeoutMs: 60_000,
       },
@@ -75,6 +81,7 @@ describe("repository execution policy", () => {
           "a".repeat(40),
         ],
         cwd: "/workspace/repository",
+        maxOutputBytes: 10_000,
         stage: "checkout",
         timeoutMs: 20_000,
       },
@@ -120,6 +127,9 @@ describe("repository execution policy", () => {
     ["generated/client.ts", undefined],
     ["src/__generated__/schema.ts", undefined],
     ["src/client.generated.ts", undefined],
+    ["schemas/client.generated.json", undefined],
+    ["schemas/CLIENT.GENERATED.JSON", undefined],
+    ["schemas/client-generated.yaml", undefined],
     ["lib/model.g.dart", undefined],
     ["lib/model.freezed.dart", undefined],
     ["docs/how-code-is-generated.md", "textual"],
@@ -131,12 +141,20 @@ describe("repository execution policy", () => {
     [".venv/lib/site.py", undefined],
     ["Podfile.lock", undefined],
     ["Package.resolved", undefined],
+    ["package.resolved", undefined],
     [".terraform.lock.hcl", undefined],
     ["pubspec.lock", undefined],
     ["dependencies/custom.lock", undefined],
+    ["bun.lockb", undefined],
+    ["gradle.lockfile", undefined],
+    ["npm-shrinkwrap.json", undefined],
+    ["NPM-SHRINKWRAP.JSON", undefined],
     ["assets/logo.png", undefined],
+    ["assets/LOGO.PNG", undefined],
     ["secrets/private.pem", undefined],
+    ["secrets/PRIVATE.PEM", undefined],
     [".env.production", undefined],
+    [".ENV.PRODUCTION", undefined],
     ["../escape.ts", undefined],
     ["src/bad\nname.ts", undefined],
   ])("classifies %s as review mode %s", (path, mode) => {
@@ -149,6 +167,67 @@ describe("repository execution policy", () => {
       selectReviewableFiles(["z.ts", "README.md", "a.ts", "a.ts"], 3),
     ).toEqual(["README.md", "a.ts", "z.ts"]);
     expect(() => selectReviewableFiles(["a.ts"], 0)).toThrow();
+  });
+
+  it.each([
+    ["renamed", ".env.production", "docs/configuration.txt"],
+    ["renamed", "docs/configuration.txt", ".env.production"],
+    ["copied", "secrets/private.pem", "src/public-key.txt"],
+    ["copied", "src/public-key.txt", "secrets/private.pem"],
+  ] as const)(
+    "rejects a %s when either side is excluded (%s -> %s)",
+    (changeType, oldPath, newPath) => {
+      const operation = changeType === "renamed" ? "rename" : "copy";
+      const [file] = splitPullRequestDiff(
+        [
+          `diff --git a/${oldPath} b/${newPath}`,
+          "similarity index 100%",
+          `${operation} from ${oldPath}`,
+          `${operation} to ${newPath}`,
+        ].join("\n"),
+      );
+
+      if (file === undefined) throw new Error("Expected one parsed diff file");
+      expect(file.changeType).toBe(changeType);
+      expect(classifyPullRequestDiffFile(file)).toBeUndefined();
+      expect(isReviewablePullRequestDiffFile(file)).toBe(false);
+    },
+  );
+
+  it("classifies a safe rename using its compatible destination path", () => {
+    const [file] = splitPullRequestDiff(
+      [
+        "diff --git a/src/old.ts b/src/new.ts",
+        "similarity index 100%",
+        "rename from src/old.ts",
+        "rename to src/new.ts",
+      ].join("\n"),
+    );
+
+    expect(file).toBeDefined();
+    expect(classifyPullRequestDiffFile(file!)).toBe("structural");
+    expect(isReviewablePullRequestDiffFile(file!)).toBe(true);
+  });
+
+  it("fails closed when change metadata and the compatible path disagree", () => {
+    expect(
+      classifyPullRequestDiffFile({
+        changeType: "modified",
+        newPath: "src/new.ts",
+        oldPath: "src/old.ts",
+        patch: "",
+        path: "src/new.ts",
+      }),
+    ).toBeUndefined();
+    expect(
+      classifyPullRequestDiffFile({
+        changeType: "added",
+        newPath: "src/new.ts",
+        oldPath: "src/old.ts",
+        patch: "",
+        path: "src/new.ts",
+      }),
+    ).toBeUndefined();
   });
 
   it("maps validated tools to fixed executables and argv", () => {
@@ -191,12 +270,15 @@ describe("repository execution policy", () => {
     expect(structuralArgv.slice(0, 7)).toEqual([
       "ast-grep",
       "run",
+      "--config",
+      trustedAstGrepConfigPath,
       "--json=stream",
       "--lang",
       "typescript",
-      "--pattern",
-      "function $F($$$A) { $$$B }",
     ]);
+    expect(trustedAstGrepConfigPath).toBe("/opt/holon/sgconfig.yml");
+    expect(structuralArgv).toContain("--pattern");
+    expect(structuralArgv).toContain("function $F($$$A) { $$$B }");
     expect(structuralArgv).toContain("**/*.{ts,mts,cts}");
     expect(structuralArgv).toContain("!**/vendor/**");
     expect(structuralArgv.slice(-2)).toEqual(["--", "."]);
@@ -261,6 +343,65 @@ describe("repository execution policy", () => {
       name: "search_text",
     });
     expect("argv" in execution ? execution.argv : []).toContain(glob);
+  });
+
+  it.each([
+    [".env.production", "!**/.env.*"],
+    ["bun.lockb", "!**/bun.lockb"],
+    ["gradle.lockfile", "!**/gradle.lockfile"],
+    ["npm-shrinkwrap.json", "!**/npm-shrinkwrap.json"],
+    [
+      "assets/logo.png",
+      "!**/*.{7z,a,ai,apk,avi,avif,bin,bmp,bz2,class,db,der,dll,doc,docx,dylib,ear,eot,exe,gif,gz,ico,iso,jar,jpeg,jpg,jks,keystore,mov,mp3,mp4,o,ogg,otf,p12,pdf,pfx,png,ppt,pptx,psd,pyc,rar,so,sqlite,sqlite2,sqlite3,tar,tiff,tif,tgz,ttf,war,wasm,wav,webm,webp,woff,woff2,xls,xlsx,xz,zip}",
+    ],
+  ])("derives a search exclusion for classified path %s", (path, glob) => {
+    expect(classifyReviewPath(path)).toBeUndefined();
+    const execution = buildTool({
+      arguments: { maxResults: 5, query: "symbol" },
+      name: "search_text",
+    });
+    expect("argv" in execution ? execution.argv : []).toContain(glob);
+  });
+
+  it.each([
+    ["schemas/client.generated.json", "!**/*.generated.", "json"],
+    ["schemas/client-generated.yaml", "!**/*-generated.", "yaml"],
+  ])(
+    "derives the generated-file search exclusion for %s",
+    (path, prefix, fileExtension) => {
+      expect(classifyReviewPath(path)).toBeUndefined();
+      const execution = buildTool({
+        arguments: { maxResults: 5, query: "symbol" },
+        name: "search_text",
+      });
+      const argv = "argv" in execution ? execution.argv : [];
+      expect(
+        argv.some(
+          (argument) =>
+            argument.startsWith(prefix) && argument.includes(fileExtension),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it("excludes secret env files globally while restoring safe templates", () => {
+    const execution = buildTool({
+      arguments: { maxResults: 5, query: "PLACEHOLDER" },
+      name: "search_text",
+    });
+    const argv = "argv" in execution ? execution.argv : [];
+
+    expect(argv.indexOf("**/*")).toBeLessThan(argv.indexOf("!**/.env.*"));
+    expect(argv.indexOf("!**/.env.*")).toBeLessThan(
+      argv.indexOf("**/.env.example"),
+    );
+    expect(argv).toContain("!**/.env");
+    expect(argv).toContain("!**/.env.*");
+    expect(argv).toContain("**/.env.example");
+    expect(argv).toContain("**/.env.sample");
+    expect(argv).toContain("**/.env.template");
+    expect(argv).toContain("!**/.[eE][nN][vV].*");
+    expect(argv).toContain("**/.[eE][nN][vV].[eE][xX][aA][mM][pP][lL][eE]");
   });
 
   it("denies ignored paths to repository tools and restricts structural search", () => {
