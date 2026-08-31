@@ -56,8 +56,14 @@ describe("runEvaluationSuite", () => {
       first.id,
       second.id,
     ]);
-    expect(subject).toHaveBeenNthCalledWith(1, first.input);
-    expect(subject).toHaveBeenNthCalledWith(2, second.input);
+    expect(subject).toHaveBeenNthCalledWith(1, {
+      caseId: first.id,
+      ...first.input,
+    });
+    expect(subject).toHaveBeenNthCalledWith(2, {
+      caseId: second.id,
+      ...second.input,
+    });
   });
 
   it("classifies invalid output without leaking validation details", async () => {
@@ -127,6 +133,33 @@ describe("runEvaluationSuite", () => {
     });
   });
 
+  it("preserves bounded telemetry without using it for grading", async () => {
+    const passingOutput = evalSubjectOutputSchema.parse(createPassingOutput());
+    const output = evalSubjectOutputSchema.parse({
+      ...passingOutput,
+      telemetry: {
+        attempts: [
+          {
+            attempt: "investigation",
+            inputTokens: 10,
+            outputTokens: 5,
+            toolCallCount: 1,
+            totalTokens: 15,
+          },
+        ],
+        durationMs: 25,
+      },
+    });
+    const result = await runEvaluationSuite(
+      [createEvalCase()],
+      async () => output,
+      evaluationConfiguration,
+    );
+
+    expect(result.caseRuns[0]).toMatchObject({ telemetry: output.telemetry });
+    expect(result.passedCases).toBe(1);
+  });
+
   it("classifies subject errors without retaining arbitrary messages", async () => {
     const result = await runEvaluationSuite(
       [createEvalCase()],
@@ -142,6 +175,13 @@ describe("runEvaluationSuite", () => {
       invalidOutputs: 0,
       subjectErrors: 1,
     });
+    expect(result.caseRuns).toEqual([
+      {
+        caseId: "correctness.return-null",
+        outcome: "subject_error",
+        reason: "unknown",
+      },
+    ]);
     expect(JSON.stringify(result)).not.toContain("secret model response");
   });
 

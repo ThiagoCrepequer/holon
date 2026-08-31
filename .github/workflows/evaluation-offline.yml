@@ -1,0 +1,48 @@
+name: Evaluation (offline)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-offline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.4.0
+
+      - name: Enable the pinned package manager
+        run: corepack enable
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify the mock evaluation harness
+        run: pnpm --filter @holon/evaluation test
+
+      - name: Evaluate recorded synthetic outputs
+        env:
+          EVALUATION_REPORT_PATH: artifacts/evaluation/recorded-output.json
+        run: pnpm --filter @holon/evaluation evaluate:recorded
+
+      - name: Upload the evaluation report
+        if: ${{ always() && hashFiles('artifacts/evaluation/recorded-output.json') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evaluation-recorded-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: artifacts/evaluation/recorded-output.json
+          retention-days: 14

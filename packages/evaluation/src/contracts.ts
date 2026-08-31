@@ -12,12 +12,27 @@ const evalIdentifierSchema = z
   .max(100)
   .regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u);
 
-export const evalRunConfigurationSchema = z.strictObject({
-  corpusVersion: evalIdentifierSchema,
-  policyVersion: evalIdentifierSchema,
-  promptVersion: evalIdentifierSchema,
-  subjectVersion: evalIdentifierSchema,
-});
+export const evalRunConfigurationSchema = z
+  .strictObject({
+    corpusVersion: evalIdentifierSchema,
+    mode: z.enum(["mock-model", "recorded-output", "live-model"]),
+    modelReference: z.string().trim().min(1).max(256).nullable(),
+    policyVersion: evalIdentifierSchema,
+    promptVersion: evalIdentifierSchema,
+    subjectVersion: evalIdentifierSchema,
+  })
+  .superRefine((configuration, context) => {
+    if (
+      (configuration.mode === "live-model") !==
+      (configuration.modelReference !== null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "only live-model evaluations must identify a model reference",
+        path: ["modelReference"],
+      });
+    }
+  });
 
 const diagnosticTermSchema = z.string().trim().min(2).max(100);
 
@@ -129,12 +144,28 @@ export const evalCaseSchema = z
     }
   });
 
+export const evalModelAttemptSchema = z.strictObject({
+  attempt: z.enum(["investigation", "recovery"]),
+  finishReason: z.string().trim().min(1).max(100).optional(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  toolCallCount: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative().optional(),
+});
+
+export const evalSubjectTelemetrySchema = z.strictObject({
+  attempts: z.array(evalModelAttemptSchema).max(2),
+  durationMs: z.number().int().nonnegative(),
+});
+
 export const evalSubjectOutputSchema = z.strictObject({
   output: modelReviewOutputSchema,
   partial: z.boolean(),
+  telemetry: evalSubjectTelemetrySchema.optional(),
 });
 
 export type EvalCase = z.infer<typeof evalCaseSchema>;
 export type EvalRunConfiguration = z.infer<typeof evalRunConfigurationSchema>;
+export type EvalSubjectTelemetry = z.infer<typeof evalSubjectTelemetrySchema>;
 export type EvalSubjectOutput = z.infer<typeof evalSubjectOutputSchema>;
 export type ExpectedFinding = z.infer<typeof expectedFindingSchema>;

@@ -4,6 +4,8 @@ import { evalCaseSchema, type EvalCase } from "../src/index.js";
 
 export const evaluationConfiguration = {
   corpusVersion: "baseline-v1",
+  mode: "recorded-output",
+  modelReference: null,
   policyVersion: "review-policy-v1",
   promptVersion: "review-prompt-v1",
   subjectVersion: "recorded-output-v1",
