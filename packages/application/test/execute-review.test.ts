@@ -40,6 +40,7 @@ const job: ReviewJob = reviewJobSchema.parse({
 const context: ReviewContext = {
   changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
   diff: "@@ -9,0 +10,1 @@\n+return null;",
+  reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
 };
 
 const output: ModelReviewOutput = {

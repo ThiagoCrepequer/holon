@@ -26,9 +26,9 @@ const request = executorRequestSchema.parse({
   schemaVersion: 1,
 });
 
-function ripgrepMatch(index: number): string {
+function ripgrepMatch(index: number, path = "src/index.ts"): string {
   return JSON.stringify({
-    data: { lines: { text: `match-${index}` } },
+    data: { lines: { text: `match-${index}` }, path: { text: path } },
     type: "match",
   });
 }
@@ -42,6 +42,7 @@ class FakeSandbox implements SandboxPort {
   public egressBlocked = false;
   public readonly commands: string[][] = [];
   public readonly files = new Map<string, string>();
+  public readonly readPaths: string[] = [];
 
   public configureGitHubEgress(
     token: string,
@@ -61,6 +62,7 @@ class FakeSandbox implements SandboxPort {
   }
 
   public readFile(path: string): Promise<string> {
+    this.readPaths.push(path);
     const stored = this.files.get(path);
     if (stored !== undefined) return Promise.resolve(stored);
     return Promise.resolve(
@@ -121,11 +123,28 @@ class FakeSandbox implements SandboxPort {
         stdout: `${argv.at(-1)}\n`,
         truncated: false,
       });
+    if (argv[0] === "sed") {
+      const range = argv[3]?.match(/^(\d+),(\d+)p$/u);
+      if (range === null || range === undefined)
+        throw new TypeError("Unexpected sed range in test sandbox");
+      const startLine = Number(range[1]);
+      const endLine = Number(range[2]);
+      const stdout = Array.from(
+        { length: endLine - startLine + 1 },
+        (_, index) => `line ${startLine + index}`,
+      ).join("\n");
+      return Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${stdout}\n`,
+        truncated: false,
+      });
+    }
     if (argv[0] === "rg")
       return Promise.resolve({
         exitCode: 0,
         stderr: "",
-        stdout: '{"type":"match"}',
+        stdout: ripgrepMatch(1),
         truncated: false,
       });
     return Promise.resolve({
@@ -147,7 +166,7 @@ describe("RepositoryExecutorService", () => {
     await expect(service.hasContext(request.runId)).resolves.toBe(true);
   });
 
-  it("checks out exact commits, blocks clone egress and persists a bounded TS/JS context", async () => {
+  it("checks out exact commits, blocks clone egress and persists a bounded structural context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
@@ -163,6 +182,7 @@ describe("RepositoryExecutorService", () => {
     await expect(service.loadContext(request.runId)).resolves.toEqual({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       diff: request.canonicalDiff,
+      reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
       surface: [
         {
           change: "added",
@@ -187,6 +207,64 @@ describe("RepositoryExecutorService", () => {
       sandbox.files.get("/workspace/holon-review-context.json"),
     ).toBeDefined();
     expect(sandbox.commands.flat()).not.toContain("npm");
+  });
+
+  it("includes safe textual patches while ignoring binary, lock, generated, vendored and minified files", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const textualRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/README.md b/README.md",
+        "--- a/README.md",
+        "+++ b/README.md",
+        "@@ -1 +1,2 @@",
+        " # Project",
+        "+Document the runtime contract.",
+        "diff --git a/package-lock.json b/package-lock.json",
+        "--- a/package-lock.json",
+        "+++ b/package-lock.json",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/generated/client.py b/generated/client.py",
+        "--- a/generated/client.py",
+        "+++ b/generated/client.py",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/vendor/library.go b/vendor/library.go",
+        "--- a/vendor/library.go",
+        "+++ b/vendor/library.go",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/public/app.min.js b/public/app.min.js",
+        "--- a/public/app.min.js",
+        "+++ b/public/app.min.js",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/assets/logo.png b/assets/logo.png",
+        "new file mode 100644",
+        "index 0000000..1234567",
+        "Binary files /dev/null and b/assets/logo.png differ",
+      ].join("\n"),
+    });
+
+    await expect(
+      service.prepare(textualRequest, "installation-token"),
+    ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+      changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
+      reviewedFiles: [{ mode: "textual", path: "README.md" }],
+      surface: [],
+    });
+    const context = await service.loadContext(request.runId);
+    expect(context.diff).toContain("README.md");
+    expect(context.diff).not.toMatch(
+      /package-lock|generated\/client|vendor\/library|app\.min|logo\.png/u,
+    );
   });
 
   it("destroys the sandbox immediately when checkout fails permanently", async () => {
@@ -259,6 +337,12 @@ describe("RepositoryExecutorService", () => {
 
   it("runs validated search and bounded line reads in the existing sandbox", async () => {
     const sandbox = new FakeSandbox();
+    const originalRun = sandbox.run.bind(sandbox);
+    let readOptions: Parameters<SandboxPort["run"]>[1] | undefined;
+    sandbox.run = (argv, options) => {
+      if (argv[0] === "sed") readOptions = options;
+      return originalRun(argv, options);
+    };
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     await expect(
@@ -269,7 +353,7 @@ describe("RepositoryExecutorService", () => {
           name: "search_text",
         }),
       ),
-    ).resolves.toEqual({ content: '{"type":"match"}', truncated: false });
+    ).resolves.toEqual({ content: ripgrepMatch(1), truncated: false });
     await expect(
       service.runTool(
         request.runId,
@@ -282,6 +366,181 @@ describe("RepositoryExecutorService", () => {
       content: "line 10\nline 11\nline 12",
       truncated: false,
     });
+    expect(sandbox.readPaths).toEqual([]);
+    expect(sandbox.commands).toContainEqual([
+      "sed",
+      "-n",
+      "-e",
+      "10,12p",
+      "/workspace/repository/src/index.ts",
+    ]);
+    expect(readOptions).toEqual({
+      cwd: "/workspace/repository",
+      maxOutputBytes: 100_000,
+      timeoutMs: 20_000,
+    });
+  });
+
+  it("reviews deletion-only patches instead of treating them as an empty scope", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const deletionRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/src/policy.ts b/src/policy.ts",
+        "--- a/src/policy.ts",
+        "+++ b/src/policy.ts",
+        "@@ -1 +0,0 @@",
+        "-assertAuthorized(request);",
+      ].join("\n"),
+    });
+
+    await expect(
+      service.prepare(deletionRequest, "installation-token"),
+    ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+      changedLines: [],
+      reviewedFiles: [{ mode: "structural", path: "src/policy.ts" }],
+    });
+    expect((await service.loadContext(request.runId)).diff).toContain(
+      "-assertAuthorized(request);",
+    );
+  });
+
+  it("reserves early budget for textual context when structural patches are large", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const largeLine = "x".repeat(58_000);
+    const documentationLine = "d".repeat(5_000);
+    const mixedRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        "diff --git a/src/a.ts b/src/a.ts",
+        "--- a/src/a.ts",
+        "+++ b/src/a.ts",
+        "@@ -0,0 +1 @@",
+        `+${largeLine}`,
+        "diff --git a/src/b.ts b/src/b.ts",
+        "--- a/src/b.ts",
+        "+++ b/src/b.ts",
+        "@@ -0,0 +1 @@",
+        `+${largeLine}`,
+        "diff --git a/README.md b/README.md",
+        "--- a/README.md",
+        "+++ b/README.md",
+        "@@ -0,0 +1 @@",
+        `+${documentationLine}`,
+      ].join("\n"),
+    });
+
+    await expect(
+      service.prepare(mixedRequest, "installation-token"),
+    ).resolves.toMatchObject({ fileCount: 2, truncated: true });
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+      reviewedFiles: [
+        { mode: "structural", path: "src/a.ts" },
+        { mode: "textual", path: "README.md" },
+      ],
+    });
+  });
+
+  it("enforces review exclusions on tool capabilities and search results", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    sandbox.files.set(
+      "/workspace/holon-review-context.json",
+      JSON.stringify({
+        changedLines: [{ line: 1, path: "README.md", side: "RIGHT" }],
+        diff: "+documentation",
+        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+      }),
+    );
+
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: {
+            language: "typescript",
+            maxResults: 5,
+            pattern: "$A",
+          },
+          name: "search_structure",
+        }),
+      ),
+    ).rejects.toThrow("unavailable without structural review files");
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { path: ".env.production" },
+          name: "read_file",
+        }),
+      ),
+    ).rejects.toThrow("excluded from review");
+
+    sandbox.run = () =>
+      Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        stdout: [
+          ripgrepMatch(1, "src/index.ts"),
+          ripgrepMatch(2, "vendor/library.ts"),
+          ripgrepMatch(3, ".env.production"),
+        ].join("\n"),
+        truncated: false,
+      });
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { maxResults: 5, query: "match" },
+          name: "search_text",
+        }),
+      ),
+    ).resolves.toEqual({
+      content: ripgrepMatch(1, "src/index.ts"),
+      truncated: false,
+    });
+  });
+
+  it("returns only structural paths from ast-grep streaming output", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    sandbox.files.set(
+      "/workspace/holon-review-context.json",
+      JSON.stringify({
+        changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
+        diff: "+export const value = 1;",
+        reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
+      }),
+    );
+    const allowed = JSON.stringify({ file: "src/index.ts", text: "value" });
+    sandbox.run = () =>
+      Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        stdout: [
+          allowed,
+          JSON.stringify({ file: "README.md", text: "value" }),
+          JSON.stringify({ file: "vendor/library.ts", text: "value" }),
+        ].join("\n"),
+        truncated: false,
+      });
+
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: {
+            language: "typescript",
+            maxResults: 5,
+            pattern: "$A",
+          },
+          name: "search_structure",
+        }),
+      ),
+    ).resolves.toEqual({ content: allowed, truncated: false });
   });
 
   it("rejects a checkout whose resolved head differs from the signed webhook", async () => {
@@ -332,6 +591,31 @@ describe("RepositoryExecutorService", () => {
     ).rejects.toThrow("escapes the repository");
   });
 
+  it("rejects an allowed-looking symlink that resolves to an ignored path", async () => {
+    const sandbox = new FakeSandbox();
+    const original = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv[0] === "realpath"
+        ? Promise.resolve({
+            exitCode: 0,
+            stderr: "",
+            stdout: "/workspace/repository/.env.production\n",
+            truncated: false,
+          })
+        : original(argv, options);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.runTool(
+        request.runId,
+        repositoryToolCallSchema.parse({
+          arguments: { path: "src/config.ts" },
+          name: "read_file",
+        }),
+      ),
+    ).rejects.toThrow("Resolved repository tool path is excluded");
+  });
+
   it("destroys a sandbox explicitly after the workflow completes", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
@@ -358,7 +642,16 @@ describe("RepositoryExecutorService", () => {
     expect(prepared.truncated).toBe(true);
     expect(prepared.fileCount).toBe(0);
     expect(context.diff).toBe("");
-    sandbox.readFile = () => Promise.resolve("x".repeat(100_001));
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv[0] === "sed"
+        ? Promise.resolve({
+            exitCode: 0,
+            stderr: "",
+            stdout: "x".repeat(100_001),
+            truncated: true,
+          })
+        : originalRun(argv, options);
     await expect(
       service.runTool(
         request.runId,
@@ -372,7 +665,16 @@ describe("RepositoryExecutorService", () => {
 
   it("bounds file results by UTF-8 bytes rather than UTF-16 characters", async () => {
     const sandbox = new FakeSandbox();
-    sandbox.readFile = () => Promise.resolve("😀".repeat(30_000));
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv[0] === "sed"
+        ? Promise.resolve({
+            exitCode: 0,
+            stderr: "",
+            stdout: `a${"😀".repeat(30_000)}`,
+            truncated: true,
+          })
+        : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
     const result = await service.runTool(
@@ -414,6 +716,31 @@ describe("RepositoryExecutorService", () => {
       ]),
       truncated: true,
     });
+  });
+
+  it("trims long-path coordinates to the serialized context byte limit", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const longPath = `src/${"coordinate".repeat(10)}.ts`;
+    const amplifiedRequest = executorRequestSchema.parse({
+      ...request,
+      canonicalDiff: [
+        `diff --git a/${longPath} b/${longPath}`,
+        `--- a/${longPath}`,
+        `+++ b/${longPath}`,
+        "@@ -0,0 +1,5000 @@",
+        Array.from({ length: 5_000 }, () => "+x").join("\n"),
+      ].join("\n"),
+    });
+
+    const prepared = await service.prepare(amplifiedRequest, "token");
+    const context = await service.loadContext(request.runId);
+    expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
+    expect(prepared.changedLineCount).toBeGreaterThan(0);
+    expect(prepared.changedLineCount).toBeLessThan(5_000);
+    expect(prepared.truncated).toBe(true);
+    expect(context.changedLines).toHaveLength(prepared.changedLineCount);
+    expect(context.truncated).toBe(true);
   });
 
   it("rejects unexpected repository tool exit codes but accepts no-match", async () => {

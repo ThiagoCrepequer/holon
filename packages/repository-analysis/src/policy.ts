@@ -1,4 +1,8 @@
-import type { ExecutorRequest, RepositoryToolCall } from "@holon/contracts";
+import type {
+  ExecutorRequest,
+  RepositoryToolCall,
+  ReviewFileMode,
+} from "@holon/contracts";
 
 export interface CommandExecution {
   readonly argv: readonly string[];
@@ -17,9 +21,83 @@ export interface ReadFileExecution {
 
 export type ToolExecution = CommandExecution | ReadFileExecution;
 
-const supportedExtension = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/iu;
-const excludedPath =
-  /(?:^|\/)(?:node_modules|dist|build|coverage|generated|vendor)(?:\/|$)|\.min\.[cm]?js$/iu;
+const structuralExtension = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/iu;
+const excludedDirectory =
+  /(?:^|\/)(?:\.git|\.hg|\.svn|node_modules|bower_components|dist|build|coverage|generated|__generated__|vendor|vendors|third[_-]party|pods|target|\.next|\.nuxt|\.output|\.turbo|\.cache|\.terraform|\.venv|venv|site-packages)(?:\/|$)/iu;
+const generatedCodeFile =
+  /(?:\.(?:generated|gen|pb|designer)|-generated)\.(?:[cm]?[jt]sx?|c|cc|cpp|cs|dart|go|java|kt|kts|php|proto|py|rb|rs|scala|swift|vue)$|\.(?:freezed|g)\.dart$/iu;
+const minifiedFile =
+  /(?:\.min\.(?:[cm]?[jt]s|[jt]sx|css|html|json|svg)|\.map)$/iu;
+const binaryExtension =
+  /\.(?:7z|a|ai|apk|avi|avif|bin|bmp|bz2|class|db|der|dll|docx?|dylib|ear|eot|exe|gif|gz|ico|iso|jar|jpe?g|jks|keystore|mov|mp3|mp4|o|ogg|otf|p12|pdf|pfx|png|pptx?|psd|pyc|rar|so|sqlite3?|tar|tiff?|tgz|ttf|war|wasm|wav|webm|webp|woff2?|xlsx?|xz|zip)$/iu;
+const secretFile =
+  /(?:^|\/)(?:\.env(?:\.(?!example$|sample$|template$)[^/]*)?|\.netrc|\.npmrc|\.pypirc|credentials\.json|id_(?:dsa|ecdsa|ed25519|rsa)|.*\.(?:key|pem))$/iu;
+const lockFile =
+  /(?:^|\/)(?:\.terraform\.lock\.hcl|bun\.lockb?|cargo\.lock|composer\.lock|deno\.lock|flake\.lock|gemfile\.lock|go\.(?:sum|work\.sum)|gradle\.lockfile|mix\.lock|npm-shrinkwrap\.json|package-lock\.json|package\.resolved|packages\.lock\.json|pipfile\.lock|pnpm-lock\.yaml|podfile\.lock|poetry\.lock|pubspec\.lock|uv\.lock|yarn\.lock|[^/]+\.lock|[^/]+-lock\.json)$/iu;
+const ignoredSearchGlobs = [
+  "!**/.git/**",
+  "!**/.hg/**",
+  "!**/.svn/**",
+  "!**/node_modules/**",
+  "!**/bower_components/**",
+  "!**/dist/**",
+  "!**/build/**",
+  "!**/coverage/**",
+  "!**/generated/**",
+  "!**/__generated__/**",
+  "!**/vendor/**",
+  "!**/vendors/**",
+  "!**/third_party/**",
+  "!**/third-party/**",
+  "!**/Pods/**",
+  "!**/target/**",
+  "!**/.next/**",
+  "!**/.nuxt/**",
+  "!**/.output/**",
+  "!**/.turbo/**",
+  "!**/.cache/**",
+  "!**/.terraform/**",
+  "!**/.venv/**",
+  "!**/venv/**",
+  "!**/site-packages/**",
+  "!**/*.generated.*",
+  "!**/*.gen.*",
+  "!**/*.pb.*",
+  "!**/*.designer.*",
+  "!**/*.min.js",
+  "!**/*.min.mjs",
+  "!**/*.min.cjs",
+  "!**/*.min.ts",
+  "!**/*.min.mts",
+  "!**/*.min.cts",
+  "!**/*.min.jsx",
+  "!**/*.min.tsx",
+  "!**/*.min.css",
+  "!**/*.min.html",
+  "!**/*.min.json",
+  "!**/*.min.svg",
+  "!**/*.map",
+  "!**/.netrc",
+  "!**/.npmrc",
+  "!**/.pypirc",
+  "!**/credentials.json",
+  "!**/id_dsa",
+  "!**/id_ecdsa",
+  "!**/id_ed25519",
+  "!**/id_rsa",
+  "!**/*.key",
+  "!**/*.pem",
+  "!**/*-lock.json",
+  "!**/*.lock",
+  "!**/go.sum",
+  "!**/go.work.sum",
+  "!**/pnpm-lock.yaml",
+  "!**/yarn.lock",
+  "!**/.terraform.lock.hcl",
+  "!**/Package.resolved",
+  "!**/Podfile.lock",
+  "!**/pubspec.lock",
+] as const;
 
 function containsControlCharacter(value: string): boolean {
   for (const character of value) {
@@ -104,22 +182,34 @@ export function buildCheckoutPlan(
   ];
 }
 
-export function isSupportedSourcePath(path: string): boolean {
-  return (
-    isNormalizedRepositoryPath(path) &&
-    supportedExtension.test(path) &&
-    !excludedPath.test(path)
-  );
+export function classifyReviewPath(path: string): ReviewFileMode | undefined {
+  const basename = path.slice(path.lastIndexOf("/") + 1);
+  if (
+    !isNormalizedRepositoryPath(path) ||
+    excludedDirectory.test(path) ||
+    generatedCodeFile.test(basename) ||
+    minifiedFile.test(path) ||
+    binaryExtension.test(path) ||
+    secretFile.test(path) ||
+    lockFile.test(path)
+  ) {
+    return undefined;
+  }
+  return structuralExtension.test(path) ? "structural" : "textual";
 }
 
-export function selectReviewFiles(
+export function isReviewablePath(path: string): boolean {
+  return classifyReviewPath(path) !== undefined;
+}
+
+export function selectReviewableFiles(
   paths: readonly string[],
   maximumFiles: number,
 ): readonly string[] {
   if (!Number.isSafeInteger(maximumFiles) || maximumFiles <= 0) {
     throw new TypeError("maximumFiles must be a positive safe integer");
   }
-  return [...new Set(paths.filter(isSupportedSourcePath))]
+  return [...new Set(paths.filter(isReviewablePath))]
     .toSorted()
     .slice(0, maximumFiles);
 }
@@ -128,12 +218,48 @@ function searchRoots(paths: readonly string[] | undefined): readonly string[] {
   return paths === undefined || paths.length === 0 ? ["."] : paths;
 }
 
+function assertReviewablePaths(
+  paths: readonly string[] | undefined,
+  requiredMode?: ReviewFileMode,
+): void {
+  for (const path of paths ?? []) {
+    const mode = classifyReviewPath(path);
+    if (mode === undefined) {
+      throw new TypeError("Repository tool path is excluded from review");
+    }
+    if (requiredMode !== undefined && mode !== requiredMode) {
+      throw new TypeError(
+        "Structural search path must be JavaScript/TypeScript",
+      );
+    }
+  }
+}
+
+function searchGlobArguments(flag: "--glob" | "--globs"): readonly string[] {
+  return ignoredSearchGlobs.flatMap((glob) => [flag, glob]);
+}
+
+function structuralGlob(language: "javascript" | "jsx" | "tsx" | "typescript") {
+  switch (language) {
+    case "javascript":
+      return "**/*.{js,mjs,cjs}";
+    case "jsx":
+      return "**/*.jsx";
+    case "tsx":
+      return "**/*.tsx";
+    case "typescript":
+      return "**/*.{ts,mts,cts}";
+  }
+  throw new TypeError("Unsupported structural-search language");
+}
+
 export function buildToolExecution(
   call: RepositoryToolCall,
   repositoryPath: string,
 ): ToolExecution {
   assertAbsoluteNormalizedPath(repositoryPath, "repositoryPath");
   if (call.name === "read_file") {
+    assertReviewablePaths([call.arguments.path]);
     const startLine = call.arguments.startLine ?? 1;
     return {
       endLine: call.arguments.endLine ?? startLine + 199,
@@ -143,6 +269,7 @@ export function buildToolExecution(
     };
   }
   if (call.name === "search_text") {
+    assertReviewablePaths(call.arguments.paths);
     return {
       argv: [
         "rg",
@@ -150,6 +277,7 @@ export function buildToolExecution(
         "--fixed-strings",
         "--max-count",
         String(call.arguments.maxResults),
+        ...searchGlobArguments("--glob"),
         "--",
         call.arguments.query,
         ...searchRoots(call.arguments.paths),
@@ -158,6 +286,7 @@ export function buildToolExecution(
       maxOutputBytes: Math.min(100_000, call.arguments.maxResults * 10_000),
     };
   }
+  assertReviewablePaths(call.arguments.paths, "structural");
   return {
     argv: [
       "ast-grep",
@@ -167,6 +296,9 @@ export function buildToolExecution(
       call.arguments.language,
       "--pattern",
       call.arguments.pattern,
+      "--globs",
+      structuralGlob(call.arguments.language),
+      ...searchGlobArguments("--globs"),
       "--",
       ...searchRoots(call.arguments.paths),
     ],

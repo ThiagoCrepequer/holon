@@ -444,15 +444,21 @@ export async function executeReviewWorkflow(
           estimatedDiffTokens: Math.ceil(
             new TextEncoder().encode(context.diff).byteLength / 4,
           ),
+          structuralFileCount: context.reviewedFiles.filter(
+            (file) => file.mode === "structural",
+          ).length,
           surfaceCount: context.surface?.length ?? 0,
+          textualFileCount: context.reviewedFiles.filter(
+            (file) => file.mode === "textual",
+          ).length,
           truncated: context.truncated ?? false,
         });
         const modelOutput = modelReviewOutputSchema.parse(
-          context.changedLines.length === 0
+          context.reviewedFiles.length === 0
             ? {
                 findings: [],
                 summary:
-                  "No supported TypeScript or JavaScript changes require an automated review.",
+                  "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
               }
             : await services.model.review(job, context),
         );

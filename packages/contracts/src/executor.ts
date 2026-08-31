@@ -77,31 +77,73 @@ export const repositoryToolResultSchema = z.strictObject({
   truncated: z.boolean(),
 });
 
-export const reviewContextSchema = z.strictObject({
-  changedLines: z
-    .array(
-      z.strictObject({
-        line: positiveIntegerSchema,
-        path: repositoryPathSchema,
-        side: z.literal("RIGHT"),
-      }),
-    )
-    .max(5_000),
-  diff: z.string().max(120_000),
-  surface: z
-    .array(
-      z.strictObject({
-        change: z.enum(["added", "removed"]),
-        excerpt: z.string().min(1).max(300),
-        kind: z.enum(["contract", "control_flow", "persistence", "security"]),
-        line: positiveIntegerSchema,
-        path: repositoryPathSchema,
-      }),
-    )
-    .max(50)
-    .optional(),
-  truncated: z.boolean().optional(),
-});
+export const reviewFileModeSchema = z.enum(["structural", "textual"]);
+
+export const reviewContextSchema = z
+  .strictObject({
+    changedLines: z
+      .array(
+        z.strictObject({
+          line: positiveIntegerSchema,
+          path: repositoryPathSchema,
+          side: z.literal("RIGHT"),
+        }),
+      )
+      .max(5_000),
+    diff: z.string().max(120_000),
+    reviewedFiles: z
+      .array(
+        z.strictObject({
+          mode: reviewFileModeSchema,
+          path: repositoryPathSchema,
+        }),
+      )
+      .max(50),
+    surface: z
+      .array(
+        z.strictObject({
+          change: z.enum(["added", "removed"]),
+          excerpt: z.string().min(1).max(300),
+          kind: z.enum(["contract", "control_flow", "persistence", "security"]),
+          line: positiveIntegerSchema,
+          path: repositoryPathSchema,
+        }),
+      )
+      .max(50)
+      .optional(),
+    truncated: z.boolean().optional(),
+  })
+  .superRefine((context, refinement) => {
+    const modes = new Map(
+      context.reviewedFiles.map((file) => [file.path, file.mode] as const),
+    );
+    const paths = new Set(modes.keys());
+    if (paths.size !== context.reviewedFiles.length) {
+      refinement.addIssue({
+        code: "custom",
+        message: "reviewed file paths must be unique",
+        path: ["reviewedFiles"],
+      });
+    }
+    for (const [index, changedLine] of context.changedLines.entries()) {
+      if (!paths.has(changedLine.path)) {
+        refinement.addIssue({
+          code: "custom",
+          message: "changed line path must identify a reviewed file",
+          path: ["changedLines", index, "path"],
+        });
+      }
+    }
+    for (const [index, signal] of (context.surface ?? []).entries()) {
+      if (modes.get(signal.path) !== "structural") {
+        refinement.addIssue({
+          code: "custom",
+          message: "review surface path must identify a structural file",
+          path: ["surface", index, "path"],
+        });
+      }
+    }
+  });
 
 export const preparedRepositorySchema = z.strictObject({
   changedLineCount: z.number().int().nonnegative().max(5_000),
@@ -147,6 +189,7 @@ export const executorRequestSchema = z
 
 export type RepositoryToolCall = z.infer<typeof repositoryToolCallSchema>;
 export type RepositoryToolResult = z.infer<typeof repositoryToolResultSchema>;
+export type ReviewFileMode = z.infer<typeof reviewFileModeSchema>;
 export type ReviewContext = z.infer<typeof reviewContextSchema>;
 export type PreparedRepository = z.infer<typeof preparedRepositorySchema>;
 export type ExecutorRequest = z.infer<typeof executorRequestSchema>;

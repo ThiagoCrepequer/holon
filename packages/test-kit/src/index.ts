@@ -46,5 +46,6 @@ export function createReviewContext(): ReviewContext {
   return {
     changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
     diff: patch,
+    reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
   };
 }

@@ -6,5 +6,6 @@ RUN apt-get update \
     && npm install --global @ast-grep/cli@0.45.2 \
     && git --version \
     && realpath --version \
+    && sed --version \
     && rg --version \
     && ast-grep --version

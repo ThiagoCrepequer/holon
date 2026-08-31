@@ -47,6 +47,7 @@ const canonicalDiff = [
 const modelContext = {
   changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" as const }],
   diff: canonicalDiff,
+  reviewedFiles: [{ mode: "structural" as const, path: "src/index.ts" }],
 };
 
 function immediateWorkflowStep(
@@ -217,6 +218,9 @@ describe("ReviewWorkflow", () => {
           Promise.resolve({
             changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
             diff: "@@ -9,0 +10,1 @@\n+return null;",
+            reviewedFiles: [
+              { mode: "structural" as const, path: "src/index.ts" },
+            ],
           }),
         prepare: (request) => {
           executorRequest = request;
@@ -250,7 +254,7 @@ describe("ReviewWorkflow", () => {
     ]);
   });
 
-  it("publishes a deterministic summary without model cost for unsupported changes", async () => {
+  it("publishes a deterministic summary without model cost when every change is ignored", async () => {
     let modelCalls = 0;
     const result = await executeReviewWorkflow(
       env,
@@ -282,7 +286,8 @@ describe("ReviewWorkflow", () => {
         executor: {
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          loadContext: () => Promise.resolve({ changedLines: [], diff: "" }),
+          loadContext: () =>
+            Promise.resolve({ changedLines: [], diff: "", reviewedFiles: [] }),
           prepare: () =>
             Promise.resolve({
               changedLineCount: 0,
@@ -300,6 +305,77 @@ describe("ReviewWorkflow", () => {
 
     expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
     expect(modelCalls).toBe(0);
+  });
+
+  it("sends deletion-only changes to the model even without inline coordinates", async () => {
+    let modelCalls = 0;
+    const deletionDiff = [
+      "diff --git a/src/policy.ts b/src/policy.ts",
+      "--- a/src/policy.ts",
+      "+++ b/src/policy.ts",
+      "@@ -1 +0,0 @@",
+      "-assertAuthorized(request);",
+    ].join("\n");
+    const result = await executeReviewWorkflow(
+      env,
+      {
+        instanceId: "deletion-only-workflow",
+        payload: job,
+        timestamp: new Date("2026-08-29T12:00:00.000Z"),
+        workflowName: "holon-review-workflow",
+      },
+      immediateWorkflowStep([]),
+      {
+        createModel: () => ({
+          review: (_job, context) => {
+            modelCalls += 1;
+            expect(context.changedLines).toEqual([]);
+            expect(context.diff).toContain("-assertAuthorized(request);");
+            return Promise.resolve({
+              findings: [],
+              summary: "A security guard was removed and requires review.",
+            });
+          },
+        }),
+        createSession: () =>
+          Promise.resolve({
+            api: {
+              paginate: () => Promise.resolve([]),
+              request: () => Promise.resolve({ data: { id: 1 } }),
+            },
+            currentHeadSha: () => Promise.resolve("a".repeat(40)),
+            pullRequestDiff: () => Promise.resolve(deletionDiff),
+            expiresAt: "later",
+            token: "token",
+          }),
+        executor: {
+          cleanup: () => Promise.resolve(),
+          hasContext: () => Promise.resolve(true),
+          loadContext: () =>
+            Promise.resolve({
+              changedLines: [],
+              diff: deletionDiff,
+              reviewedFiles: [
+                { mode: "structural" as const, path: "src/policy.ts" },
+              ],
+            }),
+          prepare: () =>
+            Promise.resolve({
+              changedLineCount: 0,
+              contextBytes: 200,
+              fileCount: 1,
+              runId: job.runId,
+              schemaVersion: 1 as const,
+              truncated: false,
+            }),
+          runTool: () => Promise.resolve({ content: "", truncated: false }),
+        },
+        now: () => "2026-08-29T12:00:01.000Z",
+      },
+    );
+
+    expect(result).toEqual({ findingsPublished: 0, outcome: "completed" });
+    expect(modelCalls).toBe(1);
   });
 
   it("checkpoints the production review as granular, bounded durable steps", async () => {
@@ -367,6 +443,9 @@ describe("ReviewWorkflow", () => {
                 { line: 10, path: "src/index.ts", side: "RIGHT" as const },
               ],
               diff: "@@ -9,0 +10,1 @@\n+return null;",
+              reviewedFiles: [
+                { mode: "structural" as const, path: "src/index.ts" },
+              ],
             }),
           prepare: () =>
             Promise.resolve({
@@ -610,6 +689,9 @@ describe("ReviewWorkflow", () => {
                   { line: 10, path: "src/index.ts", side: "RIGHT" as const },
                 ],
                 diff: "@@ -9,0 +10,1 @@\n+return null;",
+                reviewedFiles: [
+                  { mode: "structural" as const, path: "src/index.ts" },
+                ],
               }),
             prepare: () =>
               Promise.resolve({

@@ -7,9 +7,7 @@ export interface PullRequestDiffFile {
 }
 
 function normalizeDiffPath(path: string): string {
-  const unquoted =
-    path.startsWith('"') && path.endsWith('"') ? path.slice(1, -1) : path;
-  return unquoted.replace(/^[ab]\//u, "");
+  return path.replace(/^[ab]\//u, "");
 }
 
 /**
@@ -42,6 +40,14 @@ export function splitPullRequestDiff(
     }
     return { patch, path: normalizeDiffPath(candidate) };
   });
+}
+
+export function isNonBinaryPullRequestPatch(patch: string): boolean {
+  const parsed = parsePatch(patch);
+  if (parsed.length !== 1) {
+    throw new TypeError("Expected one repository path per diff section");
+  }
+  return parsed[0]?.isBinary !== true;
 }
 
 export function collectChangedLines(

@@ -186,6 +186,7 @@ describe("bounded repository tools", () => {
     const context = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       diff: "+const safe = true;",
+      reviewedFiles: [{ mode: "structural", path: "src/index.ts" }],
       truncated: false,
     };
     expect(reviewContextSchema.parse(context)).toEqual(context);
@@ -206,6 +207,37 @@ describe("bounded repository tools", () => {
             line: 1,
             path: "../secret",
           },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      reviewContextSchema.safeParse({
+        ...context,
+        changedLines: [{ line: 10, path: "README.md", side: "RIGHT" }],
+        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+        surface: [
+          {
+            change: "added",
+            excerpt: "heading",
+            kind: "contract",
+            line: 10,
+            path: "README.md",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      reviewContextSchema.safeParse({
+        ...context,
+        reviewedFiles: [{ mode: "textual", path: "README.md" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      reviewContextSchema.safeParse({
+        ...context,
+        reviewedFiles: [
+          { mode: "structural", path: "src/index.ts" },
+          { mode: "textual", path: "src/index.ts" },
         ],
       }).success,
     ).toBe(false);
