@@ -55,6 +55,7 @@ export interface RepositoryExecutorBinding {
   prepareRepositoryV2?(
     request: ExecutorRequestV2,
   ): Promise<PreparedRepositoryV2>;
+  resolveContainerId?(runId: string): Promise<string> | string;
   runTool(
     runId: string,
     call: RepositoryToolCall,
@@ -129,7 +130,10 @@ export class RepositoryTransientError extends Error {
   }
 }
 
-type ExecutorV2Method = "loadContextV2" | "prepareRepositoryV2";
+type ExecutorV2Method =
+  | "loadContextV2"
+  | "prepareRepositoryV2"
+  | "resolveContainerId";
 
 export function isExecutorRpcMethodUnavailable(
   error: unknown,
@@ -213,6 +217,28 @@ export function createReviewServices(
             job.envelope.repository.id,
           )),
     );
+
+  const resolveCredentialContainerId = async (): Promise<string> => {
+    try {
+      if (executor.resolveContainerId === undefined) {
+        throw new TypeError(
+          'The RPC receiver does not implement the method "resolveContainerId".',
+        );
+      }
+      const containerId = await executor.resolveContainerId(job.runId);
+      if (!/^[a-f0-9]{64}$/u.test(containerId)) {
+        throw new TypeError("Executor returned an invalid container ID");
+      }
+      return containerId;
+    } catch (error) {
+      if (!isExecutorRpcMethodUnavailable(error, "resolveContainerId")) {
+        throw error;
+      }
+      // Rollout bridge for an N-1 executor. That version still receives the
+      // installation token directly and does not consult the credential scope.
+      return createExpectedContainerId(job.runId);
+    }
+  };
 
   const prepareOnce = async (): Promise<PreparedRepositoryV2> => {
     try {
@@ -402,7 +428,7 @@ export function createReviewServices(
     },
     registerCredentialScope: async () => {
       await ledger.registerCredentialScope({
-        containerId: createExpectedContainerId(job.runId),
+        containerId: await resolveCredentialContainerId(),
         installationId: job.envelope.installationId,
         repositoryId: job.envelope.repository.id,
         repositoryName: job.envelope.repository.name,

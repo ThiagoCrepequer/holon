@@ -36,7 +36,7 @@ import {
 } from "./egress-policy.js";
 import { RepositoryExecutorService } from "./executor-service.js";
 import { SandboxRuntimeError } from "./sandbox-errors.js";
-import { createSandboxId } from "./sandbox-identity.js";
+import { createSandboxId, resolveContainerId } from "./sandbox-identity.js";
 import type { SandboxPort, SandboxProvider } from "./sandbox-port.js";
 
 export interface GitHubCredentialBroker {
@@ -257,6 +257,10 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     request: ExecutorRequestV2,
   ): Promise<PreparedRepositoryV2> {
     return this.service().prepareRepositoryV2(request);
+  }
+
+  public resolveContainerId(runId: string): string {
+    return resolveContainerId(this.env.SANDBOXES, runId);
   }
 
   public loadContext(runId: string): Promise<ReviewContextV1> {

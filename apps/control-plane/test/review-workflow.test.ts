@@ -111,6 +111,7 @@ function session(
 
 function runtime(
   options: {
+    readonly containerId?: string | null;
     readonly context?: ReviewContextV2;
     readonly head?: () => string;
     readonly model?: ReviewRuntime["createModel"];
@@ -119,6 +120,8 @@ function runtime(
 ) {
   const posts = options.posts ?? [];
   const cleanup = vi.fn(() => Promise.resolve());
+  const resolvedContainerId = options.containerId ?? "f".repeat(64);
+  const resolveContainerId = vi.fn(() => Promise.resolve(resolvedContainerId));
   const prepareRepositoryV2 = vi.fn(() =>
     Promise.resolve({
       changedLineCount: (options.context ?? context).changedLines.length,
@@ -145,13 +148,14 @@ function runtime(
       hasContext: () => Promise.resolve(true),
       loadContextV2: () => Promise.resolve(options.context ?? context),
       prepareRepositoryV2,
+      ...(options.containerId === null ? {} : { resolveContainerId }),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
     },
     logger: { emit: () => undefined },
     now: () => "2026-08-29T12:00:05.000Z",
     wait: () => Promise.resolve(),
   };
-  return { cleanup, posts, prepareRepositoryV2, value };
+  return { cleanup, posts, prepareRepositoryV2, resolveContainerId, value };
 }
 
 function event(instanceId: string) {
@@ -164,6 +168,72 @@ function event(instanceId: string) {
 }
 
 describe("ReviewWorkflow", () => {
+  it("registers the real Durable Object ID resolved by the executor", async () => {
+    const setup = runtime();
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("platform-container-identity"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
+
+    expect(setup.resolveContainerId).toHaveBeenCalledWith(job.runId);
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ container_id: string }>(
+            "SELECT container_id FROM credential_scopes WHERE run_id = ?",
+            job.runId,
+          )
+          .one().container_id,
+      ).toBe("f".repeat(64));
+    });
+  });
+
+  it("keeps the N-1 logical-name fallback limited to a missing RPC method", async () => {
+    const setup = runtime({ containerId: null });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("legacy-container-identity"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
+
+    expect(setup.resolveContainerId).not.toHaveBeenCalled();
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ container_id: string }>(
+            "SELECT container_id FROM credential_scopes WHERE run_id = ?",
+            job.runId,
+          )
+          .one().container_id,
+      ).toBe(`r-16-7-${"a".repeat(40)}`);
+    });
+  });
+
+  it("fails closed when the executor returns a malformed platform ID", async () => {
+    const setup = runtime({ containerId: "not-a-durable-object-id" });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("malformed-container-identity"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).rejects.toThrow("Executor returned an invalid container ID");
+    expect(setup.prepareRepositoryV2).not.toHaveBeenCalled();
+  });
+
   it("publishes with fresh ledger and head authorization before each mutation", async () => {
     const stepNames: string[] = [];
     let headReads = 0;

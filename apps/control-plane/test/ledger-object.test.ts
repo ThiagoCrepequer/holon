@@ -256,6 +256,7 @@ describe("ReviewLedgerObject", () => {
   });
 
   it("denies publication and credentials when a run is stale or terminal", async () => {
+    const platformContainerId = "f".repeat(64);
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await ledger.claimRun(run, "workflow-authorized");
     await ledger.transition(
@@ -266,7 +267,7 @@ describe("ReviewLedgerObject", () => {
       "workflow-authorized:start",
     );
     await ledger.registerCredentialScope({
-      containerId: `r-16-7-${"a".repeat(40)}`,
+      containerId: platformContainerId,
       installationId: 99,
       repositoryId: 42,
       repositoryName: "api",
@@ -275,7 +276,7 @@ describe("ReviewLedgerObject", () => {
     });
     await expect(
       ledger.authorizeCredential({
-        containerId: `r-16-7-${"a".repeat(40)}`,
+        containerId: platformContainerId,
         installationId: 99,
         repositoryId: 42,
         repositoryName: "api",
@@ -283,6 +284,16 @@ describe("ReviewLedgerObject", () => {
         runId,
       }),
     ).resolves.toBe(true);
+    await expect(
+      ledger.authorizeCredential({
+        containerId: "e".repeat(64),
+        installationId: 99,
+        repositoryId: 42,
+        repositoryName: "api",
+        repositoryOwner: "acme",
+        runId,
+      }),
+    ).resolves.toBe(false);
 
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await ledger.claimRun(
@@ -295,7 +306,7 @@ describe("ReviewLedgerObject", () => {
     );
     await expect(
       ledger.authorizeCredential({
-        containerId: `r-16-7-${"a".repeat(40)}`,
+        containerId: platformContainerId,
         installationId: 99,
         repositoryId: 42,
         repositoryName: "api",

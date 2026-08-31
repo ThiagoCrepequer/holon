@@ -5,6 +5,10 @@ const maximumSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
 const runCoordinates =
   /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40})$/u;
 
+interface DurableObjectIdentityNamespace {
+  idFromName(name: string): { toString(): string };
+}
+
 function compactCoordinate(value: string, name: string): string {
   const coordinate = BigInt(value);
   if (coordinate <= 0n || coordinate > maximumSafeInteger) {
@@ -25,4 +29,15 @@ export function createSandboxId(rawRunId: string): string {
   );
   const prefix = `r-${repositoryId}-${pullRequestNumber}-`;
   return `${prefix}${groups.headSha!.slice(0, maximumSandboxIdLength - prefix.length)}`;
+}
+
+export function resolveContainerId(
+  namespace: DurableObjectIdentityNamespace,
+  runId: string,
+): string {
+  const containerId = namespace.idFromName(createSandboxId(runId)).toString();
+  if (!/^[a-f0-9]{64}$/u.test(containerId)) {
+    throw new TypeError("Container Durable Object ID is invalid");
+  }
+  return containerId;
 }

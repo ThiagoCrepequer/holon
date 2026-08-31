@@ -67,6 +67,10 @@ O executor implementado não executa scripts do repositório:
   por um handler de bloqueio explícito assim que o fetch termina;
 - o outbound handler recebe `containerId` da plataforma e busca credencial JIT
   no entrypoint RPC nomeado do control plane;
+- antes do clone, o executor resolve o nome determinístico do Sandbox com
+  `SANDBOXES.idFromName(...)`, devolve o Durable Object ID real ao control plane
+  e esse ID opaco é registrado no credential scope; o broker compara esse valor
+  exatamente com `ctx.containerId`, sem confundi-lo com o nome lógico;
 - comandos são registrados sem incluir segredos;
 - filesystem é descartado ao final da run;
 - inatividade coloca o container para dormir após 30 segundos; a próxima tool

@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createSandboxId } from "../src/sandbox-identity.js";
+import {
+  createSandboxId,
+  resolveContainerId,
+} from "../src/sandbox-identity.js";
 
 const headSha = "a".repeat(40);
 
 describe("Sandbox identity", () => {
+  it("resolves the platform Durable Object ID from the deterministic name", () => {
+    const platformId = "f".repeat(64);
+    const idFromName = vi.fn(() => ({ toString: () => platformId }));
+    const runId = `github:42:pr:7:head:${headSha}`;
+
+    expect(resolveContainerId({ idFromName }, runId)).toBe(platformId);
+    expect(idFromName).toHaveBeenCalledWith(createSandboxId(runId));
+  });
+
   it("compacts a review run into a stable DNS-safe Sandbox ID", () => {
     const runId = `github:1050733747:pr:123456:head:${headSha}`;
 

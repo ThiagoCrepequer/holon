@@ -44,12 +44,23 @@ criadas pela versão anterior.
   Queue, SQLite, filesystem, parâmetros do Sandbox ou logs.
 - O control plane tenta V2 e só recorre ao V1 quando o método V2 não existe.
   Erro funcional ou de segurança em V2 nunca ativa fallback.
+
 - O rollout é ordenado: primeiro control plane dual-stack com broker e fallback;
   depois executor dual-stack; por fim observação e drenagem de V1. Remover V1
   exige uma decisão posterior e prova de que nenhuma versão retida o usa.
 - Em conta vazia, onde nenhum alvo existe, um config bootstrap cria primeiro o
   executor sem binding de broker. Ele não está apto a clonar; serve apenas para
   permitir o deploy do control plane. O executor final é implantado logo depois.
+
+### Correção de implementação — 2026-08-31
+
+O nome determinístico usado em `idFromName` e o `containerId` exposto pela
+plataforma são identidades diferentes. O executor resolve o Durable Object ID
+opaco a partir do nome e o control plane registra esse ID no scope antes de
+preparar o repositório. O outbound handler continua obtendo `containerId` do
+contexto confiável e o broker continua exigindo igualdade exata com o scope.
+Essa correção preserva a decisão de autorização por container; relaxar ou
+remover essa verificação exigiria uma decisão que supersedesse este ADR.
 
 ## Alternativas rejeitadas
 

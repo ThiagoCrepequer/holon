@@ -50,5 +50,8 @@ e informa truncamento; o Worker não lê nem materializa o arquivo completo.
 
 O credential request contém somente container, run, instalação e identidade do
 repositório. `containerId` vem do contexto da plataforma; resposta com token e
-expiração existe apenas no broker/outbound handler. V1 permanece aceito para
-rollout N-1, mas seu argumento token é ignorado pelo executor dual-stack.
+expiração existe apenas no broker/outbound handler. Antes da preparação V2, o
+control plane obtém do executor esse mesmo Durable Object ID opaco por RPC e o
+registra no scope; o nome determinístico passado a `idFromName` não é o
+`containerId`. V1 permanece aceito para rollout N-1, mas seu argumento token é
+ignorado pelo executor dual-stack.

@@ -9,8 +9,9 @@ import {
 } from "../src/credential-broker.js";
 
 const runId = `github:42:pr:7:head:${"a".repeat(40)}` as RunId;
+const containerId = "f".repeat(64);
 const request = {
-  containerId: `r-16-7-${"a".repeat(40)}`,
+  containerId,
   installationId: 99,
   repositoryId: 42,
   repositoryName: "api",
@@ -19,11 +20,8 @@ const request = {
 };
 
 describe("GitHubCredentialBrokerEntrypoint", () => {
-  it("strictly validates the serialized run and deterministic container", () => {
+  it("validates the platform Durable Object ID before ledger authorization", () => {
     expect(parseCredentialRequest(request)).toEqual(request);
-    expect(() =>
-      parseCredentialRequest({ ...request, containerId: "untrusted" }),
-    ).toThrow("Credential request is invalid");
     expect(() =>
       parseCredentialRequest({ ...request, extra: "not allowed" }),
     ).toThrow("Credential request is invalid");

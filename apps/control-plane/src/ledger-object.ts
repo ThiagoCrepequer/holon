@@ -21,7 +21,6 @@ import type {
 import { canTransitionRun } from "@holon/domain";
 import { DurableObject } from "cloudflare:workers";
 
-import { createExpectedContainerId } from "./credential-broker.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 
@@ -302,10 +301,7 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
 
   public registerCredentialScope(raw: GitHubCredentialRequest): Promise<void> {
     const request = githubCredentialRequestSchema.parse(raw);
-    if (
-      request.installationId === undefined ||
-      request.containerId !== createExpectedContainerId(request.runId)
-    ) {
+    if (request.installationId === undefined) {
       throw new TypeError("Credential scope is invalid");
     }
     if (
@@ -331,10 +327,7 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     raw: GitHubCredentialRequest,
   ): Promise<boolean> {
     const request = githubCredentialRequestSchema.parse(raw);
-    if (
-      request.installationId === undefined ||
-      request.containerId !== createExpectedContainerId(request.runId)
-    ) {
+    if (request.installationId === undefined) {
       return Promise.resolve(false);
     }
     const installationId = request.installationId;
@@ -360,7 +353,6 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     if (!parsed.success) return Promise.resolve(false);
     const request = parsed.data;
     if (
-      request.containerId !== createExpectedContainerId(request.runId) ||
       this.latestRunId() !== request.runId ||
       !["running", "publishing"].includes(
         this.runState(request.runId as RunId) ?? "",
@@ -384,9 +376,6 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     const parsed = githubCredentialRequestSchema.safeParse(raw);
     if (!parsed.success) return Promise.resolve(false);
     const request = parsed.data;
-    if (request.containerId !== createExpectedContainerId(request.runId)) {
-      return Promise.resolve(false);
-    }
     if (
       this.latestRunId() !== request.runId ||
       !["running", "publishing"].includes(

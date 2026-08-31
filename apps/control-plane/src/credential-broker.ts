@@ -91,10 +91,7 @@ export function createExpectedContainerId(runId: string): string {
 
 export function parseCredentialRequest(raw: unknown): GitHubCredentialRequest {
   const parsed = githubCredentialRequestSchema.safeParse(raw);
-  if (
-    !parsed.success ||
-    parsed.data.containerId !== createExpectedContainerId(parsed.data.runId)
-  ) {
+  if (!parsed.success) {
     throw new TypeError("Credential request is invalid");
   }
   return parsed.data;

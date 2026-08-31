@@ -13,6 +13,8 @@ import {
 } from "../src/cloudflare-sandbox.js";
 
 describe("Cloudflare Sandbox adapter in workerd", () => {
+  const platformContainerId = "f".repeat(64);
+
   it("maps current exported transient SDK errors without inspecting messages", () => {
     const stale = new StaleProcessHandleError({
       code: "STALE_PROCESS_HANDLE",
@@ -66,7 +68,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
       new Request("http://github.holon.internal/acme/api.git/info/refs"),
       { GITHUB_CREDENTIAL_BROKER: { getInstallationToken } } as never,
       {
-        containerId: "holon-sandbox-1",
+        containerId: platformContainerId,
         params: authorization,
       } as never,
     );
@@ -76,7 +78,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
       "Credential service unavailable",
     );
     expect(getInstallationToken).toHaveBeenCalledWith({
-      containerId: "holon-sandbox-1",
+      containerId: platformContainerId,
       installationId: 99,
       repositoryId: 42,
       repositoryName: "api",
@@ -110,7 +112,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
     ]);
     expect(JSON.stringify(setOutboundCalls)).not.toContain(legacyToken);
     const persistedOutboundState = {
-      containerId: "holon-sandbox-1",
+      containerId: platformContainerId,
       params: setOutboundCalls[0]?.[2],
     };
     expect(JSON.stringify(persistedOutboundState)).not.toContain(legacyToken);
@@ -128,7 +130,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
 
     expect(response.status).toBe(503);
     expect(getInstallationToken).toHaveBeenCalledWith({
-      containerId: "holon-sandbox-1",
+      containerId: platformContainerId,
       repositoryId: 42,
       repositoryName: "api",
       repositoryOwner: "acme",
