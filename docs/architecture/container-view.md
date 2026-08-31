@@ -4,12 +4,13 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0006-use-granular-workflow-checkpoints.md
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
 ---
 
 # Visão de containers
@@ -45,16 +46,16 @@ flowchart TD
 
 ## Catálogo
 
-| ID  | Responsabilidade                                                 | Tecnologia atual                          | Estado               |
-| --- | ---------------------------------------------------------------- | ----------------------------------------- | -------------------- |
-| C01 | Validar HMAC, normalizar evento e responder rapidamente          | Cloudflare Worker                         | Implementada         |
-| C02 | Absorver bursts e aplicar backpressure                           | Cloudflare Queues                         | Implementada         |
-| C03 | Executar etapas duráveis e retries delimitados                   | Cloudflare Workflows                      | Implementada         |
-| C04 | Registrar run, head SHA, efeitos publicados e dedupe             | Durable Object SQLite por PR              | Implementada         |
-| C05 | Obter repositório e executar buscas/parsers permitidos           | Cloudflare Sandbox em deployable separado | Implementada         |
-| C06 | Mapear superfície, pedir ferramentas e produzir findings tipados | Application/domain + AI SDK tool loop     | Implementada         |
-| C07 | Aplicar modelo, telemetria e políticas de custo/rate limit       | Cloudflare AI Gateway                     | Adapter implementado |
-| C08 | Reler head e publicar comentários/review GitHub                  | GitHub REST API                           | Implementada         |
+| ID  | Responsabilidade                                           | Tecnologia atual                          | Estado               |
+| --- | ---------------------------------------------------------- | ----------------------------------------- | -------------------- |
+| C01 | Validar HMAC, normalizar evento e responder rapidamente    | Cloudflare Worker                         | Implementada         |
+| C02 | Absorver bursts e aplicar backpressure                     | Cloudflare Queues                         | Implementada         |
+| C03 | Executar etapas duráveis e retries delimitados             | Cloudflare Workflows                      | Implementada         |
+| C04 | Registrar run, head SHA, efeitos publicados e dedupe       | Durable Object SQLite por PR              | Implementada         |
+| C05 | Classificar contexto e executar buscas/parsers autorizados | Cloudflare Sandbox em deployable separado | Implementada         |
+| C06 | Respeitar modos, pedir tools e produzir findings tipados   | Application/domain + AI SDK tool loop     | Implementada         |
+| C07 | Aplicar modelo, telemetria e políticas de custo/rate limit | Cloudflare AI Gateway                     | Adapter implementado |
+| C08 | Reler head e publicar comentários/review GitHub            | GitHub REST API                           | Implementada         |
 
 ## Alocação inicial em deployables
 
@@ -69,6 +70,11 @@ preserva isolamento e política de recursos próprios para código de repositór
 sem obrigar a separar prematuramente as partes confiáveis do control plane.
 O contexto potencialmente grande permanece no filesystem efêmero de C05; C03
 persiste apenas checkpoints e resultados pequenos.
+
+C05 classifica cada patch como `structural`, `textual` ou ignorado e aplica a
+mesma elegibilidade a leituras e buscas posteriores. C06 recebe os modos
+explicitamente: ast-grep fica restrito a JS/TS estrutural, enquanto patches
+textuais elegíveis usam apenas diff, leitura e busca textual.
 
 ## Componentes adiados
 

@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Glossario
@@ -26,6 +26,26 @@ analise. Nao substitui findings inline.
 **Surface mapping**
 : Leitura inicial do diff para identificar mudancas de contrato, persistencia,
 seguranca e logica de negocio que merecem investigacao adicional.
+
+**Structural review**
+: Review de JavaScript, TypeScript, JSX ou TSX que pode combinar patch, leitura,
+busca textual e busca de sintaxe com uma gramática suportada.
+
+**Textual review**
+: Review de um patch textual elegível que usa diff, leitura limitada e busca
+textual, sem prometer compreensão de AST ou semântica específica da linguagem.
+
+**Eligible textual patch**
+: Patch Git não binário, inclusive remoção, rename ou metadata-only, com caminho
+normalizado que não corresponde às heurísticas de exclusão. "Elegível"
+descreve a política de processamento; o conteúdo continua não confiável e
+sujeito a prompt injection.
+
+**Ignored file**
+: Arquivo excluído do contexto e das tools por classificação binária, ausência
+de patch Git utilizável ou heurística de lockfile, build, minificação,
+sourcemap, geração, vendor ou caminho potencialmente sensível. A classificação
+é defensiva e não equivale a um secret scanner.
 
 **Cascade investigation**
 : Busca por chamadores, usos, contratos e efeitos em arquivos nao alterados pelo

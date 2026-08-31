@@ -45,11 +45,13 @@ Start at `docs/README.md` and load only the documents relevant to the task.
 
 ## Current architectural boundary
 
-ADR-0001 through ADR-0006 define the current boundary. The implementation is a
-TypeScript 7 ESM monorepo with two deployables: `apps/control-plane` and
-`apps/repository-executor`. Workflows coordinates retries, a Durable Object
-SQLite instance per PR owns the ledger, and the executor uses Cloudflare
-Sandbox with deny-by-default egress.
+The accepted ADRs listed in `docs/decisions/README.md` define the current
+boundary. The implementation is a TypeScript 7 ESM monorepo with two
+deployables: `apps/control-plane` and `apps/repository-executor`. Workflows
+coordinates retries, a Durable Object SQLite instance per PR owns the ledger,
+and the executor uses Cloudflare Sandbox with deny-by-default egress. Review is
+structural for JS/TS and textual for eligible patches; the same exclusion
+policy applies to initial context and repository tools.
 
 Package boundaries and commands are documented in
 `docs/architecture/technical-ecosystem.md` and

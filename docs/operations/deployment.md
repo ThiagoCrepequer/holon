@@ -98,7 +98,21 @@ Fontes verificadas em 2026-08-30:
    `recovery` e sem tools. O Workflow não pode repetir a sessão.
 10. Abra um PR cuja base avançou depois da criação da branch e compare a
     contagem de linhas do GitHub com `repository.prepared`.
-11. Abra um PR somente de documentação e confirme zero tokens de modelo.
+11. Abra um PR somente de documentação e confirme uma chamada de modelo em modo
+    textual; tente uma tool estrutural e confirme rejeição no host.
+12. Abra um PR contendo somente lockfile ou artefato gerado e confirme zero
+    tokens de modelo. Repita com um caminho potencialmente sensível reconhecido
+    pela política e confirme que `read_file` e buscas não conseguem recuperá-lo.
+13. Abra um PR somente com rename, metadata ou remoções sem linha adicionada
+    comentável e confirme uma chamada de modelo, zero finding inline e risco
+    comprovado limitado ao resumo.
+14. Em um PR misto, confirme que ambos os modos recebem oportunidade inicial,
+    a seleção seguinte favorece structural em 3:1, arquivos ignorados não
+    aparecem em tools e o resumo declara truncamento quando algum limite for
+    atingido.
+15. Solicite duas páginas consecutivas de um arquivo grande e confirme que cada
+    `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
+    inteiro, e que páginas de paths ignorados são rejeitadas.
 
 ## Observabilidade e rollback
 
@@ -106,7 +120,8 @@ O código emite JSON estruturado para `review.started`, `repository.prepared`,
 `model.input`, `model.usage`,
 `review.completed`, `review.failed` e falhas secundárias de cleanup ou
 terminalização. Os campos incluem run, IDs não secretos, duração, outcome,
-tokens e quantidade publicada; não incluem prompt, diff, arquivo ou mensagem
+tokens, contagens de arquivos estruturais/textuais e quantidade publicada; não
+incluem prompt, diff, nome de arquivo ou mensagem
 arbitrária de erro. Antes do piloto, configure retenção e acesso aos logs e ao
 AI Gateway. O header `cf-aig-collect-log-payload=false` é obrigatório; removê-lo
 expõe código do repositório nos logs do Gateway.

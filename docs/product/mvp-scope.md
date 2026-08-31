@@ -4,9 +4,10 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
 ---
 
 # Escopo do MVP
@@ -22,8 +23,14 @@ de introduzir memoria conversacional, RAG de repositorio ou multiagentes.
 - Validacao HMAC do corpo bruto do webhook antes de qualquer parsing confiavel.
 - Desacoplamento assincorno entre recebimento e processamento.
 - Uma `review run` por repositorio, PR e head SHA.
-- Obtencao do diff e do contexto estritamente necessario do repositorio.
-- Busca textual e estrutural por usos relacionados a mudancas criticas.
+- Obtencao do diff canonico e do contexto estritamente necessario do repositorio.
+- Review estrutural de JavaScript, TypeScript, JSX e TSX.
+- Review textual de patches elegiveis em documentacao, configuracao e outras
+  linguagens, sem promessa de compreensao de AST.
+- Exclusao heuristica de binarios, lockfiles, minificados, sourcemaps, artefatos
+  gerados, vendorizados, builds e caminhos potencialmente sensiveis.
+- Busca textual e estrutural por usos relacionados a mudancas criticas, limitada
+  pelo modo e pela mesma politica de exclusao do contexto inicial.
 - Loop de analise com numero limitado de passos e ferramentas permitidas.
 - Findings estruturados com evidencia, severidade e coordenadas do diff.
 - Comentarios inline e um resumo por run.

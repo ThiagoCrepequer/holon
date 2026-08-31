@@ -4,12 +4,13 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 related:
   - ../product/mvp-scope.md
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
   - technical-bootstrap.md
 ---
 
@@ -38,7 +39,8 @@ limites atuais.
 - Definir `ReviewRun`, `Finding`, `Publication` e tool calls.
 - Montar corpus de PRs positivos e negativos para avaliação.
 - Definir métricas iniciais de precisão, falsos positivos e custo.
-- Decidir linguagens suportadas no piloto.
+- Aplicar a decisão de review estrutural JS/TS, review textual elegível e
+  exclusões heurísticas do piloto.
 
 Saída: contratos versionados e avaliação reproduzível sem Cloudflare.
 
@@ -80,9 +82,10 @@ Saída: evidência recuperável com proveniência e isolamento demonstrado.
 
 Saída: findings estruturados sem publicação externa.
 
-Estado local: surface mapping, parser de unified diff, redaction, budgets e
-schemas estão implementados. O corpus de avaliação e suas métricas permanecem
-pendentes porque dependem de casos representativos aprovados.
+Estado local: surface mapping, parser de unified diff, classificação estrutural
+ou textual, exclusões heurísticas, redaction, budgets e schemas estão
+implementados. O corpus de avaliação e suas métricas permanecem pendentes
+porque dependem de casos representativos aprovados.
 
 ## Fase 5 — Publicação controlada
 

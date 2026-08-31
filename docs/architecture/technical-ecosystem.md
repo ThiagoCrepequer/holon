@@ -4,10 +4,11 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
   - ../planning/technical-bootstrap.md
 ---
 
@@ -98,7 +99,7 @@ depende de schemas runtime. `test-kit` é somente para fixtures de teste.
 | `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                          |
 | `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                              |
 | `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                 |
-| `@holon/repository-analysis` | Parser de diff, surface mapping e policies puras do executor                                       | Biblioteca `diff`; sem SDK de infraestrutura |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura |
 | `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                |
 
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
@@ -119,8 +120,9 @@ O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
 `apps/repository-executor` recebe pedidos tipados, cria workspace isolado,
-persiste contexto efêmero e retorna evidência limitada com proveniência. Nenhum
-token de modelo ou autoridade de publicação GitHub deve entrar nesse deployable.
+classifica patches e aplica a mesma elegibilidade a tools, persiste contexto
+efêmero e retorna evidência limitada com proveniência. Nenhum token de modelo ou
+autoridade de publicação GitHub deve entrar nesse deployable.
 
 ## Fronteiras de validacao
 
@@ -206,7 +208,7 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 
 ## Regras para agentes de codigo
 
-- Ler ADR-0001 a ADR-0005 antes de alterar fronteiras do MVP.
+- Ler os ADRs aceitos no índice de decisões antes de alterar fronteiras do MVP.
 - Nao criar novo workspace para uma simples subpasta de implementacao.
 - Nao importar adapter a partir de dominio ou aplicacao.
 - Nao adicionar build tool quando Wrangler ou `tsc` ja atendem o consumidor.

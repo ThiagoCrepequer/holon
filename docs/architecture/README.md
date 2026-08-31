@@ -4,14 +4,15 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Arquitetura
 
 Os documentos deste diretório descrevem a arquitetura vigente. O código do MVP
-materializa ADR-0001 a ADR-0005; limitações de validação remota continuam
-explícitas nos documentos de operação e planejamento.
+materializa as decisões aceitas listadas no
+[índice de ADRs](../decisions/README.md); limitações de validação remota
+continuam explícitas nos documentos de operação e planejamento.
 
 ## Visões
 

@@ -29,6 +29,7 @@ limiar numérico ainda devem ser recalibrados com um corpus maior.
 - declarar que testes passaram se eles nao foram executados;
 - sugerir uma API inexistente;
 - expor segredos ou reproduzir dados sensiveis;
+- alegar compreensão estrutural de um arquivo classificado como `textual`;
 - publicar a mesma conclusao em varias linhas;
 - classificar como erro uma preferencia de estilo.
 
@@ -54,8 +55,19 @@ lado `RIGHT` do diff atual.
 
 Uma execução publica no máximo os três findings de maior confiança. Se limites
 de arquivos, bytes ou coordenadas forem atingidos, o resumo precisa declarar
-que a review foi parcial. Alterações sem arquivos TypeScript/JavaScript recebem
-um resumo determinístico sem consumo de modelo.
+que a review foi parcial. JS/TS recebe investigação estrutural; demais patches
+textuais elegíveis recebem review textual e exigem silêncio mais conservador
+quando o patch e as tools textuais não provarem o caminho causal.
+
+Se todos os arquivos forem binários, lockfiles, gerados, vendorizados,
+minificados ou corresponderem às heurísticas de caminhos
+potencialmente sensíveis, a run publica resumo determinístico sem consumo de
+modelo. Essas heurísticas reduzem exposição e ruído, mas não constituem um
+secret scanner nem substituem redaction.
+
+Remoções, renames e metadata-only elegíveis ainda recebem review. Sem uma linha
+adicionada no lado `RIGHT`, o modelo deve retornar zero findings e registrar no
+resumo apenas riscos comprovados que não podem ser ancorados inline.
 
 ## Avaliacao futura
 
@@ -66,5 +78,7 @@ O conjunto de avaliacao deve conter:
 - mudancas de assinatura com chamadores fora do diff;
 - mudancas de persistencia e concorrencia;
 - vulnerabilidades representativas;
+- patches textuais corretos e defeituosos fora de JS/TS;
+- PRs contendo somente arquivos excluídos e PRs mistos;
 - diffs grandes, truncados e com force-push;
 - reentrega do mesmo webhook.

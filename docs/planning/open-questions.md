@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
 ---
 
 # Questões em aberto
@@ -35,8 +35,9 @@ por marcador foram definidos e implementados.
 - Quando busca semântica supera busca estrutural no corpus?
 - Quais tarefas auxiliares justificam Workers AI?
 - Quando respostas em comentários justificam Agents SDK/Think e DO por PR?
-- Como ampliar o suporte a monorepos e código gerado? Submódulos não são
-  obtidos e filtros Git LFS permanecem desativados no MVP.
+- Como ampliar o suporte a monorepos? Código gerado permanece excluído; admiti-lo
+  no futuro exige uma exceção explícita, evidência de valor e nova decisão.
+  Submódulos não são obtidos e filtros Git LFS permanecem desativados no MVP.
 - Como cancelar trabalho antigo após force-push?
 
 ## Decisões já tomadas
@@ -53,7 +54,9 @@ por marcador foram definidos e implementados.
   ledger idempotente.
 - O executor é um deployable separado usando Sandbox `@next` com versão
   fixada, egress deny-by-default e destruição ao final da run.
-- O piloto estrutural cobre JavaScript, TypeScript, JSX e TSX.
+- A review estrutural cobre JavaScript, TypeScript, JSX e TSX; demais patches
+  textuais elegíveis recebem review textual conforme ADR-0013. A mesma política
+  de exclusão autoriza contexto inicial e tools.
 - `CLAUDE.md` e customização de Copilot não serão criados agora.
 - Vectorize, R2, Workers AI, Tunnel e conversa persistente não fazem parte da
   primeira entrega.

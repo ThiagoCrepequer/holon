@@ -26,7 +26,7 @@ pnpm verify
 O gate executa Oxfmt, Oxlint, TypeScript, cobertura, testes Workerd, dry-run dos
 Workers e build da imagem. Ele não usa GitHub, AI Gateway nem Cloudflare remotos.
 
-Última prova local em 2026-08-29: 170 testes passaram, todos os pacotes
+Última prova local em 2026-08-30: 259 testes passaram, todos os pacotes
 respeitaram 90% de statements/lines/functions e 85% de branches, ambos os
 Workers produziram bundle em dry-run e a imagem fixada por digest foi
 construída. Esses números são snapshot, não meta de produto.
@@ -59,7 +59,19 @@ docker run --rm --entrypoint ast-grep \
   holon-repository-executor-holonsandbox:worker \
   run --json=stream --lang typescript --pattern 'return $A' -- \
   /workspace/tool-smoke.ts
+
+docker run --rm --entrypoint sed \
+  -v "$PWD/apps/repository-executor/test/fixtures/tool-smoke.ts:/workspace/tool-smoke.ts:ro" \
+  holon-repository-executor-holonsandbox:worker \
+  -n '1,20p' /workspace/tool-smoke.ts
 ```
+
+No runtime, `read_file` não usa uma API que materialize o arquivo inteiro. O
+host resolve o path com `realpath`, aplica elegibilidade e containment e só então
+constrói uma paginação inclusiva com `sed` dentro do container. Cada chamada
+aceita no máximo 500 linhas e retorna no máximo 100 kB; páginas posteriores
+exigem novas chamadas explícitas. `git`, `rg`, `ast-grep run`, `realpath` e
+`sed` formam a allowlist de comandos construída pelo host.
 
 Os testes do control plane usam Istanbul porque o plugin Workers não oferece
 V8 coverage. Pacotes Node usam o provider V8. Os limiares globais são 90% para
@@ -105,7 +117,7 @@ recebe segredo de webhook, chave do App ou credencial do modelo.
 
 - O Workerd prova handlers, Queue dispatcher, Workflow e Durable Object SQLite.
 - Fakes provam a composição executor -> modelo -> publisher e a idempotência.
-- O dry-run prova bundle e construção do Dockerfile; o smoke prova `rg` e
-  `ast-grep run` dentro dessa imagem.
+- O dry-run prova bundle e construção do Dockerfile; o smoke prova `rg`,
+  `ast-grep run` e a paginação `sed` dentro dessa imagem.
 - Nada disso prova um webhook público, GitHub App real, modelo compatível, cota,
   latência, retenção ou publicação remota.

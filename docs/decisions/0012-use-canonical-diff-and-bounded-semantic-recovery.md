@@ -1,7 +1,7 @@
 ---
 id: ADR-0012
 kind: decision
-status: accepted
+status: superseded
 date: 2026-08-30
 owners:
   - core-team
@@ -13,6 +13,12 @@ related:
 ---
 
 # Usar diff canônico e recuperação semântica limitada
+
+> Substituída integralmente pelo
+> [ADR-0013](0013-use-tiered-structural-and-textual-review.md), que preserva o
+> diff canônico, os limites, a recuperação e a política de privacidade enquanto
+> amplia a superfície de review textual. Este documento permanece como registro
+> histórico da decisão original.
 
 ## Contexto e problema
 

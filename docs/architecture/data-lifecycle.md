@@ -4,7 +4,9 @@ kind: architecture
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-30
+related:
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
 ---
 
 # Ciclo de vida dos dados
@@ -14,20 +16,23 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
 
 ## Classes de dados
 
-| Classe            | Exemplos                                            | Persistência pretendida                                    |
-| ----------------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| Identidade        | installation ID, repository ID, PR number, head SHA | Enquanto a instalação existir e conforme auditoria         |
-| Evento            | delivery ID, tipo, timestamp, envelope normalizado  | Curta, suficiente para dedupe e diagnóstico                |
-| Código temporário | clone, patch, arquivos lidos, AST temporária        | Somente durante a run no MVP                               |
-| Evidência         | trechos usados para sustentar finding               | Mínima e com retenção limitada                             |
-| IA                | prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita |
-| Publicação        | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria           |
-| Segredo           | chaves e tokens                                     | Somente secret binding; token efêmero não persistido       |
+| Classe              | Exemplos                                            | Persistência pretendida                                    |
+| ------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| Identidade          | installation ID, repository ID, PR number, head SHA | Enquanto a instalação existir e conforme auditoria         |
+| Evento              | delivery ID, tipo, timestamp, envelope normalizado  | Curta, suficiente para dedupe e diagnóstico                |
+| Diff canônico bruto | Request temporário do executor, limitado a 2 MB     | Somente durante preparação; não vira checkpoint ou prompt  |
+| Contexto filtrado   | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                               |
+| Evidência           | Trechos usados para sustentar finding               | Mínima e com retenção limitada                             |
+| IA                  | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita |
+| Publicação          | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria           |
+| Segredo             | Chaves e tokens                                     | Somente secret binding; token efêmero não persistido       |
 
 ## Princípios
 
 - Coletar somente o necessário para produzir e auditar a review.
 - Não persistir clone integral por padrão.
+- Filtrar o diff canônico antes de persistir contexto ou construir prompt e
+  aplicar a mesma exclusão às tools.
 - Não reutilizar código privado de uma organização para outra.
 - Separar telemetria operacional de conteúdo de código.
 - Tornar deleção por instalação e repositório possível.

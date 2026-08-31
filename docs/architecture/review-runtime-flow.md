@@ -9,7 +9,7 @@ related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0006-use-granular-workflow-checkpoints.md
-  - ../decisions/0012-use-canonical-diff-and-bounded-semantic-recovery.md
+  - ../decisions/0013-use-tiered-structural-and-textual-review.md
 ---
 
 # Fluxo de execução de uma review
@@ -101,14 +101,28 @@ Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
 run antes de iniciar um container faturável. A revalidação final continua
 obrigatória para cobrir force-push durante a análise.
 
-O contexto bruto não atravessa o checkpoint de preparação. O control-plane
-obtém o diff canônico do GitHub e o executor o divide em patches completos; não
-executa `git diff baseSha headSha`. O contexto é validado e
-gravado no filesystem efêmero do Sandbox; apenas contagens, tamanho e flag de
-truncamento voltam ao Workflow. A etapa de análise relê esse arquivo e retorna
-somente a saída estruturada e limitada do modelo. Antes da leitura, o
-control-plane verifica a existência do artefato antes da leitura e de cada tool
-call. Se o container tiver sido substituído, repete a preparação exata e
+O control-plane obtém do GitHub o diff canônico bruto e o transporta no request
+do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
+checkpoint: o executor o divide em patches completos, sem executar
+`git diff baseSha headSha`, e aplica a classificação antes de persistir o
+contexto. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
+artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
+heurísticas são descartados antes do contexto e do modelo.
+
+A mesma classificação autoriza as tools. Leituras rejeitam paths ignorados;
+buscas limitam roots e resultados a arquivos elegíveis; ast-grep opera somente
+sobre paths `structural`. `read_file` primeiro autoriza o path real e depois
+executa no container uma página fixa construída pelo host com `sed`, limitada a
+500 linhas e 100 kB, sem materializar o arquivo inteiro no Worker. As
+heurísticas reduzem ruído e exposição, mas não são um secret scanner e não
+tornam conteúdo elegível confiável.
+
+O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
+contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise
+relê esse arquivo e retorna somente a saída estruturada e limitada do modelo.
+Antes da leitura e de cada tool call, o control-plane verifica a existência do
+artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.
 
 ## Falhas esperadas
@@ -126,8 +140,9 @@ idempotente com o mesmo par de SHAs.
 - Resposta ausente ou estruturalmente inválida depois de HTTP 200: executar no
   máximo uma síntese sem tools; uma segunda falha encerra a run e publica uma
   notificação idempotente sem detalhes sensíveis.
-- Nenhuma mudança TypeScript/JavaScript: publicar resumo determinístico sem
-  chamar o modelo.
+- Nenhuma mudança elegível depois das exclusões: publicar resumo determinístico
+  sem chamar o modelo. Remoções, renames e metadata elegíveis ainda chamam o
+  modelo, mas sem linha `RIGHT` só podem influenciar o resumo.
 - Contexto acima do budget: analisar somente patches completos selecionados e
   marcar o resumo como parcial.
 - Finding estruturalmente válido em linha não alterada: descartar o finding e

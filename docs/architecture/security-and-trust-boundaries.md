@@ -67,24 +67,42 @@ O executor implementado não executa scripts do repositório:
 - fork bombs, processos em background e serviços expostos são proibidos;
 - submódulos não são obtidos; filtros Git LFS são desativados no checkout.
 
-Os únicos comandos construídos pelo host são `git`, `rg`, `ast-grep run` e
-`realpath`, com argv tipado, diretório fixo, timeout e limites de saída. Não
-existe ferramenta shell genérica. A imagem fixa as versões do Sandbox, ripgrep
-e ast-grep; a base também é fixada por digest e o smoke local executa ambas as
-ferramentas contra uma fixture TypeScript. O diff não é calculado dentro do
-checkout: vem do endpoint canônico do Pull Request e é validado antes de entrar
-no Sandbox.
+O diff canônico bruto, limitado a 2 MB, cruza o request do executor antes da
+classificação. Ele permanece temporário, não vira checkpoint persistido e não é
+enviado integralmente ao modelo. Antes de persistir contexto, a política separa
+JS/TS estrutural de outros patches Git não binários elegíveis, inclusive
+remoções, renames e metadata-only. Patches binários e caminhos reconhecidos como
+lockfiles, código gerado, vendor, minificados, sourcemaps, build ou
+potencialmente sensíveis são ignorados.
+
+As exclusões por nome, extensão e diretório são heurísticas defensivas, não um
+secret scanner nem garantia de detectar todo artefato. A mesma política é
+aplicada às tools: `read_file` rejeita paths ignorados, buscas textuais filtram
+roots e resultados e ast-grep opera apenas sobre paths estruturais. A
+classificação textual não concede uma nova ferramenta nem amplia egress.
+
+Os únicos comandos construídos pelo host são `git`, `rg`, `ast-grep run`,
+`realpath` e `sed`, com argv tipado, diretório fixo, timeout e limites de saída.
+Não existe ferramenta shell genérica. A imagem fixa as versões do Sandbox,
+ripgrep e ast-grep; a base também é fixada por digest e o smoke local executa as
+ferramentas de análise contra fixtures controladas. O diff não é calculado
+dentro do checkout: vem do endpoint canônico do Pull Request e é validado antes
+de entrar no Sandbox.
 
 Antes de `read_file`, o host resolve symlinks com `realpath` e rejeita qualquer
 destino fora de `/workspace/repository`; paths lexicais seguros sozinhos não são
-considerados isolamento suficiente.
+considerados isolamento suficiente. Depois dessa autorização, o host constrói
+uma chamada `sed` com uma página fixa e inclusiva. O arquivo não é materializado
+inteiro na memória do Worker: o container devolve no máximo 500 linhas e 100 kB
+por chamada, e sinaliza truncamento quando o limite de saída é atingido.
 
 ## Prompt injection
 
 Conteúdo do repositório é evidência, nunca instrução. O host, e não o modelo,
-decide quais ferramentas existem, quais argumentos são permitidos e quais dados
-podem sair da trust boundary. Texto encontrado em README, comentários ou código
-não pode ampliar permissões.
+decide quais ferramentas existem, quais argumentos e paths são permitidos e
+quais dados podem sair da trust boundary. Texto encontrado em README,
+comentários ou código não pode ampliar permissões. Um patch textual elegível
+continua sendo conteúdo não confiável; "elegível" não significa seguro.
 
 Antes de prompt, resultado de ferramenta e saída publicável, o host redige
 formatos conhecidos de credenciais. O prompt inicial é limitado a 100 kB, o

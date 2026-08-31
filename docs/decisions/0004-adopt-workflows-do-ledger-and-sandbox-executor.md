@@ -89,8 +89,18 @@ contrato.
   dependências e execução de scripts do repositório ficam proibidas no MVP.
 - O workspace será destruído ao final da run, inclusive em falha.
 
+> Detalhamento operacional vigente em
+> [segurança e trust boundaries](../architecture/security-and-trust-boundaries.md):
+> a allowlist construída pelo host inclui `git`, `rg`, `ast-grep run`,
+> `realpath` e `sed`. `read_file` usa `realpath` seguido de uma página `sed`
+> limitada, sem materializar o arquivo inteiro no Worker.
+
 O piloto inicial analisará JavaScript, TypeScript, JSX e TSX. Outros arquivos
 podem fornecer contexto textual, mas não recebem promessa de análise estrutural.
+
+> Escopo de arquivos evoluído pelo [ADR-0013](0013-use-tiered-structural-and-textual-review.md):
+> JS/TS mantém análise estrutural e demais patches textuais elegíveis recebem
+> review textual.
 
 ## Consequências
 
