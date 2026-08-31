@@ -84,6 +84,7 @@ flowchart TD
     MO --> CT
     RA --> CT
     EV --> CT
+    EV --> AP
     EV -. somente testes .-> TK
     CT --> DO
     AP --> DO
@@ -99,16 +100,16 @@ somente para fixtures de teste.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR   |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                 |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                          |
-| `@holon/evaluation`          | Contratos do corpus, runner offline e graders determinísticos                                      | Zod e contratos; sem SDK de infraestrutura   |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                              |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                 |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                |
+| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR     |
+| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                   |
+| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                            |
+| `@holon/evaluation`          | Contratos do corpus, runner offline e graders determinísticos                                      | Aplicação, contratos e Zod; sem infraestrutura |
+| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                |
+| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                   |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura   |
+| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                  |
 
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma

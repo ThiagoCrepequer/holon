@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runEvaluationSuite } from "../src/index.js";
+import { evalSubjectOutputSchema, runEvaluationSuite } from "../src/index.js";
 import {
   createEvalCase,
   createPassingOutput,
@@ -43,6 +43,7 @@ describe("runEvaluationSuite", () => {
         matchedFindings: 2,
         precision: 1,
         recall: 1,
+        rejectedFindings: 0,
         severityMatches: 2,
         unexpectedFindings: 0,
       },
@@ -76,6 +77,54 @@ describe("runEvaluationSuite", () => {
     expect(result.caseRuns).toEqual([
       { caseId: "correctness.return-null", outcome: "invalid_output" },
     ]);
+  });
+
+  it("rejects a schema-valid finding whose evidence is absent from the patch", async () => {
+    const output = evalSubjectOutputSchema.parse(createPassingOutput());
+    const finding = output.output.findings[0];
+    const evidence = finding?.evidence[0];
+    if (evidence === undefined)
+      throw new TypeError("fixture evidence is required");
+    const candidate = {
+      ...output,
+      output: {
+        ...output.output,
+        findings: [
+          {
+            ...finding,
+            evidence: [
+              {
+                ...evidence,
+                excerpt: "content that does not exist in the patch",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await runEvaluationSuite(
+      [createEvalCase()],
+      async () => candidate,
+      evaluationConfiguration,
+    );
+
+    expect(result).toMatchObject({
+      failedCases: 1,
+      metrics: {
+        actualFindings: 0,
+        recall: 0,
+        rejectedFindings: 1,
+      },
+      passedCases: 0,
+    });
+    expect(result.caseRuns[0]).toMatchObject({
+      grade: {
+        failures: [{ findingId: "return-null", kind: "missing_finding" }],
+      },
+      outcome: "completed",
+      rejectedFindings: 1,
+    });
   });
 
   it("classifies subject errors without retaining arbitrary messages", async () => {

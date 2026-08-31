@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "zod": "catalog:"
   },

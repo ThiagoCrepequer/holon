@@ -1,4 +1,9 @@
-import type { ReviewContextV2, ReviewJob } from "@holon/contracts";
+import { selectValidFindings } from "@holon/application";
+import {
+  modelReviewOutputSchema,
+  type ReviewContextV2,
+  type ReviewJob,
+} from "@holon/contracts";
 
 import {
   evalCaseSchema,
@@ -23,6 +28,7 @@ export type EvalCaseRun =
       readonly caseId: string;
       readonly grade: EvalGrade;
       readonly outcome: "completed";
+      readonly rejectedFindings: number;
     }
   | {
       readonly caseId: string;
@@ -42,6 +48,7 @@ export interface EvalSuiteResult {
     readonly matchedFindings: number;
     readonly precision: number | null;
     readonly recall: number | null;
+    readonly rejectedFindings: number;
     readonly severityMatches: number;
     readonly unexpectedFindings: number;
   };
@@ -78,10 +85,22 @@ async function runCase(
   if (!parsed.success) {
     return { caseId: evalCase.id, outcome: "invalid_output" };
   }
+  const validFindings = selectValidFindings(
+    parsed.data.output.findings,
+    evalCase.input.context,
+  );
+  const validatedOutput = modelReviewOutputSchema.parse({
+    ...parsed.data.output,
+    findings: validFindings,
+  });
   return {
     caseId: evalCase.id,
-    grade: gradeEvaluationCase(evalCase, parsed.data),
+    grade: gradeEvaluationCase(evalCase, {
+      ...parsed.data,
+      output: validatedOutput,
+    }),
     outcome: "completed",
+    rejectedFindings: parsed.data.output.findings.length - validFindings.length,
   };
 }
 
@@ -113,6 +132,7 @@ export async function runEvaluationSuite(
         total.expectedFindings + caseRun.grade.metrics.expectedFindings,
       matchedFindings:
         total.matchedFindings + caseRun.grade.metrics.matchedFindings,
+      rejectedFindings: total.rejectedFindings + caseRun.rejectedFindings,
       severityMatches:
         total.severityMatches + caseRun.grade.metrics.severityMatches,
       unexpectedFindings:
@@ -122,6 +142,7 @@ export async function runEvaluationSuite(
       actualFindings: 0,
       expectedFindings: 0,
       matchedFindings: 0,
+      rejectedFindings: 0,
       severityMatches: 0,
       unexpectedFindings: 0,
     },

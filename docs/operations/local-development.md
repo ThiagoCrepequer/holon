@@ -26,7 +26,7 @@ pnpm verify
 O gate executa Oxfmt, Oxlint, TypeScript, cobertura, testes Workerd, dry-run dos
 Workers e build da imagem. Ele não usa GitHub, AI Gateway nem Cloudflare remotos.
 
-Última prova local em 2026-08-31: 373 testes passaram, todos os pacotes
+Última prova local em 2026-08-31: 374 testes passaram, todos os pacotes
 respeitaram 90% de statements/lines/functions e 85% de branches, ambos os
 Workers produziram bundle em dry-run e a imagem fixada por digest foi
 construída. Esses números são snapshot, não meta de produto.

@@ -201,6 +201,9 @@ importers:
 
   packages/evaluation:
     dependencies:
+      '@holon/application':
+        specifier: workspace:*
+        version: link:../application
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts
