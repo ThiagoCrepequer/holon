@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-08-31
 ---
 
 # Provisionamento e deploy
@@ -141,6 +141,12 @@ Fontes verificadas em 2026-08-30:
 20. Use um rename de caminho potencialmente sensível para caminho comum e uma
     `.sgconfig.yml` hostil no repositório; confirme que nenhum lado aparece em
     leitura/busca e que ast-grep continua usando `/opt/holon/sgconfig.yml`.
+
+Evidência em 2026-08-31: os itens 3 e 4 foram observados em PRs públicos, e o
+encerramento parcial de um PR grande também foi exercitado. Isso não marca os
+demais itens como concluídos e não substitui a repetição do checklist para cada
+rollout. Consulte o
+[snapshot do smoke remoto](../research/2026-08-31-live-github-app-review-smoke.md).
 
 ## Observabilidade e rollback
 

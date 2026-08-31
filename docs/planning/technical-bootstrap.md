@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-08-31
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -71,7 +71,7 @@ Saida: fluxo local completo sem publicar nem executar codigo de repositorio.
 
 Saida: tecnologias candidatas resolvidas por evidencia.
 
-## Etapa 6 — Integração controlada — pendente em ambiente remoto
+## Etapa 6 — Integração controlada — parcialmente comprovada
 
 - Registrar um GitHub App de desenvolvimento com menor privilégio.
 - Criar recursos Cloudflare e configurar secrets fora do código.
@@ -79,6 +79,13 @@ Saida: tecnologias candidatas resolvidas por evidencia.
 - Medir rate limits, latência, custo e política de retenção reais.
 
 Saida: primeiro vertical slice auditavel em ambiente de desenvolvimento.
+
+Estado em 2026-08-31: GitHub App, Workflow, preparação remota, análise e
+publicação foram observados em três smokes públicos. A evidência e suas
+limitações estão no
+[relatório de smoke remoto](../research/2026-08-31-live-github-app-review-smoke.md).
+Repositório privado, redelivery, force-push concorrente, múltiplos findings,
+rate limits, custo e retenção continuam pendentes.
 
 ## Criterios globais de aceite
 
