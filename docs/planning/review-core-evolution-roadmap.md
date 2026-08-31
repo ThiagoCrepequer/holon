@@ -54,6 +54,13 @@ desatualizados, mas substituí-los por “validado em produção” também seri
 incorreto. O estado preciso é **parcialmente comprovado em ambiente remoto, com
 lacunas enumeradas**.
 
+Em 2026-08-31, a fundação de avaliação passou a incluir contratos, dois casos
+sintéticos, recordings autorizadas, runner, graders, relatório e execução
+offline em Pull Requests. Um adapter live-model manual também ficou disponível
+atrás do GitHub Environment `live-evaluation`; antecipá-lo não conclui baseline,
+calibração, holdout ou gates das fases seguintes. O live eval continua manual,
+pequeno e não publica no GitHub.
+
 ## Ordem recomendada
 
 | Ordem | Frente                        | Resultado esperado                                        | Dependência            |

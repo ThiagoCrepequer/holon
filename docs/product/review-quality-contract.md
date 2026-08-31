@@ -75,8 +75,9 @@ O pacote `@holon/evaluation` inicia a baseline offline com schema estrito,
 proveniência somente sintética ou pública, partições `development`/`holdout`,
 matching one-to-one de findings, precisão, recall, severidade, confiança,
 parcialidade e termos obrigatórios/proibidos. A configuração registra versões
-de corpus, política, prompt e subject. O pacote não chama modelo, GitHub ou
-Cloudflare; o subject é injetado e toda saída é revalidada.
+de corpus, política, prompt e subject. Os modos obrigatórios em PR não chamam
+modelo, GitHub ou Cloudflare; o subject é injetado e toda saída é revalidada. O
+adapter live manual chama somente a rota autenticada já adotada no AI Gateway.
 Findings com evidência ausente do patch canônico são rejeitados antes do
 grading e contabilizados separadamente.
 
@@ -84,6 +85,14 @@ O corpus V1 inicial recria dois smokes como fixtures sintéticas: regressão do
 limiar de confiança e controle negativo de documentação. Essa amostra prova o
 runner, não representa uma métrica de qualidade do produto nem autoriza gates
 numéricos.
+
+Em Pull Requests, o workflow de avaliação executa os testes do subject mockado e
+as recordings sintéticas V1, sem secrets nem chamadas a provedores durante a
+avaliação. O subject live é acionado somente por `workflow_dispatch` sobre
+`main`, usa o GitHub Environment
+`live-evaluation` e não clona repositório nem publica review. Seu relatório
+persiste IDs, versões, métricas, falhas enumeradas e telemetria de uso; não
+persiste prompt, patch, evidência ou resposta integral.
 
 O conjunto de avaliação deve crescer com:
 

@@ -85,6 +85,7 @@ flowchart TD
     RA --> CT
     EV --> CT
     EV --> AP
+    EV --> MO
     EV -. somente testes .-> TK
     CT --> DO
     AP --> DO
@@ -94,22 +95,29 @@ flowchart TD
 Em texto: aplicações compõem casos de uso e adapters. Adapters implementam portas
 definidas por `application`. `application` depende de contratos e domínio;
 `contracts` usa Zod nas fronteiras e tipos puros do domínio. `evaluation`
-valida corpus sintético e mede outputs por oráculos determinísticos sem acessar
-infraestrutura. O domínio nunca depende de schemas runtime. `test-kit` é
-somente para fixtures de teste.
+valida corpus sintético e mede outputs por oráculos determinísticos. Os modos
+mock e recorded não acessam infraestrutura; o adapter live manual usa `model`
+para chamar a mesma rota autenticada do AI Gateway, sem GitHub, Sandbox ou
+publicação. O domínio nunca depende de schemas runtime. `test-kit` é somente
+para fixtures de teste.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas               |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR     |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                   |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                            |
-| `@holon/evaluation`          | Contratos do corpus, runner offline e graders determinísticos                                      | Aplicação, contratos e Zod; sem infraestrutura |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                   |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura   |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                  |
+| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR      |
+| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                    |
+| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                             |
+| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI |
+| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                 |
+| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                    |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura    |
+| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                   |
+
+O adapter live usa ferramentas sintéticas indisponíveis por contrato: ele mede
+prompt e modelo somente com o contexto autocontido do caso. O smoke remoto
+continua responsável por provar GitHub, ferramentas reais, Sandbox e
+publicação.
 
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
