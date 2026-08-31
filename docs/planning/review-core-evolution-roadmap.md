@@ -498,6 +498,14 @@ Verificação realizada em 2026-08-31:
 
 ## Próxima ação
 
-Executar somente o **PR A — evidência documental**. Depois de revisar e aceitar
-esse snapshot, iniciar o contrato do corpus sem misturar a correção de anomalias
-com a definição da baseline que deverá detectá-las.
+Estado em 2026-08-31:
+
+- o **PR A — evidência documental** foi executado pelo snapshot remoto e pela
+  reconciliação dos documentos de planejamento;
+- o contrato `EvalCaseV1`, o runner offline, os graders determinísticos e dois
+  casos sintéticos de desenvolvimento iniciaram os PRs B e C;
+- nenhum gate de qualidade foi definido a partir dessa amostra mínima.
+
+A próxima ação é ampliar o corpus de desenvolvimento por categoria e adicionar
+casos holdout antes de medir a primeira baseline. Correções das anomalias
+observadas continuam posteriores aos respectivos casos de regressão.
