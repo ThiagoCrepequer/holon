@@ -1,8 +1,8 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { baselineCorpusV1 } from "../corpus/v1/index.js";
-import { baselineRecordingsV1 } from "../recordings/v1/index.js";
+import { baselineCorpusV2 } from "../corpus/v2/index.js";
+import { baselineRecordingsV2 } from "../recordings/v2/index.js";
 import { evalRunConfigurationSchema } from "./contracts.js";
 import { createEvaluationReport, renderEvaluationSummary } from "./report.js";
 import { runEvaluationSuite } from "./runner.js";
@@ -36,12 +36,12 @@ async function main(): Promise<void> {
   const mode = parseMode(process.argv[2]);
   const sourceRevision = safeRunMetadata("GITHUB_SHA", "local");
   const configuration = evalRunConfigurationSchema.parse({
-    corpusVersion: "baseline-v1",
+    corpusVersion: "baseline-v2",
     mode: mode === "live" ? "live-model" : "recorded-output",
     modelReference: mode === "live" ? requiredEnvironment("AI_MODEL_ID") : null,
     policyVersion: "review-policy-v1",
     promptVersion: "review-prompt-v1",
-    subjectVersion: mode === "live" ? "live-model-v1" : "recorded-output-v1",
+    subjectVersion: mode === "live" ? "live-model-v1" : "recorded-output-v2",
   });
   const subject =
     mode === "live"
@@ -53,9 +53,9 @@ async function main(): Promise<void> {
           model: configuration.modelReference ?? "",
           sourceRevision,
         })
-      : createRecordedSubject(baselineRecordingsV1);
+      : createRecordedSubject(baselineRecordingsV2);
   const suite = await runEvaluationSuite(
-    baselineCorpusV1,
+    baselineCorpusV2,
     subject,
     configuration,
   );

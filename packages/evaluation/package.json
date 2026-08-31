@@ -5,8 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./corpus": "./corpus/v1/index.ts",
-    "./recordings": "./recordings/v1/index.ts"
+    "./corpus": "./corpus/v2/index.ts",
+    "./corpus/v1": "./corpus/v1/index.ts",
+    "./corpus/v2": "./corpus/v2/index.ts",
+    "./recordings": "./recordings/v2/index.ts",
+    "./recordings/v1": "./recordings/v1/index.ts",
+    "./recordings/v2": "./recordings/v2/index.ts"
   },
   "scripts": {
     "evaluate:live": "tsx src/cli.ts live",

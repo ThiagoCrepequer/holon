@@ -17,7 +17,7 @@ manual. Nenhum modo cria um terceiro Worker.
 `.github/workflows/evaluation-offline.yml` executa:
 
 1. testes do pacote com subjects mockados;
-2. corpus V1 contra recordings sintéticas versionadas;
+2. corpus V2 contra recordings sintéticas versionadas;
 3. resumo no GitHub Actions Job Summary;
 4. relatório `recorded-output.json` como artifact por 14 dias.
 
@@ -92,3 +92,7 @@ prompt, política ou modelo devem ser comparadas na mesma suíte. A OpenAI
 recomenda avaliações representativas e contínuas porque saídas generativas são
 variáveis; verificação realizada em 2026-08-31:
 [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices).
+
+O corpus V1 permanece versionado para reproduzir a primeira execução live. A V2
+substitui o caso positivo ambíguo por um patch autocontido no qual o novo limiar
+literal contradiz uma constante de política preservada no próprio diff.
