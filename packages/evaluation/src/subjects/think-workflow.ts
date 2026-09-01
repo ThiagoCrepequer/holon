@@ -5,9 +5,12 @@ import {
 } from "../think-protocol.js";
 
 export interface ThinkWorkflowSubjectConfig {
+  readonly accountId: string;
   readonly apiToken: string;
   readonly baseUrl: string;
   readonly evaluationRunId: string;
+  readonly gatewayId: string;
+  readonly model: string;
   readonly pollIntervalMs?: number;
   readonly sourceRevision: string;
   readonly timeoutMs?: number;
@@ -33,6 +36,15 @@ function validatedBaseUrl(value: string): URL {
 }
 
 function validateConfig(config: ThinkWorkflowSubjectConfig): URL {
+  if (!/^[a-f0-9]{32}$/u.test(config.accountId)) {
+    throw new TypeError("Think evaluation account ID is invalid");
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u.test(config.gatewayId)) {
+    throw new TypeError("Think evaluation gateway ID is invalid");
+  }
+  if (!/^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(config.model)) {
+    throw new TypeError("Think evaluation model reference is invalid");
+  }
   if (config.apiToken.length < 16 || config.apiToken.length > 4_096) {
     throw new TypeError("Think evaluation API token is invalid");
   }
@@ -84,8 +96,11 @@ export function createThinkWorkflowSubject(
   return async ({ caseId }) => {
     const startResponse = await fetchImplementation(new URL("runs", baseUrl), {
       body: JSON.stringify({
+        accountId: config.accountId,
         caseId,
         evaluationRunId: config.evaluationRunId,
+        gatewayId: config.gatewayId,
+        modelReference: config.model,
         sourceRevision: config.sourceRevision,
       }),
       headers,

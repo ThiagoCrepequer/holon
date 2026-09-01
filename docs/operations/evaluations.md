@@ -146,17 +146,22 @@ execução combina `run_id` e `run_attempt`; portanto, um re-run não reutiliza 
 Workflow durável de uma tentativa anterior.
 
 O relatório `harness-comparison.json` mantém cada suíte e agrega conclusão,
-aprovação no grader, outputs inválidos, erros de subject, tokens, tool calls e
-latência por braço. Ele não contém prompt, patch nem resposta completa, e não
+aprovação no grader, precisão, recall, outputs inválidos, erros de subject,
+tokens, tool calls e latência por braço. Custo monetário deve ser correlacionado
+separadamente no AI Gateway pelo `evaluation_run_id`, pois a resposta compatível
+não o fornece. O relatório não contém prompt, patch nem resposta completa, e não
 escolhe vencedor automaticamente. Uma opção só deve ser promovida após os
 critérios do [ADR-0017 proposto](../decisions/0017-select-review-output-harness-from-evidence.md)
 e uma validação holdout.
 
 O endpoint experimental aceita somente IDs existentes em `baseline-v3`; o
 corpus é carregado dentro do Worker. O caller nunca envia diff ou prompt. O
-Agent desabilita workspace Bash, MCP, fetch, reasoning e armazenamento de
-mensagens/tools, e o status expõe somente resultado validado, telemetria
-numérica e razões enumeradas.
+endpoint também atesta account, Gateway, rota de modelo e SHA contra o runtime,
+rejeitando qualquer drift entre os braços. O Agent desabilita workspace Bash,
+MCP, fetch, reasoning e armazenamento de mensagens/tools, e o status expõe
+somente resultado validado, telemetria numérica e razões enumeradas. Um callback
+durável destrói o Agent e seu estado após um dia, alinhado à retenção do
+Workflow.
 
 Fontes verificadas em 2026-08-31:
 

@@ -7,6 +7,8 @@ export interface HarnessAggregate {
   readonly invalidOutputs: number;
   readonly outputTokens: number | null;
   readonly passedCases: number;
+  readonly precision: number | null;
+  readonly recall: number | null;
   readonly subject: string;
   readonly subjectErrors: number;
   readonly toolCalls: number | null;
@@ -58,6 +60,15 @@ function sumOptional(values: readonly (number | null)[]): number | null {
   return observed ? total : null;
 }
 
+function ratio(
+  numerator: number,
+  denominator: number,
+  completedCases: number,
+): number | null {
+  if (completedCases === 0) return null;
+  return denominator === 0 ? 1 : numerator / denominator;
+}
+
 export function createHarnessComparisonReport(
   suites: readonly EvaluationReport[],
   sourceRevision: string,
@@ -88,56 +99,74 @@ export function createHarnessComparisonReport(
     throw new TypeError("harness comparison subjects must have equal trials");
   }
   return {
-    aggregates: trialsBySubject.map(({ reports, subject }) => ({
-      completedCases: reports.reduce(
+    aggregates: trialsBySubject.map(({ reports, subject }) => {
+      const completedCases = reports.reduce(
         (total, report) => total + report.suite.completedCases,
         0,
-      ),
-      durationMs: sumOptional(
-        reports.map((report) =>
-          report.suite.caseRuns.reduce<number | null>(
-            (total, caseRun) =>
-              caseRun.outcome === "completed" && caseRun.telemetry !== undefined
-                ? (total ?? 0) + caseRun.telemetry.durationMs
-                : total,
-            null,
+      );
+      const actualFindings = reports.reduce(
+        (total, report) => total + report.suite.metrics.actualFindings,
+        0,
+      );
+      const expectedFindings = reports.reduce(
+        (total, report) => total + report.suite.metrics.expectedFindings,
+        0,
+      );
+      const matchedFindings = reports.reduce(
+        (total, report) => total + report.suite.metrics.matchedFindings,
+        0,
+      );
+      return {
+        completedCases,
+        durationMs: sumOptional(
+          reports.map((report) =>
+            report.suite.caseRuns.reduce<number | null>(
+              (total, caseRun) =>
+                caseRun.outcome === "completed" &&
+                caseRun.telemetry !== undefined
+                  ? (total ?? 0) + caseRun.telemetry.durationMs
+                  : total,
+              null,
+            ),
           ),
         ),
-      ),
-      inputTokens: sumOptional(
-        reports.map((report) =>
-          sumTelemetry(report, (attempt) => attempt.inputTokens),
+        inputTokens: sumOptional(
+          reports.map((report) =>
+            sumTelemetry(report, (attempt) => attempt.inputTokens),
+          ),
         ),
-      ),
-      invalidOutputs: reports.reduce(
-        (total, report) => total + report.suite.invalidOutputs,
-        0,
-      ),
-      outputTokens: sumOptional(
-        reports.map((report) =>
-          sumTelemetry(report, (attempt) => attempt.outputTokens),
+        invalidOutputs: reports.reduce(
+          (total, report) => total + report.suite.invalidOutputs,
+          0,
         ),
-      ),
-      passedCases: reports.reduce(
-        (total, report) => total + report.suite.passedCases,
-        0,
-      ),
-      subject,
-      subjectErrors: reports.reduce(
-        (total, report) => total + report.suite.subjectErrors,
-        0,
-      ),
-      toolCalls: sumOptional(
-        reports.map((report) =>
-          sumTelemetry(report, (attempt) => attempt.toolCallCount),
+        outputTokens: sumOptional(
+          reports.map((report) =>
+            sumTelemetry(report, (attempt) => attempt.outputTokens),
+          ),
         ),
-      ),
-      totalCases: reports.reduce(
-        (total, report) => total + report.suite.totalCases,
-        0,
-      ),
-      trials: reports.length,
-    })),
+        passedCases: reports.reduce(
+          (total, report) => total + report.suite.passedCases,
+          0,
+        ),
+        precision: ratio(matchedFindings, actualFindings, completedCases),
+        recall: ratio(matchedFindings, expectedFindings, completedCases),
+        subject,
+        subjectErrors: reports.reduce(
+          (total, report) => total + report.suite.subjectErrors,
+          0,
+        ),
+        toolCalls: sumOptional(
+          reports.map((report) =>
+            sumTelemetry(report, (attempt) => attempt.toolCallCount),
+          ),
+        ),
+        totalCases: reports.reduce(
+          (total, report) => total + report.suite.totalCases,
+          0,
+        ),
+        trials: reports.length,
+      };
+    }),
     schemaVersion: 1,
     sourceRevision,
     suites,
@@ -146,6 +175,10 @@ export function createHarnessComparisonReport(
 
 function numberOrNA(value: number | null): string {
   return value === null ? "n/a" : String(value);
+}
+
+function percentage(value: number | null): string {
+  return value === null ? "n/a" : `${(value * 100).toFixed(2)}%`;
 }
 
 export function renderHarnessComparisonSummary(
@@ -157,11 +190,11 @@ export function renderHarnessComparisonSummary(
     `- Source revision: \`${report.sourceRevision}\``,
     "- Interpret completion, quality, tokens and latency together; this report does not select a winner automatically.",
     "",
-    "| Subject | Trials | Passed | Completed | Invalid | Subject errors | Input tokens | Output tokens | Tool calls | Duration ms |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| Subject | Trials | Passed | Completed | Precision | Recall | Invalid | Subject errors | Input tokens | Output tokens | Tool calls | Duration ms |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...report.aggregates.map(
       (aggregate) =>
-        `| \`${aggregate.subject}\` | ${aggregate.trials} | ${aggregate.passedCases}/${aggregate.totalCases} | ${aggregate.completedCases}/${aggregate.totalCases} | ${aggregate.invalidOutputs} | ${aggregate.subjectErrors} | ${numberOrNA(aggregate.inputTokens)} | ${numberOrNA(aggregate.outputTokens)} | ${numberOrNA(aggregate.toolCalls)} | ${numberOrNA(aggregate.durationMs)} |`,
+        `| \`${aggregate.subject}\` | ${aggregate.trials} | ${aggregate.passedCases}/${aggregate.totalCases} | ${aggregate.completedCases}/${aggregate.totalCases} | ${percentage(aggregate.precision)} | ${percentage(aggregate.recall)} | ${aggregate.invalidOutputs} | ${aggregate.subjectErrors} | ${numberOrNA(aggregate.inputTokens)} | ${numberOrNA(aggregate.outputTokens)} | ${numberOrNA(aggregate.toolCalls)} | ${numberOrNA(aggregate.durationMs)} |`,
     ),
     "",
   ].join("\n");

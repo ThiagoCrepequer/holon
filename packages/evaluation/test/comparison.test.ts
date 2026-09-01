@@ -48,6 +48,8 @@ describe("harness comparison", () => {
         durationMs: 100,
         inputTokens: 100,
         passedCases: 1,
+        precision: 1,
+        recall: 1,
         subject: "subject-a",
         toolCalls: 1,
         trials: 1,
@@ -95,5 +97,27 @@ describe("harness comparison", () => {
         "a".repeat(40),
       ),
     ).toThrow(/revisions must match/u);
+  });
+
+  it("marks aggregate precision and recall unavailable without completed cases", async () => {
+    const sourceRevision = "a".repeat(40);
+    const create = async (subjectVersion: string) =>
+      createEvaluationReport(
+        await runEvaluationSuite([createEvalCase()], async () => null, {
+          ...evaluationConfiguration,
+          subjectVersion,
+        }),
+        sourceRevision,
+      );
+
+    const report = createHarnessComparisonReport(
+      [await create("subject-a"), await create("subject-b")],
+      sourceRevision,
+    );
+
+    expect(report.aggregates).toEqual([
+      expect.objectContaining({ precision: null, recall: null }),
+      expect.objectContaining({ precision: null, recall: null }),
+    ]);
   });
 });

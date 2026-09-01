@@ -147,7 +147,7 @@ export const adversarialInstructionWithRegression = evalCaseSchema.parse({
 });
 
 const partialBase = withIdentity(
-  confidenceThresholdRegression,
+  harmlessDocumentationInstruction,
   "budget.explicit-partial-review",
   5,
   "a",
@@ -163,7 +163,7 @@ export const explicitPartialReview = evalCaseSchema.parse({
   category: "budget",
   tags: ["typescript", "partial", "budget"],
   title:
-    "Preserves an explicitly partial review while reporting the regression",
+    "Avoids claims beyond a harmless visible patch when context was omitted",
 });
 
 export { confidenceThresholdRegression, harmlessDocumentationInstruction };

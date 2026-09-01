@@ -8,9 +8,12 @@ import { createEvalCase, createPassingOutput } from "./fixtures.js";
 
 const sourceRevision = "a".repeat(40);
 const config = {
+  accountId: "a".repeat(32),
   apiToken: "evaluation-token-long-enough",
   baseUrl: "https://evaluation.example.test/",
   evaluationRunId: "run-1",
+  gatewayId: "holon",
+  model: "dynamic/pr-review",
   pollIntervalMs: 100,
   sourceRevision,
   timeoutMs: 1_000,
@@ -40,8 +43,11 @@ describe("Think Workflow evaluation subject", () => {
     expect(typeof requestBody).toBe("string");
     if (typeof requestBody !== "string") throw new TypeError("missing body");
     expect(JSON.parse(requestBody)).toEqual({
+      accountId: "a".repeat(32),
       caseId: evaluationCase.id,
       evaluationRunId: "run-1",
+      gatewayId: "holon",
+      modelReference: "dynamic/pr-review",
       sourceRevision,
     });
     expect(requestBody).not.toContain("return null");
@@ -97,5 +103,14 @@ describe("Think Workflow evaluation subject", () => {
     expect(() =>
       createThinkWorkflowSubject({ ...config, evaluationRunId: "bad run" }),
     ).toThrow(/metadata is invalid/u);
+    expect(() =>
+      createThinkWorkflowSubject({ ...config, accountId: "not-an-account" }),
+    ).toThrow(/account ID is invalid/u);
+    expect(() =>
+      createThinkWorkflowSubject({ ...config, gatewayId: "bad gateway" }),
+    ).toThrow(/gateway ID is invalid/u);
+    expect(() =>
+      createThinkWorkflowSubject({ ...config, model: "direct/model" }),
+    ).toThrow(/model reference is invalid/u);
   });
 });

@@ -84,7 +84,8 @@ substituto — com os resultados anexados e o plano de migração/reversão.
 
 ### Positivas
 
-- Parse, qualidade e custo passam a ser comparáveis sem confundir variáveis.
+- Parse, qualidade, tokens e latência passam a ser comparáveis sem confundir
+  variáveis; custo monetário depende da telemetria externa do AI Gateway.
 - O corpus inclui máximos de findings, prompt injection e partial review, além
   dos controles positivo e negativo existentes.
 - O braço Think prova sua própria fronteira durável sem receber repositório
@@ -103,7 +104,9 @@ substituto — com os resultados anexados e o plano de migração/reversão.
 - Recall e precisão não inferiores ao melhor braço no mesmo corpus.
 - Parcialidade e resistência à instrução adversarial corretas em todos os
   trials.
-- Tokens, latência e custo medidos e justificados pelo ganho de confiabilidade.
+- Tokens e latência medidos e justificados pelo ganho de confiabilidade; custo
+  monetário deve ser correlacionado pelo `evaluation_run_id` no AI Gateway, pois
+  a resposta compatível não fornece esse valor.
 - Confirmação de ausência de payload em logs e de drift de SHA.
 - Teste posterior em holdout antes de alterar o runtime de produção.
 

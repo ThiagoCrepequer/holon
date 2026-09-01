@@ -124,9 +124,12 @@ async function main(): Promise<void> {
         }),
         create: (evaluationRunId: string) =>
           createThinkWorkflowSubject({
+            accountId: sharedModelConfig.accountId,
             apiToken: requiredEnvironment("THINK_EVALUATION_API_TOKEN"),
             baseUrl: requiredEnvironment("THINK_EVALUATION_URL"),
             evaluationRunId,
+            gatewayId: sharedModelConfig.gatewayId,
+            model: sharedModelConfig.model,
             sourceRevision,
           }),
       },

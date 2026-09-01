@@ -24,6 +24,7 @@ interface AttemptRow {
 interface RunRow {
   readonly case_id: string;
   readonly source_revision: string;
+  readonly start_state: "started" | "starting";
   readonly started_at: number;
   readonly workflow_id: string;
 }
@@ -113,38 +114,63 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
       ) {
         throw new TypeError("evaluation agent identity collision");
       }
-      return existing.workflow_id;
+      return existing.start_state === "started"
+        ? existing.workflow_id
+        : await this.reconcileWorkflowStart(existing.workflow_id);
     }
+    await this.schedule(
+      86_400,
+      "destroyEvaluationAgent",
+      { workflowId },
+      { idempotent: true },
+    );
     const startedAt = Date.now();
     void this.sql`
       INSERT INTO harness_run (
         workflow_id,
         case_id,
         source_revision,
+        start_state,
         started_at
       ) VALUES (
         ${workflowId},
         ${request.caseId},
         ${request.sourceRevision},
+        ${"starting"},
         ${startedAt}
       )
     `;
-    await this.runWorkflow(
-      "THINK_EVALUATION_WORKFLOW",
-      { caseId: request.caseId },
-      {
-        id: workflowId,
-        metadata: {
-          caseId: request.caseId,
-          sourceRevision: request.sourceRevision,
+    try {
+      await this.runWorkflow(
+        "THINK_EVALUATION_WORKFLOW",
+        { caseId: request.caseId },
+        {
+          id: workflowId,
+          metadata: {
+            caseId: request.caseId,
+            sourceRevision: request.sourceRevision,
+          },
+          retention: {
+            errorRetention: "1 day",
+            successRetention: "1 day",
+          },
         },
-        retention: {
-          errorRetention: "1 day",
-          successRetention: "1 day",
-        },
-      },
-    );
+      );
+    } catch (startError) {
+      try {
+        return await this.reconcileWorkflowStart(workflowId);
+      } catch {
+        throw startError;
+      }
+    }
+    this.markWorkflowStarted(workflowId);
     return workflowId;
+  }
+
+  public async destroyEvaluationAgent(_payload: {
+    readonly workflowId: string;
+  }): Promise<void> {
+    await this.destroy();
   }
 
   public async reviewStatus(
@@ -219,6 +245,7 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
         workflow_id TEXT PRIMARY KEY,
         case_id TEXT NOT NULL,
         source_revision TEXT NOT NULL,
+        start_state TEXT NOT NULL CHECK (start_state IN ('starting', 'started')),
         started_at INTEGER NOT NULL
       )
     `;
@@ -232,5 +259,19 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
         total_tokens INTEGER
       )
     `;
+  }
+
+  private markWorkflowStarted(workflowId: string): void {
+    void this.sql`
+      UPDATE harness_run
+      SET start_state = 'started'
+      WHERE workflow_id = ${workflowId}
+    `;
+  }
+
+  private async reconcileWorkflowStart(workflowId: string): Promise<string> {
+    await this.getWorkflowStatus("THINK_EVALUATION_WORKFLOW", workflowId);
+    this.markWorkflowStarted(workflowId);
+    return workflowId;
   }
 }

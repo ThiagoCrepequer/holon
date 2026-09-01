@@ -18,17 +18,17 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
 
 ## Classes de dados
 
-| Classe              | Exemplos                                            | Persistência pretendida                                    |
-| ------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
-| Identidade          | installation ID, repository ID, PR number, head SHA | Enquanto a instalação existir e conforme auditoria         |
-| Evento              | delivery ID, tipo, timestamp, envelope normalizado  | Workflow: 1 dia sucesso, 3 dias erro; demais ainda aberta  |
-| Diff canônico bruto | Request temporário do executor, limitado a 2 MB     | Somente durante preparação; não vira checkpoint ou prompt  |
-| Contexto filtrado   | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                               |
-| Evidência           | Trechos usados para sustentar finding               | Mínima e com retenção limitada                             |
-| IA                  | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita |
-| Publicação          | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria           |
-| Segredo             | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped     |
-| Avaliação sintética | IDs, prompt derivado do corpus V3 e saída validada  | DO/Workflow experimental; retenção configurada em 1 dia    |
+| Classe              | Exemplos                                            | Persistência pretendida                                                         |
+| ------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Identidade          | installation ID, repository ID, PR number, head SHA | Enquanto a instalação existir e conforme auditoria                              |
+| Evento              | delivery ID, tipo, timestamp, envelope normalizado  | Workflow: 1 dia sucesso, 3 dias erro; demais ainda aberta                       |
+| Diff canônico bruto | Request temporário do executor, limitado a 2 MB     | Somente durante preparação; não vira checkpoint ou prompt                       |
+| Contexto filtrado   | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                                                    |
+| Evidência           | Trechos usados para sustentar finding               | Mínima e com retenção limitada                                                  |
+| IA                  | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita                      |
+| Publicação          | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria                                |
+| Segredo             | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped                          |
+| Avaliação sintética | IDs, prompt derivado do corpus V3 e saída validada  | Workflow com retenção de 1 dia; Agent destruído por callback durável após 1 dia |
 
 ## Princípios
 

@@ -4,8 +4,11 @@ import { HarnessEvaluationAgent } from "../src/agent.js";
 
 const sourceRevision = "a".repeat(40);
 const request = {
+  accountId: "a".repeat(32),
   caseId: "correctness.confidence-threshold-regression",
   evaluationRunId: "run-1",
+  gatewayId: "holon",
+  modelReference: "dynamic/pr-review",
   sourceRevision,
 };
 const workflowId = `review-${"b".repeat(64)}`;
@@ -28,6 +31,7 @@ interface FakeState {
   run?: {
     case_id: string;
     source_revision: string;
+    start_state: "started" | "starting";
     started_at: number;
     workflow_id: string;
   };
@@ -35,7 +39,9 @@ interface FakeState {
 
 function fakeAgent() {
   const state: FakeState = { attempts: [] };
+  const destroy = vi.fn(() => Promise.resolve());
   const runWorkflow = vi.fn(() => Promise.resolve(workflowId));
+  const schedule = vi.fn(() => Promise.resolve({ id: "cleanup-schedule" }));
   const getWorkflowStatus = vi.fn<() => Promise<InstanceStatus>>(() =>
     Promise.resolve({ status: "queued" as const }),
   );
@@ -50,8 +56,12 @@ function fakeAgent() {
           workflow_id: values[0] as string,
           case_id: values[1] as string,
           source_revision: values[2] as string,
-          started_at: Number(values[3]),
+          start_state: values[3] as "started" | "starting",
+          started_at: Number(values[4]),
         };
+      }
+      if (query.startsWith("UPDATE harness_run") && state.run !== undefined) {
+        state.run = { ...state.run, start_state: "started" };
       }
       if (query.startsWith("INSERT INTO harness_attempts")) {
         state.attempts.push({
@@ -70,6 +80,7 @@ function fakeAgent() {
     HarnessEvaluationAgent.prototype,
   ) as HarnessEvaluationAgent;
   Object.defineProperties(agent, {
+    destroy: { value: destroy },
     env: {
       value: {
         AI_GATEWAY_ACCOUNT_ID: "a".repeat(32),
@@ -82,9 +93,18 @@ function fakeAgent() {
     getWorkflowStatus: { value: getWorkflowStatus },
     name: { value: "eval-test" },
     runWorkflow: { value: runWorkflow },
+    schedule: { value: schedule },
     sql: { value: sql },
   });
-  return { agent, getWorkflowStatus, runWorkflow, sql, state };
+  return {
+    agent,
+    destroy,
+    getWorkflowStatus,
+    runWorkflow,
+    schedule,
+    sql,
+    state,
+  };
 }
 
 describe("HarnessEvaluationAgent", () => {
@@ -136,12 +156,19 @@ describe("HarnessEvaluationAgent", () => {
     ]);
   });
 
-  it("starts a revision-bound workflow idempotently and retains an ambiguous start", async () => {
+  it("starts a revision-bound workflow idempotently and reconciles an ambiguous start", async () => {
     const first = fakeAgent();
     await expect(first.agent.startReview(request, workflowId)).resolves.toBe(
       workflowId,
     );
     expect(first.runWorkflow).toHaveBeenCalledOnce();
+    expect(first.schedule).toHaveBeenCalledWith(
+      86_400,
+      "destroyEvaluationAgent",
+      { workflowId },
+      { idempotent: true },
+    );
+    expect(first.state.run?.start_state).toBe("started");
     await expect(first.agent.startReview(request, workflowId)).resolves.toBe(
       workflowId,
     );
@@ -159,14 +186,39 @@ describe("HarnessEvaluationAgent", () => {
 
     const failed = fakeAgent();
     failed.runWorkflow.mockRejectedValueOnce(new Error("start failed"));
-    await expect(failed.agent.startReview(request, workflowId)).rejects.toThrow(
-      "start failed",
+    await expect(failed.agent.startReview(request, workflowId)).resolves.toBe(
+      workflowId,
     );
-    expect(failed.state.run).toMatchObject({ workflow_id: workflowId });
+    expect(failed.state.run).toMatchObject({
+      start_state: "started",
+      workflow_id: workflowId,
+    });
+    expect(failed.getWorkflowStatus).toHaveBeenCalledOnce();
     await expect(failed.agent.startReview(request, workflowId)).resolves.toBe(
       workflowId,
     );
     expect(failed.runWorkflow).toHaveBeenCalledOnce();
+
+    const unresolved = fakeAgent();
+    unresolved.runWorkflow.mockRejectedValueOnce(new Error("start failed"));
+    unresolved.getWorkflowStatus.mockRejectedValueOnce(new Error("unknown"));
+    await expect(
+      unresolved.agent.startReview(request, workflowId),
+    ).rejects.toThrow("start failed");
+    expect(unresolved.state.run?.start_state).toBe("starting");
+    unresolved.getWorkflowStatus.mockResolvedValueOnce({ status: "queued" });
+    await expect(
+      unresolved.agent.startReview(request, workflowId),
+    ).resolves.toBe(workflowId);
+    expect(unresolved.runWorkflow).toHaveBeenCalledOnce();
+  });
+
+  it("destroys the complete Agent state when retention expires", async () => {
+    const { agent, destroy } = fakeAgent();
+
+    await agent.destroyEvaluationAgent({ workflowId });
+
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it.each(["queued", "running", "waiting", "paused"] as const)(
@@ -176,6 +228,7 @@ describe("HarnessEvaluationAgent", () => {
       state.run = {
         case_id: request.caseId,
         source_revision: sourceRevision,
+        start_state: "started",
         started_at: Date.now(),
         workflow_id: workflowId,
       };
@@ -212,6 +265,7 @@ describe("HarnessEvaluationAgent", () => {
       current.state.run = {
         case_id: request.caseId,
         source_revision: sourceRevision,
+        start_state: "started",
         started_at: Date.now(),
         workflow_id: workflowId,
       };
@@ -227,6 +281,7 @@ describe("HarnessEvaluationAgent", () => {
     state.run = {
       case_id: request.caseId,
       source_revision: sourceRevision,
+      start_state: "started",
       started_at: Date.now() - 10,
       workflow_id: workflowId,
     };

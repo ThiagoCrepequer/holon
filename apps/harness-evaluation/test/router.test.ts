@@ -5,6 +5,9 @@ import { createHarnessEvaluationHandler } from "../src/router.js";
 const token = "test-evaluation-token-long-enough";
 const sourceRevision = "a".repeat(40);
 const environment = {
+  AI_GATEWAY_ACCOUNT_ID: "a".repeat(32),
+  AI_GATEWAY_ID: "holon",
+  AI_MODEL_ID: "dynamic/pr-review",
   SOURCE_REVISION: sourceRevision,
   THINK_EVALUATION_API_TOKEN: token,
 };
@@ -49,8 +52,11 @@ describe("harness evaluation router", () => {
     );
     const handler = createHarnessEvaluationHandler(environment, resolve);
     const body = JSON.stringify({
+      accountId: "a".repeat(32),
       caseId: "correctness.confidence-threshold-regression",
       evaluationRunId: "run-1",
+      gatewayId: "holon",
+      modelReference: "dynamic/pr-review",
       sourceRevision,
     });
 
@@ -68,6 +74,7 @@ describe("harness evaluation router", () => {
     );
 
     for (const invalidBody of [
+      { ...JSON.parse(body), modelReference: "dynamic/other-route" },
       { ...JSON.parse(body), caseId: "unknown.case" },
       { ...JSON.parse(body), sourceRevision: "b".repeat(40) },
     ]) {
@@ -135,8 +142,11 @@ describe("harness evaluation router", () => {
     const response = await handler(
       request("/runs", {
         body: JSON.stringify({
+          accountId: "a".repeat(32),
           caseId: "correctness.confidence-threshold-regression",
           evaluationRunId: "run-1",
+          gatewayId: "holon",
+          modelReference: "dynamic/pr-review",
           sourceRevision,
         }),
         method: "POST",

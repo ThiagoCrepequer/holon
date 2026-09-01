@@ -8,9 +8,24 @@ const safeIdentifierSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
 
+const accountIdSchema = z.string().regex(/^[a-f0-9]{32}$/u);
+const gatewayIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u);
+const modelReferenceSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u);
+
 export const thinkEvaluationStartRequestSchema = z.strictObject({
+  accountId: accountIdSchema,
   caseId: safeIdentifierSchema,
   evaluationRunId: safeIdentifierSchema,
+  gatewayId: gatewayIdSchema,
+  modelReference: modelReferenceSchema,
   sourceRevision: safeIdentifierSchema,
 });
 

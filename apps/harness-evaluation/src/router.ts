@@ -94,7 +94,14 @@ async function readStartRequest(request: Request): Promise<unknown> {
 }
 
 export function createHarnessEvaluationHandler(
-  env: Pick<Cloudflare.Env, "SOURCE_REVISION" | "THINK_EVALUATION_API_TOKEN">,
+  env: Pick<
+    Cloudflare.Env,
+    | "AI_GATEWAY_ACCOUNT_ID"
+    | "AI_GATEWAY_ID"
+    | "AI_MODEL_ID"
+    | "SOURCE_REVISION"
+    | "THINK_EVALUATION_API_TOKEN"
+  >,
   resolveAgent: EvaluationAgentResolver,
 ): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -114,6 +121,9 @@ export function createHarnessEvaluationHandler(
         return json({ error: "invalid_run_request" }, 400);
       }
       if (
+        startRequest.accountId !== env.AI_GATEWAY_ACCOUNT_ID ||
+        startRequest.gatewayId !== env.AI_GATEWAY_ID ||
+        startRequest.modelReference !== env.AI_MODEL_ID ||
         startRequest.sourceRevision !== env.SOURCE_REVISION ||
         !allowedCaseIds.has(startRequest.caseId)
       ) {

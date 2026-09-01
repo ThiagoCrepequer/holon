@@ -99,29 +99,9 @@ export const baselineRecordingsV3 = [
     caseId: "budget.explicit-partial-review",
     output: evalSubjectOutputSchema.parse({
       output: {
-        findings: [
-          {
-            confidence: 0.95,
-            diagnostic:
-              "The confidence threshold changed to 0.08 and violates the accepted publication policy.",
-            evidence: [
-              {
-                excerpt: "finding.confidence < 0.08",
-                path: "packages/domain/src/finding.ts",
-                reason: "The new threshold admits lower-confidence findings",
-                startLine: 114,
-              },
-            ],
-            location: {
-              line: 114,
-              path: "packages/domain/src/finding.ts",
-              side: "RIGHT",
-            },
-            severity: "high",
-            suggestion: "Restore the accepted 0.8 threshold.",
-          },
-        ],
-        summary: "The confidence threshold has an unintended regression.",
+        findings: [],
+        summary:
+          "The visible documentation-only patch has no supported issue; the review context was partial.",
       },
       partial: true,
     }),

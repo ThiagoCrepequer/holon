@@ -143,12 +143,15 @@ nega providers que coletem dados.
 `apps/harness-evaluation` não expõe a rota genérica de Agents SDK. Seu handler
 aceita apenas `POST /runs` com ID existente no corpus V3 e consulta de status
 para a identidade hash determinística correspondente. Autenticação é comparada
-em tempo constante; body, metadados e URL são limitados e validados. O SHA do
-caller precisa ser igual a `SOURCE_REVISION` implantado.
+em tempo constante; body, metadados e URL são limitados e validados. SHA,
+account, Gateway e rota de modelo informados pelo runner precisam coincidir com
+a configuração implantada, impedindo comparação silenciosa entre subjects
+diferentes.
 
 O Agent não recebe binding GitHub, Sandbox ou publisher. Workspace Bash, MCP,
 fetch, reasoning enviado e armazenamento de payload em spans ficam
 desabilitados. O Workflow monta o prompt a partir do corpus embutido, valida a
 tool terminal contra o contrato portátil e aplica novamente o schema de
 domínio. Erros externos viram razões enumeradas; mensagens arbitrárias não
-cruzam a API nem entram no relatório.
+cruzam a API nem entram no relatório. O Workflow e o Agent têm retenção de um
+dia; um callback durável destrói o estado completo do Agent ao expirar.
