@@ -96,12 +96,22 @@ sequenceDiagram
 ## Checkpoints implementados
 
 Na ordem normal, o Workflow executa `claim-run`, `start-run`,
-`revalidate-initial-head`, `prepare-repository`, `analyze-review`, `begin-publication`,
-`revalidate-current-head`, zero ou mais `publish-inline-N`, `publish-summary`,
-`complete-run` e o registro durável de cleanup. Obsolescência e falha registram
-a mesma obrigação. Um alarm do ledger executa cleanup idempotente até sucesso,
-independentemente do resultado do Workflow. Os nomes são determinísticos;
-transições usam operation IDs derivados da instância e do nome da etapa.
+`revalidate-initial-head`, `start-check-run`, `prepare-repository`, `analyze-review`,
+`begin-publication`, `revalidate-current-head`, zero ou mais `publish-inline-N`,
+`publish-summary`, `complete-check-run`, `complete-run-and-schedule-cleanup` e o
+registro durável de cleanup.
+
+O ciclo de vida no GitHub Check Runs é mantido de forma idempotente:
+
+- Ao iniciar a execução da run (`start-check-run`), cria um Check Run com `status: "in_progress"`, ancorado ao `runId` via `external_id` e armazenado na tabela `runs` do ledger.
+- Se o head for substituído (`completeObsolete`), o Check Run é atualizado para `status: "completed"` com `conclusion: "cancelled"`.
+- Ao concluir a publicação (`complete-check-run`), o Check Run é atualizado para `status: "completed"` com `conclusion: "success"` (0 findings) ou `conclusion: "neutral"` (achados identificados ou escopo parcial), detalhando contagem de achados, arquivos e duração.
+- Em caso de falha terminal (`fail-check-run`), o Check Run é concluído com `conclusion: "failure"`.
+
+Obsolescência e falha registram a mesma obrigação de cleanup durável. Um alarm do
+ledger executa cleanup idempotente até sucesso, independentemente do resultado do
+Workflow. Os nomes são determinísticos; transições usam operation IDs derivados da
+instância e do nome da etapa.
 
 Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
 run antes de iniciar um container faturável. A revalidação final continua

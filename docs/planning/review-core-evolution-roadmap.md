@@ -93,16 +93,11 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 2. Ciclo de vida e publicação
 
-- representar `queued`, `in_progress` e `completed` em um Check Run ou mecanismo
-  equivalente;
-- publicar um review coerente, evitando review-pai vazio acompanhado de resumo
-  separado sem relação clara;
-- tornar explícitos resultado geral, parcialidade, cobertura, motivo de omissão
-  e ação recomendada;
-- preservar marcadores determinísticos e atualização idempotente.
-
-Uma decisão será necessária se Check Runs passarem a compor o contrato externo
-ou exigirem novas permissões do GitHub App.
+- [x] Contratos e schemas Zod para Check Runs (`packages/contracts/src/check-run.ts`);
+- [x] Adaptador de publicação com `createCheckRun`, `updateCheckRun` e `findCheckRunByExternalId` (`packages/github`);
+- [x] Formatação enriquecida de output com métricas, arquivos, duração e escopo parcial (`packages/application`);
+- [x] Integração durável no `ReviewWorkflow` e persistência do ID no ledger SQLite (`apps/control-plane`, Migration 3);
+- [x] Tratamento resiliente e idempotente de estados `in_progress`, `cancelled`, `success`, `neutral` e `failure`.
 
 ### 3. Batch review para PRs grandes
 
