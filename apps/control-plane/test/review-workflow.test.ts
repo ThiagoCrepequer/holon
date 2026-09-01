@@ -1,4 +1,9 @@
-import { reviewJobV2Schema, type ReviewContextV2 } from "@holon/contracts";
+import { createReviewRun } from "@holon/application";
+import {
+  reviewJobV2Schema,
+  type ReviewContextV2,
+  type ReviewJob,
+} from "@holon/contracts";
 import type { RunId } from "@holon/domain";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -163,10 +168,10 @@ function runtime(
   return { cleanup, posts, prepareRepositoryV2, resolveContainerId, value };
 }
 
-function event(instanceId: string) {
+function event(instanceId: string, customJob: ReviewJob = job) {
   return {
     instanceId,
-    payload: job,
+    payload: customJob,
     timestamp: new Date("2026-08-29T12:00:00.000Z"),
     workflowName: "holon-review-workflow",
   };
@@ -264,8 +269,10 @@ describe("ReviewWorkflow", () => {
 
     expect(headReads).toBe(4);
     expect(setup.posts.map((post) => post.route)).toEqual([
+      "POST /repos/{owner}/{repo}/check-runs",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
     ]);
     expect(setup.cleanup).not.toHaveBeenCalled();
     expect(stepNames).toContain("complete-run-and-schedule-cleanup");
@@ -294,8 +301,11 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(setup.posts).toHaveLength(1);
-    expect(setup.posts[0]?.route).toContain("/comments");
+    expect(setup.posts.map((post) => post.route)).toEqual([
+      "POST /repos/{owner}/{repo}/check-runs",
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+    ]);
     expect(
       setup.posts.some((post) =>
         String(post.body).includes("could not complete"),
@@ -345,7 +355,10 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(setup.posts).toHaveLength(0);
+    expect(setup.posts.map((post) => post.route)).toEqual([
+      "POST /repos/{owner}/{repo}/check-runs",
+      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+    ]);
   });
 
   it("skips the model for a context with no eligible files", async () => {
@@ -369,7 +382,10 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toMatchObject({ outcome: "completed" });
     expect(review).not.toHaveBeenCalled();
-    expect(setup.posts[0]?.body).toContain("No eligible changes were found");
+    const summaryPost = setup.posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPost?.body).toContain("No eligible changes were found");
   });
 
   it("returns duplicate without rerunning a completed head", async () => {
@@ -485,9 +501,11 @@ describe("ReviewWorkflow", () => {
       immediateStep([]),
       setup.value,
     );
-    expect(posts).toHaveLength(1);
-    expect(posts[0]?.body).toContain("Low-severity observations:");
-    expect(posts[0]?.body).toContain(finding.diagnostic);
+    const summaryPost = posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPost?.body).toContain("Low-severity observations:");
+    expect(summaryPost?.body).toContain(finding.diagnostic);
   });
 
   it("does not publish a failure notice when the failed run is no longer fresh", async () => {
@@ -510,7 +528,9 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).rejects.toThrow("model unavailable");
-    expect(setup.posts).toHaveLength(0);
+    expect(
+      setup.posts.some((post) => post.route.includes("/pulls/{pull_number}")),
+    ).toBe(false);
     await expect(
       env.REVIEW_LEDGERS.getByName("github:42:pr:7").runState(
         job.runId as RunId,
@@ -553,5 +573,281 @@ describe("ReviewWorkflow", () => {
     expect(parseAppId("123")).toBe(123);
     expect(() => parseAppId("0")).toThrow("positive integer");
     expect(() => parseAppId("not-a-number")).toThrow("positive integer");
+  });
+
+  it("manages Check Run lifecycle with in_progress and completion status", async () => {
+    const checkRunRequests: Array<{
+      readonly route: string;
+      readonly parameters: Record<string, unknown>;
+    }> = [];
+    const setup = runtime();
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const s = session([]);
+        return Promise.resolve({
+          ...s,
+          api: {
+            ...s.api,
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.includes("check-runs")) {
+                checkRunRequests.push({ parameters, route });
+              }
+              return Promise.resolve({ data: { id: 789 } });
+            },
+          },
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("check-run-lifecycle-run"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+
+    expect(checkRunRequests).toHaveLength(2);
+    expect(checkRunRequests[0]).toMatchObject({
+      parameters: {
+        external_id:
+          "github:42:pr:7:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        head_sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        name: "Holon Review",
+        output: {
+          summary:
+            "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
+          title: "Holon Review in progress",
+        },
+        owner: "acme",
+        repo: "api",
+        request: { retries: 0 },
+        started_at: expect.any(String),
+        status: "in_progress",
+      },
+      route: "POST /repos/{owner}/{repo}/check-runs",
+    });
+
+    expect(checkRunRequests[1]?.route).toBe(
+      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+    );
+    expect(checkRunRequests[1]?.parameters).toMatchObject({
+      check_run_id: 789,
+      conclusion: "neutral",
+      status: "completed",
+    });
+
+    await expect(
+      env.REVIEW_LEDGERS.getByName("github:42:pr:7").checkRunId(
+        job.runId as RunId,
+      ),
+    ).resolves.toBe(789);
+  });
+
+  it("handles existing check runs found via findCheckRunByExternalId or ledger cache", async () => {
+    const setup = runtime();
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    const cachedRunId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
+    const jobWithCachedRun: ReviewJob = {
+      ...job,
+      envelope: {
+        ...job.envelope,
+        pullRequest: {
+          ...job.envelope.pullRequest,
+          headSha: "b".repeat(40),
+        },
+      },
+      runId: cachedRunId,
+    };
+    const testRun = createReviewRun(jobWithCachedRun);
+    await ledger.claimRun(
+      testRun,
+      "workflow-cached",
+      "2026-08-29T12:00:00.000Z",
+    );
+    await ledger.recordCheckRunId(cachedRunId, 555);
+
+    const checkRunRequests: string[] = [];
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const s = session([]);
+        return Promise.resolve({
+          ...s,
+          api: {
+            ...s.api,
+            request: (route: string) => {
+              checkRunRequests.push(route);
+              return Promise.resolve({ data: { id: 1 } });
+            },
+          },
+          currentHeadSha: () => Promise.resolve("b".repeat(40)),
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("workflow-cached", jobWithCachedRun),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+
+    // start-check-run re-used cached 555 and did not call POST /check-runs
+    expect(
+      checkRunRequests.filter(
+        (r) => r.startsWith("POST") && r.includes("check-runs"),
+      ),
+    ).toHaveLength(0);
+    // complete-check-run called PATCH /check-runs/{check_run_id}
+    expect(
+      checkRunRequests.filter(
+        (r) => r.startsWith("PATCH") && r.includes("check-runs"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("finds existing check runs on GitHub when ledger does not have checkRunId", async () => {
+    const checkRunPatches: Array<{
+      readonly route: string;
+      readonly parameters: Record<string, unknown>;
+    }> = [];
+    const setup = runtime();
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const s = session([]);
+        return Promise.resolve({
+          ...s,
+          api: {
+            ...s.api,
+            listCheckRuns: () =>
+              Promise.resolve([
+                {
+                  externalId: job.runId,
+                  id: 888,
+                  name: "Holon Review",
+                  status: "in_progress",
+                },
+              ]),
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.startsWith("PATCH") && route.includes("check-runs")) {
+                checkRunPatches.push({ parameters, route });
+              }
+              return Promise.resolve({ data: { id: 1 } });
+            },
+          },
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("found-check-run-on-github"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+
+    expect(checkRunPatches).toHaveLength(1);
+    expect(checkRunPatches[0]?.parameters).toMatchObject({
+      check_run_id: 888,
+      status: "completed",
+    });
+  });
+
+  it("completes check run with success conclusion for clean review without findings", async () => {
+    const checkRunPatches: Array<{
+      readonly parameters: Record<string, unknown>;
+    }> = [];
+    const setup = runtime({
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: [],
+              summary: "No functional regressions or security flaws found.",
+            },
+            promptTruncated: false,
+          }),
+      }),
+    });
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const s = session([]);
+        return Promise.resolve({
+          ...s,
+          api: {
+            ...s.api,
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.startsWith("PATCH") && route.includes("check-runs")) {
+                checkRunPatches.push({ parameters });
+              }
+              return Promise.resolve({ data: { id: 1 } });
+            },
+          },
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("clean-review-run"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+
+    expect(checkRunPatches).toHaveLength(1);
+    expect(checkRunPatches[0]?.parameters).toMatchObject({
+      conclusion: "success",
+      status: "completed",
+    });
+  });
+
+  it("handles check run start and update failures gracefully without failing review", async () => {
+    const events: Array<{ readonly event: string }> = [];
+    const setup = runtime();
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const s = session([]);
+        return Promise.resolve({
+          ...s,
+          api: {
+            ...s.api,
+            request: (route: string) => {
+              if (route.includes("check-runs")) {
+                return Promise.reject(
+                  new Error("check run API network failure"),
+                );
+              }
+              return Promise.resolve({ data: { id: 123 } });
+            },
+          },
+        });
+      },
+      logger: {
+        emit: (name) => events.push({ event: name }),
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("check-run-error-handling-run"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toMatchObject({ outcome: "completed" });
+
+    expect(events.some((e) => e.event === "check_run.start_failed")).toBe(true);
   });
 });

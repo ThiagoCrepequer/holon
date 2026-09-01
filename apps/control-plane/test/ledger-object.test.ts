@@ -132,14 +132,14 @@ describe("ReviewLedgerObject", () => {
     await evictDurableObject(ledger);
 
     await expect(ledger.isLatestRun(runId)).resolves.toBe(true);
-    await runInDurableObject(ledger, (_object, state) => {
+    await runInDurableObject(ledger, (object, state) => {
       expect(
         state.storage.sql
           .exec<{ version: number }>(
             "SELECT version FROM schema_migrations ORDER BY version",
           )
           .toArray(),
-      ).toEqual([{ version: 1 }, { version: 2 }]);
+      ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
       expect(
         state.storage.sql
           .exec<{ causal_version: string }>(
@@ -148,6 +148,14 @@ describe("ReviewLedgerObject", () => {
           )
           .one().causal_version,
       ).toBe(run.createdAt);
+      expect(object.checkRunId(runId)).toBeUndefined();
+      expect(
+        object.checkRunId(
+          "github:42:pr:99:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+      ).toBeUndefined();
+      object.recordCheckRunId(runId, 101);
+      expect(object.checkRunId(runId)).toBe(101);
     });
   });
 

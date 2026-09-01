@@ -1,7 +1,9 @@
 import type {
+  CreateCheckRunInput,
   ModelReviewOutput,
   ReviewContextV2,
   ReviewJob,
+  UpdateCheckRunInput,
 } from "@holon/contracts";
 import type {
   PublicationId,
@@ -11,7 +13,11 @@ import type {
   RunState,
 } from "@holon/domain";
 
-export type { ReviewContextV2 as ReviewContext } from "@holon/contracts";
+export type {
+  CreateCheckRunInput,
+  ReviewContextV2 as ReviewContext,
+  UpdateCheckRunInput,
+} from "@holon/contracts";
 
 export interface ModelReviewResult {
   readonly output: ModelReviewOutput;
@@ -57,9 +63,12 @@ export interface PublishCommentInput {
 }
 
 export interface ReviewPublisher {
+  createCheckRun?(input: CreateCheckRunInput): Promise<number>;
+  findCheckRunByExternalId?(externalId: string): Promise<number | undefined>;
   findCommentByMarker(
     marker: string,
     kind: "inline" | "summary",
   ): Promise<number | undefined>;
   publish(input: PublishCommentInput): Promise<number>;
+  updateCheckRun?(input: UpdateCheckRunInput): Promise<void>;
 }

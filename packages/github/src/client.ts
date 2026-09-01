@@ -12,6 +12,7 @@ import {
 } from "./errors.js";
 import type {
   GitHubApi,
+  GitHubCheckRun,
   GitHubComment,
   GitHubCommentListParameters,
   GitHubCommentListRoute,
@@ -94,6 +95,41 @@ class OctokitApi implements GitHubApi {
     } catch (error) {
       throw classifyGitHubRequestError(error);
     }
+  }
+
+  public async listCheckRuns(
+    ref: string,
+    parameters: {
+      readonly check_name?: string;
+      readonly owner: string;
+      readonly repo: string;
+    },
+  ): Promise<readonly GitHubCheckRun[]> {
+    return await executeGitHubRequest(async () => {
+      const response = await this.octokit.request(
+        "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
+        {
+          ...parameters,
+          ref,
+        },
+      );
+      const data = record(response.data, "GitHub check runs list data");
+      const checkRuns = Array.isArray(data.check_runs) ? data.check_runs : [];
+      return checkRuns.map((candidate) => {
+        const item = record(candidate, "GitHub check run item");
+        if (!Number.isSafeInteger(item.id) || Number(item.id) <= 0) {
+          throw new TypeError("GitHub check run id must be a positive integer");
+        }
+        return {
+          ...(typeof item.external_id === "string"
+            ? { externalId: item.external_id }
+            : {}),
+          id: Number(item.id),
+          name: typeof item.name === "string" ? item.name : "",
+          status: typeof item.status === "string" ? item.status : "",
+        };
+      });
+    });
   }
 
   public async request(

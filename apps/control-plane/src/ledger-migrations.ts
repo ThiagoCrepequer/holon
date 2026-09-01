@@ -79,6 +79,12 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 2,
   },
+  {
+    statements: `
+      ALTER TABLE runs ADD COLUMN github_check_run_id INTEGER;
+    `,
+    version: 3,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

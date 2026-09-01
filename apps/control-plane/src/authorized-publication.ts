@@ -13,6 +13,8 @@ export interface PublicationLedger extends ReviewLedger {
     runId: RunId,
     purpose: "failure" | "review",
   ): Promise<boolean>;
+  checkRunId(runId: RunId): Promise<number | undefined> | number | undefined;
+  recordCheckRunId(runId: RunId, checkRunId: number): Promise<void> | void;
 }
 
 export class ReviewMutationNotAuthorizedError extends Error {

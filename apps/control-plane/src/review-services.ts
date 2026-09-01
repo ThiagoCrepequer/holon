@@ -368,12 +368,20 @@ export function createReviewServices(
     });
     return {
       publisher: {
+        createCheckRun: (input) =>
+          executeGitHubOperation(() => delegate.createCheckRun(input)),
+        findCheckRunByExternalId: (externalId) =>
+          executeGitHubOperation(() =>
+            delegate.findCheckRunByExternalId(externalId),
+          ),
         findCommentByMarker: (marker, kind) =>
           executeGitHubOperation(() =>
             delegate.findCommentByMarker(marker, kind),
           ),
         publish: (input) =>
           executeGitHubOperation(() => delegate.publish(input)),
+        updateCheckRun: (input) =>
+          executeGitHubOperation(() => delegate.updateCheckRun(input)),
       },
       readCurrentHead: () =>
         executeGitHubOperation(() =>
