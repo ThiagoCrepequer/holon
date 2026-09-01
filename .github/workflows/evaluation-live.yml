@@ -25,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24.4.0
+          node-version: 24.19.0
 
       - name: Enable the pinned package manager
         run: corepack enable
@@ -39,7 +39,7 @@ jobs:
           AI_GATEWAY_API_TOKEN: ${{ secrets.AI_GATEWAY_API_TOKEN }}
           AI_GATEWAY_ID: ${{ vars.AI_GATEWAY_ID }}
           AI_MODEL_ID: ${{ vars.AI_MODEL_ID }}
-          EVALUATION_REPORT_PATH: artifacts/evaluation/live-model.json
+          EVALUATION_REPORT_PATH: ${{ github.workspace }}/artifacts/evaluation/live-model.json
         run: pnpm --filter @holon/evaluation evaluate:live
 
       - name: Upload the evaluation report
@@ -47,5 +47,5 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evaluation-live-${{ github.run_id }}-${{ github.sha }}
-          path: artifacts/evaluation/live-model.json
+          path: ${{ github.workspace }}/artifacts/evaluation/live-model.json
           retention-days: 30

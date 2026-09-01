@@ -145,7 +145,7 @@ export const evalCaseSchema = z
   });
 
 export const evalModelAttemptSchema = z.strictObject({
-  attempt: z.enum(["investigation", "recovery"]),
+  attempt: z.enum(["investigation", "recovery", "terminal-tool", "think-step"]),
   finishReason: z.string().trim().min(1).max(100).optional(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
@@ -154,7 +154,7 @@ export const evalModelAttemptSchema = z.strictObject({
 });
 
 export const evalSubjectTelemetrySchema = z.strictObject({
-  attempts: z.array(evalModelAttemptSchema).max(2),
+  attempts: z.array(evalModelAttemptSchema).max(16),
   durationMs: z.number().int().nonnegative(),
 });
 

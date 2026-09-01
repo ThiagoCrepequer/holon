@@ -21,9 +21,12 @@ const sdk = vi.hoisted(() => {
     APICallError,
     createProvider: vi.fn(),
     generateText: vi.fn(),
+    hasToolCall: vi.fn((name: string) => ({ tool: name })),
     model: vi.fn(),
     object: vi.fn((input: unknown) => input),
     stepCountIs: vi.fn((steps: number) => ({ steps })),
+    toolLoopGenerate: vi.fn(),
+    toolLoopSettings: [] as unknown[],
   };
 });
 
@@ -36,7 +39,17 @@ vi.mock("@ai-sdk/provider-utils", () => ({
 vi.mock("ai", () => ({
   APICallError: sdk.APICallError,
   Output: { object: sdk.object },
+  ToolLoopAgent: class {
+    public constructor(settings: unknown) {
+      sdk.toolLoopSettings.push(settings);
+    }
+
+    public generate(input: unknown) {
+      return sdk.toolLoopGenerate(input);
+    }
+  },
   generateText: sdk.generateText,
+  hasToolCall: sdk.hasToolCall,
   stepCountIs: sdk.stepCountIs,
 }));
 
@@ -47,6 +60,7 @@ import {
   AiSdkReviewGenerator,
   ModelProviderRequestError,
   RepositoryToolBudgetExceededError,
+  TerminalToolReviewGenerator,
   buildReviewPrompt,
   buildReviewPromptResult,
   createBoundedRepositoryToolRunner,
@@ -451,6 +465,63 @@ describe("model review boundary", () => {
       toolChoice: "none",
     });
     expect(options.stopWhen).toEqual({ steps: 7 });
+  });
+
+  it("terminates on the schema-valid submit_review tool call", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
+    sdk.toolLoopGenerate.mockResolvedValueOnce({
+      finishReason: "tool-calls",
+      staticToolCalls: [
+        {
+          input: { findings: [], summary: output.summary },
+          toolName: "submit_review",
+        },
+      ],
+      toolCalls: [{ toolName: "submit_review" }],
+      usage: { inputTokens: 90, outputTokens: 10, totalTokens: 100 },
+    });
+    const usages: unknown[] = [];
+    const generator = new TerminalToolReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+      (usage) => usages.push(usage),
+    );
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).resolves.toEqual(output);
+    const settings = sdk.toolLoopSettings.at(-1) as {
+      readonly prepareStep: (input: { readonly stepNumber: number }) => unknown;
+      readonly stopWhen: unknown;
+      readonly tools: Record<string, { execute(): Promise<unknown> }>;
+    };
+    expect(settings.stopWhen).toEqual([
+      { tool: "submit_review" },
+      { steps: 7 },
+    ]);
+    expect(settings.prepareStep({ stepNumber: 6 })).toEqual({
+      activeTools: ["submit_review"],
+      toolChoice: { toolName: "submit_review", type: "tool" },
+    });
+    await expect(settings.tools.submit_review!.execute()).resolves.toEqual({
+      accepted: true,
+    });
+    expect(usages).toEqual([
+      {
+        attempt: "terminal-tool",
+        finishReason: "tool-calls",
+        inputTokens: 90,
+        outputTokens: 10,
+        toolCallCount: 1,
+        totalTokens: 100,
+      },
+    ]);
   });
 
   it("performs one tool-free recovery for a semantically empty successful response", async () => {

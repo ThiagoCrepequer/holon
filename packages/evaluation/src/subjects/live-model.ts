@@ -4,6 +4,7 @@ import {
   GatewayModelReviewer,
   ModelProviderRequestError,
   RepositoryToolBudgetExceededError,
+  TerminalToolReviewGenerator,
   createBoundedRepositoryToolRunner,
   nonRetryableModelFailureCode,
   parseGatewayModelReference,
@@ -20,6 +21,10 @@ export interface LiveModelSubjectConfig extends Omit<
   "metadata"
 > {
   readonly evaluationRunId: string;
+  readonly harness?:
+    | "structured-output"
+    | "structured-output-portable"
+    | "terminal-tool";
   readonly sourceRevision: string;
 }
 
@@ -71,26 +76,34 @@ export function createEvaluationModelReviewer(
   onUsage: (usage: ModelUsage) => void,
 ): ModelReviewer {
   validateLiveModelConfig(config);
+  const generatorConfig = {
+    accountId: config.accountId,
+    apiToken: config.apiToken,
+    gatewayId: config.gatewayId,
+    metadata: {
+      case_id: caseId,
+      evaluation_run_id: config.evaluationRunId,
+      source_revision: config.sourceRevision,
+      stage: "evaluation",
+      harness: config.harness ?? "structured-output",
+    },
+    model: config.model,
+  };
+  const tools = createBoundedRepositoryToolRunner(
+    createSelfContainedEvaluationTools(),
+    12,
+  );
   return new GatewayModelReviewer(
-    new AiSdkReviewGenerator(
-      {
-        accountId: config.accountId,
-        apiToken: config.apiToken,
-        gatewayId: config.gatewayId,
-        metadata: {
-          case_id: caseId,
-          evaluation_run_id: config.evaluationRunId,
-          source_revision: config.sourceRevision,
-          stage: "evaluation",
-        },
-        model: config.model,
-      },
-      createBoundedRepositoryToolRunner(
-        createSelfContainedEvaluationTools(),
-        12,
-      ),
-      onUsage,
-    ),
+    config.harness === "terminal-tool"
+      ? new TerminalToolReviewGenerator(generatorConfig, tools, onUsage)
+      : new AiSdkReviewGenerator(
+          generatorConfig,
+          tools,
+          onUsage,
+          config.harness === "structured-output-portable"
+            ? "portable"
+            : "domain",
+        ),
   );
 }
 

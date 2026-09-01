@@ -1,0 +1,89 @@
+name: Evaluation (harness comparison)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-harness-comparison
+  cancel-in-progress: false
+
+jobs:
+  deploy-harness:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: harness-evaluation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+
+      - name: Enable the pinned package manager
+        run: corepack enable
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify the experimental harness Worker
+        run: pnpm --filter @holon/harness-evaluation typecheck
+
+      - name: Deploy the exact evaluation revision
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: >-
+          pnpm --filter @holon/harness-evaluation exec wrangler deploy
+          --keep-vars
+          --var "SOURCE_REVISION:${GITHUB_SHA}"
+
+  compare:
+    needs: deploy-harness
+    environment: live-evaluation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+
+      - name: Enable the pinned package manager
+        run: corepack enable
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compare review harnesses
+        env:
+          AI_GATEWAY_ACCOUNT_ID: ${{ vars.AI_GATEWAY_ACCOUNT_ID }}
+          AI_GATEWAY_API_TOKEN: ${{ secrets.AI_GATEWAY_API_TOKEN }}
+          AI_GATEWAY_ID: ${{ vars.AI_GATEWAY_ID }}
+          AI_MODEL_ID: ${{ vars.AI_MODEL_ID }}
+          EVALUATION_RUN_ID: ${{ format('{0}.{1}', github.run_id, github.run_attempt) }}
+          EVALUATION_REPORT_PATH: ${{ github.workspace }}/artifacts/evaluation/harness-comparison.json
+          EVALUATION_REPETITIONS: "3"
+          THINK_EVALUATION_API_TOKEN: ${{ secrets.THINK_EVALUATION_API_TOKEN }}
+          THINK_EVALUATION_URL: ${{ vars.THINK_EVALUATION_URL }}
+        run: pnpm --filter @holon/evaluation evaluate:compare
+
+      - name: Upload the comparison report
+        if: ${{ always() && hashFiles('artifacts/evaluation/harness-comparison.json') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evaluation-harness-comparison-${{ github.run_id }}-${{ github.sha }}
+          path: ${{ github.workspace }}/artifacts/evaluation/harness-comparison.json
+          retention-days: 30

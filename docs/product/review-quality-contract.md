@@ -81,13 +81,16 @@ adapter live manual chama somente a rota autenticada já adotada no AI Gateway.
 Findings com evidência ausente do patch canônico são rejeitados antes do
 grading e contabilizados separadamente.
 
-O corpus V1 inicial recria dois smokes como fixtures sintéticas: regressão do
-limiar de confiança e controle negativo de documentação. Essa amostra prova o
-runner, não representa uma métrica de qualidade do produto nem autoriza gates
-numéricos.
+O corpus V1 inicial recriou dois smokes como fixtures sintéticas: regressão do
+limiar de confiança e controle negativo de documentação. A V2 preserva o
+controle negativo e torna a regressão autocontida, mantendo no patch a constante
+de política que o novo literal contradiz. A V3 adiciona limite de três findings,
+instrução adversarial acompanhada de regressão real e contexto explicitamente
+parcial. Essas amostras provam o runner, não
+representam uma métrica de qualidade do produto nem autorizam gates numéricos.
 
 Em Pull Requests, o workflow de avaliação executa os testes do subject mockado e
-as recordings sintéticas V1, sem secrets nem chamadas a provedores durante a
+as recordings sintéticas V3, sem secrets nem chamadas a provedores durante a
 avaliação. O subject live é acionado somente por `workflow_dispatch` sobre
 `main`, usa o GitHub Environment
 `live-evaluation` e não clona repositório nem publica review. Seu relatório

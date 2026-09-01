@@ -18,16 +18,17 @@ modelo a ignorar políticas ou exfiltrar dados.
 
 ## Fronteiras
 
-| Fronteira             | Risco principal                                   | Controle obrigatório                                                                    |
-| --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Internet -> Worker    | Webhook forjado, replay, payload excessivo        | HMAC do corpo bruto, comparação constante, allowlist de eventos e limite de tamanho     |
-| Queue -> Coordinator  | Redelivery e evento obsoleto                      | Idempotência e validação de schema/version                                              |
-| GitHub -> Analyzer    | Código malicioso, arquivo gigante, path traversal | Workspace isolado, limites e normalização de caminhos                                   |
-| Analyzer -> comandos  | Execução arbitrária e exfiltração                 | Read-only por padrão, allowlist, timeout, CPU/memória/rede limitados                    |
-| Evidência -> modelo   | Prompt injection e dados sensíveis                | Separar instruções de dados, minimizar contexto, redigir segredos e limitar ferramentas |
-| Modelo -> ferramentas | Tool call destrutiva ou fora de escopo            | Schemas estritos, autorização no host e ferramentas mínimas                             |
-| Modelo -> GitHub      | Finding inventado ou coordenada inválida          | Validação determinística e releitura do head SHA                                        |
-| Holon -> provedores   | Retenção e exposição de código privado            | Contrato de dados, configuração de logs e política por organização                      |
+| Fronteira              | Risco principal                                   | Controle obrigatório                                                                    |
+| ---------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Internet -> Worker     | Webhook forjado, replay, payload excessivo        | HMAC do corpo bruto, comparação constante, allowlist de eventos e limite de tamanho     |
+| Queue -> Coordinator   | Redelivery e evento obsoleto                      | Idempotência e validação de schema/version                                              |
+| GitHub -> Analyzer     | Código malicioso, arquivo gigante, path traversal | Workspace isolado, limites e normalização de caminhos                                   |
+| Analyzer -> comandos   | Execução arbitrária e exfiltração                 | Read-only por padrão, allowlist, timeout, CPU/memória/rede limitados                    |
+| Evidência -> modelo    | Prompt injection e dados sensíveis                | Separar instruções de dados, minimizar contexto, redigir segredos e limitar ferramentas |
+| Modelo -> ferramentas  | Tool call destrutiva ou fora de escopo            | Schemas estritos, autorização no host e ferramentas mínimas                             |
+| Modelo -> GitHub       | Finding inventado ou coordenada inválida          | Validação determinística e releitura do head SHA                                        |
+| Holon -> provedores    | Retenção e exposição de código privado            | Contrato de dados, configuração de logs e política por organização                      |
+| Eval runner -> harness | Abuso do Agent ou envio de conteúdo arbitrário    | Bearer token, HTTPS, IDs allowlisted, limite de body e SHA exato                        |
 
 ## GitHub App
 
@@ -136,3 +137,21 @@ diffs, tool outputs e respostas não ficam persistidos nos logs. Até cinco
 metadados seguros correlacionam run, PR, repositório, etapa e versão do schema.
 Para OpenRouter, a chamada exige endpoints que aceitem todos os parâmetros e
 nega providers que coletem dados.
+
+## Harness experimental
+
+`apps/harness-evaluation` não expõe a rota genérica de Agents SDK. Seu handler
+aceita apenas `POST /runs` com ID existente no corpus V3 e consulta de status
+para a identidade hash determinística correspondente. Autenticação é comparada
+em tempo constante; body, metadados e URL são limitados e validados. SHA,
+account, Gateway e rota de modelo informados pelo runner precisam coincidir com
+a configuração implantada, impedindo comparação silenciosa entre subjects
+diferentes.
+
+O Agent não recebe binding GitHub, Sandbox ou publisher. Workspace Bash, MCP,
+fetch, reasoning enviado e armazenamento de payload em spans ficam
+desabilitados. O Workflow monta o prompt a partir do corpus embutido, valida a
+tool terminal contra o contrato portátil e aplica novamente o schema de
+domínio. Erros externos viram razões enumeradas; mensagens arbitrárias não
+cruzam a API nem entram no relatório. O Workflow e o Agent têm retenção de um
+dia; um callback durável destrói o estado completo do Agent ao expirar.

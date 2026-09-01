@@ -59,6 +59,65 @@ export const modelReviewOutputSchema = z.strictObject({
   summary: z.string().trim().min(1).max(800),
 });
 
+/**
+ * JSON-Schema-portable model boundary. Optional domain fields are required but
+ * nullable so strict providers see a stable set of required properties. Cross-
+ * field invariants remain in modelReviewOutputSchema and are checked after the
+ * transport value is normalized.
+ */
+export const modelReviewTransportSchema = z.strictObject({
+  findings: z
+    .array(
+      z.strictObject({
+        confidence: z.number().min(0).max(1),
+        diagnostic: z.string().trim().min(30).max(600),
+        evidence: z
+          .array(
+            z.strictObject({
+              endLine: positiveIntegerSchema.nullable(),
+              excerpt: z.string().min(1).max(300),
+              path: repositoryPathSchema,
+              reason: z.string().min(1).max(200),
+              startLine: positiveIntegerSchema,
+            }),
+          )
+          .min(1)
+          .max(2),
+        location: z.strictObject({
+          line: positiveIntegerSchema,
+          path: repositoryPathSchema,
+          side: z.literal("RIGHT"),
+          startLine: positiveIntegerSchema.nullable(),
+        }),
+        severity: z.enum(["critical", "high", "medium", "low"]),
+        suggestion: z.string().trim().min(1).max(800).nullable(),
+      }),
+    )
+    .max(3),
+  summary: z.string().trim().min(1).max(800),
+});
+
+export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
+  const transport = modelReviewTransportSchema.parse(value);
+  return modelReviewOutputSchema.parse({
+    findings: transport.findings.map((finding) => ({
+      ...finding,
+      evidence: finding.evidence.map((evidence) => ({
+        ...evidence,
+        ...(evidence.endLine === null ? { endLine: undefined } : {}),
+      })),
+      location: {
+        ...finding.location,
+        ...(finding.location.startLine === null
+          ? { startLine: undefined }
+          : {}),
+      },
+      ...(finding.suggestion === null ? { suggestion: undefined } : {}),
+    })),
+    summary: transport.summary,
+  });
+}
+
 export const runStateSchema = z.enum([
   "queued",
   "running",
