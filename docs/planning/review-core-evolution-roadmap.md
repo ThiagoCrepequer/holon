@@ -61,11 +61,12 @@ atrás do GitHub Environment `live-evaluation`; antecipá-lo não conclui baseli
 calibração, holdout ou gates das fases seguintes. O live eval continua manual,
 pequeno e não publica no GitHub.
 
-O próximo experimento adicionou `baseline-v3` e uma comparação manual com três
-trials entre structured output de domínio, structured output portátil, tool
-terminal do AI SDK e `ThinkWorkflow.step.prompt()`. O ADR-0017 permanece
-`proposed`: nenhum braço foi promovido ao review de produção antes dos
-resultados e do holdout.
+Em 2026-09-01, a comparação de harnesses (ADR-0017) foi concluída em três
+trials e supersedida pelo ADR-0018. O Cloudflare Think foi rejeitado e
+descomissionado devido a custo/latência desproporcionais e erro de saída, e a
+arquitetura em duas fases (investigação contextual com ferramentas seguida de
+finalização estruturada dedicada com schema portável e validação no host) foi
+adotada para o core de review.
 
 ## Ordem recomendada
 
@@ -511,14 +512,13 @@ Verificação realizada em 2026-08-31:
 
 ## Próxima ação
 
-Estado em 2026-08-31:
+Estado em 2026-09-01:
 
-- o **PR A — evidência documental** foi executado pelo snapshot remoto e pela
-  reconciliação dos documentos de planejamento;
-- o contrato `EvalCaseV1`, o runner offline, os graders determinísticos e dois
-  casos sintéticos de desenvolvimento iniciaram os PRs B e C;
-- nenhum gate de qualidade foi definido a partir dessa amostra mínima.
+- a comparação de harnesses (ADR-0017) foi concluída e supersedida pelo ADR-0018,
+  adotando a arquitetura em duas fases e descomissionando o spike do Think;
+- o contrato `EvalCaseV1`, o runner offline, os graders determinísticos e o corpus
+  V3 formam a fundação de avaliação do projeto;
+- nenhum gate de qualidade arbitrário foi imposto antes da ampliação do corpus.
 
 A próxima ação é ampliar o corpus de desenvolvimento por categoria e adicionar
-casos holdout antes de medir a primeira baseline. Correções das anomalias
-observadas continuam posteriores aos respectivos casos de regressão.
+casos holdout, além de avançar para a frente 3 (Batch review para PRs grandes).

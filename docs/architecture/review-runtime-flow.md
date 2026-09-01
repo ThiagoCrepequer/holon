@@ -13,6 +13,7 @@ related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
+  - ../decisions/0018-adopt-two-phase-decoupled-review-generator.md
 ---
 
 # Fluxo de execução de uma review

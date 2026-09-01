@@ -15,7 +15,6 @@
     "./recordings/v3": "./recordings/v3/index.ts"
   },
   "scripts": {
-    "evaluate:compare": "tsx src/cli.ts compare",
     "evaluate:live": "tsx src/cli.ts live",
     "evaluate:recorded": "tsx src/cli.ts recorded",
     "test": "vitest run --config ../../vitest.config.ts --root .",

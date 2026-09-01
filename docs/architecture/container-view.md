@@ -53,7 +53,7 @@ flowchart TD
 | C03 | Executar etapas duráveis e retries delimitados             | Cloudflare Workflows                      | Implementada         |
 | C04 | Registrar run, head SHA, efeitos publicados e dedupe       | Durable Object SQLite por PR              | Implementada         |
 | C05 | Classificar contexto e executar buscas/parsers autorizados | Cloudflare Sandbox em deployable separado | Implementada         |
-| C06 | Respeitar modos, pedir tools e produzir findings tipados   | Application/domain + AI SDK tool loop     | Implementada         |
+| C06 | Executar investigação em duas fases e gate de evidência    | Application/domain + Two-Phase Review     | Implementada         |
 | C07 | Aplicar modelo, telemetria e políticas de custo/rate limit | Cloudflare AI Gateway                     | Adapter implementado |
 | C08 | Reler head e publicar comentários/review GitHub            | GitHub REST API                           | Implementada         |
 
@@ -76,11 +76,14 @@ mesma elegibilidade a leituras e buscas posteriores. C06 recebe os modos
 explicitamente: ast-grep fica restrito a JS/TS estrutural, enquanto patches
 textuais elegíveis usam apenas diff, leitura e busca textual.
 
-## Componentes adiados
+C06 opera em duas fases conforme ADR-0018: Fase 1 executa investigação com tools
+delimitadas em texto livre; Fase 2 realiza finalização estruturada dedicada com
+schema portável e validação no host.
 
-- Agents SDK e `@cloudflare/think`: não adotados no runtime de review. Um spike
-  isolado no `apps/harness-evaluation` compara o harness de saída conforme o
-  ADR-0017 proposto; isso não antecipa a fase conversacional.
+## Componentes adiados ou rejeitados
+
+- Agents SDK e `@cloudflare/think`: rejeitados e descomissionados após evidência
+  empírica do benchmark (ADR-0018).
 - Vectorize: somente após benchmark de recuperação.
 - R2: somente quando snapshots ou artefatos grandes tiverem retenção definida.
 - Workers AI: somente com tarefa auxiliar e benchmark explícitos.

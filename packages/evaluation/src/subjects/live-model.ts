@@ -4,7 +4,6 @@ import {
   GatewayModelReviewer,
   ModelProviderRequestError,
   RepositoryToolBudgetExceededError,
-  TerminalToolReviewGenerator,
   createBoundedRepositoryToolRunner,
   nonRetryableModelFailureCode,
   parseGatewayModelReference,
@@ -21,10 +20,7 @@ export interface LiveModelSubjectConfig extends Omit<
   "metadata"
 > {
   readonly evaluationRunId: string;
-  readonly harness?:
-    | "structured-output"
-    | "structured-output-portable"
-    | "terminal-tool";
+  readonly harness?: "structured-output" | "structured-output-portable";
   readonly sourceRevision: string;
 }
 
@@ -94,16 +90,12 @@ export function createEvaluationModelReviewer(
     12,
   );
   return new GatewayModelReviewer(
-    config.harness === "terminal-tool"
-      ? new TerminalToolReviewGenerator(generatorConfig, tools, onUsage)
-      : new AiSdkReviewGenerator(
-          generatorConfig,
-          tools,
-          onUsage,
-          config.harness === "structured-output-portable"
-            ? "portable"
-            : "domain",
-        ),
+    new AiSdkReviewGenerator(
+      generatorConfig,
+      tools,
+      onUsage,
+      config.harness === "structured-output" ? "domain" : "portable",
+    ),
   );
 }
 
