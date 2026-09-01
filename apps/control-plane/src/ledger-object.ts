@@ -219,6 +219,27 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     return row === undefined ? undefined : runStateSchema.parse(row.state);
   }
 
+  public recordCheckRunId(runId: RunId, checkRunId: number): void {
+    const parsedRunId = runIdSchema.parse(runId);
+    const parsedCheckRunId = positiveIntegerSchema.parse(checkRunId);
+    this.ctx.storage.sql.exec(
+      "UPDATE runs SET github_check_run_id = ? WHERE id = ?",
+      parsedCheckRunId,
+      parsedRunId,
+    );
+  }
+
+  public checkRunId(runId: RunId): number | undefined {
+    const parsedRunId = runIdSchema.parse(runId);
+    const row = this.ctx.storage.sql
+      .exec<{ github_check_run_id: number | null }>(
+        "SELECT github_check_run_id FROM runs WHERE id = ?",
+        parsedRunId,
+      )
+      .toArray()[0];
+    return row?.github_check_run_id ?? undefined;
+  }
+
   public async transition(
     runId: RunId,
     expected: RunState,

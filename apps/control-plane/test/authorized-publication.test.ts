@@ -33,10 +33,12 @@ function ledger(
 ) {
   return {
     authorizeMutation: authorize,
+    checkRunId: () => undefined,
     claimPublication: claim,
     claimRun: () => Promise.resolve("claimed" as const),
     completePublication: vi.fn(() => Promise.resolve()),
     isLatestRun: () => Promise.resolve(true),
+    recordCheckRunId: () => undefined,
     transition: () => Promise.resolve(),
   } satisfies PublicationLedger;
 }

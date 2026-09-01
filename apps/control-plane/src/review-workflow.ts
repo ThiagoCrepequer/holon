@@ -1,12 +1,16 @@
 import {
   composeReviewSummary,
   createReviewRun,
+  determineCheckRunConclusion,
+  formatCheckRunOutput,
   renderFinding,
   selectValidFindings,
 } from "@holon/application";
 import {
   modelReviewOutputSchema,
   reviewJobSchema,
+  type CheckRunConclusion,
+  type CheckRunOutput,
   type ReviewJob,
 } from "@holon/contracts";
 import {
@@ -153,6 +157,13 @@ export async function executeReviewWorkflow(
     stepName: string,
     cleanup: boolean,
   ) => {
+    if (repositoryStarted) {
+      await updateCheckRunCompleted("cancel-check-run", "cancelled", {
+        summary:
+          "A newer commit was pushed to this pull request. This review run was cancelled.",
+        title: "Holon Review Superseded",
+      });
+    }
     const occurredAt = await moveTo(stepName, expected, "obsolete", cleanup);
     const result = { findingsPublished: 0, outcome: "obsolete" } as const;
     emit("review.completed", {
@@ -160,6 +171,84 @@ export async function executeReviewWorkflow(
       ...result,
     });
     return result;
+  };
+
+  const ensureCheckRunStarted = async (): Promise<number | undefined> =>
+    await step
+      .do("start-check-run", publicationStep, async () => {
+        let checkRunId = await services.ledger.checkRunId(run.id);
+        if (checkRunId !== undefined) return checkRunId;
+
+        const github = await services.createMutationContext();
+        if (github.publisher.findCheckRunByExternalId !== undefined) {
+          const existingId = await github.publisher.findCheckRunByExternalId(
+            run.id,
+          );
+          if (existingId !== undefined) {
+            await services.ledger.recordCheckRunId(run.id, existingId);
+            return existingId;
+          }
+        }
+
+        if (github.publisher.createCheckRun !== undefined) {
+          checkRunId = await github.publisher.createCheckRun({
+            externalId: run.id,
+            headSha: job.envelope.pullRequest.headSha,
+            name: "Holon Review",
+            output: {
+              summary:
+                "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
+              title: "Holon Review in progress",
+            },
+            startedAt: now(),
+            status: "in_progress",
+          });
+          await services.ledger.recordCheckRunId(run.id, checkRunId);
+          return checkRunId;
+        }
+        return undefined;
+      })
+      .catch((checkRunError: unknown) => {
+        emit("check_run.start_failed", {
+          errorKind: errorKind(checkRunError),
+        });
+        return undefined;
+      });
+
+  const updateCheckRunCompleted = async (
+    stepName: string,
+    conclusion: CheckRunConclusion,
+    output: CheckRunOutput,
+  ): Promise<void> => {
+    await step
+      .do(stepName, publicationStep, async () => {
+        let checkRunId = await services.ledger.checkRunId(run.id);
+        const github = await services.createMutationContext();
+        if (
+          checkRunId === undefined &&
+          github.publisher.findCheckRunByExternalId !== undefined
+        ) {
+          checkRunId = await github.publisher.findCheckRunByExternalId(run.id);
+        }
+        if (
+          checkRunId !== undefined &&
+          github.publisher.updateCheckRun !== undefined
+        ) {
+          await github.publisher.updateCheckRun({
+            checkRunId,
+            completedAt: now(),
+            conclusion,
+            output,
+            status: "completed",
+          });
+        }
+      })
+      .catch((checkRunError: unknown) => {
+        emit("check_run.update_failed", {
+          errorKind: errorKind(checkRunError),
+          stepName,
+        });
+      });
   };
 
   try {
@@ -213,6 +302,7 @@ export async function executeReviewWorkflow(
     }
 
     repositoryStarted = true;
+    await ensureCheckRunStarted();
     await step.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
       const prepared = await services.prepareRepository(1);
@@ -374,6 +464,23 @@ export async function executeReviewWorkflow(
       );
     }
 
+    const isPartial = output.summary.includes("Partial review:");
+    const checkRunConclusion = determineCheckRunConclusion(
+      output.findings,
+      isPartial,
+    );
+    const checkRunOutput = formatCheckRunOutput({
+      durationMs: durationFrom(rawEvent.timestamp, now()),
+      findings: output.findings,
+      partial: isPartial,
+      summary: output.summary,
+    });
+    await updateCheckRunCompleted(
+      "complete-check-run",
+      checkRunConclusion,
+      checkRunOutput,
+    );
+
     const completedAt = await moveTo(
       "complete-run-and-schedule-cleanup",
       "publishing",
@@ -387,6 +494,13 @@ export async function executeReviewWorkflow(
     });
     return result;
   } catch (error) {
+    if (runClaimed) {
+      await updateCheckRunCompleted("fail-check-run", "failure", {
+        summary:
+          "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
+        title: "Holon Review Failed",
+      });
+    }
     const terminal = await step
       .do("mark-review-terminal-and-schedule-cleanup", stateStep, async () => {
         const occurredAt = now();
