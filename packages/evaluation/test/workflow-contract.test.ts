@@ -25,9 +25,27 @@ describe("evaluation workflow artifact contract", () => {
   it("deploys and compares the exact same main revision behind protected environments", async () => {
     const source = await workflow("evaluation-harness-comparison.yml");
 
-    expect(source).toContain("environment: harness-evaluation");
-    expect(source).toContain("environment: live-evaluation");
+    expect(source.split("environment: live-evaluation")).toHaveLength(3);
+    expect(source).not.toContain("environment: harness-evaluation");
+    expect(source).toContain(
+      "CLOUDFLARE_ACCOUNT_ID: ${{ vars.AI_GATEWAY_ACCOUNT_ID }}",
+    );
+    expect(source).toContain('--secrets-file "${secrets_file}"');
+    expect(source).toContain(
+      '--var "AI_GATEWAY_ACCOUNT_ID:${AI_GATEWAY_ACCOUNT_ID}"',
+    );
+    expect(source).toContain('--var "AI_GATEWAY_ID:${AI_GATEWAY_ID}"');
+    expect(source).toContain('--var "AI_MODEL_ID:${AI_MODEL_ID}"');
     expect(source).toContain('--var "SOURCE_REVISION:${GITHUB_SHA}"');
+    expect(source).toContain(
+      "printf 'AI_GATEWAY_API_TOKEN=%s\\n' \"${AI_GATEWAY_API_TOKEN}\"",
+    );
+    expect(source).toContain(
+      "printf 'THINK_EVALUATION_API_TOKEN=%s\\n' \"${THINK_EVALUATION_API_TOKEN}\"",
+    );
+    expect(source).toContain(
+      'secrets_file="${RUNNER_TEMP}/holon-harness-evaluation.env"',
+    );
     expect(source).toContain("needs: deploy-harness");
     expect(source).toContain(
       "THINK_EVALUATION_API_TOKEN: ${{ secrets.THINK_EVALUATION_API_TOKEN }}",

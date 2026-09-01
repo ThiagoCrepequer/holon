@@ -71,7 +71,7 @@ Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 
 `holon-harness-evaluation` não participa desse rollout de produção. O workflow
 manual **Evaluation (harness comparison)** o implanta separadamente, com
-aprovação do Environment `harness-evaluation`, antes de comparar o mesmo SHA.
+aprovação do Environment `live-evaluation`, antes de comparar o mesmo SHA.
 Não conecte esse Worker a deploy automático enquanto o ADR-0017 estiver
 `proposed`: uma alteração em `main` não deve gerar inferência ou recurso remoto
 sem ação explícita.
