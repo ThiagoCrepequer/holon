@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEvaluationReport,
   createHarnessComparisonReport,
+  EvaluationSubjectError,
   renderHarnessComparisonSummary,
   runEvaluationSuite,
 } from "../src/index.js";
@@ -119,5 +120,35 @@ describe("harness comparison", () => {
       expect.objectContaining({ precision: null, recall: null }),
       expect.objectContaining({ precision: null, recall: null }),
     ]);
+  });
+
+  it("renders safe failure-reason counts by subject", async () => {
+    const sourceRevision = "a".repeat(40);
+    const create = async (
+      subjectVersion: string,
+      reason: "execution_timeout" | "model_output_invalid",
+    ) =>
+      createEvaluationReport(
+        await runEvaluationSuite(
+          [createEvalCase()],
+          async () => {
+            throw new EvaluationSubjectError(reason);
+          },
+          { ...evaluationConfiguration, subjectVersion },
+        ),
+        sourceRevision,
+      );
+    const report = createHarnessComparisonReport(
+      [
+        await create("subject-a", "model_output_invalid"),
+        await create("subject-b", "execution_timeout"),
+      ],
+      sourceRevision,
+    );
+
+    const summary = renderHarnessComparisonSummary(report);
+    expect(summary).toContain("## Subject failure reasons");
+    expect(summary).toContain("| `subject-a` | `model_output_invalid` | 1 |");
+    expect(summary).toContain("| `subject-b` | `execution_timeout` | 1 |");
   });
 });

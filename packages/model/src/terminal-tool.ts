@@ -5,12 +5,13 @@ import {
   modelReviewTransportSchema,
   parseModelReviewTransport,
 } from "@holon/contracts";
-import { ToolLoopAgent, hasToolCall, stepCountIs } from "ai";
+import { APICallError, ToolLoopAgent, hasToolCall, stepCountIs } from "ai";
 
 import {
   createGatewayLanguageModel,
   createRepositoryModelTools,
   gatewayModelProviderOptions,
+  ModelProviderRequestError,
   type CloudflareGatewayModelConfig,
   type ModelUsage,
 } from "./ai-sdk.js";
@@ -69,7 +70,17 @@ export class TerminalToolReviewGenerator implements ReviewGenerator {
       toolChoice: "required",
       tools,
     });
-    const result = await agent.generate({ prompt: request.prompt });
+    const result = await agent
+      .generate({ prompt: request.prompt })
+      .catch((error: unknown) => {
+        if (APICallError.isInstance(error)) {
+          throw new ModelProviderRequestError(
+            error.isRetryable,
+            error.statusCode,
+          );
+        }
+        throw error;
+      });
     this.onUsage?.({
       attempt: "terminal-tool",
       finishReason: result.finishReason,

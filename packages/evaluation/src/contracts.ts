@@ -12,6 +12,20 @@ const evalIdentifierSchema = z
   .max(100)
   .regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u);
 
+export const evaluationSubjectFailureReasonSchema = z.enum([
+  "execution_aborted",
+  "execution_error",
+  "execution_skipped",
+  "execution_timeout",
+  "model_output",
+  "model_output_invalid",
+  "model_output_missing",
+  "provider_permanent",
+  "provider_transient",
+  "tool_budget",
+  "unknown",
+]);
+
 export const evalRunConfigurationSchema = z
   .strictObject({
     corpusVersion: evalIdentifierSchema,
@@ -168,4 +182,7 @@ export type EvalCase = z.infer<typeof evalCaseSchema>;
 export type EvalRunConfiguration = z.infer<typeof evalRunConfigurationSchema>;
 export type EvalSubjectTelemetry = z.infer<typeof evalSubjectTelemetrySchema>;
 export type EvalSubjectOutput = z.infer<typeof evalSubjectOutputSchema>;
+export type EvaluationSubjectFailureReason = z.infer<
+  typeof evaluationSubjectFailureReasonSchema
+>;
 export type ExpectedFinding = z.infer<typeof expectedFindingSchema>;

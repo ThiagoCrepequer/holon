@@ -223,7 +223,7 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
     }
     const result = harnessWorkflowResultSchema.safeParse(workflow.output);
     if (!result.success) {
-      return { reason: "model_output", status: "errored" };
+      return { reason: "model_output_invalid", status: "errored" };
     }
     if (result.data.kind === "error") {
       return { reason: result.data.reason, status: "errored" };

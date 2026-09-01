@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { evalSubjectOutputSchema } from "./contracts.js";
+import {
+  evalSubjectOutputSchema,
+  evaluationSubjectFailureReasonSchema,
+} from "./contracts.js";
 
 const safeIdentifierSchema = z
   .string()
@@ -44,13 +47,7 @@ export const thinkEvaluationStatusResponseSchema = z.discriminatedUnion(
       status: z.literal("complete"),
     }),
     z.strictObject({
-      reason: z.enum([
-        "model_output",
-        "provider_permanent",
-        "provider_transient",
-        "tool_budget",
-        "unknown",
-      ]),
+      reason: evaluationSubjectFailureReasonSchema,
       status: z.literal("errored"),
     }),
   ],

@@ -12,6 +12,7 @@ import {
   type EvalCase,
   type EvalRunConfiguration,
   type EvalSubjectTelemetry,
+  type EvaluationSubjectFailureReason,
 } from "./contracts.js";
 import { gradeEvaluationCase, type EvalGrade } from "./grader.js";
 
@@ -24,13 +25,6 @@ export interface EvaluationSubjectInput {
 export type EvaluationSubject = (
   input: EvaluationSubjectInput,
 ) => Promise<unknown>;
-
-export type EvaluationSubjectFailureReason =
-  | "model_output"
-  | "provider_permanent"
-  | "provider_transient"
-  | "tool_budget"
-  | "unknown";
 
 export class EvaluationSubjectError extends Error {
   public constructor(public readonly reason: EvaluationSubjectFailureReason) {

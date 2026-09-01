@@ -276,7 +276,7 @@ describe("HarnessEvaluationAgent", () => {
       [{ status: "errored" }, { reason: "unknown", status: "errored" }],
       [
         { output: { private: "provider payload" }, status: "complete" },
-        { reason: "model_output", status: "errored" },
+        { reason: "model_output_invalid", status: "errored" },
       ],
       [
         {
