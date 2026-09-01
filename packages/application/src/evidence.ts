@@ -46,7 +46,7 @@ function evidenceAppearsInPatch(
   const endLine = evidence.endLine ?? evidence.startLine;
   if (endLine - evidence.startLine > 500) return false;
   const selected: string[] = [];
-  for (let line = evidence.startLine; line <= endLine; line += 1) {
+  for (let line = evidence.startLine; line < endLine; line += 1) {
     const content = lines.get(line);
     if (content === undefined) return false;
     selected.push(content);
