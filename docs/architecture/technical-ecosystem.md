@@ -150,8 +150,8 @@ O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
 O runtime de review continua com dois deployables. O terceiro app só existe no
-ambiente `harness-evaluation`; não recebe binding do control plane, token da
-GitHub App, Sandbox ou autoridade de publicação.
+fluxo manual protegido por `live-evaluation`; não recebe binding do control
+plane, token da GitHub App, Sandbox ou autoridade de publicação.
 
 `apps/repository-executor` recebe pedidos tipados, cria workspace isolado,
 classifica patches e aplica a mesma elegibilidade a tools, persiste contexto

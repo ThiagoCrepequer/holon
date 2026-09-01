@@ -60,10 +60,13 @@ Para executar também a comparação de harnesses, acrescente:
 THINK_EVALUATION_URL=https://holon-harness-evaluation.<subdomain>.workers.dev/
 
 # Environment secret
+CLOUDFLARE_API_TOKEN
 THINK_EVALUATION_API_TOKEN
 ```
 
-O token deve ter somente a permissão necessária para executar o AI Gateway. A
+`AI_GATEWAY_API_TOKEN` deve ter somente `AI Gateway Run`.
+`CLOUDFLARE_API_TOKEN` é uma credencial separada, limitada ao account alvo e
+com `Workers Scripts: Write`; não reutilize o token do Gateway para deploy. A
 chave do provedor permanece no BYOK do Gateway e não entra no GitHub.
 
 Secrets de Environment só ficam disponíveis depois que as protection rules
@@ -112,26 +115,17 @@ literal contradiz uma constante de política preservada no próprio diff.
 
 ## Comparação manual de harnesses
 
-O workflow **Evaluation (harness comparison)** só aceita `main` e usa dois
-GitHub Environments. `harness-evaluation` implanta o Worker experimental no SHA
-exato; `live-evaluation` libera as credenciais do modelo e o token de chamada.
-O segundo job só inicia depois do deploy.
+O workflow **Evaluation (harness comparison)** só aceita `main`. Os jobs de
+deploy e comparação usam exclusivamente o GitHub Environment
+`live-evaluation`; o segundo job só inicia depois do deploy do SHA exato.
 
-Configure `harness-evaluation` com:
-
-```text
-# Environment variable
-CLOUDFLARE_ACCOUNT_ID
-
-# Environment secret
-CLOUDFLARE_API_TOKEN
-```
-
-O token de deploy deve ser limitado ao Worker experimental. No runtime do
-Worker, configure uma única vez as variables `AI_GATEWAY_ACCOUNT_ID`,
-`AI_GATEWAY_ID` e `AI_MODEL_ID`, e os secrets `AI_GATEWAY_API_TOKEN` e
-`THINK_EVALUATION_API_TOKEN`. O deploy usa `--keep-vars` e muda somente
-`SOURCE_REVISION`; secrets remotos nunca são removidos pelo deploy.
+O deploy reutiliza `AI_GATEWAY_ACCOUNT_ID` como `CLOUDFLARE_ACCOUNT_ID` e
+provisiona no mesmo comando as variables `AI_GATEWAY_ACCOUNT_ID`,
+`AI_GATEWAY_ID`, `AI_MODEL_ID` e `SOURCE_REVISION`, além dos secrets
+`AI_GATEWAY_API_TOKEN` e `THINK_EVALUATION_API_TOKEN`. O arquivo transitório de
+secrets é criado com permissão restrita em `RUNNER_TEMP`, removido ao terminar e
+nunca escrito no workspace ou artifact. `--keep-vars` preserva configurações
+remotas não administradas por esse workflow; secrets omitidos não são apagados.
 
 Cada execução compara três trials dos mesmos cinco casos em quatro braços:
 
