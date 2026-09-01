@@ -30,7 +30,7 @@ export interface CloudflareGatewayModelConfig {
 }
 
 export interface ModelUsage {
-  readonly attempt: "investigation" | "recovery" | "terminal-tool";
+  readonly attempt: "investigation" | "finalization" | "recovery";
   readonly finishReason: string | undefined;
   readonly inputTokens: number | undefined;
   readonly outputTokens: number | undefined;
@@ -47,7 +47,6 @@ export type ModelOutputContract = "domain" | "portable";
 
 const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const maximumInvestigationSteps = 6;
-const maximumModelSteps = maximumInvestigationSteps + 1;
 const recoverableSemanticErrors = new Set([
   "AI_NoObjectGeneratedError",
   "AI_NoOutputGeneratedError",
@@ -178,21 +177,82 @@ export const gatewayModelProviderOptions = {
   },
 } as const;
 
-export class AiSdkReviewGenerator implements ReviewGenerator {
+export const finalizationInstructions = [
+  "You are Holon, finalizing a code review based on investigation results.",
+  "Synthesize all concrete regressions found during investigation into the required structured output schema.",
+  "Report only proven functional bugs, security vulnerabilities, or contract violations.",
+  "If no regression was proven or evidence is insufficient, return an empty findings array with an informative summary.",
+  "Every evidence excerpt must appear in the canonical patch at the stated line range.",
+].join("\n");
+
+export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public constructor(
     private readonly config: CloudflareGatewayModelConfig,
     private readonly toolsRunner: RepositoryToolRunner,
     private readonly onUsage?: (usage: ModelUsage) => void,
-    private readonly outputContract: ModelOutputContract = "domain",
+    private readonly outputContract: ModelOutputContract = "portable",
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
     const model = createGatewayLanguageModel(this.config);
     const tools = createRepositoryModelTools(this.toolsRunner);
-    const runAttempt = async (
-      attempt: "investigation" | "recovery",
+
+    // Phase 1: Investigative Tool Loop (freeform diagnostic text)
+    let investigationText = "";
+    try {
+      const investigationResult = await generateText({
+        instructions: request.instructions,
+        maxOutputTokens: 4_000,
+        maxRetries: 0,
+        model,
+        prompt: request.prompt,
+        providerOptions: gatewayModelProviderOptions,
+        stopWhen: stepCountIs(maximumInvestigationSteps),
+        temperature: 0,
+        tools,
+      });
+
+      this.onUsage?.({
+        attempt: "investigation",
+        finishReason: investigationResult.finishReason,
+        inputTokens: investigationResult.usage?.inputTokens,
+        outputTokens: investigationResult.usage?.outputTokens,
+        toolCallCount: investigationResult.toolCalls?.length ?? 0,
+        totalTokens: investigationResult.usage?.totalTokens,
+      });
+
+      investigationText = investigationResult.text ?? "";
+    } catch (error) {
+      if (APICallError.isInstance(error)) {
+        throw new ModelProviderRequestError(
+          error.isRetryable,
+          error.statusCode,
+        );
+      }
+      throw error;
+    }
+
+    // Phase 2: Dedicated Structured Finalization Step
+    const runFinalization = async (
+      attempt: "finalization" | "recovery",
     ): Promise<unknown> => {
-      const investigation = attempt === "investigation";
+      const isRecovery = attempt === "recovery";
+      const instructions = isRecovery
+        ? `${finalizationInstructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`
+        : finalizationInstructions;
+
+      const finalizationPrompt = [
+        "### Review Context",
+        request.prompt,
+        "",
+        "### Investigation Findings and Analysis",
+        investigationText.trim().length > 0
+          ? investigationText
+          : "No additional tool findings were recorded during investigation.",
+        "",
+        "Synthesize and return the final structured review object.",
+      ].join("\n");
+
       const output =
         this.outputContract === "portable"
           ? Output.object({
@@ -203,43 +263,35 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
               name: "holon_review",
               schema: modelReviewOutputSchema,
             });
-      const result = await generateText({
-        instructions: investigation
-          ? request.instructions
-          : `${request.instructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`,
+
+      const finalizationResult = await generateText({
+        instructions,
         maxOutputTokens: 4_000,
         maxRetries: 0,
         model,
         output,
-        ...(investigation
-          ? {
-              prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-                stepNumber >= maximumInvestigationSteps
-                  ? { activeTools: [], toolChoice: "none" as const }
-                  : undefined,
-              stopWhen: stepCountIs(maximumModelSteps),
-              tools,
-            }
-          : { stopWhen: stepCountIs(1) }),
-        prompt: request.prompt,
+        prompt: finalizationPrompt,
         providerOptions: gatewayModelProviderOptions,
+        stopWhen: stepCountIs(1),
         temperature: 0,
       });
+
       this.onUsage?.({
         attempt,
-        finishReason: result.finishReason,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        toolCallCount: result.toolCalls?.length ?? 0,
-        totalTokens: result.usage.totalTokens,
+        finishReason: finalizationResult.finishReason,
+        inputTokens: finalizationResult.usage?.inputTokens,
+        outputTokens: finalizationResult.usage?.outputTokens,
+        toolCallCount: finalizationResult.toolCalls?.length ?? 0,
+        totalTokens: finalizationResult.usage?.totalTokens,
       });
+
       return this.outputContract === "portable"
-        ? parseModelReviewTransport(result.output)
-        : modelReviewOutputSchema.parse(result.output);
+        ? parseModelReviewTransport(finalizationResult.output)
+        : modelReviewOutputSchema.parse(finalizationResult.output);
     };
 
     try {
-      return await runAttempt("investigation");
+      return await runFinalization("finalization");
     } catch (error) {
       if (APICallError.isInstance(error)) {
         throw new ModelProviderRequestError(
@@ -256,7 +308,7 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
     }
 
     try {
-      return await runAttempt("recovery");
+      return await runFinalization("recovery");
     } catch (error) {
       if (APICallError.isInstance(error)) {
         throw new ModelProviderRequestError(
@@ -268,3 +320,6 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
     }
   }
 }
+
+export const AiSdkReviewGenerator = TwoPhaseReviewGenerator;
+export type AiSdkReviewGenerator = TwoPhaseReviewGenerator;
