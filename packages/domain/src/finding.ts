@@ -112,7 +112,9 @@ export function classifyFindingPublication(
   finding: Finding,
 ): FindingPublication {
   if (finding.confidence < 0.8) return "discard";
-  if (finding.severity === "low") return "summary_only";
+  if (finding.severity === "low" && finding.confidence < 0.95) {
+    return "summary_only";
+  }
   return "inline";
 }
 
