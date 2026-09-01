@@ -377,17 +377,24 @@ describe("model review boundary", () => {
     });
   });
 
-  it("configures AI SDK structured output and delegates all three bounded tools", async () => {
+  it("executes the two-phase review generator with tool-enabled investigation and structured finalization", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.generateText.mockResolvedValueOnce({
-      finishReason: "stop",
-      output,
-      toolCalls: [],
-      usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
-    });
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.object.mockImplementationOnce((input: unknown) => input);
-    sdk.stepCountIs.mockReturnValueOnce({ steps: 7 });
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Diagnostic notes from investigation.",
+        toolCalls: [],
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      })
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        output,
+        toolCalls: [],
+        usage: { inputTokens: 200, outputTokens: 20, totalTokens: 220 },
+      });
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    sdk.object.mockImplementation((input: unknown) => input);
+    sdk.stepCountIs.mockImplementation((steps: number) => ({ steps }));
     const calls: unknown[] = [];
     const usages: unknown[] = [];
     const generator = new AiSdkReviewGenerator(
@@ -410,9 +417,11 @@ describe("model review boundary", () => {
       generator.generate({ instructions: "system", prompt: "prompt" }),
     ).resolves.toEqual(output);
 
-    const options = sdk.generateText.mock.calls.at(-1)?.[0] as {
+    expect(sdk.generateText).toHaveBeenCalledTimes(2);
+
+    const phase1Options = sdk.generateText.mock.calls[0]?.[0] as {
+      readonly instructions: string;
       readonly maxRetries: number;
-      readonly prepareStep: (input: { readonly stepNumber: number }) => unknown;
       readonly providerOptions: unknown;
       readonly stopWhen: unknown;
       readonly tools: Record<
@@ -420,65 +429,73 @@ describe("model review boundary", () => {
         { execute(input: unknown): Promise<unknown> }
       >;
     };
-    await options.tools.read_file!.execute({ path: "src/index.ts" });
-    await options.tools.search_text!.execute({
+    await phase1Options.tools.read_file!.execute({ path: "src/index.ts" });
+    await phase1Options.tools.search_text!.execute({
       maxResults: 5,
       query: "symbol",
     });
-    await options.tools.search_structure!.execute({
+    await phase1Options.tools.search_structure!.execute({
       language: "typescript",
       maxResults: 5,
       pattern: "$A",
     });
 
     expect(calls).toHaveLength(3);
+    expect(phase1Options.stopWhen).toEqual({ steps: 6 });
+    expect(phase1Options.maxRetries).toBe(0);
+
+    const phase2Options = sdk.generateText.mock.calls[1]?.[0] as {
+      readonly instructions: string;
+      readonly maxRetries: number;
+      readonly prompt: string;
+      readonly stopWhen: unknown;
+      readonly tools: unknown;
+    };
+    expect(phase2Options.tools).toBeUndefined();
+    expect(phase2Options.stopWhen).toEqual({ steps: 1 });
+    expect(phase2Options.prompt).toContain(
+      "Diagnostic notes from investigation.",
+    );
+
     expect(usages).toEqual([
       {
         attempt: "investigation",
         finishReason: "stop",
         inputTokens: 100,
+        outputTokens: 50,
+        toolCallCount: 0,
+        totalTokens: 150,
+      },
+      {
+        attempt: "finalization",
+        finishReason: "stop",
+        inputTokens: 200,
         outputTokens: 20,
         toolCallCount: 0,
-        totalTokens: 120,
+        totalTokens: 220,
       },
     ]);
-    expect(sdk.createProvider).toHaveBeenCalledWith(
-      createGatewayProviderSettings({
-        accountId: "account",
-        apiToken: "token",
-        gatewayId: "holon",
-        model: "dynamic/pr-review",
-      }),
-    );
-    expect(sdk.model).toHaveBeenCalledWith("dynamic/pr-review");
-    expect(options.maxRetries).toBe(0);
-    expect(options.providerOptions).toEqual({
-      cloudflareAiGateway: {
-        provider: { data_collection: "deny", require_parameters: true },
-        reasoningEffort: "low",
-      },
-    });
-    expect(options.prepareStep({ stepNumber: 5 })).toBeUndefined();
-    expect(options.prepareStep({ stepNumber: 6 })).toEqual({
-      activeTools: [],
-      toolChoice: "none",
-    });
-    expect(options.stopWhen).toEqual({ steps: 7 });
   });
 
-  it("performs one tool-free recovery for a semantically empty successful response", async () => {
+  it("performs one tool-free recovery for a semantically empty finalization response", async () => {
     const missingOutput = new Error("missing output");
     missingOutput.name = "AI_NoOutputGeneratedError";
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     sdk.generateText
       .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation notes.",
+        toolCalls: [],
+        usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+      })
+      .mockResolvedValueOnce({
         finishReason: "length",
         get output() {
           throw missingOutput;
         },
         toolCalls: [],
-        usage: { inputTokens: 100, outputTokens: 4_000, totalTokens: 4_100 },
+        usage: { inputTokens: 150, outputTokens: 4_000, totalTokens: 4_150 },
       })
       .mockResolvedValueOnce({
         finishReason: "stop",
@@ -501,8 +518,8 @@ describe("model review boundary", () => {
     await expect(
       generator.generate({ instructions: "system", prompt: "prompt" }),
     ).resolves.toEqual(output);
-    expect(sdk.generateText).toHaveBeenCalledTimes(2);
-    const recovery = sdk.generateText.mock.calls[1]?.[0] as {
+    expect(sdk.generateText).toHaveBeenCalledTimes(3);
+    const recovery = sdk.generateText.mock.calls[2]?.[0] as {
       readonly instructions: string;
       readonly stopWhen: unknown;
       readonly tools?: unknown;
@@ -510,7 +527,8 @@ describe("model review boundary", () => {
     expect(recovery.instructions).toContain("single recovery attempt");
     expect(recovery.stopWhen).toEqual({ steps: 1 });
     expect(recovery.tools).toBeUndefined();
-    expect(usages).toHaveLength(2);
+    expect(usages).toHaveLength(3);
+    expect(usages[2]).toMatchObject({ attempt: "recovery" });
   });
 
   it.each([
@@ -564,10 +582,42 @@ describe("model review boundary", () => {
     expect(isNonRetryableModelError("unknown failure")).toBe(false);
   });
 
-  it("preserves unexpected SDK errors for terminal diagnostics", async () => {
+  it("supports domain output contract with direct schema parsing", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.generateText.mockRejectedValueOnce(new TypeError("invalid SDK state"));
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        output,
+        toolCalls: [],
+        usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+      });
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+      undefined,
+      "domain",
+    );
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).resolves.toEqual(output);
+  });
+
+  it("handles provider errors occurring during finalization and recovery phases", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     const generator = new AiSdkReviewGenerator(
       {
         accountId: "account",
@@ -578,8 +628,91 @@ describe("model review boundary", () => {
       { run: () => Promise.resolve({ content: "", truncated: false }) },
     );
 
+    // Finalization throws APICallError
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation ok",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(new sdk.APICallError(502, true));
+
     await expect(
       generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).rejects.toThrow("invalid SDK state");
+    ).rejects.toMatchObject({ isRetryable: true, statusCode: 502 });
+
+    // Recovery throws APICallError
+    const missingOutput = new Error("missing output");
+    missingOutput.name = "AI_NoOutputGeneratedError";
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation ok",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockResolvedValueOnce({
+        finishReason: "length",
+        get output() {
+          throw missingOutput;
+        },
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(new sdk.APICallError(401, false));
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).rejects.toMatchObject({ isRetryable: false, statusCode: 401 });
+
+    // Recovery throws non-API error
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation ok",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockResolvedValueOnce({
+        finishReason: "length",
+        get output() {
+          throw missingOutput;
+        },
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(new Error("unexpected recovery explosion"));
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).rejects.toThrow("unexpected recovery explosion");
+  });
+
+  it("propagates unrecoverable semantic errors from finalization directly", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation ok",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(new RangeError("unrecoverable fatal memory"));
+
+    await expect(
+      generator.generate({ instructions: "system", prompt: "prompt" }),
+    ).rejects.toThrow("unrecoverable fatal memory");
   });
 });
