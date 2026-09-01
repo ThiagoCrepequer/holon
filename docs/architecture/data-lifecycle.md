@@ -28,6 +28,7 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
 | IA                  | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita |
 | Publicação          | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria           |
 | Segredo             | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped     |
+| Avaliação sintética | IDs, prompt derivado do corpus V3 e saída validada  | DO/Workflow experimental; retenção configurada em 1 dia    |
 
 ## Princípios
 
@@ -42,6 +43,10 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
   credential scope no mesmo encerramento durável.
 - Definir residência, retenção e uso por provedor antes do piloto privado.
 - Desabilitar ou redigir logs de prompts que contenham código sensível.
+- Limitar o harness experimental a corpus sintético versionado. O runner
+  persiste somente relatório sanitizado em artifact; o DO/Workflow pode manter
+  temporariamente a conversa necessária ao `step.prompt`, mas nunca recebe
+  conteúdo arbitrário ou repositório privado.
 
 ## R2 e Vectorize
 

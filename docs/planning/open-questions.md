@@ -39,7 +39,9 @@ por marcador foram definidos e implementados.
 - Como coletar feedback de falso positivo sem poluir o PR?
 - Quando busca semântica supera busca estrutural no corpus?
 - Quais tarefas auxiliares justificam Workers AI?
-- Quando respostas em comentários justificam Agents SDK/Think e DO por PR?
+- O experimento do ADR-0017 mostra ganho suficiente para adotar
+  Agents SDK/Think no transporte de saída? Isso é independente de decidir
+  quando respostas conversacionais justificam um DO por PR.
 - Como ampliar o suporte a monorepos? Código gerado permanece excluído; admiti-lo
   no futuro exige uma exceção explícita, evidência de valor e nova decisão.
   Submódulos não são obtidos e filtros Git LFS permanecem desativados no MVP.

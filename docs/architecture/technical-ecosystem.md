@@ -28,10 +28,14 @@ holon/
 |   |   |-- src/
 |   |   |-- test/
 |   |   `-- wrangler.jsonc
-|   `-- repository-executor/
+|   |-- repository-executor/
 |       |-- src/
 |       |-- test/
 |       |-- Dockerfile
+|       `-- wrangler.jsonc
+|   `-- harness-evaluation/        # experimental, fora do runtime de review
+|       |-- src/
+|       |-- test/
 |       `-- wrangler.jsonc
 |-- packages/
 |   |-- domain/
@@ -63,6 +67,7 @@ políticas puras ficam junto ao pacote ou app que as possui.
 flowchart TD
     CP[apps/control-plane]
     EX[apps/repository-executor]
+    HE[apps/harness-evaluation]
     GH[packages/github]
     MO[packages/model]
     RA[packages/repository-analysis]
@@ -78,6 +83,9 @@ flowchart TD
     CP --> AP
     EX --> RA
     EX --> CT
+    HE --> EV
+    HE --> MO
+    HE --> CT
     GH --> AP
     GH --> CT
     MO --> AP
@@ -100,6 +108,11 @@ mock e recorded não acessam infraestrutura; o adapter live manual usa `model`
 para chamar a mesma rota autenticada do AI Gateway, sem GitHub, Sandbox ou
 publicação. O domínio nunca depende de schemas runtime. `test-kit` é somente
 para fixtures de teste.
+
+`apps/harness-evaluation` é um deployable experimental e descartável para a
+comparação descrita no ADR-0017 proposto. Ele não está no caminho de produção:
+aceita apenas IDs do corpus embutido, usa Agent/Workflow próprios e devolve
+resultado/telemetria validados ao runner manual.
 
 ## Responsabilidades por pacote
 
@@ -135,6 +148,10 @@ subpasta interna.
 
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
+
+O runtime de review continua com dois deployables. O terceiro app só existe no
+ambiente `harness-evaluation`; não recebe binding do control plane, token da
+GitHub App, Sandbox ou autoridade de publicação.
 
 `apps/repository-executor` recebe pedidos tipados, cria workspace isolado,
 classifica patches e aplica a mesma elegibilidade a tools, persiste contexto
@@ -216,19 +233,20 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 
 ## Politica de bibliotecas
 
-| Biblioteca/capacidade        | Estado              | Limite                                         |
-| ---------------------------- | ------------------- | ---------------------------------------------- |
-| Hono                         | Selecionada         | Somente adapter HTTP                           |
-| Zod 4                        | Selecionada         | Fronteiras; nao substituir tipos de dominio    |
-| Octokit modular              | Selecionada         | Somente `@holon/github`                        |
-| AI SDK + AI Gateway provider | Selecionada         | Somente `@holon/model`, atras de porta         |
-| `diff`                       | Selecionada         | Adapter proprio e fixtures obrigatorias        |
-| Cloudflare Workflows         | Selecionada         | Coordenação durável com retries delimitados    |
-| Cloudflare Sandbox SDK       | Selecionada `@next` | Versão exata e imagem correspondente fixadas   |
-| Dependency Cruiser           | Adiada              | Introduzir se regras de pacote nao bastarem    |
-| Knip                         | Adiada              | Introduzir quando houver massa de exports/deps |
-| Probot, ORM e DI framework   | Nao adotados        | Sem requisito no primeiro slice                |
-| Agents SDK, Think, MCP e RAG | Adiados             | Fora do MVP one-shot                           |
+| Biblioteca/capacidade        | Estado              | Limite                                               |
+| ---------------------------- | ------------------- | ---------------------------------------------------- |
+| Hono                         | Selecionada         | Somente adapter HTTP                                 |
+| Zod 4                        | Selecionada         | Fronteiras; nao substituir tipos de dominio          |
+| Octokit modular              | Selecionada         | Somente `@holon/github`                              |
+| AI SDK + AI Gateway provider | Selecionada         | Somente `@holon/model`, atras de porta               |
+| `diff`                       | Selecionada         | Adapter proprio e fixtures obrigatorias              |
+| Cloudflare Workflows         | Selecionada         | Coordenação durável com retries delimitados          |
+| Cloudflare Sandbox SDK       | Selecionada `@next` | Versão exata e imagem correspondente fixadas         |
+| Dependency Cruiser           | Adiada              | Introduzir se regras de pacote nao bastarem          |
+| Knip                         | Adiada              | Introduzir quando houver massa de exports/deps       |
+| Probot, ORM e DI framework   | Nao adotados        | Sem requisito no primeiro slice                      |
+| Agents SDK e Think           | Spike experimental  | Somente `apps/harness-evaluation`; ADR-0017 proposto |
+| MCP e RAG                    | Adiados             | Fora do MVP one-shot                                 |
 
 ## Regras para agentes de codigo
 

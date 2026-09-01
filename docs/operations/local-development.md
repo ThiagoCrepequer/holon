@@ -11,7 +11,8 @@ last-reviewed: 2026-08-31
 
 ## Requisitos
 
-- Node.js 24; CI usa 24.4.0 e o manifesto rejeita majors diferentes.
+- Node.js 24.19 ou posterior dentro da major 24; CI usa 24.19.0 porque o
+  harness experimental depende de Babel 8, que exige Node 24.11 ou posterior.
 - pnpm 11.24.0 habilitado por Corepack.
 - Docker CLI e daemon compatível para construir o Sandbox.
 
@@ -41,16 +42,22 @@ Comandos focados:
 pnpm --filter @holon/application test:coverage
 pnpm --filter @holon/evaluation test:coverage
 pnpm --filter @holon/evaluation evaluate:recorded
+pnpm --filter @holon/harness-evaluation test
+pnpm --filter @holon/harness-evaluation build
 pnpm --filter @holon/control-plane test
 pnpm --filter @holon/repository-executor test:coverage
 pnpm --filter @holon/control-plane build
 pnpm --filter @holon/repository-executor build
 ```
 
-`evaluate:recorded` executa o corpus V2 contra outputs sintéticos versionados,
+`evaluate:recorded` executa o corpus V3 contra outputs sintéticos versionados,
 grava `artifacts/evaluation/recorded-output.json` e não usa rede. O diretório de
 artifacts é ignorado pelo Git. A execução live é deliberadamente remota e
 manual; siga [avaliações](evaluations.md) em vez de copiar secrets para o shell.
+
+`evaluate:compare` também é deliberadamente manual e remoto. Ele requer o
+Worker de harness no mesmo SHA e três trials configurados pelo workflow; não é
+um substituto para o gate offline de Pull Requests.
 
 Após o build da imagem, o smoke manual usa a fixture versionada para provar as
 CLIs reais. Em host ARM, Docker pode avisar que a imagem é `linux/amd64`:

@@ -54,12 +54,18 @@ desatualizados, mas substituí-los por “validado em produção” também seri
 incorreto. O estado preciso é **parcialmente comprovado em ambiente remoto, com
 lacunas enumeradas**.
 
-Em 2026-08-31, a fundação de avaliação passou a incluir contratos, dois casos
+Em 2026-08-31, a fundação de avaliação passou a incluir contratos, cinco casos
 sintéticos, recordings autorizadas, runner, graders, relatório e execução
 offline em Pull Requests. Um adapter live-model manual também ficou disponível
 atrás do GitHub Environment `live-evaluation`; antecipá-lo não conclui baseline,
 calibração, holdout ou gates das fases seguintes. O live eval continua manual,
 pequeno e não publica no GitHub.
+
+O próximo experimento adicionou `baseline-v3` e uma comparação manual com três
+trials entre structured output de domínio, structured output portátil, tool
+terminal do AI SDK e `ThinkWorkflow.step.prompt()`. O ADR-0017 permanece
+`proposed`: nenhum braço foi promovido ao review de produção antes dos
+resultados e do holdout.
 
 ## Ordem recomendada
 

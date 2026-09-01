@@ -78,7 +78,9 @@ textuais elegíveis usam apenas diff, leitura e busca textual.
 
 ## Componentes adiados
 
-- Agents SDK e `@cloudflare/think`: fase conversacional.
+- Agents SDK e `@cloudflare/think`: não adotados no runtime de review. Um spike
+  isolado no `apps/harness-evaluation` compara o harness de saída conforme o
+  ADR-0017 proposto; isso não antecipa a fase conversacional.
 - Vectorize: somente após benchmark de recuperação.
 - R2: somente quando snapshots ou artefatos grandes tiverem retenção definida.
 - Workers AI: somente com tarefa auxiliar e benchmark explícitos.
