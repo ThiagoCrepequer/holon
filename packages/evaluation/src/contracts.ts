@@ -159,7 +159,13 @@ export const evalCaseSchema = z
   });
 
 export const evalModelAttemptSchema = z.strictObject({
-  attempt: z.enum(["investigation", "recovery", "terminal-tool", "think-step"]),
+  attempt: z.enum([
+    "investigation",
+    "finalization",
+    "recovery",
+    "terminal-tool",
+    "think-step",
+  ]),
   finishReason: z.string().trim().min(1).max(100).optional(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
