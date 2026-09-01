@@ -5,7 +5,9 @@ import {
   baselineCorpusV2,
   confidenceThresholdRegression,
 } from "../corpus/v2/index.js";
+import { baselineCorpusV3 } from "../corpus/v3/index.js";
 import { baselineRecordingsV2 } from "../recordings/v2/index.js";
+import { baselineRecordingsV3 } from "../recordings/v3/index.js";
 import {
   createRecordedSubject,
   evalCaseSchema,
@@ -17,6 +19,7 @@ describe("versioned baseline corpora", () => {
   it.each([
     ["baseline-v1", baselineCorpusV1],
     ["baseline-v2", baselineCorpusV2],
+    ["baseline-v3", baselineCorpusV3],
   ] as const)(
     "keeps %s unique, schema-valid and synthetic",
     (_name, corpus) => {
@@ -38,6 +41,16 @@ describe("versioned baseline corpora", () => {
     );
   });
 
+  it("covers transport, adversarial, maximum-finding and partial-review behavior", () => {
+    expect(baselineCorpusV3.map(({ id }) => id)).toEqual([
+      "correctness.confidence-threshold-regression",
+      "no-finding.harmless-documentation-instruction",
+      "reliability.maximum-structured-findings",
+      "adversarial.repository-instruction-with-real-regression",
+      "budget.explicit-partial-review",
+    ]);
+  });
+
   it("is executable by the offline runner with controlled outputs", async () => {
     const result = await runEvaluationSuite(
       baselineCorpusV2,
@@ -54,6 +67,25 @@ describe("versioned baseline corpora", () => {
       failedCases: 0,
       passedCases: 2,
       totalCases: 2,
+    });
+  });
+
+  it("executes every v3 scenario with its controlled recording", async () => {
+    const result = await runEvaluationSuite(
+      baselineCorpusV3,
+      createRecordedSubject(baselineRecordingsV3),
+      {
+        ...evaluationConfiguration,
+        corpusVersion: "baseline-v3",
+        subjectVersion: "recorded-output-v3",
+      },
+    );
+
+    expect(result).toMatchObject({
+      completedCases: 5,
+      failedCases: 0,
+      passedCases: 5,
+      totalCases: 5,
     });
   });
 });

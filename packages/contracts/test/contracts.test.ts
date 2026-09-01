@@ -6,6 +6,8 @@ import {
   executorRequestV2Schema,
   githubCredentialRequestSchema,
   modelReviewOutputSchema,
+  modelReviewTransportSchema,
+  parseModelReviewTransport,
   preparedRepositorySchema,
   publicationRecordSchema,
   repositoryToolCallSchema,
@@ -425,6 +427,35 @@ describe("model output and publication ledger", () => {
         chainOfThought: "private reasoning",
       }).success,
     ).toBe(false);
+  });
+
+  it("normalizes a provider-portable nullable transport before domain validation", () => {
+    const transported = modelReviewTransportSchema.parse({
+      findings: output.findings.map((finding) => ({
+        ...finding,
+        evidence: finding.evidence.map((evidence) => ({
+          ...evidence,
+          endLine: null,
+        })),
+        location: { ...finding.location, startLine: null },
+        suggestion: finding.suggestion ?? null,
+      })),
+      summary: output.summary,
+    });
+
+    expect(parseModelReviewTransport(transported)).toEqual(output);
+    expect(() =>
+      parseModelReviewTransport({
+        ...transported,
+        findings: transported.findings.map((finding) => ({
+          ...finding,
+          evidence: finding.evidence.map((evidence) => ({
+            ...evidence,
+            endLine: evidence.startLine - 1,
+          })),
+        })),
+      }),
+    ).toThrow(/endLine must not precede/u);
   });
 
   it("keeps the largest valid model result below the Workflow step limit", () => {

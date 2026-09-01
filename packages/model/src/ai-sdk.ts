@@ -6,7 +6,9 @@ import {
 } from "@ai-sdk/openai-compatible";
 import { tool } from "@ai-sdk/provider-utils";
 import {
+  modelReviewTransportSchema,
   modelReviewOutputSchema,
+  parseModelReviewTransport,
   readFileArgumentsSchema,
   searchStructureArgumentsSchema,
   searchTextArgumentsSchema,
@@ -28,7 +30,7 @@ export interface CloudflareGatewayModelConfig {
 }
 
 export interface ModelUsage {
-  readonly attempt: "investigation" | "recovery";
+  readonly attempt: "investigation" | "recovery" | "terminal-tool";
   readonly finishReason: string | undefined;
   readonly inputTokens: number | undefined;
   readonly outputTokens: number | undefined;
@@ -40,6 +42,8 @@ export interface GatewayModelReference {
   readonly gatewayPath: "compat";
   readonly modelId: string;
 }
+
+export type ModelOutputContract = "domain" | "portable";
 
 const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const maximumInvestigationSteps = 6;
@@ -129,59 +133,84 @@ export function createGatewayProviderSettings(
   };
 }
 
+export function createGatewayLanguageModel(
+  config: CloudflareGatewayModelConfig,
+) {
+  const { modelId } = parseGatewayModelReference(config.model);
+  const provider = createOpenAICompatible(
+    createGatewayProviderSettings(config),
+  );
+  return provider(modelId);
+}
+
+export function createRepositoryModelTools(toolsRunner: RepositoryToolRunner) {
+  return {
+    read_file: tool({
+      description:
+        "Read at most 500 lines from a repository-relative source file.",
+      execute: (arguments_) =>
+        toolsRunner.run({ arguments: arguments_, name: "read_file" }),
+      inputSchema: readFileArgumentsSchema,
+    }),
+    search_structure: tool({
+      description:
+        "Search JavaScript or TypeScript syntax using an ast-grep pattern.",
+      execute: (arguments_) =>
+        toolsRunner.run({ arguments: arguments_, name: "search_structure" }),
+      inputSchema: searchStructureArgumentsSchema,
+    }),
+    search_text: tool({
+      description: "Search exact text in the repository with bounded results.",
+      execute: (arguments_) =>
+        toolsRunner.run({ arguments: arguments_, name: "search_text" }),
+      inputSchema: searchTextArgumentsSchema,
+    }),
+  };
+}
+
+export const gatewayModelProviderOptions = {
+  cloudflareAiGateway: {
+    provider: {
+      data_collection: "deny",
+      require_parameters: true,
+    },
+    reasoningEffort: "low",
+  },
+} as const;
+
 export class AiSdkReviewGenerator implements ReviewGenerator {
   public constructor(
     private readonly config: CloudflareGatewayModelConfig,
     private readonly toolsRunner: RepositoryToolRunner,
     private readonly onUsage?: (usage: ModelUsage) => void,
+    private readonly outputContract: ModelOutputContract = "domain",
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
-    const { modelId } = parseGatewayModelReference(this.config.model);
-    const provider = createOpenAICompatible(
-      createGatewayProviderSettings(this.config),
-    );
-    const tools = {
-      read_file: tool({
-        description:
-          "Read at most 500 lines from a repository-relative source file.",
-        execute: (arguments_) =>
-          this.toolsRunner.run({ arguments: arguments_, name: "read_file" }),
-        inputSchema: readFileArgumentsSchema,
-      }),
-      search_structure: tool({
-        description:
-          "Search JavaScript or TypeScript syntax using an ast-grep pattern.",
-        execute: (arguments_) =>
-          this.toolsRunner.run({
-            arguments: arguments_,
-            name: "search_structure",
-          }),
-        inputSchema: searchStructureArgumentsSchema,
-      }),
-      search_text: tool({
-        description:
-          "Search exact text in the repository with bounded results.",
-        execute: (arguments_) =>
-          this.toolsRunner.run({ arguments: arguments_, name: "search_text" }),
-        inputSchema: searchTextArgumentsSchema,
-      }),
-    };
+    const model = createGatewayLanguageModel(this.config);
+    const tools = createRepositoryModelTools(this.toolsRunner);
     const runAttempt = async (
       attempt: "investigation" | "recovery",
     ): Promise<unknown> => {
       const investigation = attempt === "investigation";
+      const output =
+        this.outputContract === "portable"
+          ? Output.object({
+              name: "holon_review",
+              schema: modelReviewTransportSchema,
+            })
+          : Output.object({
+              name: "holon_review",
+              schema: modelReviewOutputSchema,
+            });
       const result = await generateText({
         instructions: investigation
           ? request.instructions
           : `${request.instructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`,
         maxOutputTokens: 4_000,
         maxRetries: 0,
-        model: provider(modelId),
-        output: Output.object({
-          name: "holon_review",
-          schema: modelReviewOutputSchema,
-        }),
+        model,
+        output,
         ...(investigation
           ? {
               prepareStep: ({ stepNumber }: { stepNumber: number }) =>
@@ -193,15 +222,7 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
             }
           : { stopWhen: stepCountIs(1) }),
         prompt: request.prompt,
-        providerOptions: {
-          cloudflareAiGateway: {
-            provider: {
-              data_collection: "deny",
-              require_parameters: true,
-            },
-            reasoningEffort: "low",
-          },
-        },
+        providerOptions: gatewayModelProviderOptions,
         temperature: 0,
       });
       this.onUsage?.({
@@ -212,7 +233,9 @@ export class AiSdkReviewGenerator implements ReviewGenerator {
         toolCallCount: result.toolCalls?.length ?? 0,
         totalTokens: result.usage.totalTokens,
       });
-      return modelReviewOutputSchema.parse(result.output);
+      return this.outputContract === "portable"
+        ? parseModelReviewTransport(result.output)
+        : modelReviewOutputSchema.parse(result.output);
     };
 
     try {

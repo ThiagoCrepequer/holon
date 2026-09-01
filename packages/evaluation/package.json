@@ -8,11 +8,14 @@
     "./corpus": "./corpus/v2/index.ts",
     "./corpus/v1": "./corpus/v1/index.ts",
     "./corpus/v2": "./corpus/v2/index.ts",
+    "./corpus/v3": "./corpus/v3/index.ts",
     "./recordings": "./recordings/v2/index.ts",
     "./recordings/v1": "./recordings/v1/index.ts",
-    "./recordings/v2": "./recordings/v2/index.ts"
+    "./recordings/v2": "./recordings/v2/index.ts",
+    "./recordings/v3": "./recordings/v3/index.ts"
   },
   "scripts": {
+    "evaluate:compare": "tsx src/cli.ts compare",
     "evaluate:live": "tsx src/cli.ts live",
     "evaluate:recorded": "tsx src/cli.ts recorded",
     "test": "vitest run --config ../../vitest.config.ts --root .",
