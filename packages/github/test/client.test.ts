@@ -231,4 +231,50 @@ describe("GitHub installation client", () => {
       { owner: "acme", repo: "api" },
     );
   });
+
+  it("lists check runs and parses valid items while ignoring invalid fields", async () => {
+    const session = await createInstallationSession(
+      { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+      99,
+      42,
+    );
+    sdk.request.mockResolvedValueOnce({
+      data: {
+        check_runs: [
+          {
+            external_id: "github:42:pr:7:head:aaa",
+            id: 101,
+            name: "Holon Review",
+            status: "in_progress",
+          },
+          {
+            id: 102,
+            name: "Other Check",
+            status: "completed",
+          },
+        ],
+        total_count: 2,
+      },
+    });
+
+    const result = await session.api.listCheckRuns!("a".repeat(40), {
+      check_name: "Holon Review",
+      owner: "acme",
+      repo: "api",
+    });
+
+    expect(result).toEqual([
+      {
+        externalId: "github:42:pr:7:head:aaa",
+        id: 101,
+        name: "Holon Review",
+        status: "in_progress",
+      },
+      {
+        id: 102,
+        name: "Other Check",
+        status: "completed",
+      },
+    ]);
+  });
 });

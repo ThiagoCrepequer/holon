@@ -1,4 +1,9 @@
-import type { PublishCommentInput, ReviewPublisher } from "@holon/application";
+import type {
+  CreateCheckRunInput,
+  PublishCommentInput,
+  ReviewPublisher,
+  UpdateCheckRunInput,
+} from "@holon/application";
 
 export interface GitHubComment {
   readonly body?: string | undefined;
@@ -7,6 +12,13 @@ export interface GitHubComment {
     readonly login: string;
     readonly type: string;
   } | null;
+}
+
+export interface GitHubCheckRun {
+  readonly externalId?: string | undefined;
+  readonly id: number;
+  readonly name: string;
+  readonly status: string;
 }
 
 export type GitHubCommentListRoute =
@@ -25,6 +37,14 @@ export interface GitHubApi {
     route: GitHubCommentListRoute,
     parameters: GitHubCommentListParameters,
   ): AsyncIterable<readonly GitHubComment[]>;
+  listCheckRuns?(
+    ref: string,
+    parameters: {
+      readonly check_name?: string;
+      readonly owner: string;
+      readonly repo: string;
+    },
+  ): Promise<readonly GitHubCheckRun[]>;
   request(
     route: string,
     parameters: Record<string, unknown>,
@@ -81,6 +101,66 @@ export class GitHubReviewPublisher implements ReviewPublisher {
       if (pages >= 20) break;
     }
     return undefined;
+  }
+
+  public async findCheckRunByExternalId(
+    externalId: string,
+  ): Promise<number | undefined> {
+    if (this.api.listCheckRuns === undefined) return undefined;
+    const checkRuns = await this.api.listCheckRuns(this.target.headSha, {
+      check_name: "Holon Review",
+      owner: this.target.owner,
+      repo: this.target.repo,
+    });
+    const match = checkRuns.find((item) => item.externalId === externalId);
+    return match?.id;
+  }
+
+  public async createCheckRun(input: CreateCheckRunInput): Promise<number> {
+    const parameters: Record<string, unknown> = {
+      external_id: input.externalId,
+      head_sha: input.headSha,
+      name: input.name ?? "Holon Review",
+      owner: this.target.owner,
+      repo: this.target.repo,
+      request: { retries: 0 },
+      status: input.status,
+      ...(input.startedAt === undefined ? {} : { started_at: input.startedAt }),
+      ...(input.completedAt === undefined
+        ? {}
+        : { completed_at: input.completedAt }),
+      ...(input.conclusion === undefined
+        ? {}
+        : { conclusion: input.conclusion }),
+      ...(input.output === undefined ? {} : { output: input.output }),
+    };
+    const response = await this.api.request(
+      "POST /repos/{owner}/{repo}/check-runs",
+      parameters,
+    );
+    return response.data.id;
+  }
+
+  public async updateCheckRun(input: UpdateCheckRunInput): Promise<void> {
+    const parameters: Record<string, unknown> = {
+      check_run_id: input.checkRunId,
+      owner: this.target.owner,
+      repo: this.target.repo,
+      request: { retries: 0 },
+      ...(input.status === undefined ? {} : { status: input.status }),
+      ...(input.conclusion === undefined
+        ? {}
+        : { conclusion: input.conclusion }),
+      ...(input.startedAt === undefined ? {} : { started_at: input.startedAt }),
+      ...(input.completedAt === undefined
+        ? {}
+        : { completed_at: input.completedAt }),
+      ...(input.output === undefined ? {} : { output: input.output }),
+    };
+    await this.api.request(
+      "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+      parameters,
+    );
   }
 
   public async publish(input: PublishCommentInput): Promise<number> {

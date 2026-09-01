@@ -41,6 +41,31 @@ class FakeGitHubApi implements GitHubApi {
     }
   }
 
+  public checkRuns: readonly {
+    readonly externalId?: string;
+    readonly id: number;
+    readonly name: string;
+    readonly status: string;
+  }[] = [];
+
+  public listCheckRuns(
+    _ref: string,
+    _parameters: {
+      readonly check_name?: string;
+      readonly owner: string;
+      readonly repo: string;
+    },
+  ): Promise<
+    readonly {
+      readonly externalId?: string;
+      readonly id: number;
+      readonly name: string;
+      readonly status: string;
+    }[]
+  > {
+    return Promise.resolve(this.checkRuns);
+  }
+
   public request(
     route: string,
     parameters: Record<string, unknown>,
@@ -251,5 +276,165 @@ describe("GitHubReviewPublisher", () => {
         startLine: 11,
       }),
     ).rejects.toThrow("startLine");
+  });
+
+  it("creates a GitHub check run with expected parameters", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+
+    const checkRunId = await publisher.createCheckRun({
+      externalId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      headSha: "a".repeat(40),
+      name: "Holon Review",
+      output: {
+        summary: "In progress...",
+        title: "Holon Review in progress",
+      },
+      startedAt: "2026-08-29T12:00:00.000Z",
+      status: "in_progress",
+    });
+
+    expect(checkRunId).toBe(123);
+    expect(api.requests[0]).toEqual({
+      parameters: {
+        external_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+        head_sha: "a".repeat(40),
+        name: "Holon Review",
+        output: {
+          summary: "In progress...",
+          title: "Holon Review in progress",
+        },
+        owner: "acme",
+        repo: "api",
+        request: { retries: 0 },
+        started_at: "2026-08-29T12:00:00.000Z",
+        status: "in_progress",
+      },
+      route: "POST /repos/{owner}/{repo}/check-runs",
+    });
+
+    await publisher.createCheckRun({
+      completedAt: "2026-08-29T12:05:00.000Z",
+      conclusion: "success",
+      externalId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      headSha: "a".repeat(40),
+      status: "completed",
+    });
+
+    expect(api.requests[1]).toEqual({
+      parameters: {
+        completed_at: "2026-08-29T12:05:00.000Z",
+        conclusion: "success",
+        external_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+        head_sha: "a".repeat(40),
+        name: "Holon Review",
+        owner: "acme",
+        repo: "api",
+        request: { retries: 0 },
+        status: "completed",
+      },
+      route: "POST /repos/{owner}/{repo}/check-runs",
+    });
+  });
+
+  it("updates an existing GitHub check run with various parameter subsets", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+
+    await publisher.updateCheckRun({
+      checkRunId: 456,
+      completedAt: "2026-08-29T12:01:00.000Z",
+      conclusion: "success",
+      output: {
+        summary: "Review completed successfully.",
+        title: "Holon Review — No regressions found",
+      },
+      status: "completed",
+    });
+
+    expect(api.requests[0]).toEqual({
+      parameters: {
+        check_run_id: 456,
+        completed_at: "2026-08-29T12:01:00.000Z",
+        conclusion: "success",
+        output: {
+          summary: "Review completed successfully.",
+          title: "Holon Review — No regressions found",
+        },
+        owner: "acme",
+        repo: "api",
+        request: { retries: 0 },
+        status: "completed",
+      },
+      route: "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+    });
+
+    await publisher.updateCheckRun({
+      checkRunId: 456,
+      startedAt: "2026-08-29T12:00:00.000Z",
+    });
+
+    expect(api.requests[1]).toEqual({
+      parameters: {
+        check_run_id: 456,
+        owner: "acme",
+        repo: "api",
+        request: { retries: 0 },
+        started_at: "2026-08-29T12:00:00.000Z",
+      },
+      route: "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
+    });
+  });
+
+  it("finds existing check runs by externalId and handles missing api method", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+    const runId = `github:42:pr:7:head:${"a".repeat(40)}`;
+    api.checkRuns = [
+      {
+        externalId: runId,
+        id: 999,
+        name: "Holon Review",
+        status: "in_progress",
+      },
+    ];
+
+    await expect(publisher.findCheckRunByExternalId(runId)).resolves.toBe(999);
+    await expect(
+      publisher.findCheckRunByExternalId("github:other:run"),
+    ).resolves.toBeUndefined();
+
+    const basicApi = {
+      iterate: api.iterate.bind(api),
+      request: api.request.bind(api),
+    };
+    const basicPublisher = new GitHubReviewPublisher(basicApi, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+    await expect(
+      basicPublisher.findCheckRunByExternalId(runId),
+    ).resolves.toBeUndefined();
   });
 });
