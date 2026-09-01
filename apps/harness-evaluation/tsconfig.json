@@ -1,7 +1,0 @@
-{
-  "extends": "../../tooling/typescript/base.json",
-  "compilerOptions": {
-    "types": ["@cloudflare/vitest-plugin/types"]
-  },
-  "include": ["src/**/*.ts", "test/**/*.ts", "worker-configuration.d.ts"]
-}

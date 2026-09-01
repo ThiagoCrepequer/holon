@@ -69,13 +69,6 @@ Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 | `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` |
 | `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       |
 
-`holon-harness-evaluation` não participa desse rollout de produção. O workflow
-manual **Evaluation (harness comparison)** o implanta separadamente, com
-aprovação do Environment `live-evaluation`, antes de comparar o mesmo SHA.
-Não conecte esse Worker a deploy automático enquanto o ADR-0017 estiver
-`proposed`: uma alteração em `main` não deve gerar inferência ou recurso remoto
-sem ação explícita.
-
 O root permanece no topo porque ambos os apps dependem do workspace e do
 lockfile do monorepo. Deploy automático independente dos dois Workers fica
 desabilitado: os bindings são bidirecionais e a ordem control plane -> executor

@@ -47,22 +47,25 @@ Start at `docs/README.md` and load only the documents relevant to the task.
 
 The accepted ADRs listed in `docs/decisions/README.md` define the current
 boundary. The implementation is a TypeScript 7 ESM monorepo with two production
-deployables: `apps/control-plane` and `apps/repository-executor`. The isolated
-`apps/harness-evaluation` deployable is an experimental, manual-only evaluation
-spike governed by proposed ADR-0017; it is not part of the review runtime. Workflows
+deployables: `apps/control-plane` and `apps/repository-executor`. Workflows
 coordinates retries, a Durable Object SQLite instance per PR owns the ledger,
 and the executor uses Cloudflare Sandbox with deny-by-default egress. Review is
 structural for JS/TS and textual for eligible patches; the same exclusion
 policy applies to initial context and repository tools.
 
+The review generator uses a two-phase decoupled architecture (investigation tool
+loop followed by dedicated schema finalization and host evidence verification)
+governed by ADR-0018.
+
 Package boundaries and commands are documented in
 `docs/architecture/technical-ecosystem.md` and
 `docs/operations/local-development.md`.
 
-Cloudflare Agents SDK and `@cloudflare/think` remain excluded from production;
-their use is limited to the ADR-0017 evaluation spike. Conversational follow-ups,
-Vectorize-based RAG, and private MCP infrastructure remain deferred or subject
-to focused validation unless a later ADR changes their status.
+Cloudflare Agents SDK and `@cloudflare/think` are excluded from the repository
+following the conclusion and decommissioning of the ADR-0017 evaluation spike.
+Conversational follow-ups, Vectorize-based RAG, and private MCP infrastructure
+remain deferred or subject to focused validation unless a later ADR changes
+their status.
 
 ## Engineering rules
 

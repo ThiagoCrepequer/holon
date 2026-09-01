@@ -10,10 +10,8 @@ last-reviewed: 2026-08-31
 # Execução das avaliações
 
 Holon mantém avaliação offline em Pull Requests e avaliações com modelo somente
-por ação manual. O live eval básico chama o adapter de produção diretamente. A
-comparação opcional implanta um terceiro Worker **exclusivo de avaliação** para
-exercitar Agents SDK/Think; ele não recebe webhooks nem participa do review de
-produção.
+por ação manual. O live eval básico chama o adapter de produção diretamente
+usando a arquitetura em duas fases (ADR-0018).
 
 ## Pull Requests
 
@@ -53,21 +51,8 @@ Configure como Environment secret:
 AI_GATEWAY_API_TOKEN
 ```
 
-Para executar também a comparação de harnesses, acrescente:
-
-```text
-# Environment variable
-THINK_EVALUATION_URL=https://holon-harness-evaluation.<subdomain>.workers.dev/
-
-# Environment secret
-CLOUDFLARE_API_TOKEN
-THINK_EVALUATION_API_TOKEN
-```
-
-`AI_GATEWAY_API_TOKEN` deve ter somente `AI Gateway Run`.
-`CLOUDFLARE_API_TOKEN` é uma credencial separada, limitada ao account alvo e
-com `Workers Scripts: Write`; não reutilize o token do Gateway para deploy. A
-chave do provedor permanece no BYOK do Gateway e não entra no GitHub.
+`AI_GATEWAY_API_TOKEN` deve ter somente `AI Gateway Run`. A chave do provedor
+permanece no BYOK do Gateway e não entra no GitHub.
 
 Secrets de Environment só ficam disponíveis depois que as protection rules
 forem satisfeitas. Fonte verificada em 2026-08-31:
@@ -104,72 +89,17 @@ publicação pertencem ao smoke remoto separado.
 
 O corpus atual possui cinco casos de desenvolvimento. Um resultado verde prova
 esses casos, não qualidade geral nem prontidão para produção. Mudanças de
-prompt, política, modelo ou harness devem ser comparadas na mesma suíte. A OpenAI
+prompt, política, modelo ou arquitetura devem ser comparadas na mesma suíte. A OpenAI
 recomenda avaliações representativas e contínuas porque saídas generativas são
 variáveis; verificação realizada em 2026-08-31:
 [Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices).
 
 O corpus V1 permanece versionado para reproduzir a primeira execução live. A V2
 substitui o caso positivo ambíguo por um patch autocontido no qual o novo limiar
-literal contradiz uma constante de política preservada no próprio diff.
-
-## Comparação manual de harnesses
-
-O workflow **Evaluation (harness comparison)** só aceita `main`. Os jobs de
-deploy e comparação usam exclusivamente o GitHub Environment
-`live-evaluation`; o segundo job só inicia depois do deploy do SHA exato.
-
-O deploy reutiliza `AI_GATEWAY_ACCOUNT_ID` como `CLOUDFLARE_ACCOUNT_ID` e
-provisiona no mesmo comando as variables `AI_GATEWAY_ACCOUNT_ID`,
-`AI_GATEWAY_ID`, `AI_MODEL_ID` e `SOURCE_REVISION`, além dos secrets
-`AI_GATEWAY_API_TOKEN` e `THINK_EVALUATION_API_TOKEN`. O arquivo transitório de
-secrets é criado com permissão restrita em `RUNNER_TEMP`, removido ao terminar e
-nunca escrito no workspace ou artifact. `--keep-vars` preserva configurações
-remotas não administradas por esse workflow; secrets omitidos não são apagados.
-
-Cada execução compara três trials dos mesmos cinco casos em quatro braços:
-
-1. structured output com o schema de domínio atual;
-2. structured output com schema JSON-portável;
-3. tool terminal `submit_review` no AI SDK;
-4. `ThinkWorkflow.step.prompt()` com a mesma saída portável.
-
-Os braços são executados sequencialmente para evitar concorrência contra a rota
-do provider, mas a ordem inicial é rotacionada a cada trial. A identidade de
-execução combina `run_id` e `run_attempt`; portanto, um re-run não reutiliza o
-Workflow durável de uma tentativa anterior.
-
-O relatório `harness-comparison.json` mantém cada suíte e agrega conclusão,
-aprovação no grader, precisão, recall, outputs inválidos, erros de subject,
-tokens, tool calls e latência por braço. Custo monetário deve ser correlacionado
-separadamente no AI Gateway pelo `evaluation_run_id`, pois a resposta compatível
-não o fornece. O relatório não contém prompt, patch nem resposta completa, e não
-escolhe vencedor automaticamente. Uma opção só deve ser promovida após os
-critérios do [ADR-0017 proposto](../decisions/0017-select-review-output-harness-from-evidence.md)
-e uma validação holdout.
-
-O Job Summary também agrega as razões seguras de falha por braço. Use
-`model_output_missing` quando o modelo não produzir a saída terminal,
-`model_output_invalid` quando a saída ou o schema falhar na validação,
-`execution_aborted`, `execution_skipped`, `execution_timeout` e
-`execution_error` para estados terminais do Think, e `provider_permanent`,
-`provider_transient` ou `tool_budget` para as demais fronteiras. O estado
-`execution_error` indica que a submissão Think terminou sem resultado válido,
-mas o SDK não forneceu um subtipo seguro; não inferimos a causa por texto de
-exceção. Essas razões são enums: mensagens, payloads e respostas do provider
-continuam excluídos do relatório.
-
-O endpoint experimental aceita somente IDs existentes em `baseline-v3`; o
-corpus é carregado dentro do Worker. O caller nunca envia diff ou prompt. O
-endpoint também atesta account, Gateway, rota de modelo e SHA contra o runtime,
-rejeitando qualquer drift entre os braços. O Agent desabilita workspace Bash,
-MCP, fetch, reasoning e armazenamento de mensagens/tools, e o status expõe
-somente resultado validado, telemetria numérica e razões enumeradas. Um callback
-durável destrói o Agent e seu estado após um dia, alinhado à retenção do
-Workflow.
+literal contradiz uma constante de política preservada no próprio diff. A V3
+inclui limites de findings estruturados, prompt injection e revisão parcial.
 
 Fontes verificadas em 2026-08-31:
 
-- [Wrangler deploy e `--keep-vars`](https://developers.cloudflare.com/workers/wrangler/commands/#deploy)
-- [Cloudflare Think Workflows](https://github.com/cloudflare/agents/blob/main/docs/think/workflows.md)
-- [Cloudflare harnesses](https://developers.cloudflare.com/agents/harnesses/)
+- [OpenAI model selection and evaluation](https://developers.openai.com/api/docs/guides/latest-model)
+- [Cloudflare dynamic routes](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/)

@@ -1,14 +1,17 @@
 ---
 id: ADR-0017
 kind: decision
-status: proposed
+status: superseded
 date: 2026-08-31
 owners:
   - core-team
 supersedes: []
+superseded-by:
+  - 0018-adopt-two-phase-decoupled-review-generator.md
 related:
   - 0001-adopt-incremental-mvp-architecture.md
   - 0005-use-ai-gateway-rest-api-with-ai-sdk.md
+  - 0018-adopt-two-phase-decoupled-review-generator.md
   - ../operations/evaluations.md
   - ../planning/review-core-evolution-roadmap.md
 ---

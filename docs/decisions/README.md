@@ -32,7 +32,8 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0014](0014-version-executor-rpc-and-broker-github-credentials.md)    | Versionar RPC e emitir credenciais GitHub por broker            | `accepted`   | 2026-08-30 |
 | [ADR-0015](0015-use-causal-admission-and-durable-terminal-cleanup.md)     | Usar admissão causal e cleanup terminal durável                 | `accepted`   | 2026-08-30 |
 | [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md) | Exigir patches completos e evidência verificável pelo host      | `accepted`   | 2026-08-30 |
-| [ADR-0017](0017-select-review-output-harness-from-evidence.md)            | Selecionar harness de saída por avaliação comparativa           | `proposed`   | 2026-08-31 |
+| [ADR-0017](0017-select-review-output-harness-from-evidence.md)            | Selecionar harness de saída por avaliação comparativa           | `superseded` | 2026-08-31 |
+| [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)            | Adotar gerador desacoplado em duas fases com gate no host       | `accepted`   | 2026-09-01 |
 
 ## Regras
 

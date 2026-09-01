@@ -60,7 +60,6 @@ import {
   AiSdkReviewGenerator,
   ModelProviderRequestError,
   RepositoryToolBudgetExceededError,
-  TerminalToolReviewGenerator,
   buildReviewPrompt,
   buildReviewPromptResult,
   createBoundedRepositoryToolRunner,
@@ -465,130 +464,6 @@ describe("model review boundary", () => {
       toolChoice: "none",
     });
     expect(options.stopWhen).toEqual({ steps: 7 });
-  });
-
-  it("terminates on the schema-valid submit_review tool call", async () => {
-    sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.toolLoopGenerate.mockResolvedValueOnce({
-      finishReason: "tool-calls",
-      staticToolCalls: [
-        {
-          input: { findings: [], summary: output.summary },
-          toolName: "submit_review",
-        },
-      ],
-      toolCalls: [{ toolName: "submit_review" }],
-      usage: { inputTokens: 90, outputTokens: 10, totalTokens: 100 },
-    });
-    const usages: unknown[] = [];
-    const generator = new TerminalToolReviewGenerator(
-      {
-        accountId: "account",
-        apiToken: "token",
-        gatewayId: "holon",
-        model: "dynamic/pr-review",
-      },
-      { run: () => Promise.resolve({ content: "", truncated: false }) },
-      (usage) => usages.push(usage),
-    );
-
-    await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).resolves.toEqual(output);
-    const settings = sdk.toolLoopSettings.at(-1) as {
-      readonly prepareStep: (input: { readonly stepNumber: number }) => unknown;
-      readonly stopWhen: unknown;
-      readonly tools: Record<string, { execute(): Promise<unknown> }>;
-    };
-    expect(settings.stopWhen).toEqual([
-      { tool: "submit_review" },
-      { steps: 7 },
-    ]);
-    expect(settings.prepareStep({ stepNumber: 6 })).toEqual({
-      activeTools: ["submit_review"],
-      toolChoice: { toolName: "submit_review", type: "tool" },
-    });
-    await expect(settings.tools.submit_review!.execute()).resolves.toEqual({
-      accepted: true,
-    });
-    expect(usages).toEqual([
-      {
-        attempt: "terminal-tool",
-        finishReason: "tool-calls",
-        inputTokens: 90,
-        outputTokens: 10,
-        toolCallCount: 1,
-        totalTokens: 100,
-      },
-    ]);
-  });
-
-  it("classifies terminal-tool provider failures before the evaluation boundary", async () => {
-    sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.toolLoopGenerate.mockRejectedValueOnce(new sdk.APICallError(503, true));
-    const generator = new TerminalToolReviewGenerator(
-      {
-        accountId: "account",
-        apiToken: "token",
-        gatewayId: "holon",
-        model: "dynamic/pr-review",
-      },
-      { run: () => Promise.resolve({ content: "", truncated: false }) },
-    );
-
-    await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).rejects.toMatchObject({
-      isRetryable: true,
-      name: "ModelTransientError",
-      statusCode: 503,
-    } satisfies Partial<ModelProviderRequestError>);
-  });
-
-  it("classifies a completed terminal loop without submit_review as missing output", async () => {
-    sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.toolLoopGenerate.mockResolvedValueOnce({
-      finishReason: "stop",
-      staticToolCalls: [],
-      toolCalls: [],
-      usage: { inputTokens: 90, outputTokens: 10, totalTokens: 100 },
-    });
-    const generator = new TerminalToolReviewGenerator(
-      {
-        accountId: "account",
-        apiToken: "token",
-        gatewayId: "holon",
-        model: "dynamic/pr-review",
-      },
-      { run: () => Promise.resolve({ content: "", truncated: false }) },
-    );
-
-    await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).rejects.toMatchObject({ name: "AI_NoOutputGeneratedError" });
-  });
-
-  it("preserves unexpected terminal-tool SDK errors", async () => {
-    const unexpectedError = new TypeError("invalid terminal SDK state");
-    sdk.createProvider.mockReturnValue(sdk.model);
-    sdk.model.mockReturnValueOnce({ modelId: "dynamic/pr-review" });
-    sdk.toolLoopGenerate.mockRejectedValueOnce(unexpectedError);
-    const generator = new TerminalToolReviewGenerator(
-      {
-        accountId: "account",
-        apiToken: "token",
-        gatewayId: "holon",
-        model: "dynamic/pr-review",
-      },
-      { run: () => Promise.resolve({ content: "", truncated: false }) },
-    );
-
-    await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).rejects.toBe(unexpectedError);
   });
 
   it("performs one tool-free recovery for a semantically empty successful response", async () => {
