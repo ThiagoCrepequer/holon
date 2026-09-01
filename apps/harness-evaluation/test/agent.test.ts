@@ -178,7 +178,14 @@ describe("HarnessEvaluationAgent", () => {
     await expect(first.agent.startReview(request, workflowId)).resolves.toBe(
       workflowId,
     );
-    expect(first.runWorkflow).toHaveBeenCalledOnce();
+    expect(first.runWorkflow).toHaveBeenCalledWith(
+      "THINK_EVALUATION_WORKFLOW",
+      { caseId: request.caseId },
+      expect.objectContaining({
+        agentBinding: "HARNESS_EVALUATION_AGENTS",
+        id: workflowId,
+      }),
+    );
     expect(first.schedule).toHaveBeenCalledWith(
       86_400,
       "destroyEvaluationAgent",
