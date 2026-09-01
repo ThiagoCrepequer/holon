@@ -47,6 +47,14 @@ export function isTerminalRunState(state: RunState): boolean {
   return transitions[state].length === 0;
 }
 
+export function isTransientRunState(state: RunState): boolean {
+  return state === "running" || state === "publishing";
+}
+
+export function isRecoverableRunState(state: RunState): boolean {
+  return state === "queued" || state === "failed_retryable";
+}
+
 export function transitionRun(
   run: ReviewRun,
   to: RunState,

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   InvalidRunTransitionError,
   canTransitionRun,
+  isRecoverableRunState,
   isTerminalRunState,
+  isTransientRunState,
   transitionRun,
   type ReviewRun,
 } from "../src/index.js";
@@ -66,5 +68,17 @@ describe("review run state machine", () => {
     expect(() =>
       transitionRun({ ...run, state: from }, to, "2026-08-29T12:00:01.000Z"),
     ).toThrow(InvalidRunTransitionError);
+  });
+
+  it("identifies transient and recoverable states accurately", () => {
+    expect(isTransientRunState("running")).toBe(true);
+    expect(isTransientRunState("publishing")).toBe(true);
+    expect(isTransientRunState("queued")).toBe(false);
+    expect(isTransientRunState("completed")).toBe(false);
+
+    expect(isRecoverableRunState("queued")).toBe(true);
+    expect(isRecoverableRunState("failed_retryable")).toBe(true);
+    expect(isRecoverableRunState("completed")).toBe(false);
+    expect(isRecoverableRunState("failed_terminal")).toBe(false);
   });
 });
