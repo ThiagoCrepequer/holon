@@ -169,6 +169,8 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
         "THINK_EVALUATION_WORKFLOW",
         { caseId: request.caseId },
         {
+          // The plural binding cannot be inferred from HarnessEvaluationAgent.
+          agentBinding: "HARNESS_EVALUATION_AGENTS",
           id: workflowId,
           metadata: {
             caseId: request.caseId,
