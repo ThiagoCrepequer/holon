@@ -1,5 +1,6 @@
 import {
   ThinkPromptAbortedError,
+  ThinkPromptError,
   ThinkPromptSkippedError,
   ThinkPromptTimeoutError,
   ThinkPromptValidationError,
@@ -10,7 +11,10 @@ import {
   modelReviewTransportSchema,
   parseModelReviewTransport,
 } from "@holon/contracts";
-import { evalSubjectOutputSchema } from "@holon/evaluation";
+import {
+  evalSubjectOutputSchema,
+  evaluationSubjectFailureReasonSchema,
+} from "@holon/evaluation";
 import { baselineCorpusV3 } from "@holon/evaluation/corpus/v3";
 import { buildReviewPromptResult } from "@holon/model";
 import type { AgentWorkflowEvent } from "agents/workflows";
@@ -35,22 +39,27 @@ export const harnessWorkflowResultSchema = z.discriminatedUnion("kind", [
     kind: z.literal("error"),
     // Workflow failures cross a durable serialization boundary. Preserve only
     // the stable failure class, never provider text or model output.
-    reason: z.enum(["model_output", "provider_transient", "unknown"]),
+    reason: evaluationSubjectFailureReasonSchema,
   }),
 ]);
 
 export type HarnessWorkflowResult = z.infer<typeof harnessWorkflowResultSchema>;
 
 function workflowFailure(error: unknown): HarnessWorkflowResult {
-  if (
-    error instanceof ThinkPromptValidationError ||
-    error instanceof ThinkPromptAbortedError ||
-    error instanceof ThinkPromptSkippedError
-  ) {
-    return { kind: "error", reason: "model_output" };
+  if (error instanceof ThinkPromptValidationError) {
+    return { kind: "error", reason: "model_output_invalid" };
+  }
+  if (error instanceof ThinkPromptAbortedError) {
+    return { kind: "error", reason: "execution_aborted" };
+  }
+  if (error instanceof ThinkPromptSkippedError) {
+    return { kind: "error", reason: "execution_skipped" };
   }
   if (error instanceof ThinkPromptTimeoutError) {
-    return { kind: "error", reason: "provider_transient" };
+    return { kind: "error", reason: "execution_timeout" };
+  }
+  if (error instanceof ThinkPromptError) {
+    return { kind: "error", reason: "execution_error" };
   }
   return { kind: "error", reason: "unknown" };
 }

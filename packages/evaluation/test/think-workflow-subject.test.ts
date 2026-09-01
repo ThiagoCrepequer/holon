@@ -77,7 +77,7 @@ describe("Think Workflow evaluation subject", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json(started))
       .mockResolvedValueOnce(
-        Response.json({ reason: "model_output", status: "errored" }),
+        Response.json({ reason: "model_output_invalid", status: "errored" }),
       );
     await expect(
       createThinkWorkflowSubject(
@@ -87,7 +87,7 @@ describe("Think Workflow evaluation subject", () => {
         caseId: evaluationCase.id,
         ...evaluationCase.input,
       }),
-    ).rejects.toEqual(new EvaluationSubjectError("model_output"));
+    ).rejects.toEqual(new EvaluationSubjectError("model_output_invalid"));
   });
 
   it("accepts only credential-free HTTPS endpoints and bounded metadata", () => {

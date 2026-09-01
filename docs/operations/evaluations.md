@@ -148,6 +148,17 @@ escolhe vencedor automaticamente. Uma opção só deve ser promovida após os
 critérios do [ADR-0017 proposto](../decisions/0017-select-review-output-harness-from-evidence.md)
 e uma validação holdout.
 
+O Job Summary também agrega as razões seguras de falha por braço. Use
+`model_output_missing` quando o modelo não produzir a saída terminal,
+`model_output_invalid` quando a saída ou o schema falhar na validação,
+`execution_aborted`, `execution_skipped`, `execution_timeout` e
+`execution_error` para estados terminais do Think, e `provider_permanent`,
+`provider_transient` ou `tool_budget` para as demais fronteiras. O estado
+`execution_error` indica que a submissão Think terminou sem resultado válido,
+mas o SDK não forneceu um subtipo seguro; não inferimos a causa por texto de
+exceção. Essas razões são enums: mensagens, payloads e respostas do provider
+continuam excluídos do relatório.
+
 O endpoint experimental aceita somente IDs existentes em `baseline-v3`; o
 corpus é carregado dentro do Worker. O caller nunca envia diff ou prompt. O
 endpoint também atesta account, Gateway, rota de modelo e SHA contra o runtime,

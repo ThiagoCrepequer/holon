@@ -1,4 +1,7 @@
 import {
+  ThinkPromptAbortedError,
+  ThinkPromptError,
+  ThinkPromptSkippedError,
   ThinkPromptTimeoutError,
   ThinkPromptValidationError,
 } from "@cloudflare/think/workflows";
@@ -58,11 +61,17 @@ describe("Think evaluation workflow", () => {
     for (const [error, reason] of [
       [
         new ThinkPromptValidationError("submission", new Error("invalid")),
-        "model_output",
+        "model_output_invalid",
       ],
       [
         new ThinkPromptTimeoutError("submission", new Error("timeout")),
-        "provider_transient",
+        "execution_timeout",
+      ],
+      [new ThinkPromptAbortedError("submission"), "execution_aborted"],
+      [new ThinkPromptSkippedError("submission"), "execution_skipped"],
+      [
+        new ThinkPromptError("private terminal failure", "submission", "error"),
+        "execution_error",
       ],
       [new Error("private provider payload"), "unknown"],
     ] as const) {

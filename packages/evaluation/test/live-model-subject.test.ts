@@ -80,7 +80,16 @@ describe("createLiveModelSubject", () => {
       }),
       "tool_budget",
     ],
-    [Object.assign(new Error("invalid"), { name: "ZodError" }), "model_output"],
+    [
+      Object.assign(new Error("missing"), {
+        name: "AI_NoOutputGeneratedError",
+      }),
+      "model_output_missing",
+    ],
+    [
+      Object.assign(new Error("invalid"), { name: "ZodError" }),
+      "model_output_invalid",
+    ],
     [new Error("arbitrary provider content"), "unknown"],
   ] as const)("maps model failures to a safe reason", async (error, reason) => {
     const evalCase = createEvalCase();

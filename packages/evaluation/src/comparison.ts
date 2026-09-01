@@ -184,6 +184,24 @@ function percentage(value: number | null): string {
 export function renderHarnessComparisonSummary(
   report: HarnessComparisonReport,
 ): string {
+  const failureRows = report.aggregates.flatMap((aggregate) => {
+    const counts = new Map<string, number>();
+    for (const suite of report.suites) {
+      if (suite.suite.configuration.subjectVersion !== aggregate.subject)
+        continue;
+      for (const caseRun of suite.suite.caseRuns) {
+        if (caseRun.outcome !== "subject_error") continue;
+        const reason = caseRun.reason ?? "unknown";
+        counts.set(reason, (counts.get(reason) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .toSorted(([left], [right]) => left.localeCompare(right, "en"))
+      .map(
+        ([reason, count]) =>
+          `| \`${aggregate.subject}\` | \`${reason}\` | ${count} |`,
+      );
+  });
   return [
     "# Holon harness comparison",
     "",
@@ -196,6 +214,16 @@ export function renderHarnessComparisonSummary(
       (aggregate) =>
         `| \`${aggregate.subject}\` | ${aggregate.trials} | ${aggregate.passedCases}/${aggregate.totalCases} | ${aggregate.completedCases}/${aggregate.totalCases} | ${percentage(aggregate.precision)} | ${percentage(aggregate.recall)} | ${aggregate.invalidOutputs} | ${aggregate.subjectErrors} | ${numberOrNA(aggregate.inputTokens)} | ${numberOrNA(aggregate.outputTokens)} | ${numberOrNA(aggregate.toolCalls)} | ${numberOrNA(aggregate.durationMs)} |`,
     ),
+    "",
+    "## Subject failure reasons",
+    "",
+    ...(failureRows.length === 0
+      ? ["- None."]
+      : [
+          "| Subject | Reason | Count |",
+          "| --- | --- | ---: |",
+          ...failureRows,
+        ]),
     "",
   ].join("\n");
 }

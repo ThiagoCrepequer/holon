@@ -123,8 +123,11 @@ function subjectFailure(error: unknown): EvaluationSubjectError {
   if (failureCode === "tool_budget_exhausted") {
     return new EvaluationSubjectError("tool_budget");
   }
-  if (failureCode !== undefined) {
-    return new EvaluationSubjectError("model_output");
+  if (failureCode === "output_missing") {
+    return new EvaluationSubjectError("model_output_missing");
+  }
+  if (failureCode === "object_invalid" || failureCode === "schema_invalid") {
+    return new EvaluationSubjectError("model_output_invalid");
   }
   return new EvaluationSubjectError("unknown");
 }
