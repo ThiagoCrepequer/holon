@@ -60,6 +60,13 @@ export function isChangedLine(
   );
 }
 
+export function filterChangedLinesByPath(
+  changedLines: readonly ChangedLine[],
+  path: string,
+): readonly ChangedLine[] {
+  return changedLines.filter((line) => line.path === path);
+}
+
 export function createFinding(
   candidate: FindingCandidate,
   changedLines: readonly ChangedLine[],

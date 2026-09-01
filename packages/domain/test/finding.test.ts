@@ -4,6 +4,7 @@ import {
   buildPublicationMarker,
   classifyFindingPublication,
   createFinding,
+  filterChangedLinesByPath,
   isChangedLine,
   type ChangedLine,
 } from "../src/index.js";
@@ -134,5 +135,18 @@ describe("review findings", () => {
         changedLines,
       ),
     ).toThrow("startLine");
+  });
+
+  it("filters changed lines by file path deterministically", () => {
+    const mixedChangedLines: readonly ChangedLine[] = [
+      { line: 10, path: "src/a.ts", side: "RIGHT" },
+      { line: 20, path: "src/b.ts", side: "RIGHT" },
+      { line: 30, path: "src/a.ts", side: "RIGHT" },
+    ];
+    expect(filterChangedLinesByPath(mixedChangedLines, "src/a.ts")).toEqual([
+      { line: 10, path: "src/a.ts", side: "RIGHT" },
+      { line: 30, path: "src/a.ts", side: "RIGHT" },
+    ]);
+    expect(filterChangedLinesByPath(mixedChangedLines, "src/c.ts")).toEqual([]);
   });
 });
