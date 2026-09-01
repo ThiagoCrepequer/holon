@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createCheckRunInputSchema,
   executorRequestSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -16,6 +17,7 @@ import {
   reviewContextV1Schema,
   reviewContextV2Schema,
   reviewJobSchema,
+  updateCheckRunInputSchema,
   webhookEnvelopeSchema,
 } from "../src/index.js";
 
@@ -559,5 +561,58 @@ describe("model output and publication ledger", () => {
     expect(modelReviewOutputSchema.safeParse(invalidOutput).success).toBe(
       false,
     );
+  });
+});
+
+describe("check run contracts", () => {
+  it("validates check run creation input", () => {
+    const valid = {
+      externalId: runId,
+      headSha: sha,
+      name: "Holon Review",
+      output: {
+        summary: "Review is currently in progress...",
+        title: "Holon Review in progress",
+      },
+      startedAt: "2026-08-29T12:00:00.000Z",
+      status: "in_progress",
+    } as const;
+
+    expect(createCheckRunInputSchema.parse(valid)).toEqual(valid);
+    expect(
+      createCheckRunInputSchema.parse({
+        externalId: runId,
+        headSha: sha,
+        status: "queued",
+      }),
+    ).toMatchObject({ status: "queued" });
+
+    expect(
+      createCheckRunInputSchema.safeParse({
+        ...valid,
+        headSha: "invalid-sha",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates check run update input", () => {
+    const update = {
+      checkRunId: 101,
+      completedAt: "2026-08-29T12:01:00.000Z",
+      conclusion: "success",
+      output: {
+        summary: "No functional regressions found.",
+        title: "Holon Review — No regressions",
+      },
+      status: "completed",
+    } as const;
+
+    expect(updateCheckRunInputSchema.parse(update)).toEqual(update);
+    expect(
+      updateCheckRunInputSchema.safeParse({
+        ...update,
+        checkRunId: -1,
+      }).success,
+    ).toBe(false);
   });
 });
