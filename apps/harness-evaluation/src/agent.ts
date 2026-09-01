@@ -23,6 +23,7 @@ interface AttemptRow {
 
 interface RunRow {
   readonly case_id: string;
+  readonly evaluation_run_id: string;
   readonly source_revision: string;
   readonly start_state: "started" | "starting";
   readonly started_at: number;
@@ -31,6 +32,20 @@ interface RunRow {
 
 function optionalNumber(value: number | null): number | undefined {
   return value === null ? undefined : value;
+}
+
+export function evaluationGatewayMetadata(
+  agentName: string,
+  sourceRevision: string,
+  evaluationRunId: string,
+) {
+  return {
+    agent_name: agentName,
+    evaluation_run_id: evaluationRunId,
+    source_revision: sourceRevision,
+    stage: "harness-evaluation",
+    harness: "think-workflow",
+  } as const;
 }
 
 export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
@@ -43,16 +58,22 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
   public override workspaceBash = false;
 
   public override getModel() {
+    this.ensureTables();
+    const run = this.sql<Pick<RunRow, "evaluation_run_id">>`
+      SELECT evaluation_run_id FROM harness_run LIMIT 1
+    `[0];
+    if (run === undefined) {
+      throw new TypeError("evaluation run identity is unavailable");
+    }
     return createGatewayLanguageModel({
       accountId: this.env.AI_GATEWAY_ACCOUNT_ID,
       apiToken: this.env.AI_GATEWAY_API_TOKEN,
       gatewayId: this.env.AI_GATEWAY_ID,
-      metadata: {
-        agent_name: this.name,
-        source_revision: this.env.SOURCE_REVISION,
-        stage: "harness-evaluation",
-        harness: "think-workflow",
-      },
+      metadata: evaluationGatewayMetadata(
+        this.name,
+        this.env.SOURCE_REVISION,
+        run.evaluation_run_id,
+      ),
       model: this.env.AI_MODEL_ID,
     });
   }
@@ -109,6 +130,7 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
     if (existing !== undefined) {
       if (
         existing.case_id !== request.caseId ||
+        existing.evaluation_run_id !== request.evaluationRunId ||
         existing.source_revision !== request.sourceRevision ||
         existing.workflow_id !== workflowId
       ) {
@@ -129,12 +151,14 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
       INSERT INTO harness_run (
         workflow_id,
         case_id,
+        evaluation_run_id,
         source_revision,
         start_state,
         started_at
       ) VALUES (
         ${workflowId},
         ${request.caseId},
+        ${request.evaluationRunId},
         ${request.sourceRevision},
         ${"starting"},
         ${startedAt}
@@ -244,6 +268,7 @@ export class HarnessEvaluationAgent extends Think<Cloudflare.Env> {
       CREATE TABLE IF NOT EXISTS harness_run (
         workflow_id TEXT PRIMARY KEY,
         case_id TEXT NOT NULL,
+        evaluation_run_id TEXT NOT NULL,
         source_revision TEXT NOT NULL,
         start_state TEXT NOT NULL CHECK (start_state IN ('starting', 'started')),
         started_at INTEGER NOT NULL
