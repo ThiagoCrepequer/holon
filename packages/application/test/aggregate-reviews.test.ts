@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { aggregateShardReviews, formatCheckRunOutput } from "../src/index.js";
+import {
+  aggregateShardReviews,
+  formatCheckRunOutput,
+  formatReconciliationSection,
+} from "../src/index.js";
 
 describe("aggregateShardReviews", () => {
   const fileA = {
@@ -353,5 +357,70 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.findings).toHaveLength(0);
     expect(aggregated.verdict).toBe("APPROVE");
     expect(aggregated.summary).toContain("Verdict: Approved");
+  });
+
+  describe("reconciliation formatting", () => {
+    it("formats reconciliation summary section correctly", () => {
+      const summary = {
+        newCount: 1,
+        obsoleteCount: 0,
+        persistentCount: 2,
+        reintroducedCount: 1,
+        resolvedCount: 3,
+        totalActiveCount: 4,
+      };
+
+      const section = formatReconciliationSection(summary);
+      expect(section).toContain("Finding Lifecycle (Re-review)");
+      expect(section).toContain("✅ **3** issue(s) resolved");
+      expect(section).toContain("⚠️ **2** issue(s) persistent");
+      expect(section).toContain("🆕 **1** new issue(s) detected");
+      expect(section).toContain("🔁 **1** issue(s) reintroduced");
+    });
+
+    it("returns empty string when all counts are 0", () => {
+      const summary = {
+        newCount: 0,
+        obsoleteCount: 0,
+        persistentCount: 0,
+        reintroducedCount: 0,
+        resolvedCount: 0,
+        totalActiveCount: 0,
+      };
+      expect(formatReconciliationSection(summary)).toBe("");
+    });
+
+    it("injects reconciliation section into aggregated summary when provided", () => {
+      const shardResults = [
+        {
+          findings: [],
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success" as const,
+          summary: "Shard 0 clean.",
+        },
+      ];
+
+      const reconciliation = {
+        newCount: 0,
+        obsoleteCount: 0,
+        persistentCount: 0,
+        reintroducedCount: 0,
+        resolvedCount: 2,
+        totalActiveCount: 0,
+      };
+
+      const aggregated = aggregateShardReviews(
+        plan,
+        shardResults,
+        undefined,
+        undefined,
+        reconciliation,
+      );
+
+      expect(aggregated.reconciliation).toEqual(reconciliation);
+      expect(aggregated.summary).toContain("Finding Lifecycle (Re-review)");
+      expect(aggregated.summary).toContain("✅ **2** issue(s) resolved");
+    });
   });
 });

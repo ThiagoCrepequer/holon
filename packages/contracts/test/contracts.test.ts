@@ -5,6 +5,8 @@ import {
   ciEvidenceSchema,
   createCheckRunInputSchema,
   executorRequestSchema,
+  findingFingerprintSchema,
+  findingStatusSchema,
   lineCoverageSchema,
   testExecutionReportSchema,
   executorRequestV1Schema,
@@ -15,6 +17,8 @@ import {
   parseModelReviewTransport,
   preparedRepositorySchema,
   publicationRecordSchema,
+  reconciledFindingSchema,
+  reconciliationSummarySchema,
   repositoryToolCallSchema,
   repositoryToolResultSchema,
   reviewContextSchema,
@@ -27,6 +31,7 @@ import {
   reviewVerdictPolicyOptionsSchema,
   reviewVerdictSchema,
   shardReviewResultSchema,
+  trackedFindingSchema,
   updateCheckRunInputSchema,
   webhookEnvelopeSchema,
 } from "../src/index.js";
@@ -847,6 +852,98 @@ describe("check run contracts", () => {
       expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(
         aggregated,
       );
+    });
+  });
+
+  describe("finding lifecycle schemas", () => {
+    const validFingerprint = `fp:${"b".repeat(64)}`;
+
+    it("validates findingFingerprintSchema and findingStatusSchema", () => {
+      expect(findingFingerprintSchema.parse(validFingerprint)).toBe(
+        validFingerprint,
+      );
+      expect(() => findingFingerprintSchema.parse("invalid-fp")).toThrow();
+      expect(() =>
+        findingFingerprintSchema.parse(`fp:${"b".repeat(63)}`),
+      ).toThrow();
+
+      for (const status of [
+        "new",
+        "persistent",
+        "resolved",
+        "obsolete",
+        "reintroduced",
+      ] as const) {
+        expect(findingStatusSchema.parse(status)).toBe(status);
+      }
+      expect(() => findingStatusSchema.parse("unknown")).toThrow();
+    });
+
+    it("validates trackedFindingSchema", () => {
+      const tracked = {
+        diagnostic: "Security vulnerability in authentication handler.",
+        filePath: "src/auth/jwt.ts",
+        fingerprint: validFingerprint,
+        firstSeenHeadSha: "1".repeat(40),
+        firstSeenRunId: `github:1:pr:1:head:${"1".repeat(40)}`,
+        githubCommentId: 123456,
+        lastSeenHeadSha: "2".repeat(40),
+        lastSeenRunId: `github:1:pr:1:head:${"2".repeat(40)}`,
+        line: 42,
+        prKey: "github:1:pr:1" as const,
+        severity: "critical" as const,
+        status: "persistent" as const,
+        updatedAt: "2026-09-02T20:00:00.000Z",
+      };
+      expect(trackedFindingSchema.parse(tracked)).toEqual(tracked);
+
+      expect(() =>
+        trackedFindingSchema.parse({
+          ...tracked,
+          fingerprint: "bad",
+        }),
+      ).toThrow();
+    });
+
+    it("validates reconciliationSummarySchema", () => {
+      const summary = {
+        newCount: 1,
+        obsoleteCount: 0,
+        persistentCount: 2,
+        reintroducedCount: 1,
+        resolvedCount: 3,
+        totalActiveCount: 4,
+      };
+      expect(reconciliationSummarySchema.parse(summary)).toEqual(summary);
+      expect(() =>
+        reconciliationSummarySchema.parse({ ...summary, newCount: -1 }),
+      ).toThrow();
+    });
+
+    it("validates reconciledFindingSchema", () => {
+      const reconciled = {
+        confidence: 0.95,
+        diagnostic: "SQL injection in query builder method.",
+        evidence: [
+          {
+            excerpt: "db.query(rawSql)",
+            path: "src/db.ts",
+            reason: "Unescaped user input passed to raw SQL",
+            startLine: 10,
+          },
+        ],
+        fingerprint: validFingerprint,
+        firstSeenHeadSha: "1".repeat(40),
+        location: {
+          line: 10,
+          path: "src/db.ts",
+          side: "RIGHT" as const,
+        },
+        previousCommentId: 98765,
+        severity: "high" as const,
+        status: "persistent" as const,
+      };
+      expect(reconciledFindingSchema.parse(reconciled)).toEqual(reconciled);
     });
   });
 });

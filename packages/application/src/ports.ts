@@ -3,9 +3,11 @@ import type {
   ModelReviewOutput,
   ReviewContextV2,
   ReviewJob,
+  TrackedFinding,
   UpdateCheckRunInput,
 } from "@holon/contracts";
 import type {
+  PrKey,
   PublicationId,
   PublicationRecord,
   ReviewRun,
@@ -52,6 +54,11 @@ export interface ReviewLedger {
     id: PublicationId,
     githubCommentId: number,
   ): Promise<void>;
+  loadPrFindings?(prKey: PrKey): Promise<readonly TrackedFinding[]>;
+  savePrFindings?(
+    prKey: PrKey,
+    findings: readonly TrackedFinding[],
+  ): Promise<void>;
 }
 
 export interface PublishCommentInput {
@@ -76,6 +83,7 @@ export interface ReviewPublisher {
     kind: "inline" | "summary",
   ): Promise<{ readonly body: string; readonly id: number } | undefined>;
   publish(input: PublishCommentInput): Promise<number>;
+  replyToComment?(commentId: number, body: string): Promise<number>;
   updateCheckRun?(input: UpdateCheckRunInput): Promise<void>;
   updateReviewComment?(reviewId: number, body: string): Promise<void>;
 }

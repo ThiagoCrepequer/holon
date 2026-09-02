@@ -16,8 +16,13 @@ import {
 } from "@holon/contracts";
 import {
   classifyFindingPublication,
+  computeStableFingerprint,
   createFindingId,
+  createPrKey,
+  reconcileFindings,
+  type ReconciledFinding,
   type RunState,
+  type TrackedFinding,
 } from "@holon/domain";
 import { nonRetryableModelFailureCode } from "@holon/model";
 import { buildReviewPlan } from "@holon/repository-analysis";
@@ -106,6 +111,11 @@ export async function executeReviewWorkflow(
     ...logContext,
   });
   const run = createReviewRun(job);
+  const prKey = createPrKey({
+    provider: "github",
+    pullRequestNumber: job.envelope.pullRequest.number,
+    repositoryId: job.envelope.repository.id,
+  });
   let repositoryStarted = false;
   let runClaimed = false;
 
@@ -316,7 +326,13 @@ export async function executeReviewWorkflow(
       });
     });
 
-    const output: AggregatedReviewResult = await step.do(
+    type ReconciledReviewOutput = AggregatedReviewResult & {
+      readonly activeFindings: readonly ReconciledFinding[];
+      readonly resolvedFindings: readonly TrackedFinding[];
+      readonly updatedTrackedFindings: readonly TrackedFinding[];
+    };
+
+    const output: ReconciledReviewOutput = await step.do(
       "analyze-review",
       modelStep,
       async () => {
@@ -348,7 +364,12 @@ export async function executeReviewWorkflow(
           const plan = buildReviewPlan(diffFiles);
 
           if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
-            return aggregateShardReviews(plan, []);
+            return {
+              ...aggregateShardReviews(plan, []),
+              activeFindings: [] as readonly ReconciledFinding[],
+              resolvedFindings: [] as readonly TrackedFinding[],
+              updatedTrackedFindings: [] as readonly TrackedFinding[],
+            };
           }
 
           const shardResults: ShardReviewResult[] = [];
@@ -418,7 +439,50 @@ export async function executeReviewWorkflow(
             throw new Error("All review shards failed during model execution");
           }
 
-          return aggregateShardReviews(plan, shardResults);
+          const rawAggregated = aggregateShardReviews(plan, shardResults);
+
+          const currentWithFingerprints = await Promise.all(
+            rawAggregated.findings.map(async (finding) => {
+              const fingerprint = await computeStableFingerprint({
+                diagnostic: finding.diagnostic,
+                excerpt: finding.evidence[0]?.excerpt ?? "",
+                path: finding.location.path,
+              });
+              return { ...finding, fingerprint };
+            }),
+          );
+
+          const baseline = services.ledger.loadPrFindings
+            ? await services.ledger.loadPrFindings(prKey)
+            : [];
+
+          const prFiles = plan.shards.flatMap((s) =>
+            s.files.map((f) => f.path),
+          );
+
+          const reconciled = reconcileFindings({
+            baselineFindings: baseline,
+            currentFindings: currentWithFingerprints,
+            currentHeadSha: job.envelope.pullRequest.headSha,
+            currentRunId: run.id,
+            prFiles,
+            prKey,
+          });
+
+          const finalAggregated = aggregateShardReviews(
+            plan,
+            shardResults,
+            undefined,
+            undefined,
+            reconciled.summary,
+          );
+
+          return {
+            ...finalAggregated,
+            activeFindings: reconciled.activeFindings,
+            resolvedFindings: reconciled.resolvedFindings,
+            updatedTrackedFindings: reconciled.updatedTrackedFindings,
+          };
         } catch (error) {
           const failureCode = nonRetryableModelFailureCode(error);
           if (failureCode !== undefined) {
@@ -448,8 +512,19 @@ export async function executeReviewWorkflow(
     }
 
     let findingsPublished = 0;
-    for (const [index, finding] of output.findings.entries()) {
+    const trackedToPersist = [...output.updatedTrackedFindings];
+
+    for (const [index, finding] of output.activeFindings.entries()) {
       if (classifyFindingPublication(finding) !== "inline") continue;
+
+      // Suppress duplicate inline comments for persistent findings
+      if (
+        finding.status === "persistent" &&
+        finding.previousCommentId !== undefined
+      ) {
+        continue;
+      }
+
       const result = await step.do(
         `publish-inline-${index + 1}`,
         publicationStep,
@@ -462,6 +537,7 @@ export async function executeReviewWorkflow(
               path: finding.location.path,
               startLine: finding.location.startLine ?? finding.location.line,
             });
+            let commentId: number | undefined;
             const published = await publishAuthorized(
               services.ledger,
               github.publisher,
@@ -478,8 +554,11 @@ export async function executeReviewWorkflow(
                   : {}),
               },
               () => authorizeMutation(github, "review"),
+              (id) => {
+                commentId = id;
+              },
             );
-            return { authorized: true, published } as const;
+            return { authorized: true, commentId, published } as const;
           } catch (error) {
             if (isReviewMutationNotAuthorizedError(error)) {
               return { authorized: false, published: false } as const;
@@ -495,7 +574,45 @@ export async function executeReviewWorkflow(
           true,
         );
       }
+      if (result.commentId !== undefined) {
+        const trackedIndex = trackedToPersist.findIndex(
+          (t) => t.fingerprint === finding.fingerprint,
+        );
+        const existing = trackedToPersist[trackedIndex];
+        if (existing !== undefined) {
+          trackedToPersist[trackedIndex] = {
+            ...existing,
+            githubCommentId: result.commentId,
+          };
+        }
+      }
       if (result.published) findingsPublished += 1;
+    }
+
+    // Notify resolutions on original comment threads
+    for (const [index, resolved] of output.resolvedFindings.entries()) {
+      const commentId = resolved.githubCommentId;
+      if (commentId === undefined) continue;
+      await step.do(
+        `notify-resolved-${index + 1}`,
+        publicationStep,
+        async () => {
+          const github = await services.createMutationContext();
+          if (github.publisher.replyToComment === undefined) return;
+          try {
+            const shortSha = job.envelope.pullRequest.headSha.slice(0, 7);
+            await github.publisher.replyToComment(
+              commentId,
+              `✅ Defeito resolvido no commit \`${shortSha}\`.`,
+            );
+          } catch (error) {
+            emit("finding.resolution_reply_failed", {
+              commentId,
+              errorKind: errorKind(error),
+            });
+          }
+        },
+      );
     }
 
     const summaryResult = await step.do(
@@ -531,6 +648,13 @@ export async function executeReviewWorkflow(
       );
     }
 
+    // Persist tracked findings in ledger
+    await step.do("save-pr-findings", publicationStep, async () => {
+      if (services.ledger.savePrFindings !== undefined) {
+        await services.ledger.savePrFindings(prKey, trackedToPersist);
+      }
+    });
+
     const isPartial =
       output.scopeStatus === "partial_by_policy" ||
       output.scopeStatus === "partial_by_failure";
@@ -543,6 +667,7 @@ export async function executeReviewWorkflow(
       durationMs: durationFrom(rawEvent.timestamp, now()),
       findings: output.findings,
       partial: isPartial,
+      reconciliation: output.reconciliation,
       scopeStatus: output.scopeStatus,
       shardsAnalyzed: output.shardsAnalyzed,
       summary: output.summary,

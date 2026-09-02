@@ -1,8 +1,10 @@
-import type {
-  PublicationId,
-  PublicationRecord,
-  ReviewRun,
-  RunId,
+import {
+  buildPublicationMarker,
+  createPublicationId,
+  type PublicationId,
+  type PublicationRecord,
+  type ReviewRun,
+  type RunId,
 } from "@holon/domain";
 import {
   createExecutionContext,
@@ -111,6 +113,7 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE schema_migrations;
         DROP TABLE cleanup_tasks;
         DROP TABLE credential_scopes;
+        DROP TABLE IF EXISTS pr_findings;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -139,7 +142,12 @@ describe("ReviewLedgerObject", () => {
             "SELECT version FROM schema_migrations ORDER BY version",
           )
           .toArray(),
-      ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+      ).toEqual([
+        { version: 1 },
+        { version: 2 },
+        { version: 3 },
+        { version: 4 },
+      ]);
       expect(
         state.storage.sql
           .exec<{ causal_version: string }>(
@@ -363,6 +371,21 @@ describe("ReviewLedgerObject", () => {
         containerId: "different",
       }),
     ).resolves.toBe(false);
+    await expect(ledger.bootstrapCredentialScope(v1Request)).resolves.toBe(
+      false,
+    );
+    await expect(
+      ledger.canBootstrapCredentialScope({
+        ...v1Request,
+        runId: "github:42:pr:7:head:0000000000000000000000000000000000000000",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      ledger.canBootstrapCredentialScope({
+        ...v1Request,
+        containerId: "",
+      }),
+    ).resolves.toBe(false);
   });
 
   it("persists cleanup before the alarm and completes it idempotently", async () => {
@@ -445,5 +468,127 @@ describe("ReviewLedgerObject", () => {
         ),
       ).rejects.toThrow("reused");
     });
+  });
+
+  it("persists, updates, and retrieves tracked PR findings with comment IDs", async () => {
+    const prKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    const fingerprint = `fp:${"c".repeat(64)}` as const;
+
+    const initialFinding = {
+      diagnostic: "SQL injection vulnerability in query builder.",
+      filePath: "src/db/query.ts",
+      fingerprint,
+      firstSeenHeadSha: "a".repeat(40),
+      firstSeenRunId: runId,
+      githubCommentId: 101,
+      lastSeenHeadSha: "a".repeat(40),
+      lastSeenRunId: runId,
+      line: 45,
+      prKey,
+      severity: "high" as const,
+      status: "new" as const,
+      updatedAt: "2026-09-02T12:00:00.000Z",
+    };
+
+    await ledger.savePrFindings(prKey, [initialFinding]);
+
+    let loaded = await ledger.loadPrFindings(prKey);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]).toEqual(initialFinding);
+
+    // Update to persistent on a subsequent commit, line shift to 50
+    const persistentFinding = {
+      ...initialFinding,
+      lastSeenHeadSha: "b".repeat(40),
+      lastSeenRunId: `github:42:pr:7:head:${"b".repeat(40)}` as const,
+      line: 50,
+      status: "persistent" as const,
+      updatedAt: "2026-09-02T13:00:00.000Z",
+    };
+
+    await ledger.savePrFindings(prKey, [persistentFinding]);
+    loaded = await ledger.loadPrFindings(prKey);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.status).toBe("persistent");
+    expect(loaded[0]?.line).toBe(50);
+    expect(loaded[0]?.githubCommentId).toBe(101);
+
+    // Update to resolved
+    const resolvedFinding = {
+      ...persistentFinding,
+      status: "resolved" as const,
+      updatedAt: "2026-09-02T14:00:00.000Z",
+    };
+
+    await ledger.savePrFindings(prKey, [resolvedFinding]);
+    loaded = await ledger.loadPrFindings(prKey);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.status).toBe("resolved");
+    expect(loaded[0]?.githubCommentId).toBe(101);
+  });
+
+  it("rejects claimPublication when run is not in publishing state", async () => {
+    const prKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    await ledger.claimRun(run, "wf-unauth-pub");
+
+    await runInDurableObject(ledger, async (object) => {
+      let threw = false;
+      try {
+        await object.claimPublication({
+          findingId: "summary",
+          id: createPublicationId(runId, "summary"),
+          kind: "summary",
+          marker: buildPublicationMarker(runId, "summary"),
+          runId,
+          state: "publishing",
+        });
+      } catch (err: unknown) {
+        threw = true;
+        expect((err as Error).message).toBe("Publication is not authorized");
+      }
+      expect(threw).toBe(true);
+    });
+  });
+
+  it("retries cleanup with exponential backoff on failure", async () => {
+    const prKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    await ledger.claimRun(run, "wf-cleanup-fail");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      "2026-08-29T12:00:00.000Z",
+      "op-running",
+    );
+    await ledger.transitionAndRequestCleanup(
+      runId,
+      "running",
+      "obsolete",
+      "2026-08-29T12:00:01.000Z",
+      "op-cleanup-fail",
+    );
+
+    const executor = env.REPOSITORY_EXECUTOR as {
+      cleanup: (id: string) => Promise<void>;
+    };
+    const originalCleanup = (id: string) => executor.cleanup(id);
+    executor.cleanup = () => Promise.reject(new Error("Container stuck"));
+    try {
+      await runDurableObjectAlarm(ledger);
+      await runInDurableObject(ledger, (_object, state) => {
+        const task = state.storage.sql
+          .exec<{ attempts: number }>(
+            "SELECT attempts FROM cleanup_tasks WHERE run_id = ?",
+            runId,
+          )
+          .one();
+        expect(task.attempts).toBe(1);
+      });
+    } finally {
+      executor.cleanup = originalCleanup;
+    }
   });
 });

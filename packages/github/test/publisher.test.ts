@@ -537,4 +537,35 @@ describe("GitHubReviewPublisher", () => {
       route: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
     });
   });
+
+  it("posts a reply to an existing comment", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+
+    const replyId = await publisher.replyToComment(
+      12345,
+      "✅ Issue resolved in commit abc1234.",
+    );
+
+    expect(replyId).toBe(123);
+    expect(api.requests).toHaveLength(1);
+    expect(api.requests[0]).toEqual({
+      parameters: {
+        body: "✅ Issue resolved in commit abc1234.",
+        comment_id: 12345,
+        owner: "acme",
+        pull_number: 7,
+        repo: "api",
+        request: { retries: 0 },
+      },
+      route:
+        "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies",
+    });
+  });
 });

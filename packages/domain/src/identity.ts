@@ -5,6 +5,13 @@ export type PrKey = `github:${number}:pr:${number}`;
 export type RunId = `${PrKey}:head:${string}`;
 export type FindingId = `finding:${string}`;
 export type PublicationId = `${RunId}:publication:${FindingId | "summary"}`;
+export type FindingFingerprint = `fp:${string}`;
+export type FindingStatus =
+  | "new"
+  | "persistent"
+  | "resolved"
+  | "obsolete"
+  | "reintroduced";
 
 const safeIdentifier = /^[A-Za-z0-9._:-]+$/u;
 const gitSha = /^[a-fA-F0-9]{40}$/u;

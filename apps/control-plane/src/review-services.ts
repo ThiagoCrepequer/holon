@@ -380,6 +380,10 @@ export function createReviewServices(
           ),
         publish: (input) =>
           executeGitHubOperation(() => delegate.publish(input)),
+        replyToComment: (commentId, body) =>
+          executeGitHubOperation(() =>
+            delegate.replyToComment(commentId, body),
+          ),
         updateCheckRun: (input) =>
           executeGitHubOperation(() => delegate.updateCheckRun(input)),
       },

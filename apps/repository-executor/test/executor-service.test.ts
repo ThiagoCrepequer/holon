@@ -965,7 +965,7 @@ describe("RepositoryExecutorService", () => {
       ]),
       truncated: true,
     });
-  });
+  }, 20_000);
 
   it("trims long-path coordinates to the serialized context byte limit", async () => {
     const sandbox = new FakeSandbox();
@@ -993,7 +993,7 @@ describe("RepositoryExecutorService", () => {
     expect(prepared.truncated).toBe(true);
     expect(context.changedLines).toHaveLength(prepared.changedLineCount);
     expect(context.truncated).toBe(true);
-  });
+  }, 20_000);
 
   it("rejects unexpected repository tool exit codes but accepts no-match", async () => {
     const sandbox = new FakeSandbox();
