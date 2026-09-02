@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPublicationMarker,
   classifyFindingPublication,
+  countFindingsBySeverity,
   createFinding,
   isChangedLine,
   type ChangedLine,
@@ -134,5 +135,57 @@ describe("review findings", () => {
         changedLines,
       ),
     ).toThrow("startLine");
+  });
+
+  it("counts findings by severity accurately", () => {
+    const finding1 = createFinding(
+      {
+        confidence: 0.9,
+        diagnostic:
+          "The first issue diagnostic message with more than thirty characters.",
+        evidence: [
+          {
+            excerpt: "code",
+            path: "src/example.ts",
+            reason: "why it failed",
+            startLine: 10,
+          },
+        ],
+        location: { line: 10, path: "src/example.ts", side: "RIGHT" },
+        severity: "high",
+      },
+      changedLines,
+    );
+    const finding2 = createFinding(
+      {
+        confidence: 0.9,
+        diagnostic:
+          "The second issue diagnostic message with more than thirty characters.",
+        evidence: [
+          {
+            excerpt: "code",
+            path: "src/example.ts",
+            reason: "why it failed",
+            startLine: 12,
+          },
+        ],
+        location: { line: 12, path: "src/example.ts", side: "RIGHT" },
+        severity: "medium",
+      },
+      changedLines,
+    );
+
+    expect(countFindingsBySeverity([])).toEqual({
+      critical: 0,
+      high: 0,
+      low: 0,
+      medium: 0,
+    });
+    expect(countFindingsBySeverity([finding1, finding2])).toEqual({
+      critical: 0,
+      high: 1,
+      low: 0,
+      medium: 1,
+    });
   });
 });
