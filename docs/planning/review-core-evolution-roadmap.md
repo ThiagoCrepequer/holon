@@ -138,12 +138,13 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 6. Re-review e ciclo do finding
 
-- criar fingerprint estável por regra, caminho, posição semântica e evidência;
-- reconciliar achados como novos, persistentes, resolvidos, obsoletos ou
-  reintroduzidos;
-- evitar comentários duplicados em `synchronize` e redelivery;
-- marcar resolução sem reescrever histórico;
-- manter head SHA e identidade da execução em toda transição.
+- [ ] Identidade canônica por `stableFingerprint` (`fp:[a-f0-9]{64}`) independente de `runId` e linhas absolutas;
+- [ ] Reconciliação formal de estados (`new`, `persistent`, `resolved`, `obsolete`, `reintroduced`);
+- [ ] Supressão determinística de comentários inline duplicados para achados `persistent` em `pull_request.synchronize`;
+- [ ] Publicação de respostas na thread original confirmando resolução para achados `resolved`;
+- [ ] Integração com veredito do ADR-0019 (achados `resolved` não bloqueiam; aprovação automática quando todos forem sanados);
+- [ ] Persistência atômica no SQLite do Durable Object via tabela `pr_findings` (Migration 4);
+- [ ] Formalizado no [ADR-0020](../decisions/0020-reconcile-findings-across-commits-with-stable-fingerprints.md).
 
 ### 7. Feedback e calibração
 
