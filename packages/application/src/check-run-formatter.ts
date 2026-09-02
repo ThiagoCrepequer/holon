@@ -1,4 +1,8 @@
-import type { CheckRunConclusion, CheckRunOutput } from "@holon/contracts";
+import type {
+  CheckRunConclusion,
+  CheckRunOutput,
+  ReconciliationSummary,
+} from "@holon/contracts";
 import type { Finding, ReviewVerdict } from "@holon/domain";
 
 export interface CheckRunFormattingOptions {
@@ -6,6 +10,7 @@ export interface CheckRunFormattingOptions {
   readonly fileCount?: number | undefined;
   readonly findings: readonly Finding[];
   readonly partial?: boolean | undefined;
+  readonly reconciliation?: ReconciliationSummary | undefined;
   readonly scopeStatus?:
     | "complete"
     | "partial_by_policy"
@@ -46,6 +51,7 @@ export function formatCheckRunOutput(
     fileCount,
     findings,
     partial,
+    reconciliation,
     scopeStatus,
     summary,
     verdict,
@@ -60,7 +66,10 @@ export function formatCheckRunOutput(
   if (verdict === "REQUEST_CHANGES") {
     title = `Holon Review — Changes requested (${findingCount} finding${findingCount === 1 ? "" : "s"})`;
   } else if (verdict === "APPROVE") {
-    title = "Holon Review — Approved";
+    title =
+      reconciliation !== undefined && reconciliation.resolvedCount > 0
+        ? `Holon Review — Approved (${reconciliation.resolvedCount} resolved)`
+        : "Holon Review — Approved";
   } else if (verdict === "COMMENT") {
     title = isPartial
       ? "Holon Review — Partial review completed"
@@ -86,6 +95,11 @@ export function formatCheckRunOutput(
     details.push(`- **Files analyzed**: ${fileCount}`);
   }
   details.push(`- **Findings identified**: ${findingCount}`);
+  if (reconciliation !== undefined) {
+    details.push(
+      `- **Lifecycle**: ${reconciliation.resolvedCount} resolved, ${reconciliation.persistentCount} persistent, ${reconciliation.newCount} new${reconciliation.reintroducedCount > 0 ? `, ${reconciliation.reintroducedCount} reintroduced` : ""}`,
+    );
+  }
   if (scopeStatus === "partial_by_failure") {
     details.push(
       "- **Scope**: Partial (some changes could not be analyzed due to an execution failure)",

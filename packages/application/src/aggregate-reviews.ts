@@ -1,6 +1,7 @@
 import {
   aggregatedReviewResultSchema,
   type AggregatedReviewResult,
+  type ReconciliationSummary,
   type ReviewFinding,
   type ReviewPlan,
   type ReviewScopeStatus,
@@ -17,6 +18,32 @@ import {
 } from "@holon/domain";
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+
+export function formatReconciliationSection(
+  summary: ReconciliationSummary,
+): string {
+  const parts: string[] = [];
+  if (summary.resolvedCount > 0) {
+    parts.push(
+      `- ✅ **${summary.resolvedCount}** issue(s) resolved from previous commits.`,
+    );
+  }
+  if (summary.persistentCount > 0) {
+    parts.push(
+      `- ⚠️ **${summary.persistentCount}** issue(s) persistent and still unresolved.`,
+    );
+  }
+  if (summary.newCount > 0) {
+    parts.push(
+      `- 🆕 **${summary.newCount}** new issue(s) detected in this commit.`,
+    );
+  }
+  if (summary.reintroducedCount > 0) {
+    parts.push(`- 🔁 **${summary.reintroducedCount}** issue(s) reintroduced.`);
+  }
+  if (parts.length === 0) return "";
+  return ["### Finding Lifecycle (Re-review)", ...parts].join("\n");
+}
 
 const severityWeights: Record<FindingSeverity, number> = {
   critical: 4,
@@ -50,6 +77,7 @@ export function aggregateShardReviews(
   shardResults: readonly ShardReviewResult[],
   _allEligibleChangedLines?: readonly ChangedLine[],
   options?: ReviewVerdictPolicyOptions,
+  reconciliation?: ReconciliationSummary,
 ): AggregatedReviewResult {
   if (plan.scopeStatus === "unsupported") {
     const verdictDetails = determineReviewVerdict({
@@ -171,6 +199,13 @@ export function aggregateShardReviews(
     );
   }
 
+  if (reconciliation !== undefined) {
+    const reconSection = formatReconciliationSection(reconciliation);
+    if (reconSection.length > 0) {
+      summarySections.push(reconSection);
+    }
+  }
+
   const finalSummary = limitSummary(summarySections.join("\n\n"));
 
   return aggregatedReviewResultSchema.parse({
@@ -196,6 +231,7 @@ export function aggregateShardReviews(
       ...(f.suggestion !== undefined ? { suggestion: f.suggestion } : {}),
     })),
     omissionReasons,
+    reconciliation,
     scopeStatus,
     shardsAnalyzed,
     summary: finalSummary,

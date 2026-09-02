@@ -101,6 +101,26 @@ describe("check-run-formatter", () => {
       "Holon Review — Changes requested (1 finding)",
     );
 
+    const outputApprovedWithResolutions = formatCheckRunOutput({
+      findings: [],
+      reconciliation: {
+        newCount: 0,
+        obsoleteCount: 0,
+        persistentCount: 0,
+        reintroducedCount: 0,
+        resolvedCount: 2,
+        totalActiveCount: 0,
+      },
+      summary: "All 2 previously reported issues have been resolved.",
+      verdict: "APPROVE",
+    });
+    expect(outputApprovedWithResolutions.title).toBe(
+      "Holon Review — Approved (2 resolved)",
+    );
+    expect(outputApprovedWithResolutions.summary).toContain(
+      "- **Lifecycle**: 2 resolved, 0 persistent, 0 new",
+    );
+
     const outputComment = formatCheckRunOutput({
       findings: [],
       summary: "Informational notes.",
