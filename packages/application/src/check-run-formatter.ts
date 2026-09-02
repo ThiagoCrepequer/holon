@@ -30,16 +30,8 @@ export function determineCheckRunConclusion(
 export function formatCheckRunOutput(
   options: CheckRunFormattingOptions,
 ): CheckRunOutput {
-  const {
-    durationMs,
-    fileCount,
-    findings,
-    partial,
-    scopeStatus,
-    shardsAnalyzed,
-    summary,
-    totalShards,
-  } = options;
+  const { durationMs, fileCount, findings, partial, scopeStatus, summary } =
+    options;
   const findingCount = findings.length;
   const isPartial =
     partial === true ||
@@ -62,16 +54,13 @@ export function formatCheckRunOutput(
   lines.push("");
 
   const details: string[] = [];
-  if (shardsAnalyzed !== undefined && totalShards !== undefined) {
-    details.push(`- **Batches (Shards)**: ${shardsAnalyzed}/${totalShards}`);
-  }
   if (fileCount !== undefined) {
     details.push(`- **Files analyzed**: ${fileCount}`);
   }
   details.push(`- **Findings identified**: ${findingCount}`);
   if (scopeStatus === "partial_by_failure") {
     details.push(
-      "- **Scope**: Partial (at least one shard encountered a model execution failure)",
+      "- **Scope**: Partial (some changes could not be analyzed due to an execution failure)",
     );
   } else if (scopeStatus === "partial_by_policy" || isPartial) {
     details.push(
