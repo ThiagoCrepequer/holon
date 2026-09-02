@@ -6,6 +6,10 @@ import {
   reviewSurfaceSchema,
 } from "./executor.js";
 import { reviewFindingSchema } from "./review-output.js";
+import {
+  reviewVerdictDetailsSchema,
+  reviewVerdictSchema,
+} from "./review-verdict.js";
 
 export const reviewScopeStatusSchema = z.enum([
   "complete",
@@ -51,6 +55,8 @@ export const aggregatedReviewResultSchema = z.strictObject({
   shardsAnalyzed: z.number().int().nonnegative(),
   summary: z.string().trim().max(8_000),
   totalShards: z.number().int().nonnegative(),
+  verdict: reviewVerdictSchema.optional(),
+  verdictDetails: reviewVerdictDetailsSchema.optional(),
 });
 
 export type ReviewScopeStatus = z.infer<typeof reviewScopeStatusSchema>;

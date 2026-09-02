@@ -127,16 +127,14 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 5. Veredito determinístico
 
-- manter o modelo responsável por evidências e findings, não pela decisão final;
-- derivar `REQUEST_CHANGES` apenas de findings bloqueadores que passaram por
-  validação determinística;
-- usar `COMMENT` para review parcial, inconclusivo ou não bloqueador;
-- permitir `APPROVE` somente após corpus, calibração e critérios conservadores;
-- documentar precedência entre severidade, confiança, parcialidade e falha de
-  infraestrutura.
-
-O veredito altera contrato externo e deverá ser aceito em ADR antes da
-implementação.
+- [x] Modelo responsável exclusivamente por investigar e relatar fatos técnicos (findings com localização e trecho literal);
+- [x] Veredito derivado deterministicamente no host (`@holon/domain`) por política pura e testável;
+- [x] Predominância binária e acionável (`REQUEST_CHANGES` vs. `APPROVE`):
+  - `REQUEST_CHANGES` emitido para qualquer defeito `critical`, `high`, $\ge 2$ `medium`, $\ge 1$ `medium` com alta confiança ($\ge 0.85$), ou score de risco $\ge 2.0$;
+  - `APPROVE` emitido para revisões completas sem defeitos bloqueadores (observações cosméticas `low` não impedem a aprovação);
+- [x] Confinamento estrito de `COMMENT` exclusivamente para cenários defensivos de incerteza: escopo parcial (`partial_by_policy` ou `partial_by_failure`), PR não suportado (`unsupported`), baixa confiança (< 0.75) ou desativação explícita;
+- [x] Sincronização do GitHub Check Run (`failure` para `REQUEST_CHANGES`, `success` para `APPROVE`, `neutral` para `COMMENT`) e submissão com evento correspondente no GitHub Review Publisher;
+- [x] Formalizado no [ADR-0019](../decisions/0019-derive-deterministic-review-verdict-by-policy.md).
 
 ### 6. Re-review e ciclo do finding
 

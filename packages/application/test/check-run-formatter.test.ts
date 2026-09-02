@@ -28,6 +28,13 @@ describe("check-run-formatter", () => {
     expect(determineCheckRunConclusion([], true)).toBe("neutral");
     expect(determineCheckRunConclusion([sampleFinding], false)).toBe("neutral");
     expect(determineCheckRunConclusion([sampleFinding], true)).toBe("neutral");
+    expect(
+      determineCheckRunConclusion([sampleFinding], false, "REQUEST_CHANGES"),
+    ).toBe("failure");
+    expect(determineCheckRunConclusion([], false, "APPROVE")).toBe("success");
+    expect(determineCheckRunConclusion([sampleFinding], true, "COMMENT")).toBe(
+      "neutral",
+    );
   });
 
   it("formats check run output for successful clean review", () => {
@@ -77,5 +84,28 @@ describe("check-run-formatter", () => {
     expect(outputPartialNoFindings.title).toBe(
       "Holon Review — Partial review completed",
     );
+
+    const outputApproved = formatCheckRunOutput({
+      findings: [],
+      summary: "All clean.",
+      verdict: "APPROVE",
+    });
+    expect(outputApproved.title).toBe("Holon Review — Approved");
+
+    const outputRequestedChanges = formatCheckRunOutput({
+      findings: [sampleFinding],
+      summary: "Defect found.",
+      verdict: "REQUEST_CHANGES",
+    });
+    expect(outputRequestedChanges.title).toBe(
+      "Holon Review — Changes requested (1 finding)",
+    );
+
+    const outputComment = formatCheckRunOutput({
+      findings: [],
+      summary: "Informational notes.",
+      verdict: "COMMENT",
+    });
+    expect(outputComment.title).toBe("Holon Review — Informational comment");
   });
 });

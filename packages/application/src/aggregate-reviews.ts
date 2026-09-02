@@ -8,9 +8,12 @@ import {
 } from "@holon/contracts";
 import {
   classifyFindingPublication,
+  determineReviewVerdict,
+  formatVerdictBadge,
   type ChangedLine,
   type Finding,
   type FindingSeverity,
+  type ReviewVerdictPolicyOptions,
 } from "@holon/domain";
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
@@ -46,8 +49,16 @@ export function aggregateShardReviews(
   plan: ReviewPlan,
   shardResults: readonly ShardReviewResult[],
   _allEligibleChangedLines?: readonly ChangedLine[],
+  options?: ReviewVerdictPolicyOptions,
 ): AggregatedReviewResult {
   if (plan.scopeStatus === "unsupported") {
+    const verdictDetails = determineReviewVerdict({
+      findings: [],
+      options,
+      scopeStatus: "unsupported",
+      shardsAnalyzed: 0,
+      totalShards: 0,
+    });
     return aggregatedReviewResultSchema.parse({
       findings: [],
       omissionReasons: plan.omissionReasons,
@@ -56,6 +67,8 @@ export function aggregateShardReviews(
       summary:
         "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
       totalShards: 0,
+      verdict: verdictDetails.verdict,
+      verdictDetails,
     });
   }
 
@@ -112,8 +125,22 @@ export function aggregateShardReviews(
 
   const sortedFindings = verifiedFindings.toSorted(compareFindings);
 
+  const verdictDetails = determineReviewVerdict({
+    findings: sortedFindings,
+    options,
+    scopeStatus,
+    shardsAnalyzed,
+    totalShards: plan.shards.length,
+  });
+
   // Compose summary
-  const summarySections: string[] = [];
+  const summarySections: string[] = [
+    formatVerdictBadge(verdictDetails.verdict),
+  ];
+  if (verdictDetails.reasons.length > 0) {
+    summarySections.push(verdictDetails.reasons.join(" "));
+  }
+
   if (shardSummaries.length === 0) {
     summarySections.push(
       "Holon reviewed the changes and found no functional regressions or contract breaks.",
@@ -173,5 +200,7 @@ export function aggregateShardReviews(
     shardsAnalyzed,
     summary: finalSummary,
     totalShards: plan.shards.length,
+    verdict: verdictDetails.verdict,
+    verdictDetails,
   });
 }

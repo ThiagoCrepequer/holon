@@ -9,6 +9,7 @@ import type {
   PublicationId,
   PublicationRecord,
   ReviewRun,
+  ReviewVerdict,
   RunId,
   RunState,
 } from "@holon/domain";
@@ -55,6 +56,7 @@ export interface ReviewLedger {
 
 export interface PublishCommentInput {
   readonly body: string;
+  readonly event?: ReviewVerdict | undefined;
   readonly line?: number;
   readonly marker: string;
   readonly path?: string;

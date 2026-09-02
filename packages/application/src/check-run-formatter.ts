@@ -1,5 +1,5 @@
 import type { CheckRunConclusion, CheckRunOutput } from "@holon/contracts";
-import type { Finding } from "@holon/domain";
+import type { Finding, ReviewVerdict } from "@holon/domain";
 
 export interface CheckRunFormattingOptions {
   readonly durationMs?: number | undefined;
@@ -15,12 +15,23 @@ export interface CheckRunFormattingOptions {
   readonly shardsAnalyzed?: number | undefined;
   readonly summary: string;
   readonly totalShards?: number | undefined;
+  readonly verdict?: ReviewVerdict | undefined;
 }
 
 export function determineCheckRunConclusion(
   findings: readonly Finding[],
   partial = false,
+  verdict?: ReviewVerdict,
 ): CheckRunConclusion {
+  if (verdict === "REQUEST_CHANGES") {
+    return "failure";
+  }
+  if (verdict === "APPROVE") {
+    return "success";
+  }
+  if (verdict === "COMMENT") {
+    return "neutral";
+  }
   if (findings.length === 0 && !partial) {
     return "success";
   }
@@ -30,8 +41,15 @@ export function determineCheckRunConclusion(
 export function formatCheckRunOutput(
   options: CheckRunFormattingOptions,
 ): CheckRunOutput {
-  const { durationMs, fileCount, findings, partial, scopeStatus, summary } =
-    options;
+  const {
+    durationMs,
+    fileCount,
+    findings,
+    partial,
+    scopeStatus,
+    summary,
+    verdict,
+  } = options;
   const findingCount = findings.length;
   const isPartial =
     partial === true ||
@@ -39,7 +57,17 @@ export function formatCheckRunOutput(
     scopeStatus === "partial_by_failure";
 
   let title = "Holon Review";
-  if (scopeStatus === "unsupported") {
+  if (verdict === "REQUEST_CHANGES") {
+    title = `Holon Review — Changes requested (${findingCount} finding${findingCount === 1 ? "" : "s"})`;
+  } else if (verdict === "APPROVE") {
+    title = "Holon Review — Approved";
+  } else if (verdict === "COMMENT") {
+    title = isPartial
+      ? "Holon Review — Partial review completed"
+      : scopeStatus === "unsupported"
+        ? "Holon Review — No eligible files"
+        : "Holon Review — Informational comment";
+  } else if (scopeStatus === "unsupported") {
     title = "Holon Review — No eligible files";
   } else if (findingCount === 0 && !isPartial) {
     title = "Holon Review — No regressions found";

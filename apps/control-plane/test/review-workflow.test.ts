@@ -98,7 +98,11 @@ function immediateStep(
 }
 
 function session(
-  posts: Array<{ readonly route: string; readonly body: unknown }>,
+  posts: Array<{
+    readonly body: unknown;
+    readonly event?: unknown;
+    readonly route: string;
+  }>,
   readHead: () => string = () => "a".repeat(40),
 ) {
   return {
@@ -107,7 +111,7 @@ function session(
         yield [];
       },
       request: (route: string, parameters: Record<string, unknown>) => {
-        posts.push({ body: parameters.body, route });
+        posts.push({ body: parameters.body, event: parameters.event, route });
         return Promise.resolve({ data: { id: posts.length } });
       },
     },
@@ -125,7 +129,11 @@ function runtime(
     readonly context?: ReviewContextV2;
     readonly head?: () => string;
     readonly model?: ReviewRuntime["createModel"];
-    readonly posts?: Array<{ readonly route: string; readonly body: unknown }>;
+    readonly posts?: Array<{
+      readonly body: unknown;
+      readonly event?: unknown;
+      readonly route: string;
+    }>;
   } = {},
 ) {
   const posts = options.posts ?? [];
@@ -635,7 +643,7 @@ describe("ReviewWorkflow", () => {
     );
     expect(checkRunRequests[1]?.parameters).toMatchObject({
       check_run_id: 789,
-      conclusion: "neutral",
+      conclusion: "failure",
       status: "completed",
     });
 
@@ -978,5 +986,49 @@ describe("ReviewWorkflow", () => {
     );
 
     expect(result.outcome).toBe("completed");
+  });
+
+  it("publishes summary review with REQUEST_CHANGES event when blocking defect exists", async () => {
+    const setup = runtime(); // default runtime has high severity finding
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("verdict-request-changes-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    const summaryPost = setup.posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPost).toBeDefined();
+    expect(summaryPost?.event).toBe("REQUEST_CHANGES");
+  });
+
+  it("publishes summary review with APPROVE event when review is clean", async () => {
+    const setup = runtime({
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: { findings: [], summary: "All files look great!" },
+            promptTruncated: false,
+          }),
+      }),
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("verdict-approve-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    const summaryPost = setup.posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPost).toBeDefined();
+    expect(summaryPost?.event).toBe("APPROVE");
   });
 });

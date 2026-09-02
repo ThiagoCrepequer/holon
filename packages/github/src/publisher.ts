@@ -224,7 +224,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
         {
           body,
           commit_id: this.target.headSha,
-          event: "COMMENT",
+          event: input.event ?? "COMMENT",
           owner: this.target.owner,
           pull_number: this.target.pullNumber,
           repo: this.target.repo,

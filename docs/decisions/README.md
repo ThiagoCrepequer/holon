@@ -34,6 +34,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md) | Exigir patches completos e evidência verificável pelo host      | `accepted`   | 2026-08-30 |
 | [ADR-0017](0017-select-review-output-harness-from-evidence.md)            | Selecionar harness de saída por avaliação comparativa           | `superseded` | 2026-08-31 |
 | [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)            | Adotar gerador desacoplado em duas fases com gate no host       | `accepted`   | 2026-09-01 |
+| [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)         | Derivar veredito determinístico de review por política no host  | `accepted`   | 2026-09-02 |
 
 ## Regras
 
