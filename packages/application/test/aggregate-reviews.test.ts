@@ -61,6 +61,7 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.scopeStatus).toBe("unsupported");
     expect(aggregated.findings).toHaveLength(0);
     expect(aggregated.summary).toContain("No eligible changes were found");
+    expect(aggregated.verdict).toBe("COMMENT");
   });
 
   it("aggregates and deduplicates findings from multiple shards", () => {
@@ -121,6 +122,7 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.scopeStatus).toBe("complete");
     expect(aggregated.shardsAnalyzed).toBe(2);
     expect(aggregated.findings).toHaveLength(2);
+    expect(aggregated.verdict).toBe("REQUEST_CHANGES");
     // Verified sorting: high severity findingA comes before medium severity findingB
     expect(aggregated.findings[0]!.diagnostic).toContain(
       "null pointer dereference",
@@ -132,6 +134,7 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.summary).toContain(
       "Analyzed module A.\n\nAnalyzed module B.",
     );
+    expect(aggregated.summary).toContain("Verdict: Changes requested");
   });
 
   it("handles shard failures with partial_by_failure status", () => {
@@ -177,9 +180,11 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.omissionReasons[0]).toContain(
       "Shard 2 (shard-1) failed during analysis: Gateway timeout",
     );
+    expect(aggregated.verdict).toBe("COMMENT");
     expect(aggregated.summary).toContain(
       "Partial review: some changes could not be analyzed due to an execution failure.",
     );
+    expect(aggregated.summary).toContain("Verdict: Informational Comment");
   });
 
   it("handles partial_by_policy, low severity observations, sorting by line, and empty summary", () => {
@@ -322,5 +327,31 @@ describe("aggregateShardReviews", () => {
     expect(formatted.summary).not.toContain("- **Batches (Shards)**");
     expect(formatted.summary).toContain("- **Files analyzed**: 2");
     expect(formatted.summary).toContain("- **Findings identified**: 0");
+  });
+
+  it("emits APPROVE verdict on clean PR with all shards passing", () => {
+    const shardResults = [
+      {
+        findings: [],
+        shardId: "shard-0",
+        shardIndex: 0,
+        status: "success" as const,
+        summary: "Clean shard 0.",
+      },
+      {
+        findings: [],
+        shardId: "shard-1",
+        shardIndex: 1,
+        status: "success" as const,
+        summary: "Clean shard 1.",
+      },
+    ];
+
+    const aggregated = aggregateShardReviews(plan, shardResults);
+    expect(aggregated.scopeStatus).toBe("complete");
+    expect(aggregated.shardsAnalyzed).toBe(2);
+    expect(aggregated.findings).toHaveLength(0);
+    expect(aggregated.verdict).toBe("APPROVE");
+    expect(aggregated.summary).toContain("Verdict: Approved");
   });
 });
