@@ -60,3 +60,21 @@ export type ShardReviewResult = z.infer<typeof shardReviewResultSchema>;
 export type AggregatedReviewResult = z.infer<
   typeof aggregatedReviewResultSchema
 >;
+
+/**
+ * Returns a human-readable description for a given review scope status.
+ */
+export function describeReviewScopeStatus(status: ReviewScopeStatus): string {
+  switch (status) {
+    case "complete":
+      return "Complete review covering all eligible changes";
+    case "partial_by_policy":
+      return "Partial review bounded by deterministic host policy";
+    case "partial_by_failure":
+      return "Partial review due to model execution failure on at least one batch";
+    case "unsupported":
+      return "No eligible changes available for review";
+    default:
+      throw new TypeError(`Unhandled review scope status: ${String(status)}`);
+  }
+}

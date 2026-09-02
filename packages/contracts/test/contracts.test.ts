@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregatedReviewResultSchema,
   createCheckRunInputSchema,
+  describeReviewScopeStatus,
   executorRequestSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -674,5 +675,16 @@ describe("check run contracts", () => {
     } as const;
 
     expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(aggregated);
+
+    expect(describeReviewScopeStatus("complete")).toContain("Complete review");
+    expect(describeReviewScopeStatus("partial_by_policy")).toContain(
+      "Partial review bounded by deterministic host policy",
+    );
+    expect(describeReviewScopeStatus("partial_by_failure")).toContain(
+      "Partial review due to model execution failure",
+    );
+    expect(describeReviewScopeStatus("unsupported")).toContain(
+      "No eligible changes",
+    );
   });
 });
