@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@holon/contracts": "workspace:*",
-    "@holon/domain": "workspace:*"
+    "@holon/domain": "workspace:*",
+    "fflate": "0.8.3"
   }
 }
