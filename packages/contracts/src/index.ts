@@ -3,5 +3,6 @@ export * from "./ci-evidence.js";
 export * from "./executor.js";
 export * from "./review-output.js";
 export * from "./review-plan.js";
+export * from "./review-verdict.js";
 export * from "./shared.js";
 export * from "./webhook.js";

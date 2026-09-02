@@ -23,6 +23,9 @@ import {
   reviewJobSchema,
   reviewPlanSchema,
   reviewShardSchema,
+  reviewVerdictDetailsSchema,
+  reviewVerdictPolicyOptionsSchema,
+  reviewVerdictSchema,
   shardReviewResultSchema,
   updateCheckRunInputSchema,
   webhookEnvelopeSchema,
@@ -791,5 +794,59 @@ describe("check run contracts", () => {
     expect(ciEvidenceSchema.parse(notAvailableEvidence)).toEqual(
       notAvailableEvidence,
     );
+  });
+
+  describe("review verdict contracts", () => {
+    it("validates reviewVerdictSchema values", () => {
+      expect(reviewVerdictSchema.parse("APPROVE")).toBe("APPROVE");
+      expect(reviewVerdictSchema.parse("REQUEST_CHANGES")).toBe(
+        "REQUEST_CHANGES",
+      );
+      expect(reviewVerdictSchema.parse("COMMENT")).toBe("COMMENT");
+      expect(() => reviewVerdictSchema.parse("DISMISS")).toThrow();
+    });
+
+    it("validates reviewVerdictDetailsSchema and policy options", () => {
+      const details = {
+        advisoryFindingsCount: 2,
+        blockingFindingsCount: 1,
+        reasons: ["Critical bug found in authentication flow."],
+        riskScore: 4.5,
+        verdict: "REQUEST_CHANGES" as const,
+      };
+      expect(reviewVerdictDetailsSchema.parse(details)).toEqual(details);
+
+      const options = {
+        allowApprove: true,
+        blockingSeverities: ["critical" as const, "high" as const],
+        mediumHighConfidenceThreshold: 0.85,
+        mediumSeverityThreshold: 2,
+        minimumConfidenceThreshold: 0.75,
+        riskScoreThreshold: 2.0,
+      };
+      expect(reviewVerdictPolicyOptionsSchema.parse(options)).toEqual(options);
+    });
+
+    it("validates aggregatedReviewResultSchema with verdict and details", () => {
+      const aggregated = {
+        findings: [],
+        omissionReasons: [],
+        scopeStatus: "complete" as const,
+        shardsAnalyzed: 2,
+        summary: "Clean review, no blocking defects.",
+        totalShards: 2,
+        verdict: "APPROVE" as const,
+        verdictDetails: {
+          advisoryFindingsCount: 0,
+          blockingFindingsCount: 0,
+          reasons: ["All files analyzed with complete scope."],
+          riskScore: 0,
+          verdict: "APPROVE" as const,
+        },
+      };
+      expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(
+        aggregated,
+      );
+    });
   });
 });
