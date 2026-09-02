@@ -1,17 +1,18 @@
 import {
-  composeReviewSummary,
+  aggregateShardReviews,
   createReviewRun,
   determineCheckRunConclusion,
   formatCheckRunOutput,
   renderFinding,
-  selectValidFindings,
 } from "@holon/application";
 import {
   modelReviewOutputSchema,
   reviewJobSchema,
+  type AggregatedReviewResult,
   type CheckRunConclusion,
   type CheckRunOutput,
   type ReviewJob,
+  type ShardReviewResult,
 } from "@holon/contracts";
 import {
   classifyFindingPublication,
@@ -19,6 +20,7 @@ import {
   type RunState,
 } from "@holon/domain";
 import { nonRetryableModelFailureCode } from "@holon/model";
+import { buildReviewPlan } from "@holon/repository-analysis";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -314,55 +316,120 @@ export async function executeReviewWorkflow(
       });
     });
 
-    const output = await step.do("analyze-review", modelStep, async () => {
-      try {
-        await services.ensureContext(2);
-        const context = await services.loadContext();
-        const patchBytes = contextBytes(context);
-        emit("model.input", {
-          changedLineCount: context.changedLines.length,
-          estimatedPatchTokens: Math.ceil(patchBytes / 4),
-          patchBytes,
-          structuralFileCount: context.files.filter(
-            (file) => file.mode === "structural",
-          ).length,
-          surfaceCount: context.surface?.length ?? 0,
-          textualFileCount: context.files.filter(
-            (file) => file.mode === "textual",
-          ).length,
-          truncated: context.truncated,
-        });
-        const reviewResult =
-          context.files.length === 0
-            ? {
-                output: {
+    const output: AggregatedReviewResult = await step.do(
+      "analyze-review",
+      modelStep,
+      async () => {
+        try {
+          await services.ensureContext(2);
+          const context = await services.loadContext();
+          const patchBytes = contextBytes(context);
+          emit("model.input", {
+            changedLineCount: context.changedLines.length,
+            estimatedPatchTokens: Math.ceil(patchBytes / 4),
+            patchBytes,
+            structuralFileCount: context.files.filter(
+              (file) => file.mode === "structural",
+            ).length,
+            surfaceCount: context.surface?.length ?? 0,
+            textualFileCount: context.files.filter(
+              (file) => file.mode === "textual",
+            ).length,
+            truncated: context.truncated,
+          });
+
+          const diffFiles = context.files.map((file) => ({
+            changeType: "modified" as const,
+            newPath: file.path,
+            oldPath: file.path,
+            patch: file.patch,
+            path: file.path,
+          }));
+          const plan = buildReviewPlan(diffFiles);
+
+          if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
+            return aggregateShardReviews(plan, []);
+          }
+
+          const shardResults: ShardReviewResult[] = [];
+          for (const shard of plan.shards) {
+            const shardContext = {
+              changedLines: shard.changedLines,
+              files: shard.files,
+              schemaVersion: 2 as const,
+              surface: shard.surface,
+              truncated: shard.totalShards > 1,
+            };
+            if (plan.shards.length === 1) {
+              const reviewResult = await services.model.review(
+                job,
+                shardContext,
+              );
+              const modelOutput = modelReviewOutputSchema.parse(
+                reviewResult.output,
+              );
+              shardResults.push({
+                findings: modelOutput.findings,
+                shardId: shard.id,
+                shardIndex: shard.index,
+                status: "success",
+                summary: modelOutput.summary,
+              });
+            } else {
+              try {
+                const reviewResult = await services.model.review(
+                  job,
+                  shardContext,
+                );
+                const modelOutput = modelReviewOutputSchema.parse(
+                  reviewResult.output,
+                );
+                shardResults.push({
+                  findings: modelOutput.findings,
+                  shardId: shard.id,
+                  shardIndex: shard.index,
+                  status: "success",
+                  summary: modelOutput.summary,
+                });
+              } catch (error) {
+                const failureCode = nonRetryableModelFailureCode(error);
+                if (failureCode !== undefined) {
+                  throw new NonRetryableError(
+                    `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
+                  );
+                }
+                shardResults.push({
+                  errorReason:
+                    error instanceof Error ? error.message : "Unknown error",
                   findings: [],
-                  summary:
-                    "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
-                },
-                promptTruncated: false,
+                  shardId: shard.id,
+                  shardIndex: shard.index,
+                  status: "failure",
+                  summary: "",
+                });
               }
-            : await services.model.review(job, context);
-        const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
-        const findings = selectValidFindings(modelOutput.findings, context);
-        return modelReviewOutputSchema.parse({
-          findings,
-          summary: composeReviewSummary(
-            modelOutput.summary,
-            findings,
-            context.truncated || reviewResult.promptTruncated,
-          ),
-        });
-      } catch (error) {
-        const failureCode = nonRetryableModelFailureCode(error);
-        if (failureCode !== undefined) {
-          throw new NonRetryableError(
-            `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
-          );
+            }
+          }
+
+          if (
+            shardResults.length > 0 &&
+            shardResults.every((r) => r.status === "failure")
+          ) {
+            throw new Error("All review shards failed during model execution");
+          }
+
+          return aggregateShardReviews(plan, shardResults);
+        } catch (error) {
+          const failureCode = nonRetryableModelFailureCode(error);
+          if (failureCode !== undefined) {
+            throw new NonRetryableError(
+              `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
+            );
+          }
+          throw error;
         }
-        throw error;
-      }
-    });
+      },
+    );
 
     await moveTo("begin-publication", "running", "publishing", false);
     const currentBeforePublication = await step.do(
@@ -405,10 +472,10 @@ export async function executeReviewWorkflow(
               {
                 line: finding.location.line,
                 path: finding.location.path,
-                side: finding.location.side,
-                ...(finding.location.startLine === undefined
-                  ? {}
-                  : { startLine: finding.location.startLine }),
+                side: "RIGHT",
+                ...(finding.location.startLine !== undefined
+                  ? { startLine: finding.location.startLine }
+                  : {}),
               },
               () => authorizeMutation(github, "review"),
             );
@@ -464,7 +531,9 @@ export async function executeReviewWorkflow(
       );
     }
 
-    const isPartial = output.summary.includes("Partial review:");
+    const isPartial =
+      output.scopeStatus === "partial_by_policy" ||
+      output.scopeStatus === "partial_by_failure";
     const checkRunConclusion = determineCheckRunConclusion(
       output.findings,
       isPartial,
@@ -473,7 +542,10 @@ export async function executeReviewWorkflow(
       durationMs: durationFrom(rawEvent.timestamp, now()),
       findings: output.findings,
       partial: isPartial,
+      scopeStatus: output.scopeStatus,
+      shardsAnalyzed: output.shardsAnalyzed,
       summary: output.summary,
+      totalShards: output.totalShards,
     });
     await updateCheckRunCompleted(
       "complete-check-run",

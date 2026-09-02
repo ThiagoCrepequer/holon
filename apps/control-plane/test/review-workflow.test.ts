@@ -850,4 +850,74 @@ describe("ReviewWorkflow", () => {
 
     expect(events.some((e) => e.event === "check_run.start_failed")).toBe(true);
   });
+
+  it("orchestrates multi-shard review with partial shard failure", async () => {
+    // 22 files will produce 2 shards with maxShardFiles = 20
+    const files = Array.from({ length: 22 }, (_, index) => ({
+      mode: "structural" as const,
+      patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
+      path: `src/file${index}.ts`,
+    }));
+
+    const changedLines = files.map((file) => ({
+      line: 10,
+      path: file.path,
+      side: "RIGHT" as const,
+    }));
+
+    let modelCalls = 0;
+    const setup = runtime({
+      context: {
+        changedLines,
+        files,
+        schemaVersion: 2,
+        truncated: false,
+      },
+      model: () => ({
+        review: () => {
+          modelCalls += 1;
+          if (modelCalls === 2) {
+            return Promise.reject(new Error("Shard 2 transient error"));
+          }
+          return Promise.resolve({
+            output: {
+              findings: [],
+              summary: "Shard review succeeded.",
+            },
+            promptTruncated: false,
+          });
+        },
+      }),
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("multi-shard-partial-failure-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(modelCalls).toBe(2);
+  });
+
+  it("handles unsupported plans with 0 eligible files in review-workflow", async () => {
+    const setup = runtime({
+      context: {
+        changedLines: [],
+        files: [],
+        schemaVersion: 2,
+        truncated: false,
+      },
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("unsupported-plan-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+  });
 });

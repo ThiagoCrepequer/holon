@@ -1,0 +1,181 @@
+import {
+  aggregatedReviewResultSchema,
+  type AggregatedReviewResult,
+  type ReviewFinding,
+  type ReviewPlan,
+  type ReviewScopeStatus,
+  type ShardReviewResult,
+} from "@holon/contracts";
+import {
+  classifyFindingPublication,
+  type ChangedLine,
+  type Finding,
+  type FindingSeverity,
+} from "@holon/domain";
+
+import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+
+const severityWeights: Record<FindingSeverity, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+function findingDeduplicationKey(finding: ReviewFinding): string {
+  const normalizedDiagnostic = finding.diagnostic.trim().toLowerCase();
+  return `${finding.location.path}:${finding.location.line}:${finding.location.side}:${normalizedDiagnostic}`;
+}
+
+function compareFindings(left: Finding, right: Finding): number {
+  const weightDiff =
+    severityWeights[right.severity] - severityWeights[left.severity];
+  if (weightDiff !== 0) return weightDiff;
+  const pathDiff = left.location.path.localeCompare(right.location.path);
+  if (pathDiff !== 0) return pathDiff;
+  return left.location.line - right.location.line;
+}
+
+function limitSummary(value: string, maximumCodePoints = 4_000): string {
+  const characters = Array.from(value);
+  if (characters.length <= maximumCodePoints) return value;
+  return `${characters.slice(0, maximumCodePoints - 1).join("")}…`;
+}
+
+export function aggregateShardReviews(
+  plan: ReviewPlan,
+  shardResults: readonly ShardReviewResult[],
+  _allEligibleChangedLines?: readonly ChangedLine[],
+): AggregatedReviewResult {
+  if (plan.scopeStatus === "unsupported") {
+    return aggregatedReviewResultSchema.parse({
+      findings: [],
+      omissionReasons: plan.omissionReasons,
+      scopeStatus: "unsupported",
+      shardsAnalyzed: 0,
+      summary:
+        "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
+      totalShards: 0,
+    });
+  }
+
+  const omissionReasons = [...plan.omissionReasons];
+  let scopeStatus: ReviewScopeStatus = plan.scopeStatus;
+  let shardsAnalyzed = 0;
+
+  const candidateFindings: ReviewFinding[] = [];
+  const shardSummaries: string[] = [];
+
+  for (const result of shardResults) {
+    if (result.status === "failure") {
+      scopeStatus = "partial_by_failure";
+      omissionReasons.push(
+        `Shard ${result.shardIndex + 1} (${result.shardId}) failed during analysis${
+          result.errorReason ? `: ${result.errorReason}` : ""
+        }.`,
+      );
+    } else {
+      shardsAnalyzed += 1;
+      candidateFindings.push(...result.findings);
+      const trimmedSummary = result.summary.trim();
+      if (trimmedSummary.length > 0) {
+        shardSummaries.push(trimmedSummary);
+      }
+    }
+  }
+
+  // Deduplicate findings by location and diagnostic
+  const dedupedFindingsMap = new Map<string, ReviewFinding>();
+  for (const finding of candidateFindings) {
+    const key = findingDeduplicationKey(finding);
+    const existing = dedupedFindingsMap.get(key);
+    if (existing === undefined || finding.confidence > existing.confidence) {
+      dedupedFindingsMap.set(key, finding);
+    }
+  }
+
+  // All files and changed lines across shards for host verification
+  const allFiles = plan.shards.flatMap((shard) => shard.files);
+  const allChangedLines = plan.shards.flatMap((shard) => shard.changedLines);
+  const dedupedCandidates = Array.from(dedupedFindingsMap.values());
+
+  const verifiedFindings = selectFindingsWithCanonicalEvidence(
+    dedupedCandidates,
+    {
+      changedLines: allChangedLines,
+      files: allFiles,
+      schemaVersion: 2,
+      surface: plan.shards.flatMap((shard) => shard.surface ?? []),
+      truncated: scopeStatus !== "complete",
+    },
+  );
+
+  const sortedFindings = verifiedFindings.toSorted(compareFindings);
+
+  // Compose summary
+  const summarySections: string[] = [];
+  if (shardSummaries.length === 0) {
+    summarySections.push(
+      "Holon reviewed the changes and found no functional regressions or contract breaks.",
+    );
+  } else if (shardSummaries.length === 1) {
+    summarySections.push(shardSummaries[0]!);
+  } else {
+    summarySections.push(
+      shardSummaries.map((s, idx) => `### Batch ${idx + 1}\n${s}`).join("\n\n"),
+    );
+  }
+
+  if (scopeStatus === "partial_by_policy") {
+    summarySections.push(
+      "Partial review: at least one eligible patch or context section was omitted by a deterministic host budget.",
+    );
+  } else if (scopeStatus === "partial_by_failure") {
+    summarySections.push(
+      "Partial review: at least one shard failed during model execution.",
+    );
+  }
+
+  const lowSeverity = sortedFindings.filter(
+    (finding) => classifyFindingPublication(finding) === "summary_only",
+  );
+  if (lowSeverity.length > 0) {
+    summarySections.push(
+      [
+        "Low-severity observations:",
+        ...lowSeverity.map((finding) => `- ${finding.diagnostic}`),
+      ].join("\n"),
+    );
+  }
+
+  const finalSummary = limitSummary(summarySections.join("\n\n"));
+
+  return aggregatedReviewResultSchema.parse({
+    findings: sortedFindings.map((f) => ({
+      confidence: f.confidence,
+      diagnostic: f.diagnostic,
+      evidence: f.evidence.map((e) => ({
+        ...(e.endLine !== undefined ? { endLine: e.endLine } : {}),
+        excerpt: e.excerpt,
+        path: e.path,
+        reason: e.reason,
+        startLine: e.startLine,
+      })),
+      location: {
+        line: f.location.line,
+        path: f.location.path,
+        side: f.location.side,
+        ...(f.location.startLine !== undefined
+          ? { startLine: f.location.startLine }
+          : {}),
+      },
+      severity: f.severity,
+      ...(f.suggestion !== undefined ? { suggestion: f.suggestion } : {}),
+    })),
+    omissionReasons,
+    scopeStatus,
+    shardsAnalyzed,
+    summary: finalSummary,
+    totalShards: plan.shards.length,
+  });
+}

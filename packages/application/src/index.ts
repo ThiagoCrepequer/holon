@@ -1,3 +1,4 @@
+export * from "./aggregate-reviews.js";
 export * from "./check-run-formatter.js";
 export * from "./evidence.js";
 export * from "./execute-review.js";

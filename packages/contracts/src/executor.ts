@@ -97,7 +97,7 @@ export const repositoryToolResultSchema = z.strictObject({
 
 export const reviewFileModeSchema = z.enum(["structural", "textual"]);
 
-const changedLinesSchema = z
+export const changedLinesSchema = z
   .array(
     z.strictObject({
       line: positiveIntegerSchema,
@@ -107,7 +107,7 @@ const changedLinesSchema = z
   )
   .max(5_000);
 
-const reviewSurfaceSchema = z
+export const reviewSurfaceSchema = z
   .array(
     z.strictObject({
       change: z.enum(["added", "removed"]),
@@ -340,6 +340,10 @@ export const githubCredentialResponseSchema = z.strictObject({
 export type RepositoryToolCall = z.infer<typeof repositoryToolCallSchema>;
 export type RepositoryToolResult = z.infer<typeof repositoryToolResultSchema>;
 export type ReviewFileMode = z.infer<typeof reviewFileModeSchema>;
+export type ReviewContextFile = z.infer<typeof reviewContextFileSchema>;
+export type ReviewSurfaceSignal = NonNullable<
+  z.infer<typeof reviewSurfaceSchema>
+>[number];
 export type ReviewContextV1 = z.infer<typeof reviewContextV1Schema>;
 export type ReviewContextV2 = z.infer<typeof reviewContextV2Schema>;
 export type ReviewContext = z.infer<typeof reviewContextSchema>;

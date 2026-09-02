@@ -2,9 +2,13 @@ import {
   reviewContextSchema,
   type ExecutorRequest,
   type ReviewContext,
+  type ReviewContextV2,
   type ReviewFileMode,
+  type ReviewPlan,
+  type ReviewShard,
 } from "@holon/contracts";
 import {
+  buildReviewPlan,
   classifyPullRequestDiffFile,
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -33,6 +37,7 @@ export interface ReviewArtifacts {
   readonly context: ReviewContext;
   readonly contextBytes: number;
   readonly fileCount: number;
+  readonly plan: ReviewPlan;
   readonly policy: string;
   readonly serializedContext: string;
 }
@@ -189,11 +194,23 @@ export function buildReviewArtifacts(
         },
   );
   const { context, serialized } = serializeBoundedContext(unboundedContext);
+  const plan = buildReviewPlan(diffFiles);
   return {
     context,
     contextBytes: new TextEncoder().encode(serialized).byteLength,
     fileCount: reviewFiles.length,
+    plan,
     policy,
     serializedContext: serialized,
   };
+}
+
+export function getShardReviewContext(shard: ReviewShard): ReviewContextV2 {
+  return reviewContextSchema.parse({
+    changedLines: shard.changedLines,
+    files: shard.files,
+    schemaVersion: 2,
+    surface: shard.surface,
+    truncated: shard.totalShards > 1,
+  }) as ReviewContextV2;
 }
