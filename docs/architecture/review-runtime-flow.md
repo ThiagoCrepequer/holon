@@ -134,10 +134,18 @@ executa no container uma página fixa construída pelo host com `sed`, limitada 
 heurísticas reduzem ruído e exposição, mas não são um secret scanner e não
 tornam conteúdo elegível confiável.
 
-O contexto filtrado preserva patches completos por arquivo. O prompt escolhe
-arquivos inteiros até 64 kB; nunca corta hunk ou arquivo e propaga `partial`
-quando omite conteúdo. O host só aceita evidência publicável quando path,
-intervalo e excerpt existem nas linhas new-file do patch canônico.
+O contexto filtrado preserva patches completos por arquivo. Para PRs maiores,
+o algoritmo de sharding (`buildReviewPlan`) agrupa arquivos elegíveis por localidade
+de diretório/módulo em shards bounded (`maxShardDiffBytes: 60 kB`, `maxShardFiles: 20`,
+`maxShardLines: 1500`), priorizando arquivos estruturais sobre textuais e nunca cortando
+hunks no meio de um arquivo.
+
+Cada shard é analisado isoladamente pelo generator (investigação contextual em duas fases),
+e seus resultados são consolidados pelo agregador de aplicação (`aggregateShardReviews`),
+que deduplica achados, ordena por severidade, valida contra o Host Evidence Verification Gate
+(garantindo que path, linha `RIGHT` e excerpt existam no patch canônico) e sintetiza o
+sumário executivo com a classificação de escopo (`complete`, `partial_by_policy`, `partial_by_failure`
+ou `unsupported`).
 
 O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
 contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise

@@ -101,16 +101,12 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 3. Batch review para PRs grandes
 
-- gerar um `ReviewPlan` determinístico com arquivos e patches completos;
-- dividir por limites conhecidos, sem cortar uma unidade sem registrar isso;
-- avaliar shards isoladamente e agregar, ordenar e deduplicar findings;
-- reservar orçamento para síntese e publicação;
-- distinguir `complete`, `partial_by_policy`, `partial_by_failure` e
-  `unsupported`;
-- medir cobertura de linhas elegíveis, arquivos, categorias e risco.
-
-Essa frente deve superseder o comportamento aceito no ADR-0016 caso altere a
-semântica atual de review parcial.
+- [x] Contratos e schemas Zod para `ReviewPlan`, `ReviewShard`, `ShardReviewResult` e `AggregatedReviewResult` (`packages/contracts/src/review-plan.ts`);
+- [x] Particionamento semântico determinístico por diretório/módulo e limites de bytes/linhas (`packages/repository-analysis/src/plan.ts`);
+- [x] Execução isolada por shard com Two-Phase Generator e tolerância a falhas parciais (`apps/control-plane/src/review-workflow.ts`);
+- [x] Agregação de findings com deduplicação por hash de diagnóstico/linha, ordenação por severidade e Host Evidence Verification Gate (`packages/application/src/aggregate-reviews.ts`);
+- [x] Classificação precisa de escopo com `complete`, `partial_by_policy`, `partial_by_failure` e `unsupported`;
+- [x] Exposição de métricas de lotes (shards analisados / total de shards) no GitHub Check Run (`packages/application/src/check-run-formatter.ts`).
 
 ### 4. Evidências de CI, cobertura e testes
 
