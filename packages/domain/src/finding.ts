@@ -123,6 +123,9 @@ export function buildPublicationMarker(
   return `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`;
 }
 
+/**
+ * Aggregates a list of review findings into counts by severity category.
+ */
 export function countFindingsBySeverity(
   findings: readonly Finding[],
 ): Record<FindingSeverity, number> {
