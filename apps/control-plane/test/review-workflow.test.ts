@@ -1031,4 +1031,207 @@ describe("ReviewWorkflow", () => {
     expect(summaryPost).toBeDefined();
     expect(summaryPost?.event).toBe("APPROVE");
   });
+
+  it("reconciles findings across commits: suppresses persistent comment and notifies resolution when fixed", async () => {
+    const posts: Array<{
+      readonly body: unknown;
+      readonly event?: unknown;
+      readonly route: string;
+    }> = [];
+
+    const sha1 = "1".repeat(40);
+    const sha2 = "2".repeat(40);
+    const sha3 = "3".repeat(40);
+
+    let currentFindings: (typeof finding)[] = [finding];
+    let currentHead = sha1;
+
+    const createJobForSha = (sha: string): ReviewJob =>
+      reviewJobV2Schema.parse({
+        ...job,
+        envelope: {
+          ...job.envelope,
+          pullRequest: {
+            ...job.envelope.pullRequest,
+            headSha: sha,
+          },
+        },
+        runId: `github:42:pr:7:head:${sha}`,
+      });
+
+    const setup = runtime({
+      head: () => currentHead,
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: currentFindings,
+              summary: "Model review completed.",
+            },
+            promptTruncated: false,
+          }),
+      }),
+      posts,
+    });
+
+    // 1. Commit 1 introduces the finding
+    const result1 = await executeReviewWorkflow(
+      env,
+      event("lifecycle-run-1", createJobForSha(sha1)),
+      immediateStep([]),
+      setup.value,
+    );
+    expect(result1.outcome).toBe("completed");
+    expect(result1.findingsPublished).toBe(1);
+
+    const inlinePostsRun1 = posts.filter(
+      (p) =>
+        p.route.includes("/pulls/{pull_number}/comments") &&
+        !p.route.includes("/replies"),
+    );
+    expect(inlinePostsRun1).toHaveLength(1);
+
+    // 2. Commit 2: finding is still present (persistent) -> duplicate suppressed!
+    currentHead = sha2;
+    const result2 = await executeReviewWorkflow(
+      env,
+      event("lifecycle-run-2", createJobForSha(sha2)),
+      immediateStep([]),
+      setup.value,
+    );
+    expect(result2.outcome).toBe("completed");
+    expect(result2.findingsPublished).toBe(0); // Suppressed!
+
+    const inlinePostsRun2 = posts.filter(
+      (p) =>
+        p.route.includes("/pulls/{pull_number}/comments") &&
+        !p.route.includes("/replies"),
+    );
+    expect(inlinePostsRun2).toHaveLength(1); // No new inline comment created
+
+    // 3. Commit 3: author fixes the finding -> resolved!
+    currentHead = sha3;
+    currentFindings = [];
+    const result3 = await executeReviewWorkflow(
+      env,
+      event("lifecycle-run-3", createJobForSha(sha3)),
+      immediateStep([]),
+      setup.value,
+    );
+    expect(result3.outcome).toBe("completed");
+    expect(result3.findingsPublished).toBe(0);
+
+    const replyPosts = posts.filter((p) =>
+      p.route.includes("/pulls/{pull_number}/comments/{comment_id}/replies"),
+    );
+    expect(replyPosts).toHaveLength(1);
+    const resolutionReply = posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/comments/{comment_id}/replies"),
+    );
+    expect(resolutionReply?.body).toContain("Defeito resolvido no commit");
+
+    // Verdict for run 3 transitions to APPROVE automatically!
+    const summaryPostRun3 = posts.findLast((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPostRun3?.event).toBe("APPROVE");
+
+    // 4. Commit 4: finding is reintroduced!
+    const sha4 = "4".repeat(40);
+    currentHead = sha4;
+    currentFindings = [finding];
+    const result4 = await executeReviewWorkflow(
+      env,
+      event("lifecycle-run-4", createJobForSha(sha4)),
+      immediateStep([]),
+      setup.value,
+    );
+    expect(result4.outcome).toBe("completed");
+    expect(result4.findingsPublished).toBe(1);
+
+    const inlinePostsRun4 = posts.filter(
+      (p) =>
+        p.route.includes("/pulls/{pull_number}/comments") &&
+        !p.route.includes("/replies"),
+    );
+    expect(inlinePostsRun4).toHaveLength(2); // New inline comment for reintroduced finding
+  });
+
+  it("handles resolution reply failure gracefully without failing review", async () => {
+    const posts: Array<{
+      readonly body: unknown;
+      readonly event?: unknown;
+      readonly route: string;
+    }> = [];
+
+    const sha1 = "1".repeat(40);
+    const sha2 = "2".repeat(40);
+    const createJobForSha = (sha: string): ReviewJob =>
+      reviewJobV2Schema.parse({
+        ...job,
+        envelope: {
+          ...job.envelope,
+          pullRequest: {
+            ...job.envelope.pullRequest,
+            headSha: sha,
+          },
+        },
+        runId: `github:42:pr:7:head:${sha}`,
+      });
+
+    let currentHead = sha1;
+
+    const setup = runtime({
+      head: () => currentHead,
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: currentHead === sha1 ? [finding] : [],
+              summary: "Model analysis.",
+            },
+            promptTruncated: false,
+          }),
+      }),
+      posts,
+    });
+
+    // Run 1 creates finding
+    await executeReviewWorkflow(
+      env,
+      event("res-fail-run-1", createJobForSha(sha1)),
+      immediateStep([]),
+      setup.value,
+    );
+
+    // Run 2: reply endpoint rejects
+    currentHead = sha2;
+    const runtimeWithFailingReply: ReviewRuntime = {
+      ...setup.value,
+      createSession: async () => {
+        const s = session(posts, () => currentHead);
+        return {
+          ...s,
+          api: {
+            ...s.api,
+            request: (route: string, params: Record<string, unknown>) => {
+              if (route.includes("/replies")) {
+                return Promise.reject(new Error("GitHub network glitch"));
+              }
+              return s.api.request(route, params);
+            },
+          },
+        };
+      },
+    };
+
+    const result2 = await executeReviewWorkflow(
+      env,
+      event("res-fail-run-2", createJobForSha(sha2)),
+      immediateStep([]),
+      runtimeWithFailingReply,
+    );
+
+    expect(result2.outcome).toBe("completed");
+  });
 });

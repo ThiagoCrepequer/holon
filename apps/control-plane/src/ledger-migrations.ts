@@ -85,6 +85,28 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 3,
   },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS pr_findings (
+        pr_key TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        first_seen_run_id TEXT NOT NULL,
+        last_seen_run_id TEXT NOT NULL,
+        first_seen_head_sha TEXT NOT NULL,
+        last_seen_head_sha TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('new', 'persistent', 'resolved', 'obsolete', 'reintroduced')),
+        severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+        file_path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        diagnostic TEXT NOT NULL,
+        github_comment_id INTEGER,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (pr_key, fingerprint)
+      );
+      CREATE INDEX IF NOT EXISTS pr_findings_status ON pr_findings(pr_key, status);
+    `,
+    version: 4,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

@@ -9,9 +9,12 @@ import {
   runStateSchema,
   runTransitionSchema,
   timestampSchema,
+  trackedFindingSchema,
   type GitHubCredentialRequest,
+  type TrackedFinding,
 } from "@holon/contracts";
 import type {
+  PrKey,
   PublicationId,
   PublicationRecord,
   ReviewRun,
@@ -46,6 +49,42 @@ interface CredentialScopeRow extends Record<string, SqlStorageValue> {
   repository_id: number;
   repository_name: string;
   repository_owner: string;
+}
+
+interface PrFindingRow extends Record<string, SqlStorageValue> {
+  diagnostic: string;
+  file_path: string;
+  fingerprint: string;
+  first_seen_head_sha: string;
+  first_seen_run_id: string;
+  github_comment_id: number | null;
+  last_seen_head_sha: string;
+  last_seen_run_id: string;
+  line: number;
+  pr_key: string;
+  severity: string;
+  status: string;
+  updated_at: string;
+}
+
+function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
+  return trackedFindingSchema.parse({
+    diagnostic: row.diagnostic,
+    filePath: row.file_path,
+    fingerprint: row.fingerprint,
+    firstSeenHeadSha: row.first_seen_head_sha,
+    firstSeenRunId: row.first_seen_run_id,
+    ...(row.github_comment_id === null
+      ? {}
+      : { githubCommentId: row.github_comment_id }),
+    lastSeenHeadSha: row.last_seen_head_sha,
+    lastSeenRunId: row.last_seen_run_id,
+    line: row.line,
+    prKey: row.pr_key,
+    severity: row.severity,
+    status: row.status,
+    updatedAt: row.updated_at,
+  });
 }
 
 type MutationPurpose = "failure" | "review";
@@ -660,5 +699,56 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
 
   private async cleanupRepository(runId: string): Promise<void> {
     await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
+  }
+
+  public loadPrFindings(prKey: PrKey): Promise<readonly TrackedFinding[]> {
+    const rows = this.ctx.storage.sql
+      .exec<PrFindingRow>(
+        `SELECT * FROM pr_findings WHERE pr_key = ? ORDER BY file_path, line`,
+        prKey,
+      )
+      .toArray();
+    return Promise.resolve(rows.map(rowToTrackedFinding));
+  }
+
+  public savePrFindings(
+    prKey: PrKey,
+    findings: readonly TrackedFinding[],
+  ): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      for (const finding of findings) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO pr_findings (
+             pr_key, fingerprint, first_seen_run_id, last_seen_run_id,
+             first_seen_head_sha, last_seen_head_sha, status, severity,
+             file_path, line, diagnostic, github_comment_id, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(pr_key, fingerprint) DO UPDATE SET
+             last_seen_run_id = excluded.last_seen_run_id,
+             last_seen_head_sha = excluded.last_seen_head_sha,
+             status = excluded.status,
+             severity = excluded.severity,
+             file_path = excluded.file_path,
+             line = excluded.line,
+             diagnostic = excluded.diagnostic,
+             github_comment_id = COALESCE(excluded.github_comment_id, pr_findings.github_comment_id),
+             updated_at = excluded.updated_at`,
+          prKey,
+          finding.fingerprint,
+          finding.firstSeenRunId,
+          finding.lastSeenRunId,
+          finding.firstSeenHeadSha,
+          finding.lastSeenHeadSha,
+          finding.status,
+          finding.severity,
+          finding.filePath,
+          finding.line,
+          finding.diagnostic,
+          finding.githubCommentId ?? null,
+          finding.updatedAt,
+        );
+      }
+    });
+    return Promise.resolve();
   }
 }

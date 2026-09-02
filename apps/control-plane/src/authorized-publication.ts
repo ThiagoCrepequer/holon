@@ -47,6 +47,7 @@ export async function publishAuthorized(
   body: string,
   location: Omit<PublishCommentInput, "body" | "marker">,
   authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
+  onPublished?: (commentId: number) => void,
 ): Promise<boolean> {
   await requireAuthorization(() => ledger.authorizeMutation(runId, "review"));
   const marker = buildPublicationMarker(runId, findingId);
@@ -76,6 +77,7 @@ export async function publishAuthorized(
     );
     if (existingId !== undefined) {
       await ledger.completePublication(id, existingId);
+      onPublished?.(existingId);
       return false;
     }
   }
@@ -86,6 +88,7 @@ export async function publishAuthorized(
     ...location,
   });
   await ledger.completePublication(id, githubCommentId);
+  onPublished?.(githubCommentId);
   return true;
 }
 
