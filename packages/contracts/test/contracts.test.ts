@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregatedReviewResultSchema,
+  ciEvidenceSchema,
   createCheckRunInputSchema,
   executorRequestSchema,
+  lineCoverageSchema,
+  testExecutionReportSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
   githubCredentialRequestSchema,
@@ -464,6 +467,72 @@ describe("model output and publication ledger", () => {
     ).toThrow(/endLine must not precede/u);
   });
 
+  it("coerces and clamps imperfect LLM outputs in modelReviewTransportSchema", () => {
+    const rawImperfection = {
+      extraRootField: "unexpected",
+      findings: [
+        {
+          confidence: "0.85",
+          diagnostic: "Too short", // < 30 chars, should be padded
+          evidence: [
+            {
+              endLine: "10", // string number
+              excerpt: "e".repeat(350), // > 300 chars, should be clamped
+              extraEvidenceField: 123,
+              path: "src/file.ts",
+              reason: "r".repeat(250), // > 200 chars, should be clamped
+              startLine: "5", // string number
+            },
+            {
+              endLine: null,
+              excerpt: "second evidence",
+              path: "src/file.ts",
+              reason: "second reason",
+              startLine: 20,
+            },
+            {
+              endLine: null,
+              excerpt: "third evidence", // > 2 evidences, should be sliced
+              path: "src/file.ts",
+              reason: "third reason",
+              startLine: 30,
+            },
+          ],
+          extraFindingField: true,
+          location: {
+            line: "5", // string number
+            path: "src/file.ts",
+            side: "RIGHT",
+            startLine: "5", // string number
+          },
+          severity: "HIGH", // uppercase, should be normalized
+          suggestion: "   ", // empty whitespace, should become null
+        },
+      ],
+      summary: "s".repeat(900), // > 800 chars, should be clamped
+    };
+
+    const parsed = modelReviewTransportSchema.parse(rawImperfection);
+    expect(parsed.summary.length).toBe(800);
+    expect(parsed.summary.endsWith("...")).toBe(true);
+    const firstFinding = parsed.findings[0]!;
+    const firstEvidence = firstFinding.evidence[0]!;
+    expect(firstFinding.diagnostic.length).toBeGreaterThanOrEqual(30);
+    expect(firstFinding.evidence.length).toBe(2);
+    expect(firstEvidence.excerpt.length).toBe(300);
+    expect(firstEvidence.reason.length).toBe(200);
+    expect(firstEvidence.startLine).toBe(5);
+    expect(firstEvidence.endLine).toBe(10);
+    expect(firstFinding.location.line).toBe(5);
+    expect(firstFinding.severity).toBe("high");
+    expect(firstFinding.suggestion).toBeNull();
+    // Verify extra fields stripped
+    expect((parsed as Record<string, unknown>).extraRootField).toBeUndefined();
+    expect(
+      (firstFinding as Record<string, unknown>).extraFindingField,
+    ).toBeUndefined();
+  });
+
   it("keeps the largest valid model result below the Workflow step limit", () => {
     const maximumFinding = {
       confidence: 1,
@@ -674,5 +743,53 @@ describe("check run contracts", () => {
     } as const;
 
     expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(aggregated);
+  });
+
+  it("validates line coverage, test execution reports, and CI evidence contracts", () => {
+    const lineCoverage = {
+      hitsByLine: { "10": 3, "11": 0, "12": 1 },
+      path: "src/example.ts",
+      totalFound: 3,
+      totalHit: 2,
+    } as const;
+
+    expect(lineCoverageSchema.parse(lineCoverage)).toEqual(lineCoverage);
+
+    const testReport = {
+      durationMs: 1250,
+      failed: 1,
+      failures: [
+        {
+          filePath: "test/example.test.ts",
+          line: 42,
+          message: "AssertionError: expected true but got false",
+          testName: "it should handle empty input",
+        },
+      ],
+      passed: 10,
+      skipped: 0,
+      total: 11,
+    } as const;
+
+    expect(testExecutionReportSchema.parse(testReport)).toEqual(testReport);
+
+    const fullEvidence = {
+      coverage: [lineCoverage],
+      source: "github-actions",
+      status: "available",
+      tests: testReport,
+      workflowName: "CI Tests",
+      workflowRunId: 12345678,
+    } as const;
+
+    expect(ciEvidenceSchema.parse(fullEvidence)).toEqual(fullEvidence);
+
+    const notAvailableEvidence = {
+      status: "not_available",
+    } as const;
+
+    expect(ciEvidenceSchema.parse(notAvailableEvidence)).toEqual(
+      notAvailableEvidence,
+    );
   });
 });

@@ -393,14 +393,14 @@ export async function executeReviewWorkflow(
                 });
               } catch (error) {
                 const failureCode = nonRetryableModelFailureCode(error);
-                if (failureCode !== undefined) {
-                  throw new NonRetryableError(
-                    `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
-                  );
-                }
+                const reason =
+                  failureCode !== undefined
+                    ? `model_${failureCode}`
+                    : error instanceof Error
+                      ? error.message
+                      : "Unknown error";
                 shardResults.push({
-                  errorReason:
-                    error instanceof Error ? error.message : "Unknown error",
+                  errorReason: reason,
                   findings: [],
                   shardId: shard.id,
                   shardIndex: shard.index,

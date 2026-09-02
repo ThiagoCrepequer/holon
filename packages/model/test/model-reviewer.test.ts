@@ -65,6 +65,8 @@ import {
   createBoundedRepositoryToolRunner,
   createGatewayProviderSettings,
   createRedactingRepositoryToolRunner,
+  extractAndParseJsonReview,
+  extractCompactContext,
   isNonRetryableModelError,
   isNonRetryableModelProviderError,
   limitUtf8Text,
@@ -714,5 +716,115 @@ describe("model review boundary", () => {
     await expect(
       generator.generate({ instructions: "system", prompt: "prompt" }),
     ).rejects.toThrow("unrecoverable fatal memory");
+  });
+
+  it("extracts compact context without raw diff patches", () => {
+    const promptWithDiff = [
+      "Repository: test/repo",
+      "Pull request: #42",
+      "Allowed changed-line ranges: 1-50",
+      "diff --git a/file.ts b/file.ts",
+      "--- a/file.ts",
+      "+++ b/file.ts",
+      "@@ -1,3 +1,3 @@",
+      "+console.log('huge diff')",
+    ].join("\n");
+
+    const compact = extractCompactContext(promptWithDiff);
+    expect(compact).toContain("Repository: test/repo");
+    expect(compact).toContain("Allowed changed-line ranges: 1-50");
+    expect(compact).not.toContain("diff --git");
+    expect(compact).not.toContain("huge diff");
+  });
+
+  it("extracts and parses json review from markdown codeblocks or thinking tags", () => {
+    const rawWithMarkdown = [
+      "<think>Let me ponder the diff... ok looks good</think>",
+      "Here is the review:",
+      "```json",
+      JSON.stringify({ findings: [], summary: "All good from markdown" }),
+      "```",
+    ].join("\n");
+
+    const extracted = extractAndParseJsonReview(rawWithMarkdown);
+    expect(extracted).toEqual({
+      findings: [],
+      summary: "All good from markdown",
+    });
+  });
+
+  it("rescues structured review from error.text when AI_NoObjectGeneratedError is thrown", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    const rescueError = Object.assign(new Error("No object generated"), {
+      name: "AI_NoObjectGeneratedError",
+      text: '```json\n{"findings": [], "summary": "Rescued from markdown text"}\n```',
+    });
+
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation complete",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(rescueError);
+
+    const result = await generator.generate({
+      instructions: "system",
+      prompt: "prompt",
+    });
+    expect(result).toEqual({
+      findings: [],
+      summary: "Rescued from markdown text",
+    });
+  });
+
+  it("gracefully degrades to investigation summary when object generation fails semantically", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    const semanticError = Object.assign(new Error("No object generated"), {
+      name: "AI_NoObjectGeneratedError",
+      text: "Unparsable text that cannot be parsed as JSON",
+    });
+
+    sdk.generateText
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        text: "Investigation found no major flaws in the implementation.",
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
+      })
+      .mockRejectedValueOnce(semanticError)
+      .mockRejectedValueOnce(semanticError);
+
+    const result = await generator.generate({
+      instructions: "system",
+      prompt: "prompt",
+    });
+    expect(result).toEqual({
+      findings: [],
+      summary: "Investigation found no major flaws in the implementation.",
+    });
   });
 });
