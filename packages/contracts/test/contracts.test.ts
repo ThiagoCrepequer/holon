@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aggregatedReviewResultSchema,
   createCheckRunInputSchema,
   executorRequestSchema,
   executorRequestV1Schema,
@@ -17,6 +18,9 @@ import {
   reviewContextV1Schema,
   reviewContextV2Schema,
   reviewJobSchema,
+  reviewPlanSchema,
+  reviewShardSchema,
+  shardReviewResultSchema,
   updateCheckRunInputSchema,
   webhookEnvelopeSchema,
 } from "../src/index.js";
@@ -614,5 +618,61 @@ describe("check run contracts", () => {
         checkRunId: -1,
       }).success,
     ).toBe(false);
+  });
+
+  it("validates review shard and plan schemas", () => {
+    const shard = {
+      byteLength: 250,
+      changedLines: [{ line: 10, path: "src/a.ts", side: "RIGHT" }],
+      files: [{ mode: "structural", patch: "diff content", path: "src/a.ts" }],
+      id: "shard-0",
+      index: 0,
+      surface: [
+        {
+          change: "added",
+          excerpt: "export function foo()",
+          kind: "contract",
+          line: 10,
+          path: "src/a.ts",
+        },
+      ],
+      totalShards: 1,
+    } as const;
+
+    expect(reviewShardSchema.parse(shard)).toEqual(shard);
+
+    const plan = {
+      omissionReasons: [],
+      schemaVersion: 2,
+      scopeStatus: "complete",
+      shards: [shard],
+      totalEligibleBytes: 250,
+      totalEligibleFiles: 1,
+      totalEligibleLines: 1,
+      unsupportedFilesCount: 0,
+    } as const;
+
+    expect(reviewPlanSchema.parse(plan)).toEqual(plan);
+
+    const shardResult = {
+      findings: [],
+      shardId: "shard-0",
+      shardIndex: 0,
+      status: "success",
+      summary: "No issues in shard 0.",
+    } as const;
+
+    expect(shardReviewResultSchema.parse(shardResult)).toEqual(shardResult);
+
+    const aggregated = {
+      findings: [],
+      omissionReasons: [],
+      scopeStatus: "complete",
+      shardsAnalyzed: 1,
+      summary: "Consolidated review summary.",
+      totalShards: 1,
+    } as const;
+
+    expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(aggregated);
   });
 });
