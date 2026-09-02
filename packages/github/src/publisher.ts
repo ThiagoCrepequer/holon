@@ -264,4 +264,22 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     );
     return response.data.id;
   }
+
+  public async replyToComment(
+    commentId: number,
+    body: string,
+  ): Promise<number> {
+    const response = await this.api.request(
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies",
+      {
+        body,
+        comment_id: commentId,
+        owner: this.target.owner,
+        pull_number: this.target.pullNumber,
+        repo: this.target.repo,
+        request: { retries: 0 },
+      },
+    );
+    return response.data.id;
+  }
 }
