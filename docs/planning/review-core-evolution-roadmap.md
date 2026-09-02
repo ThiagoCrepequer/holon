@@ -110,17 +110,20 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 4. Evidências de CI, cobertura e testes
 
-- consumir somente artefatos associados ao head SHA exato;
-- começar por formatos passivos, como LCOV, JaCoCo XML, Cobertura, JUnit XML,
-  SARIF e relatórios de mutação;
-- validar esquema, tamanho, origem, conclusão do workflow e integridade antes do
-  uso;
-- expor “evidência indisponível” sem inferir ausência de testes;
-- manter execução arbitrária, instalação de dependências e lifecycle scripts
-  fora do executor.
+- [x] Consumir somente artefatos associados ao head SHA exato via webhook `workflow_run.completed` do GitHub;
+- [x] Ingestão passiva e streaming de formatos universais: LCOV (cobertura linha a linha) e JUnit XML (execução de testes e detalhes de falhas);
+- [x] Extração segura em memória (`fflate`) com proteções contra Zip Bomb (limite de 10 MB compactado, 30 MB descompactado, rejeição de path traversal `../`);
+- [x] Validação estrutural e contratos Zod estritos em `@holon/contracts` (`lineCoverageSchema`, `testExecutionReportSchema`, `ciEvidenceSchema`);
+- [x] Cálculo determinístico de cobertura das linhas alteradas no diff do PR (`calculateChangedLinesCoverage` em `@holon/domain`);
+- [x] Atualização idempotente do comentário de review existente via marcadores delimitados (`<!-- holon:ci-evidence:start -->` / `<!-- holon:ci-evidence:end -->`), sem poluição de comentários duplicados nem check runs desnecessários;
+- [x] Exposição transparente do estado (`available` vs `not_available`) sem inferir arbitrariamente ausência de testes;
+- [x] Preservação do princípio de privilégio mínimo: zero execução de comandos arbitrários, sem instalação de dependências ou lifecycle scripts no host ou executor.
 
-Novas permissões, ingestão de artefatos privados ou persistência de relatórios
-exigem decisão de confiança e retenção.
+> [!NOTE]
+> **Recomendação de Nomenclatura vs. Flexibilidade de Cenários**:
+>
+> - **Recomendação**: Para padronização e convenção, recomenda-se que os workflows de CI do repositório nomeiem seus artefatos de build com termos semânticos como `coverage`, `test-results`, `lcov`, `junit` ou `test-report`.
+> - **Flexibilidade**: Essa recomendação **não é uma limitação técnica restritiva**. Para atender a diversos ecossistemas e configurações de pipelines existentes, o serviço de ingestão realiza _content-sniffing_ estruturado nos zips baixados (identificando assinaturas de arquivo `.lcov`, `.info`, `.xml` e tags XML de testsuites), aceitando qualquer nome de artefato fornecido pelo GitHub Actions.
 
 ### 5. Veredito determinístico
 

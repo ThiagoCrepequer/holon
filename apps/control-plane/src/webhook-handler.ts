@@ -2,6 +2,8 @@ import { pullRequestActions } from "@holon/contracts";
 import { mapPullRequestWebhook, verifyWebhookSignature } from "@holon/github";
 import { Hono } from "hono";
 
+import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
+
 const maximumWebhookBytes = 2_000_000;
 
 export class PayloadTooLargeError extends Error {
@@ -68,7 +70,7 @@ export function createWebhookApp() {
     ) {
       return context.json({ error: "invalid_signature" }, 401);
     }
-    if (event !== "pull_request")
+    if (event !== "pull_request" && event !== "workflow_run")
       return context.json({ accepted: true, ignored: true }, 202);
 
     const rawBody = new TextDecoder().decode(rawBytes);
@@ -78,6 +80,95 @@ export function createWebhookApp() {
     } catch {
       return context.json({ error: "invalid_json" }, 400);
     }
+
+    if (event === "workflow_run") {
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        "action" in payload &&
+        payload.action === "completed" &&
+        "workflow_run" in payload &&
+        typeof payload.workflow_run === "object" &&
+        payload.workflow_run !== null
+      ) {
+        const run = payload.workflow_run as Record<string, unknown>;
+        const headSha =
+          typeof run.head_sha === "string" ? run.head_sha : undefined;
+        const workflowRunId = typeof run.id === "number" ? run.id : undefined;
+        const workflowName =
+          typeof run.name === "string" ? run.name : undefined;
+        const pullRequests = Array.isArray(run.pull_requests)
+          ? run.pull_requests
+          : [];
+        const repository =
+          typeof (payload as Record<string, unknown>).repository === "object" &&
+          (payload as Record<string, unknown>).repository !== null
+            ? ((payload as Record<string, unknown>).repository as Record<
+                string,
+                unknown
+              >)
+            : undefined;
+        const repoId =
+          typeof repository?.id === "number" ? repository.id : undefined;
+        const repoName =
+          typeof repository?.name === "string" ? repository.name : undefined;
+        const repoOwnerObj =
+          typeof repository?.owner === "object" && repository.owner !== null
+            ? (repository.owner as Record<string, unknown>)
+            : undefined;
+        const repoOwner =
+          typeof repoOwnerObj?.login === "string"
+            ? repoOwnerObj.login
+            : undefined;
+        const installationId =
+          typeof (
+            (payload as Record<string, unknown>).installation as
+              | Record<string, unknown>
+              | undefined
+          )?.id === "number"
+            ? (
+                (payload as Record<string, unknown>).installation as Record<
+                  string,
+                  number
+                >
+              ).id
+            : undefined;
+
+        if (
+          headSha &&
+          workflowRunId &&
+          pullRequests.length > 0 &&
+          repoId &&
+          repoName &&
+          repoOwner &&
+          installationId
+        ) {
+          const prNumber = (pullRequests[0] as Record<string, unknown>)?.number;
+          if (typeof prNumber === "number") {
+            const enrichPromise = enrichReviewWithCiEvidence(context.env, {
+              deliveryId: delivery,
+              headSha,
+              installationId,
+              pullRequestNumber: prNumber,
+              repository: { id: repoId, name: repoName, owner: repoOwner },
+              workflowName,
+              workflowRunId,
+            });
+            try {
+              context.executionCtx.waitUntil(enrichPromise);
+            } catch {
+              // Safe fallback in test harnesses without ExecutionContext
+            }
+            return context.json(
+              { accepted: true, deliveryId: delivery, enriched: true },
+              202,
+            );
+          }
+        }
+      }
+      return context.json({ accepted: true, ignored: true }, 202);
+    }
+
     if (
       typeof payload === "object" &&
       payload !== null &&

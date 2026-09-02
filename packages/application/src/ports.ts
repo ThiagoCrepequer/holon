@@ -69,6 +69,11 @@ export interface ReviewPublisher {
     marker: string,
     kind: "inline" | "summary",
   ): Promise<number | undefined>;
+  findCommentWithBodyByMarker?(
+    marker: string,
+    kind: "inline" | "summary",
+  ): Promise<{ readonly body: string; readonly id: number } | undefined>;
   publish(input: PublishCommentInput): Promise<number>;
   updateCheckRun?(input: UpdateCheckRunInput): Promise<void>;
+  updateReviewComment?(reviewId: number, body: string): Promise<void>;
 }

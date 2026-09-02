@@ -26,6 +26,13 @@ export interface GitHubAppCredentials {
   readonly privateKey: string;
 }
 
+export interface GitHubWorkflowArtifact {
+  readonly archiveDownloadUrl?: string | undefined;
+  readonly id: number;
+  readonly name: string;
+  readonly sizeInBytes: number;
+}
+
 export interface GitHubInstallationSession {
   readonly api: GitHubApi;
   currentHeadSha(
@@ -33,13 +40,23 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<string>;
+  downloadArtifactZip?(
+    owner: string,
+    repo: string,
+    artifactId: number,
+  ): Promise<ArrayBuffer>;
+  readonly expectedAuthorLogin: string;
+  readonly expiresAt: string;
+  listWorkflowRunArtifacts?(
+    owner: string,
+    repo: string,
+    runId: number,
+  ): Promise<readonly GitHubWorkflowArtifact[]>;
   pullRequestDiff(
     owner: string,
     repo: string,
     pullNumber: number,
   ): Promise<string>;
-  readonly expiresAt: string;
-  readonly expectedAuthorLogin: string;
   readonly token: string;
 }
 
@@ -253,6 +270,71 @@ export async function createInstallationSession(
           throw new GitHubDiffTooLargeError();
         }
         return response.data;
+      });
+    },
+    async listWorkflowRunArtifacts(owner, repo, runId) {
+      return await executeGitHubRequest(async () => {
+        const response = await octokit.request(
+          "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
+          {
+            owner,
+            repo,
+            run_id: runId,
+          },
+        );
+        const data = record(response.data, "GitHub artifacts response");
+        const artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
+        return artifacts.map((candidate) => {
+          const item = record(candidate, "GitHub artifact item");
+          return {
+            archiveDownloadUrl:
+              typeof item.archive_download_url === "string"
+                ? item.archive_download_url
+                : undefined,
+            id: Number(item.id),
+            name: typeof item.name === "string" ? item.name : "",
+            sizeInBytes: Number(item.size_in_bytes ?? 0),
+          };
+        });
+      });
+    },
+    async downloadArtifactZip(owner, repo, artifactId) {
+      return await executeGitHubRequest(async () => {
+        const response = await octokit.request(
+          "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
+          {
+            archive_format: "zip",
+            artifact_id: artifactId,
+            owner,
+            repo,
+            request: {
+              parseSuccessData: false,
+            },
+          },
+        );
+        const data = response.data;
+        if (data instanceof ArrayBuffer) {
+          return data;
+        }
+        if (ArrayBuffer.isView(data)) {
+          const copy = new Uint8Array(data.byteLength);
+          copy.set(
+            new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+          );
+          return copy.buffer;
+        }
+        if (
+          typeof (data as { arrayBuffer?: () => Promise<ArrayBuffer> })
+            ?.arrayBuffer === "function"
+        ) {
+          return await (
+            data as { arrayBuffer: () => Promise<ArrayBuffer> }
+          ).arrayBuffer();
+        }
+        const bytes = new Uint8Array(data as ArrayLike<number>);
+        const copy = new Uint8Array(bytes.byteLength);
+        copy.set(bytes);
+        return copy.buffer;
       });
     },
     expiresAt: authentication.expiresAt,
