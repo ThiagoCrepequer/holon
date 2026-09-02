@@ -511,7 +511,7 @@ export async function executeReviewWorkflow(
             "summary",
             "summary",
             output.summary,
-            {},
+            { event: output.verdict },
             () => authorizeMutation(github, "review"),
           );
           return { authorized: true, published } as const;
@@ -537,6 +537,7 @@ export async function executeReviewWorkflow(
     const checkRunConclusion = determineCheckRunConclusion(
       output.findings,
       isPartial,
+      output.verdict,
     );
     const checkRunOutput = formatCheckRunOutput({
       durationMs: durationFrom(rawEvent.timestamp, now()),
@@ -546,6 +547,7 @@ export async function executeReviewWorkflow(
       shardsAnalyzed: output.shardsAnalyzed,
       summary: output.summary,
       totalShards: output.totalShards,
+      verdict: output.verdict,
     });
     await updateCheckRunCompleted(
       "complete-check-run",
