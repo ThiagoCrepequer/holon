@@ -118,12 +118,8 @@ export function aggregateShardReviews(
     summarySections.push(
       "Holon reviewed the changes and found no functional regressions or contract breaks.",
     );
-  } else if (shardSummaries.length === 1) {
-    summarySections.push(shardSummaries[0]!);
   } else {
-    summarySections.push(
-      shardSummaries.map((s, idx) => `### Batch ${idx + 1}\n${s}`).join("\n\n"),
-    );
+    summarySections.push(shardSummaries.join("\n\n"));
   }
 
   if (scopeStatus === "partial_by_policy") {
@@ -132,7 +128,7 @@ export function aggregateShardReviews(
     );
   } else if (scopeStatus === "partial_by_failure") {
     summarySections.push(
-      "Partial review: at least one shard failed during model execution.",
+      "Partial review: some changes could not be analyzed due to an execution failure.",
     );
   }
 
