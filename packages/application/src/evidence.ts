@@ -58,6 +58,11 @@ function evidenceAppearsInPatch(
   );
 }
 
+/**
+ * Validates candidate findings against the Host Evidence Verification Gate.
+ * Ensures each evidence excerpt literally appears in the canonical diff patch
+ * and the finding location belongs to an added line on the RIGHT side.
+ */
 export function selectFindingsWithCanonicalEvidence(
   candidates: readonly FindingCandidate[],
   context: ReviewContextV2,

@@ -39,6 +39,11 @@ function extractDirectory(path: string): string {
   return lastSlash === -1 ? "" : path.slice(0, lastSlash);
 }
 
+/**
+ * Partitions pull request diff files into deterministic review shards.
+ * Clusters files by directory/module locality, prioritizes structural code,
+ * and bounds each shard by diff bytes, file count, and changed line limits.
+ */
 export function buildReviewPlan(
   diffFiles: readonly PullRequestDiffFile[],
   options?: BuildReviewPlanOptions,
