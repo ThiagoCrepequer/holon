@@ -122,3 +122,31 @@ export function buildPublicationMarker(
 ): string {
   return `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`;
 }
+
+/**
+ * Aggregates a list of review findings into counts by severity category.
+ */
+export function countFindingsBySeverity(
+  findings: readonly Finding[],
+): Record<FindingSeverity, number> {
+  const counts: Record<FindingSeverity, number> = {
+    critical: 0,
+    high: 0,
+    low: 0,
+    medium: 0,
+  };
+  for (const finding of findings) {
+    counts[finding.severity] += 1;
+  }
+  return counts;
+}
+
+/**
+ * Filters a list of review findings matching the target severity level.
+ */
+export function filterFindingsBySeverity(
+  findings: readonly Finding[],
+  severity: FindingSeverity,
+): readonly Finding[] {
+  return findings.filter((finding) => finding.severity === severity);
+}

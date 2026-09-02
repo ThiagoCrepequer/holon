@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildPublicationMarker,
   classifyFindingPublication,
+  countFindingsBySeverity,
   createFinding,
+  filterFindingsBySeverity,
   isChangedLine,
   type ChangedLine,
 } from "../src/index.js";
@@ -134,5 +136,56 @@ describe("review findings", () => {
         changedLines,
       ),
     ).toThrow("startLine");
+  });
+
+  it("counts findings by severity category", () => {
+    const finding1 = createFinding(
+      {
+        confidence: 0.9,
+        diagnostic:
+          "The changed block violates the response contract used by callers.",
+        evidence: [
+          {
+            excerpt: "return null",
+            path: "src/example.ts",
+            reason: "Observed behavior",
+            startLine: 10,
+          },
+        ],
+        location: { line: 10, path: "src/example.ts", side: "RIGHT" },
+        severity: "high",
+      },
+      changedLines,
+    );
+    const finding2 = createFinding(
+      {
+        confidence: 0.9,
+        diagnostic:
+          "The changed block violates the response contract used by callers.",
+        evidence: [
+          {
+            excerpt: "return null",
+            path: "src/example.ts",
+            reason: "Observed behavior",
+            startLine: 12,
+          },
+        ],
+        location: { line: 12, path: "src/example.ts", side: "RIGHT" },
+        severity: "low",
+      },
+      changedLines,
+    );
+
+    const counts = countFindingsBySeverity([finding1, finding2]);
+    expect(counts).toEqual({
+      critical: 0,
+      high: 1,
+      low: 1,
+      medium: 0,
+    });
+
+    const highFindings = filterFindingsBySeverity([finding1, finding2], "high");
+    expect(highFindings).toHaveLength(1);
+    expect(highFindings[0]?.severity).toBe("high");
   });
 });
