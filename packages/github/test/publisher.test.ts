@@ -486,4 +486,55 @@ describe("GitHubReviewPublisher", () => {
         "PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}",
     });
   });
+
+  it("submits reviews with explicit event (APPROVE and REQUEST_CHANGES)", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+
+    await publisher.publish({
+      body: "Looks good to merge!",
+      event: "APPROVE",
+      marker: "<!-- holon:summary -->",
+    });
+
+    expect(api.requests).toHaveLength(1);
+    expect(api.requests[0]).toEqual({
+      parameters: {
+        body: "Looks good to merge!\n\n<!-- holon:summary -->",
+        commit_id: "a".repeat(40),
+        event: "APPROVE",
+        owner: "acme",
+        pull_number: 7,
+        repo: "api",
+        request: { retries: 0 },
+      },
+      route: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+    });
+
+    await publisher.publish({
+      body: "Critical defect must be fixed.",
+      event: "REQUEST_CHANGES",
+      marker: "<!-- holon:summary -->",
+    });
+
+    expect(api.requests).toHaveLength(2);
+    expect(api.requests[1]).toEqual({
+      parameters: {
+        body: "Critical defect must be fixed.\n\n<!-- holon:summary -->",
+        commit_id: "a".repeat(40),
+        event: "REQUEST_CHANGES",
+        owner: "acme",
+        pull_number: 7,
+        repo: "api",
+        request: { retries: 0 },
+      },
+      route: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
+    });
+  });
 });
