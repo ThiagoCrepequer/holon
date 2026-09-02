@@ -129,8 +129,9 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.findings[1]!.diagnostic).toContain(
       "Handler does not validate",
     );
-    expect(aggregated.summary).toContain("### Batch 1\nAnalyzed module A.");
-    expect(aggregated.summary).toContain("### Batch 2\nAnalyzed module B.");
+    expect(aggregated.summary).toContain(
+      "Analyzed module A.\n\nAnalyzed module B.",
+    );
   });
 
   it("handles shard failures with partial_by_failure status", () => {
@@ -177,7 +178,7 @@ describe("aggregateShardReviews", () => {
       "Shard 2 (shard-1) failed during analysis: Gateway timeout",
     );
     expect(aggregated.summary).toContain(
-      "Partial review: at least one shard failed during model execution.",
+      "Partial review: some changes could not be analyzed due to an execution failure.",
     );
   });
 
@@ -296,7 +297,7 @@ describe("aggregateShardReviews", () => {
       "Holon Review — Partial review completed",
     );
     expect(formattedPartial.summary).toContain(
-      "Scope**: Partial (at least one shard encountered a model execution failure)",
+      "Scope**: Partial (some changes could not be analyzed due to an execution failure)",
     );
 
     const formattedUnsupported = formatCheckRunOutput({
@@ -307,18 +308,18 @@ describe("aggregateShardReviews", () => {
     expect(formattedUnsupported.title).toBe("Holon Review — No eligible files");
   });
 
-  it("formats check run output with shard counts and scope details", () => {
+  it("formats check run output with file counts and scope details", () => {
     const formatted = formatCheckRunOutput({
       fileCount: 2,
       findings: [],
       scopeStatus: "complete",
       shardsAnalyzed: 2,
-      summary: "All batches completed.",
+      summary: "All changes completed.",
       totalShards: 2,
     });
 
     expect(formatted.title).toBe("Holon Review — No regressions found");
-    expect(formatted.summary).toContain("- **Batches (Shards)**: 2/2");
+    expect(formatted.summary).not.toContain("- **Batches (Shards)**");
     expect(formatted.summary).toContain("- **Files analyzed**: 2");
     expect(formatted.summary).toContain("- **Findings identified**: 0");
   });
