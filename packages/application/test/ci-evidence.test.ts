@@ -6,7 +6,6 @@ import {
   ingestCiArtifactZips,
   ingestRawArtifactFiles,
   MAX_COMPRESSED_BYTES,
-  MAX_UNCOMPRESSED_BYTES,
   parseJUnitXml,
   parseLcov,
 } from "../src/index.js";
@@ -157,16 +156,15 @@ DA:invalid,format
     });
 
     it("rejects zip that uncompresses beyond maximum threshold (Zip Bomb defense)", () => {
-      // Create a zip with uncompressed content larger than limit
-      // Using a string of spaces or repeating characters
-      const largeContent = new Uint8Array(MAX_UNCOMPRESSED_BYTES + 1024);
+      // Test with custom low threshold to avoid allocating/compressing 30 MB in CI test runners
+      const content = new Uint8Array(2048);
       const zipData = zipSync({
-        "big-report.xml": largeContent,
+        "big-report.xml": content,
       });
 
-      expect(() => extractSafeZipArtifact(zipData)).toThrow(
-        "Zip Bomb protection",
-      );
+      expect(() =>
+        extractSafeZipArtifact(zipData, { maxUncompressedBytes: 1024 }),
+      ).toThrow("Zip Bomb protection");
     });
   });
 

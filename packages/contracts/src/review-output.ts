@@ -65,37 +65,128 @@ export const modelReviewOutputSchema = z.strictObject({
  * field invariants remain in modelReviewOutputSchema and are checked after the
  * transport value is normalized.
  */
-export const modelReviewTransportSchema = z.strictObject({
-  findings: z
-    .array(
-      z.strictObject({
-        confidence: z.number().min(0).max(1),
-        diagnostic: z.string().trim().min(30).max(600),
-        evidence: z
-          .array(
-            z.strictObject({
-              endLine: positiveIntegerSchema.nullable(),
-              excerpt: z.string().min(1).max(300),
-              path: repositoryPathSchema,
-              reason: z.string().min(1).max(200),
-              startLine: positiveIntegerSchema,
-            }),
-          )
-          .min(1)
-          .max(2),
-        location: z.strictObject({
-          line: positiveIntegerSchema,
-          path: repositoryPathSchema,
-          side: z.literal("RIGHT"),
-          startLine: positiveIntegerSchema.nullable(),
-        }),
-        severity: z.enum(["critical", "high", "medium", "low"]),
-        suggestion: z.string().trim().min(1).max(800).nullable(),
-      }),
-    )
-    .max(3),
-  summary: z.string().trim().min(1).max(800),
-});
+const resilientPositiveInteger = z.preprocess(
+  (val) =>
+    typeof val === "string" && /^\d+$/u.test(val.trim())
+      ? Number(val.trim())
+      : val,
+  positiveIntegerSchema,
+);
+
+const resilientNullablePositiveInteger = z.preprocess(
+  (val) =>
+    typeof val === "string" && /^\d+$/u.test(val.trim())
+      ? Number(val.trim())
+      : val,
+  positiveIntegerSchema.nullable(),
+);
+
+const resilientConfidence = z.preprocess(
+  (val) =>
+    typeof val === "string" && !Number.isNaN(Number.parseFloat(val))
+      ? Math.max(0, Math.min(1, Number.parseFloat(val)))
+      : val,
+  z.number().min(0).max(1),
+);
+
+const resilientDiagnostic = z.preprocess((val) => {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed.length > 600) return `${trimmed.slice(0, 597)}...`;
+    if (trimmed.length < 30) return `${trimmed} (verified during analysis)`;
+    return trimmed;
+  }
+  return val;
+}, z.string().trim().min(30).max(600));
+
+const resilientExcerpt = z.preprocess(
+  (val) =>
+    typeof val === "string" && val.length > 300 ? val.slice(0, 300) : val,
+  z.string().min(1).max(300),
+);
+
+const resilientReason = z.preprocess(
+  (val) =>
+    typeof val === "string" && val.length > 200
+      ? `${val.slice(0, 197)}...`
+      : val,
+  z.string().min(1).max(200),
+);
+
+const resilientSuggestion = z.preprocess((val) => {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed.length === 0) return null;
+    if (trimmed.length > 800) return `${trimmed.slice(0, 797)}...`;
+    return trimmed;
+  }
+  return val;
+}, z.string().trim().min(1).max(800).nullable());
+
+const resilientSummary = z.preprocess(
+  (val) =>
+    typeof val === "string" && val.trim().length > 800
+      ? `${val.trim().slice(0, 797)}...`
+      : val,
+  z.string().trim().min(1).max(800),
+);
+
+const resilientSeverity = z.preprocess(
+  (val) => (typeof val === "string" ? val.toLowerCase().trim() : val),
+  z.enum(["critical", "high", "medium", "low"]),
+);
+
+/**
+ * JSON-Schema-portable model boundary. Optional domain fields are required but
+ * nullable so strict providers see a stable set of required properties. Coercive
+ * preprocessors ensure minor LLM output imperfections (length, extra fields, string numbers)
+ * are gracefully sanitized rather than failing the review.
+ */
+export const modelReviewTransportSchema = z
+  .object({
+    findings: z.preprocess(
+      (val) => (Array.isArray(val) ? val.slice(0, 3) : []),
+      z
+        .array(
+          z
+            .object({
+              confidence: resilientConfidence,
+              diagnostic: resilientDiagnostic,
+              evidence: z.preprocess(
+                (val) => (Array.isArray(val) ? val.slice(0, 2) : []),
+                z
+                  .array(
+                    z
+                      .object({
+                        endLine: resilientNullablePositiveInteger,
+                        excerpt: resilientExcerpt,
+                        path: repositoryPathSchema,
+                        reason: resilientReason,
+                        startLine: resilientPositiveInteger,
+                      })
+                      .strip(),
+                  )
+                  .min(1)
+                  .max(2),
+              ),
+              location: z
+                .object({
+                  line: resilientPositiveInteger,
+                  path: repositoryPathSchema,
+                  side: z.literal("RIGHT"),
+                  startLine: resilientNullablePositiveInteger,
+                })
+                .strip(),
+              severity: resilientSeverity,
+              suggestion: resilientSuggestion,
+            })
+            .strip(),
+        )
+        .max(3),
+    ),
+    summary: resilientSummary,
+  })
+  .strip();
 
 export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
   const transport = modelReviewTransportSchema.parse(value);

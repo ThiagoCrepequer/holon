@@ -901,6 +901,65 @@ describe("ReviewWorkflow", () => {
     expect(modelCalls).toBe(2);
   });
 
+  it("isolates non-retryable model failure in individual shard and completes review partially", async () => {
+    const files = Array.from({ length: 22 }, (_, index) => ({
+      mode: "structural" as const,
+      patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
+      path: `src/file${index}.ts`,
+    }));
+
+    const changedLines = files.map((file) => ({
+      line: 10,
+      path: file.path,
+      side: "RIGHT" as const,
+    }));
+
+    let modelCalls = 0;
+    const objectInvalidError = new Error("No object generated");
+    objectInvalidError.name = "AI_NoObjectGeneratedError";
+
+    const setup = runtime({
+      context: {
+        changedLines,
+        files,
+        schemaVersion: 2,
+        truncated: false,
+      },
+      model: () => ({
+        review: () => {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            return Promise.reject(objectInvalidError);
+          }
+          return Promise.resolve({
+            output: {
+              findings: [],
+              summary: "Shard 2 review succeeded.",
+            },
+            promptTruncated: false,
+          });
+        },
+      }),
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("multi-shard-object-invalid-isolated-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(modelCalls).toBe(2);
+    const summaryPost = setup.posts.find((p) =>
+      p.route.includes("/pulls/{pull_number}/reviews"),
+    );
+    expect(summaryPost?.body).toContain("Shard 2 review succeeded.");
+    expect(summaryPost?.body).toContain(
+      "Partial review: some changes could not be analyzed due to an execution failure.",
+    );
+  });
+
   it("handles unsupported plans with 0 eligible files in review-workflow", async () => {
     const setup = runtime({
       context: {

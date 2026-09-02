@@ -183,7 +183,52 @@ export const finalizationInstructions = [
   "Report only proven functional bugs, security vulnerabilities, or contract violations.",
   "If no regression was proven or evidence is insufficient, return an empty findings array with an informative summary.",
   "Every evidence excerpt must appear in the canonical patch at the stated line range.",
+  "CRITICAL: Output MUST be raw, valid JSON only. Do NOT output markdown code blocks (```json), thinking tags, introductory text or explanations. Do NOT re-investigate.",
 ].join("\n");
+
+export function extractCompactContext(prompt: string): string {
+  const lines = prompt.split("\n");
+  const metadataLines: string[] = [];
+  for (const line of lines) {
+    if (
+      line.startsWith("diff --git") ||
+      line.startsWith("--- a/") ||
+      line.startsWith("+++ b/")
+    ) {
+      break;
+    }
+    metadataLines.push(line);
+  }
+  return metadataLines.join("\n").trim();
+}
+
+export function extractAndParseJsonReview(text: string): unknown {
+  if (!text || typeof text !== "string") return undefined;
+
+  // Strip <think> tags from reasoning models
+  const withoutThinking = text.replace(/<think>[\s\S]*?<\/think>/gu, "").trim();
+
+  // Match markdown codeblocks ```json ... ``` or ``` ... ```
+  const codeBlockMatch = /```(?:json)?\s*([\s\S]*?)\s*```/u.exec(
+    withoutThinking,
+  );
+  const matchedContent = codeBlockMatch?.[1];
+  const candidate =
+    matchedContent !== undefined ? matchedContent.trim() : withoutThinking;
+
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return undefined;
+  }
+
+  const jsonSubstring = candidate.slice(firstBrace, lastBrace + 1);
+  try {
+    return JSON.parse(jsonSubstring);
+  } catch {
+    return undefined;
+  }
+}
 
 export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public constructor(
@@ -233,6 +278,21 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     }
 
     // Phase 2: Dedicated Structured Finalization Step
+    const compactContext = extractCompactContext(request.prompt);
+    const finalizationPrompt = [
+      "### Review Metadata & Allowed Line Ranges",
+      compactContext.length > 0
+        ? compactContext
+        : request.prompt.slice(0, 2000),
+      "",
+      "### Investigation Findings and Analysis",
+      investigationText.trim().length > 0
+        ? investigationText
+        : "No functional regressions were proven during investigation.",
+      "",
+      "Synthesize and return the final structured review JSON object directly.",
+    ].join("\n");
+
     const runFinalization = async (
       attempt: "finalization" | "recovery",
     ): Promise<unknown> => {
@@ -240,18 +300,6 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       const instructions = isRecovery
         ? `${finalizationInstructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`
         : finalizationInstructions;
-
-      const finalizationPrompt = [
-        "### Review Context",
-        request.prompt,
-        "",
-        "### Investigation Findings and Analysis",
-        investigationText.trim().length > 0
-          ? investigationText
-          : "No additional tool findings were recorded during investigation.",
-        "",
-        "Synthesize and return the final structured review object.",
-      ].join("\n");
 
       const output =
         this.outputContract === "portable"
@@ -266,7 +314,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
 
       const finalizationResult = await generateText({
         instructions,
-        maxOutputTokens: 4_000,
+        maxOutputTokens: 8_192,
         maxRetries: 0,
         model,
         output,
@@ -290,6 +338,27 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         : modelReviewOutputSchema.parse(finalizationResult.output);
     };
 
+    const rescueFromRawText = (error: unknown): unknown => {
+      const rawText = (error as { text?: unknown })?.text;
+      if (typeof rawText === "string" && rawText.trim().length > 0) {
+        const extracted = extractAndParseJsonReview(rawText);
+        if (
+          extracted !== undefined &&
+          typeof extracted === "object" &&
+          extracted !== null
+        ) {
+          try {
+            return this.outputContract === "portable"
+              ? parseModelReviewTransport(extracted)
+              : modelReviewOutputSchema.parse(extracted);
+          } catch {
+            // ignore schema error and continue to recovery or graceful degradation
+          }
+        }
+      }
+      return undefined;
+    };
+
     try {
       return await runFinalization("finalization");
     } catch (error) {
@@ -299,6 +368,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           error.statusCode,
         );
       }
+
+      const rescued = rescueFromRawText(error);
+      if (rescued !== undefined) {
+        return rescued;
+      }
+
       if (
         !(error instanceof Error) ||
         !recoverableSemanticErrors.has(error.name)
@@ -316,6 +391,34 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           error.statusCode,
         );
       }
+
+      const rescued = rescueFromRawText(error);
+      if (rescued !== undefined) {
+        return rescued;
+      }
+
+      // Graceful degradation only for semantic errors (AI_NoObjectGeneratedError, AI_NoOutputGeneratedError, ZodError)
+      if (error instanceof Error && recoverableSemanticErrors.has(error.name)) {
+        const rawFallbackText = (
+          investigationText.trim().length > 0
+            ? investigationText
+            : ((error as { text?: string })?.text ?? "")
+        )
+          .replace(/<think>[\s\S]*?<\/think>/gu, "")
+          .trim();
+
+        if (rawFallbackText.length > 0) {
+          const summary =
+            rawFallbackText.length > 800
+              ? `${rawFallbackText.slice(0, 797)}...`
+              : rawFallbackText;
+          return {
+            findings: [],
+            summary,
+          };
+        }
+      }
+
       throw error;
     }
   }

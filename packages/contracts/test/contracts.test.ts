@@ -467,6 +467,72 @@ describe("model output and publication ledger", () => {
     ).toThrow(/endLine must not precede/u);
   });
 
+  it("coerces and clamps imperfect LLM outputs in modelReviewTransportSchema", () => {
+    const rawImperfection = {
+      extraRootField: "unexpected",
+      findings: [
+        {
+          confidence: "0.85",
+          diagnostic: "Too short", // < 30 chars, should be padded
+          evidence: [
+            {
+              endLine: "10", // string number
+              excerpt: "e".repeat(350), // > 300 chars, should be clamped
+              extraEvidenceField: 123,
+              path: "src/file.ts",
+              reason: "r".repeat(250), // > 200 chars, should be clamped
+              startLine: "5", // string number
+            },
+            {
+              endLine: null,
+              excerpt: "second evidence",
+              path: "src/file.ts",
+              reason: "second reason",
+              startLine: 20,
+            },
+            {
+              endLine: null,
+              excerpt: "third evidence", // > 2 evidences, should be sliced
+              path: "src/file.ts",
+              reason: "third reason",
+              startLine: 30,
+            },
+          ],
+          extraFindingField: true,
+          location: {
+            line: "5", // string number
+            path: "src/file.ts",
+            side: "RIGHT",
+            startLine: "5", // string number
+          },
+          severity: "HIGH", // uppercase, should be normalized
+          suggestion: "   ", // empty whitespace, should become null
+        },
+      ],
+      summary: "s".repeat(900), // > 800 chars, should be clamped
+    };
+
+    const parsed = modelReviewTransportSchema.parse(rawImperfection);
+    expect(parsed.summary.length).toBe(800);
+    expect(parsed.summary.endsWith("...")).toBe(true);
+    const firstFinding = parsed.findings[0]!;
+    const firstEvidence = firstFinding.evidence[0]!;
+    expect(firstFinding.diagnostic.length).toBeGreaterThanOrEqual(30);
+    expect(firstFinding.evidence.length).toBe(2);
+    expect(firstEvidence.excerpt.length).toBe(300);
+    expect(firstEvidence.reason.length).toBe(200);
+    expect(firstEvidence.startLine).toBe(5);
+    expect(firstEvidence.endLine).toBe(10);
+    expect(firstFinding.location.line).toBe(5);
+    expect(firstFinding.severity).toBe("high");
+    expect(firstFinding.suggestion).toBeNull();
+    // Verify extra fields stripped
+    expect((parsed as Record<string, unknown>).extraRootField).toBeUndefined();
+    expect(
+      (firstFinding as Record<string, unknown>).extraFindingField,
+    ).toBeUndefined();
+  });
+
   it("keeps the largest valid model result below the Workflow step limit", () => {
     const maximumFinding = {
       confidence: 1,

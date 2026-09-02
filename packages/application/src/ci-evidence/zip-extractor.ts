@@ -12,6 +12,12 @@ const ALLOWED_EXTENSIONS = [
   ".json",
 ] as const;
 
+export interface ExtractSafeZipOptions {
+  readonly maxCompressedBytes?: number | undefined;
+  readonly maxFilesExtracted?: number | undefined;
+  readonly maxUncompressedBytes?: number | undefined;
+}
+
 export interface ExtractedFile {
   readonly content: string;
   readonly path: string;
@@ -31,13 +37,20 @@ function isAllowedFile(fileName: string): boolean {
  */
 export function extractSafeZipArtifact(
   zipBuffer: ArrayBuffer | Uint8Array,
+  options?: ExtractSafeZipOptions,
 ): readonly ExtractedFile[] {
+  const maxCompressedBytes =
+    options?.maxCompressedBytes ?? MAX_COMPRESSED_BYTES;
+  const maxUncompressedBytes =
+    options?.maxUncompressedBytes ?? MAX_UNCOMPRESSED_BYTES;
+  const maxFilesExtracted = options?.maxFilesExtracted ?? MAX_FILES_EXTRACTED;
+
   const bytes =
     zipBuffer instanceof Uint8Array ? zipBuffer : new Uint8Array(zipBuffer);
 
-  if (bytes.byteLength > MAX_COMPRESSED_BYTES) {
+  if (bytes.byteLength > maxCompressedBytes) {
     throw new Error(
-      `Artifact compressed size (${bytes.byteLength} bytes) exceeds safety limit of ${MAX_COMPRESSED_BYTES} bytes.`,
+      `Artifact compressed size (${bytes.byteLength} bytes) exceeds safety limit of ${maxCompressedBytes} bytes.`,
     );
   }
 
@@ -50,7 +63,7 @@ export function extractSafeZipArtifact(
     filter(file) {
       if (!isAllowedFile(file.name)) return false;
       fileCount++;
-      return fileCount <= MAX_FILES_EXTRACTED;
+      return fileCount <= maxFilesExtracted;
     },
   });
 
@@ -60,9 +73,9 @@ export function extractSafeZipArtifact(
 
   for (const [fileName, fileData] of Object.entries(unzipped)) {
     totalUncompressedBytes += fileData.byteLength;
-    if (totalUncompressedBytes > MAX_UNCOMPRESSED_BYTES) {
+    if (totalUncompressedBytes > maxUncompressedBytes) {
       throw new Error(
-        `Artifact uncompressed size exceeded maximum threshold of ${MAX_UNCOMPRESSED_BYTES} bytes (Zip Bomb protection).`,
+        `Artifact uncompressed size exceeded maximum threshold of ${maxUncompressedBytes} bytes (Zip Bomb protection).`,
       );
     }
 
