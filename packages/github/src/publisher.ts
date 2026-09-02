@@ -103,6 +103,37 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     return undefined;
   }
 
+  public async findCommentWithBodyByMarker(
+    marker: string,
+    kind: "inline" | "summary",
+  ): Promise<{ readonly body: string; readonly id: number } | undefined> {
+    const route =
+      kind === "summary"
+        ? "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+        : "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments";
+    const common = {
+      owner: this.target.owner,
+      per_page: 100,
+      pull_number: this.target.pullNumber,
+      repo: this.target.repo,
+    };
+    let pages = 0;
+    for await (const page of this.api.iterate(route, common)) {
+      pages += 1;
+      const match = page.find(
+        (comment) =>
+          comment.user?.type === "Bot" &&
+          comment.user.login === this.target.expectedAuthorLogin &&
+          comment.body?.includes(marker) === true,
+      );
+      if (match !== undefined && match.body !== undefined) {
+        return { body: match.body, id: match.id };
+      }
+      if (pages >= 20) break;
+    }
+    return undefined;
+  }
+
   public async findCheckRunByExternalId(
     externalId: string,
   ): Promise<number | undefined> {
@@ -160,6 +191,23 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     await this.api.request(
       "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
       parameters,
+    );
+  }
+
+  public async updateReviewComment(
+    reviewId: number,
+    body: string,
+  ): Promise<void> {
+    await this.api.request(
+      "PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}",
+      {
+        body,
+        owner: this.target.owner,
+        pull_number: this.target.pullNumber,
+        repo: this.target.repo,
+        request: { retries: 0 },
+        review_id: reviewId,
+      },
     );
   }
 

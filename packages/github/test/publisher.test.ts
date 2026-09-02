@@ -437,4 +437,53 @@ describe("GitHubReviewPublisher", () => {
       basicPublisher.findCheckRunByExternalId(runId),
     ).resolves.toBeUndefined();
   });
+
+  it("finds existing review comment with its body and updates review comment", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      headSha: "a".repeat(40),
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+
+    api.reviews = [
+      {
+        body: "Initial review summary\n\n<!-- holon:summary -->",
+        id: 555,
+        user: { login: "holon-reviewer[bot]", type: "Bot" },
+      },
+    ];
+
+    const found = await publisher.findCommentWithBodyByMarker(
+      "<!-- holon:summary -->",
+      "summary",
+    );
+    expect(found).toEqual({
+      body: "Initial review summary\n\n<!-- holon:summary -->",
+      id: 555,
+    });
+
+    const notFound = await publisher.findCommentWithBodyByMarker(
+      "<!-- missing -->",
+      "summary",
+    );
+    expect(notFound).toBeUndefined();
+
+    await publisher.updateReviewComment(555, "Updated review summary");
+    expect(api.requests).toHaveLength(1);
+    expect(api.requests[0]).toEqual({
+      parameters: {
+        body: "Updated review summary",
+        owner: "acme",
+        pull_number: 7,
+        repo: "api",
+        request: { retries: 0 },
+        review_id: 555,
+      },
+      route:
+        "PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}",
+    });
+  });
 });

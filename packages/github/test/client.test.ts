@@ -131,6 +131,68 @@ describe("GitHub installation client", () => {
       },
     );
 
+    sdk.request.mockResolvedValueOnce({
+      data: {
+        artifacts: [
+          {
+            archive_download_url: "https://api.github.com/zip",
+            id: 101,
+            name: "coverage-report",
+            size_in_bytes: 2048,
+          },
+        ],
+        total_count: 1,
+      },
+    });
+    await expect(
+      session.listWorkflowRunArtifacts?.("acme", "api", 555),
+    ).resolves.toEqual([
+      {
+        archiveDownloadUrl: "https://api.github.com/zip",
+        id: 101,
+        name: "coverage-report",
+        sizeInBytes: 2048,
+      },
+    ]);
+
+    const fakeZipBuffer = new ArrayBuffer(16);
+    sdk.request.mockResolvedValueOnce({
+      data: fakeZipBuffer,
+    });
+    await expect(
+      session.downloadArtifactZip?.("acme", "api", 101),
+    ).resolves.toBe(fakeZipBuffer);
+
+    // Test Uint8Array / ArrayBufferView
+    const uint8Data = new Uint8Array([1, 2, 3, 4]);
+    sdk.request.mockResolvedValueOnce({
+      data: uint8Data,
+    });
+    const uint8Result = await session.downloadArtifactZip?.("acme", "api", 101);
+    expect(new Uint8Array(uint8Result!)).toEqual(uint8Data);
+
+    // Test object with arrayBuffer() method
+    const streamObject = {
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+    };
+    sdk.request.mockResolvedValueOnce({
+      data: streamObject,
+    });
+    const streamResult = await session.downloadArtifactZip?.(
+      "acme",
+      "api",
+      101,
+    );
+    expect(streamResult?.byteLength).toBe(8);
+
+    // Test array-like numbers fallback
+    const arrayLike = [10, 20, 30];
+    sdk.request.mockResolvedValueOnce({
+      data: arrayLike,
+    });
+    const arrayResult = await session.downloadArtifactZip?.("acme", "api", 101);
+    expect(new Uint8Array(arrayResult!)).toEqual(new Uint8Array(arrayLike));
+
     const options = sdk.octokitOptions as {
       readonly auth: string;
       readonly throttle: { onRateLimit(): void; onSecondaryRateLimit(): void };
