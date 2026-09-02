@@ -5,6 +5,7 @@ import {
   reviewContextFileSchema,
   reviewSurfaceSchema,
 } from "./executor.js";
+import { reconciliationSummarySchema } from "./finding-lifecycle.js";
 import { reviewFindingSchema } from "./review-output.js";
 import {
   reviewVerdictDetailsSchema,
@@ -55,6 +56,7 @@ export const aggregatedReviewResultSchema = z.strictObject({
   shardsAnalyzed: z.number().int().nonnegative(),
   summary: z.string().trim().max(8_000),
   totalShards: z.number().int().nonnegative(),
+  reconciliation: reconciliationSummarySchema.optional(),
   verdict: reviewVerdictSchema.optional(),
   verdictDetails: reviewVerdictDetailsSchema.optional(),
 });
