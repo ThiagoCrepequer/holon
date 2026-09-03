@@ -146,5 +146,88 @@ describe("check-run-formatter", () => {
       verdict: "COMMENT",
     });
     expect(outputComment.title).toBe("Holon Review — Informational comment");
+
+    const outputWithImpact = formatCheckRunOutput({
+      findings: [],
+      structuralImpact: {
+        changedSymbols: [
+          {
+            change: "modified",
+            isExported: true,
+            kind: "function",
+            line: 10,
+            name: "fn",
+            path: "src/a.ts",
+          },
+        ],
+        contractBreaks: [
+          {
+            description: "Break description",
+            kind: "exported_symbol_removed",
+            line: 5,
+            path: "src/a.ts",
+            severity: "critical",
+          },
+        ],
+        downstreamReferences: [
+          {
+            callerLine: 12,
+            callerPath: "src/b.ts",
+            excerpt: "fn()",
+            symbolName: "fn",
+            targetPath: "src/a.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [
+          {
+            expectedTestPathPattern: "src/a.test.ts",
+            reason: "no_test_file_modified",
+            sourcePath: "src/a.ts",
+          },
+        ],
+        totalDownstreamReferencesCount: 1,
+      },
+      summary: "Summary text",
+    });
+    expect(outputWithImpact.summary).toContain(
+      "- **Structural Impact**: 1 symbol(s) modified, 1 downstream reference(s), ⚠️ 1 contract break(s), 1 test gap(s)",
+    );
+
+    const outputWithFallbackCount = formatCheckRunOutput({
+      findings: [],
+      structuralImpact: {
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [
+          {
+            callerLine: 1,
+            callerPath: "src/b.ts",
+            excerpt: "x",
+            symbolName: "x",
+            targetPath: "src/a.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [],
+      },
+      summary: "Summary text",
+    });
+    expect(outputWithFallbackCount.summary).toContain(
+      "- **Structural Impact**: 1 downstream reference(s)",
+    );
+
+    const outputEmptyImpact = formatCheckRunOutput({
+      findings: [],
+      structuralImpact: {
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+        testGaps: [],
+      },
+      summary: "Summary text",
+    });
+    expect(outputEmptyImpact.summary).not.toContain("- **Structural Impact**:");
   });
 });

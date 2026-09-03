@@ -2,6 +2,7 @@ import type {
   CheckRunConclusion,
   CheckRunOutput,
   ReconciliationSummary,
+  StructuralImpactReport,
 } from "@holon/contracts";
 import type { Finding, ReviewVerdict } from "@holon/domain";
 
@@ -18,6 +19,7 @@ export interface CheckRunFormattingOptions {
     | "unsupported"
     | undefined;
   readonly shardsAnalyzed?: number | undefined;
+  readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly summary: string;
   readonly totalShards?: number | undefined;
   readonly verdict?: ReviewVerdict | undefined;
@@ -108,6 +110,27 @@ export function formatCheckRunOutput(
     details.push(
       "- **Scope**: Partial (some files or patches exceeded deterministic limits)",
     );
+  }
+  if (options.structuralImpact !== undefined) {
+    const si = options.structuralImpact;
+    const parts: string[] = [];
+    if (si.changedSymbols.length > 0) {
+      parts.push(`${si.changedSymbols.length} symbol(s) modified`);
+    }
+    if (si.downstreamReferences.length > 0) {
+      parts.push(
+        `${si.totalDownstreamReferencesCount ?? si.downstreamReferences.length} downstream reference(s)`,
+      );
+    }
+    if (si.contractBreaks.length > 0) {
+      parts.push(`⚠️ ${si.contractBreaks.length} contract break(s)`);
+    }
+    if (si.testGaps.length > 0) {
+      parts.push(`${si.testGaps.length} test gap(s)`);
+    }
+    if (parts.length > 0) {
+      details.push(`- **Structural Impact**: ${parts.join(", ")}`);
+    }
   }
   if (durationMs !== undefined) {
     details.push(`- **Duration**: ${(durationMs / 1000).toFixed(2)}s`);

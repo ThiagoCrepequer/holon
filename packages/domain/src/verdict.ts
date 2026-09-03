@@ -21,6 +21,7 @@ export interface ReviewVerdictPolicyOptions {
 
 export interface DetermineReviewVerdictInput {
   readonly findings: readonly FindingCandidate[];
+  readonly isDegraded?: boolean | undefined;
   readonly options?: ReviewVerdictPolicyOptions | undefined;
   readonly scopeStatus:
     | "complete"
@@ -217,6 +218,19 @@ export function determineReviewVerdict(
   }
 
   // No blocking defects found: evaluate APPROVE vs COMMENT
+  if (input.isDegraded === true) {
+    reasons.push(
+      "ℹ️ A análise do modelo foi concluída de forma não-estruturada. Revise as notas investigativas abaixo.",
+    );
+    return {
+      advisoryFindingsCount: input.findings.length,
+      blockingFindingsCount: 0,
+      reasons,
+      riskScore,
+      verdict: "COMMENT",
+    };
+  }
+
   if (!options.allowApprove) {
     reasons.push(
       "No blocking defects found, but automated approvals are disabled by policy.",

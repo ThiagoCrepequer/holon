@@ -37,6 +37,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)              | Derivar veredito determinístico de review por política no host  | `accepted`   | 2026-09-02 |
 | [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md) | Reconciliar findings entre commits via fingerprinting e ciclo   | `accepted`   | 2026-09-02 |
 | [ADR-0021](0021-capture-human-feedback-and-calibration-signals.md)             | Capturar feedback humano, comandos de dispensa e calibração     | `accepted`   | 2026-09-02 |
+| [ADR-0022](0022-adopt-deterministic-structural-analyzers.md)                   | Adotar analisadores estruturais determinísticos em duas camadas | `accepted`   | 2026-09-03 |
 
 ## Regras
 

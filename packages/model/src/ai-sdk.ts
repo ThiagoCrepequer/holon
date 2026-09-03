@@ -181,6 +181,7 @@ export const finalizationInstructions = [
   "You are Holon, finalizing a code review based on investigation results.",
   "Synthesize all concrete regressions found during investigation into the required structured output schema.",
   "Report only proven functional bugs, security vulnerabilities, or contract violations.",
+  "Provide a concise executive summary ideally between 500 and 1,000 characters.",
   "If no regression was proven or evidence is insufficient, return an empty findings array with an informative summary.",
   "Every evidence excerpt must appear in the canonical patch at the stated line range.",
   "CRITICAL: Output MUST be raw, valid JSON only. Do NOT output markdown code blocks (```json), thinking tags, introductory text or explanations. Do NOT re-investigate.",
@@ -228,6 +229,62 @@ export function extractAndParseJsonReview(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+export function extractCandidateFindingsFromText(
+  text: string,
+): readonly unknown[] {
+  if (!text || typeof text !== "string") return [];
+  const findings: unknown[] = [];
+  const fileLinePattern =
+    /(?:^|\s)([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+):(\d+)(?:\b|\s)/gu;
+  let match: RegExpExecArray | null;
+  const seen = new Set<string>();
+
+  while ((match = fileLinePattern.exec(text)) !== null) {
+    const path = match[1]!;
+    const line = Number.parseInt(match[2]!, 10);
+    const key = `${path}:${line}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const afterMatch = text.slice(
+      match.index + match[0].length,
+      match.index + match[0].length + 400,
+    );
+    const codeMatch =
+      /`([^`\n]+)`|((?:return|const|let|var|def|func|export)\s+[^\n]+)/u.exec(
+        afterMatch,
+      );
+    const rawExcerpt = codeMatch?.[1] ?? codeMatch?.[2] ?? codeMatch?.[0];
+    const excerpt = rawExcerpt?.trim();
+
+    if (excerpt && excerpt.length >= 3) {
+      findings.push({
+        confidence: 0.85,
+        diagnostic: `Potential issue identified during investigation at ${path}:${line}`,
+        evidence: [
+          {
+            endLine: null,
+            excerpt: excerpt.slice(0, 290),
+            path,
+            reason: "Identified during investigative analysis",
+            startLine: line,
+          },
+        ],
+        location: {
+          line,
+          path,
+          side: "RIGHT",
+          startLine: null,
+        },
+        severity: "medium",
+        suggestion: null,
+      });
+    }
+    if (findings.length >= 3) break;
+  }
+  return findings;
 }
 
 export class TwoPhaseReviewGenerator implements ReviewGenerator {
@@ -408,14 +465,39 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           .trim();
 
         if (rawFallbackText.length > 0) {
-          const summary =
-            rawFallbackText.length > 800
-              ? `${rawFallbackText.slice(0, 797)}...`
-              : rawFallbackText;
-          return {
-            findings: [],
+          const extractedCandidates =
+            extractCandidateFindingsFromText(rawFallbackText);
+          const maxSummaryLen = 2_500;
+          let summary = rawFallbackText;
+          if (summary.length > maxSummaryLen) {
+            const slice = summary.slice(0, maxSummaryLen - 3);
+            const lastBreak = Math.max(
+              slice.lastIndexOf(". "),
+              slice.lastIndexOf("\n"),
+            );
+            summary =
+              lastBreak > 2_000
+                ? `${slice.slice(0, lastBreak + 1)}...`
+                : `${slice}...`;
+          }
+
+          const candidateOutput = {
+            findings: extractedCandidates,
+            isDegraded: true,
             summary,
           };
+
+          try {
+            return this.outputContract === "portable"
+              ? parseModelReviewTransport(candidateOutput)
+              : modelReviewOutputSchema.parse(candidateOutput);
+          } catch {
+            return {
+              findings: [],
+              isDegraded: true,
+              summary,
+            };
+          }
         }
       }
 

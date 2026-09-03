@@ -4,6 +4,7 @@ import {
   aggregateShardReviews,
   formatCheckRunOutput,
   formatReconciliationSection,
+  formatStructuralImpactSection,
 } from "../src/index.js";
 
 describe("aggregateShardReviews", () => {
@@ -440,6 +441,195 @@ describe("aggregateShardReviews", () => {
       expect(aggregated.reconciliation).toEqual(reconciliation);
       expect(aggregated.summary).toContain("Finding Lifecycle (Re-review)");
       expect(aggregated.summary).toContain("✅ **2** issue(s) resolved");
+    });
+  });
+
+  describe("formatStructuralImpactSection", () => {
+    it("formats all parts of structural impact report cleanly", () => {
+      const report = {
+        changedSymbols: [
+          {
+            change: "modified" as const,
+            isExported: true,
+            kind: "function" as const,
+            line: 10,
+            name: "updateUser",
+            path: "src/user.ts",
+          },
+        ],
+        contractBreaks: [
+          {
+            description: "Exported function 'deleteUser' was removed",
+            kind: "exported_symbol_removed" as const,
+            line: 5,
+            path: "src/user.ts",
+            severity: "critical" as const,
+          },
+        ],
+        downstreamReferences: [
+          {
+            callerLine: 30,
+            callerPath: "src/api.ts",
+            excerpt: "updateUser(data)",
+            symbolName: "updateUser",
+            targetPath: "src/user.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [
+          {
+            expectedTestPathPattern: "src/user.test.ts",
+            reason: "no_test_file_modified" as const,
+            sourcePath: "src/user.ts",
+          },
+        ],
+        totalDownstreamReferencesCount: 1,
+      };
+
+      const formatted = formatStructuralImpactSection(report);
+      expect(formatted).toContain("### 🏛️ Structural Impact Analysis");
+      expect(formatted).toContain("Potential Contract Breaks");
+      expect(formatted).toContain("deleteUser");
+      expect(formatted).toContain("Symbols Modified");
+      expect(formatted).toContain("Downstream Impact Radius");
+      expect(formatted).toContain("Test Gaps");
+    });
+
+    it("returns empty string when report has no impactful changes", () => {
+      const emptyReport = {
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+        testGaps: [],
+        totalDownstreamReferencesCount: 0,
+      };
+      expect(formatStructuralImpactSection(emptyReport)).toBe("");
+    });
+
+    it("injects structural impact section into aggregated summary when provided", () => {
+      const shardResults = [
+        {
+          findings: [],
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success" as const,
+          summary: "Clean review.",
+        },
+      ];
+
+      const report = {
+        changedSymbols: [
+          {
+            change: "added" as const,
+            isExported: true,
+            kind: "function" as const,
+            line: 1,
+            name: "init",
+            path: "src/init.ts",
+          },
+        ],
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+        testGaps: [],
+      };
+
+      const aggregated = aggregateShardReviews(
+        plan,
+        shardResults,
+        undefined,
+        undefined,
+        undefined,
+        report,
+      );
+
+      expect(aggregated.summary).toContain("Structural Impact Analysis");
+      expect(aggregated.summary).toContain("Symbols Modified");
+    });
+
+    it("handles unexported symbols and fallback downstream references count", () => {
+      const report = {
+        changedSymbols: [
+          {
+            change: "modified" as const,
+            isExported: false,
+            kind: "variable" as const,
+            line: 5,
+            name: "localVal",
+            path: "src/local.ts",
+          },
+        ],
+        contractBreaks: [],
+        downstreamReferences: [
+          {
+            callerLine: 10,
+            callerPath: "src/b.ts",
+            excerpt: "ref",
+            symbolName: "sym",
+            targetPath: "src/a.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [],
+      };
+
+      const formatted = formatStructuralImpactSection(report);
+      expect(formatted).toContain("exported: 0");
+      expect(formatted).toContain(
+        "1 reference(s) across repository outside PR",
+      );
+
+      const emptyReport = {
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+        testGaps: [],
+      };
+      const aggregatedWithEmpty = aggregateShardReviews(
+        plan,
+        [
+          {
+            findings: [],
+            shardId: "s0",
+            shardIndex: 0,
+            status: "success",
+            summary: "",
+          },
+        ],
+        undefined,
+        undefined,
+        undefined,
+        emptyReport,
+      );
+      expect(aggregatedWithEmpty.summary).not.toContain(
+        "Structural Impact Analysis",
+      );
+    });
+
+    it("propagates isDegraded and sets verdict to COMMENT with notice instead of APPROVE", () => {
+      const shardResults = [
+        {
+          findings: [],
+          isDegraded: true,
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success" as const,
+          summary: "Investigation notes...",
+        },
+      ];
+
+      const singleShardPlan = { ...plan, shards: [plan.shards[0]!] };
+      const aggregated = aggregateShardReviews(singleShardPlan, shardResults);
+
+      expect(aggregated.isDegraded).toBe(true);
+      expect(aggregated.verdict).toBe("COMMENT");
+      expect(aggregated.summary).toContain("Verdict: Informational Comment");
+      expect(aggregated.summary).toContain(
+        "A análise do modelo foi concluída de forma não-estruturada",
+      );
+      expect(aggregated.summary).not.toContain("All reviewed files clean");
     });
   });
 });

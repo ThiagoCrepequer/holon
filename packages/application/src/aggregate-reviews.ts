@@ -6,6 +6,7 @@ import {
   type ReviewPlan,
   type ReviewScopeStatus,
   type ShardReviewResult,
+  type StructuralImpactReport,
 } from "@holon/contracts";
 import {
   classifyFindingPublication,
@@ -18,6 +19,34 @@ import {
 } from "@holon/domain";
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+
+export function formatStructuralImpactSection(
+  report: StructuralImpactReport,
+): string {
+  const parts: string[] = [];
+  if (report.contractBreaks.length > 0) {
+    parts.push(
+      `- ⚠️ **Potential Contract Breaks**: ${report.contractBreaks.map((cb) => cb.description).join("; ")}`,
+    );
+  }
+  if (report.changedSymbols.length > 0) {
+    parts.push(
+      `- 🔍 **Symbols Modified**: ${report.changedSymbols.length} (exported: ${report.changedSymbols.filter((s) => s.isExported).length})`,
+    );
+  }
+  if (report.downstreamReferences.length > 0) {
+    parts.push(
+      `- 🌐 **Downstream Impact Radius**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} reference(s) across repository outside PR`,
+    );
+  }
+  if (report.testGaps.length > 0) {
+    parts.push(
+      `- 🧪 **Test Gaps**: ${report.testGaps.length} source file(s) modified without corresponding test file in PR`,
+    );
+  }
+  if (parts.length === 0) return "";
+  return ["### 🏛️ Structural Impact Analysis", ...parts].join("\n");
+}
 
 export function formatReconciliationSection(
   summary: ReconciliationSummary,
@@ -83,6 +112,7 @@ export function aggregateShardReviews(
   _allEligibleChangedLines?: readonly ChangedLine[],
   options?: ReviewVerdictPolicyOptions,
   reconciliation?: ReconciliationSummary,
+  structuralImpact?: StructuralImpactReport,
 ): AggregatedReviewResult {
   if (plan.scopeStatus === "unsupported") {
     const verdictDetails = determineReviewVerdict({
@@ -158,8 +188,13 @@ export function aggregateShardReviews(
 
   const sortedFindings = verifiedFindings.toSorted(compareFindings);
 
+  const isAnyShardDegraded = shardResults.some(
+    (result) => result.isDegraded === true,
+  );
+
   const verdictDetails = determineReviewVerdict({
     findings: sortedFindings,
+    isDegraded: isAnyShardDegraded,
     options,
     scopeStatus,
     shardsAnalyzed,
@@ -211,6 +246,13 @@ export function aggregateShardReviews(
     }
   }
 
+  if (structuralImpact !== undefined) {
+    const structuralSection = formatStructuralImpactSection(structuralImpact);
+    if (structuralSection.length > 0) {
+      summarySections.push(structuralSection);
+    }
+  }
+
   const finalSummary = limitSummary(summarySections.join("\n\n"));
 
   return aggregatedReviewResultSchema.parse({
@@ -235,6 +277,7 @@ export function aggregateShardReviews(
       severity: f.severity,
       ...(f.suggestion !== undefined ? { suggestion: f.suggestion } : {}),
     })),
+    ...(isAnyShardDegraded ? { isDegraded: true } : {}),
     omissionReasons,
     reconciliation,
     scopeStatus,
