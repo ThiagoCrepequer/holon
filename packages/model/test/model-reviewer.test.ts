@@ -151,6 +151,41 @@ describe("model review boundary", () => {
     expect(prompt).toContain("mode textual");
   });
 
+  it("includes deterministic structural-impact hints when present in context", () => {
+    const prompt = buildReviewPrompt(job, {
+      ...context,
+      structuralImpact: {
+        changedSymbols: [
+          {
+            change: "modified" as const,
+            isExported: true,
+            kind: "function" as const,
+            line: 10,
+            name: "calculateTotals",
+            path: "src/index.ts",
+          },
+        ],
+        contractBreaks: [],
+        downstreamReferences: [
+          {
+            callerLine: 20,
+            callerPath: "src/caller.ts",
+            excerpt: "calculateTotals()",
+            symbolName: "calculateTotals",
+            targetPath: "src/index.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [],
+        totalDownstreamReferencesCount: 1,
+      },
+    });
+
+    expect(prompt).toContain("Deterministic structural-impact hints:");
+    expect(prompt).toContain("calculateTotals");
+    expect(prompt).toContain("src/caller.ts");
+  });
+
   it("redacts likely credentials and bounds the initial model prompt", () => {
     const secret = `ghp_${"A".repeat(36)}`;
     const prompt = buildReviewPrompt(job, {

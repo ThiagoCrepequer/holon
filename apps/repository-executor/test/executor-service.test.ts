@@ -200,6 +200,20 @@ describe("RepositoryExecutorService", () => {
     await expect(service.loadContext(request.runId)).resolves.toEqual({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       diff: request.canonicalDiff,
+      structuralImpact: {
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+        testGaps: [
+          {
+            expectedTestPathPattern: "src/index.test.ts",
+            reason: "no_test_file_modified",
+            sourcePath: "src/index.ts",
+          },
+        ],
+        totalDownstreamReferencesCount: 0,
+      },
       surface: [
         {
           change: "added",

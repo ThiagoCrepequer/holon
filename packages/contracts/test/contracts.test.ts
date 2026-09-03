@@ -35,6 +35,12 @@ import {
   reviewVerdictPolicyOptionsSchema,
   reviewVerdictSchema,
   shardReviewResultSchema,
+  structuralImpactReportSchema,
+  changedSymbolSchema,
+  downstreamReferenceSchema,
+  contractBreakSignalSchema,
+  testGapSignalSchema,
+  securitySurfaceSignalSchema,
   trackedFindingSchema,
   updateCheckRunInputSchema,
   webhookEnvelopeSchema,
@@ -1021,6 +1027,109 @@ describe("check run contracts", () => {
           falsePositiveRate: 1.5,
         }),
       ).toThrow();
+    });
+  });
+
+  describe("structural analysis contracts", () => {
+    it("validates changedSymbolSchema correctly", () => {
+      const symbol = {
+        change: "modified" as const,
+        isExported: true,
+        kind: "function" as const,
+        line: 42,
+        name: "calculateTotals",
+        path: "src/billing.ts",
+      };
+      expect(changedSymbolSchema.parse(symbol)).toEqual(symbol);
+
+      expect(() =>
+        changedSymbolSchema.parse({
+          ...symbol,
+          kind: "unknown_kind",
+        }),
+      ).toThrow();
+    });
+
+    it("validates downstreamReferenceSchema correctly", () => {
+      const ref = {
+        callerLine: 88,
+        callerPath: "src/checkout.ts",
+        excerpt: "const totals = calculateTotals(cart);",
+        symbolName: "calculateTotals",
+        targetPath: "src/billing.ts",
+      };
+      expect(downstreamReferenceSchema.parse(ref)).toEqual(ref);
+    });
+
+    it("validates contractBreakSignalSchema correctly", () => {
+      const signal = {
+        description: "Public function calculateTotals removed from exports",
+        kind: "exported_symbol_removed" as const,
+        line: 12,
+        path: "src/billing.ts",
+        severity: "critical" as const,
+      };
+      expect(contractBreakSignalSchema.parse(signal)).toEqual(signal);
+    });
+
+    it("validates testGapSignalSchema correctly", () => {
+      const gap = {
+        expectedTestPathPattern: "test/billing.test.ts",
+        reason: "no_test_file_modified" as const,
+        sourcePath: "src/billing.ts",
+      };
+      expect(testGapSignalSchema.parse(gap)).toEqual(gap);
+    });
+
+    it("validates securitySurfaceSignalSchema correctly", () => {
+      const sec = {
+        excerpt: "const token = env.SECRET_KEY;",
+        kind: "secret_or_env_access" as const,
+        line: 15,
+        path: "src/auth.ts",
+      };
+      expect(securitySurfaceSignalSchema.parse(sec)).toEqual(sec);
+    });
+
+    it("validates structuralImpactReportSchema correctly", () => {
+      const report = {
+        changedSymbols: [
+          {
+            change: "modified" as const,
+            isExported: true,
+            kind: "function" as const,
+            line: 42,
+            name: "calculateTotals",
+            path: "src/billing.ts",
+          },
+        ],
+        contractBreaks: [],
+        downstreamReferences: [
+          {
+            callerLine: 88,
+            callerPath: "src/checkout.ts",
+            excerpt: "const totals = calculateTotals(cart);",
+            symbolName: "calculateTotals",
+            targetPath: "src/billing.ts",
+          },
+        ],
+        securitySurfaces: [],
+        testGaps: [],
+        totalDownstreamReferencesCount: 1,
+      };
+      expect(structuralImpactReportSchema.parse(report)).toEqual(report);
+    });
+
+    it("validates expanded languages in searchStructureArgumentsSchema", () => {
+      const validCall = {
+        arguments: {
+          language: "python" as const,
+          maxResults: 10,
+          pattern: "def $FN($$$ARGS):",
+        },
+        name: "search_structure" as const,
+      };
+      expect(repositoryToolCallSchema.parse(validCall)).toEqual(validCall);
     });
   });
 });

@@ -130,7 +130,21 @@ function searchGlobArguments(flag: "--glob" | "--globs"): readonly string[] {
   return globs.flatMap((glob) => [flag, glob]);
 }
 
-function structuralGlob(language: "javascript" | "jsx" | "tsx" | "typescript") {
+function structuralGlob(
+  language:
+    | "csharp"
+    | "go"
+    | "java"
+    | "javascript"
+    | "jsx"
+    | "kotlin"
+    | "php"
+    | "python"
+    | "ruby"
+    | "rust"
+    | "tsx"
+    | "typescript",
+): string {
   switch (language) {
     case "javascript":
       return "**/*.{js,mjs,cjs}";
@@ -140,8 +154,25 @@ function structuralGlob(language: "javascript" | "jsx" | "tsx" | "typescript") {
       return "**/*.tsx";
     case "typescript":
       return "**/*.{ts,mts,cts}";
+    case "python":
+      return "**/*.py";
+    case "go":
+      return "**/*.go";
+    case "rust":
+      return "**/*.rs";
+    case "java":
+      return "**/*.java";
+    case "csharp":
+      return "**/*.cs";
+    case "ruby":
+      return "**/*.rb";
+    case "php":
+      return "**/*.php";
+    case "kotlin":
+      return "**/*.{kt,kts}";
+    default:
+      throw new TypeError("Unsupported structural-search language");
   }
-  throw new TypeError("Unsupported structural-search language");
 }
 
 export function buildToolExecution(

@@ -13,6 +13,7 @@ import {
   type CheckRunOutput,
   type ReviewJob,
   type ShardReviewResult,
+  type StructuralImpactReport,
 } from "@holon/contracts";
 import {
   appendCiEvidenceToSummary,
@@ -330,6 +331,7 @@ export async function executeReviewWorkflow(
     type ReconciledReviewOutput = AggregatedReviewResult & {
       readonly activeFindings: readonly ReconciledFinding[];
       readonly resolvedFindings: readonly TrackedFinding[];
+      readonly structuralImpact?: StructuralImpactReport | undefined;
       readonly updatedTrackedFindings: readonly TrackedFinding[];
     };
 
@@ -369,6 +371,7 @@ export async function executeReviewWorkflow(
               ...aggregateShardReviews(plan, []),
               activeFindings: [] as readonly ReconciledFinding[],
               resolvedFindings: [] as readonly TrackedFinding[],
+              structuralImpact: context.structuralImpact,
               updatedTrackedFindings: [] as readonly TrackedFinding[],
             };
           }
@@ -379,6 +382,7 @@ export async function executeReviewWorkflow(
               changedLines: shard.changedLines,
               files: shard.files,
               schemaVersion: 2 as const,
+              structuralImpact: context.structuralImpact,
               surface: shard.surface,
               truncated: shard.totalShards > 1,
             };
@@ -476,12 +480,14 @@ export async function executeReviewWorkflow(
             undefined,
             undefined,
             reconciled.summary,
+            context.structuralImpact,
           );
 
           return {
             ...finalAggregated,
             activeFindings: reconciled.activeFindings,
             resolvedFindings: reconciled.resolvedFindings,
+            structuralImpact: context.structuralImpact,
             updatedTrackedFindings: reconciled.updatedTrackedFindings,
           };
         } catch (error) {
@@ -691,6 +697,7 @@ export async function executeReviewWorkflow(
       reconciliation: output.reconciliation,
       scopeStatus: output.scopeStatus,
       shardsAnalyzed: output.shardsAnalyzed,
+      structuralImpact: output.structuralImpact,
       summary: output.summary,
       totalShards: output.totalShards,
       verdict: output.verdict,

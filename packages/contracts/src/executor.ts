@@ -7,6 +7,7 @@ import {
   runIdSchema,
   timestampSchema,
 } from "./shared.js";
+import { structuralImpactReportSchema } from "./structural-analysis.js";
 
 const maxResultsSchema = z.number().int().min(1).max(100);
 
@@ -73,10 +74,23 @@ export const searchTextToolSchema = z.strictObject({
 });
 
 export const searchStructureArgumentsSchema = z.strictObject({
-  language: z.enum(["typescript", "tsx", "javascript", "jsx"]),
+  language: z.enum([
+    "typescript",
+    "tsx",
+    "javascript",
+    "jsx",
+    "python",
+    "go",
+    "rust",
+    "java",
+    "csharp",
+    "ruby",
+    "php",
+    "kotlin",
+  ]),
   maxResults: maxResultsSchema,
-  pattern: z.string().min(2).max(1_000),
   paths: z.array(repositoryPathSchema).max(20).optional(),
+  pattern: z.string().min(2).max(1_000),
 });
 
 export const searchStructureToolSchema = z.strictObject({
@@ -124,6 +138,7 @@ export const reviewSurfaceSchema = z
 export const reviewContextV1Schema = z.strictObject({
   changedLines: changedLinesSchema,
   diff: z.string().max(120_000),
+  structuralImpact: structuralImpactReportSchema.optional(),
   surface: reviewSurfaceSchema,
   truncated: z.boolean().optional(),
 });
@@ -143,6 +158,7 @@ export const reviewContextV2Schema = z
     changedLines: changedLinesSchema,
     files: z.array(reviewContextFileSchema).max(50),
     schemaVersion: z.literal(2),
+    structuralImpact: structuralImpactReportSchema.optional(),
     surface: reviewSurfaceSchema,
     truncated: z.boolean(),
   })

@@ -160,12 +160,17 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 8. Analisadores determinísticos
 
-- expandir call graph e impacto estrutural;
-- comparar contratos de API, esquemas, migrações e configuração;
-- verificar adequação de testes pelas mutações de comportamento;
-- analisar dependências, permissões e superfícies de egress;
-- usar a saída determinística como contexto e como oráculo parcial, não como
-  substituto de revisão contextual.
+- [x] Arquitetura em duas camadas: Camada 1 Núcleo Universal Agnóstico (TS/JS, Python, Go, Rust, Java) e Camada 2 Especialistas de Ecossistema;
+- [x] Extração sintática de símbolos modificados (`extractChangedSymbols`) com visibilidade (`isExported`) e classificação (`added`, `modified`, `deleted`);
+- [x] Rastreamento de referências downstream (_blast radius_ / call graph aproximado) em arquivos fora do PR (`findDownstreamReferences`);
+- [x] Detecção de quebras de contrato declarativas (`detectContractBreaks`): remoção de exports públicos e migrações SQL destrutivas (`DROP TABLE`, `DROP COLUMN`);
+- [x] Detecção de lacunas de testes (`detectTestGaps`): lógica alterada sem arquivo de teste correspondente no PR;
+- [x] Análise de superfícies de segurança, dependências e egress (`detectSecuritySurfaces`);
+- [x] Orquestrador unificado (`analyzeStructuralImpact`) executado durante a preparação do repositório no Sandbox Container;
+- [x] Enriquecimento do prompt da Fase 1 da LLM com seções determinísticas de impacto estrutural para orientação cirúrgica de ferramentas;
+- [x] Exibição de métricas estruturais no sumário de revisão e nos detalhes do Check Run;
+- [x] Suporte poliglota expandido na ferramenta `search_structure` (`ast-grep`);
+- [x] Formalizado no [ADR-0022](../decisions/0022-adopt-deterministic-structural-analyzers.md).
 
 ### 9. Confiabilidade e observabilidade
 

@@ -8,6 +8,7 @@ import {
   type ReviewShard,
 } from "@holon/contracts";
 import {
+  analyzeStructuralImpact,
   buildReviewPlan,
   classifyPullRequestDiffFile,
   collectChangedLines,
@@ -177,18 +178,23 @@ export function buildReviewArtifacts(
     reviewFiles.filter((file) => file.mode === "structural"),
     50,
   );
+  const structuralImpact = analyzeStructuralImpact({
+    changedFiles: reviewFiles,
+  });
   const unboundedContext = reviewContextSchema.parse(
     request.schemaVersion === 2
       ? {
           changedLines,
           files: reviewFiles,
           schemaVersion: 2,
+          structuralImpact,
           surface,
           truncated,
         }
       : {
           changedLines,
           diff: reviewFiles.map((file) => file.patch).join(""),
+          structuralImpact,
           surface,
           truncated,
         },
@@ -206,10 +212,14 @@ export function buildReviewArtifacts(
 }
 
 export function getShardReviewContext(shard: ReviewShard): ReviewContextV2 {
+  const structuralImpact = analyzeStructuralImpact({
+    changedFiles: shard.files,
+  });
   return reviewContextSchema.parse({
     changedLines: shard.changedLines,
     files: shard.files,
     schemaVersion: 2,
+    structuralImpact,
     surface: shard.surface,
     truncated: shard.totalShards > 1,
   }) as ReviewContextV2;
