@@ -45,7 +45,6 @@ por marcador foram definidos e implementados.
 - Como ampliar o suporte a monorepos? Código gerado permanece excluído; admiti-lo
   no futuro exige uma exceção explícita, evidência de valor e nova decisão.
   Submódulos não são obtidos e filtros Git LFS permanecem desativados no MVP.
-- Como cancelar trabalho antigo após force-push?
 
 ## Decisões já tomadas
 

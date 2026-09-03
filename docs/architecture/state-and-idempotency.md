@@ -8,6 +8,7 @@ last-reviewed: 2026-09-03
 related:
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
+  - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
 ---
 
 # Estado e idempotência
@@ -44,6 +45,7 @@ stateDiagram-v2
     publishing --> failed_retryable
     failed_retryable --> running
     failed_retryable --> failed_terminal
+    failed_retryable --> obsolete
     completed --> [*]
     obsolete --> [*]
     failed_terminal --> [*]
@@ -61,6 +63,8 @@ stateDiagram-v2
 - Retry de etapa não cria nova run.
 - Uma instância diferente do Workflow não assume uma run ativa já pertencente a
   outra instância.
+- A promoção causal torna runs ativas anteriores `obsolete` e persiste as
+  obrigações de cancelamento antes de qualquer chamada a `terminate`.
 - Cada transição possui operation ID; repetir a mesma operação com os mesmos
   estados é no-op, mas reutilizar o ID com parâmetros diferentes falha fechado.
 - O ledger registra o ID retornado pelo GitHub antes de marcar publicação como
@@ -114,3 +118,10 @@ A reconciliação de ciclo de vida é dependente de cobertura: um finding ausent
 só vira `resolved` quando seu arquivo foi revisado, e só vira `obsolete` quando
 uma análise completa prova que o arquivo deixou o PR. Falha de shard, resposta
 degradada ou escopo parcial preservam findings fora da cobertura observada.
+
+`workflow_supersessions` mantém uma obrigação por run substituída. A claim V2
+devolve as pendências à instância causalmente mais nova para cancelamento
+imediato; o alarm assume pendências com mais de 30 segundos. Os relógios de
+retry de supersession e cleanup são independentes, portanto uma API de Workflow
+indisponível não impede a destruição de um Sandbox. Uma conclusão de
+supersession não remove o histórico da run nem sua tarefa de cleanup.

@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-09-03
 related:
   - ../product/mvp-scope.md
   - ../product/review-quality-contract.md
@@ -183,6 +183,11 @@ resultado. O plano de implementação está detalhado abaixo.
 - [x] Replay offline seguro de telemetria e incidentes em `@holon/evaluation` (`replayIncidentTelemetry`), recalculando custos e validando SLOs sem efeitos colaterais de rede ou mutações no GitHub;
 - [x] Política estrita de _Zero Data Leakage_: jamais registrar diffs, excertos de código, prompts, chaves ou tokens;
 - [x] Formalizado no [ADR-0023](../decisions/0023-adopt-cloudflare-native-operational-reliability-and-observability.md).
+- [x] Cancelamento ativo de Workflows causalmente obsoletos após handoff
+      transacional no ledger, com reconciliação de estado terminal, rollback do
+      Check Run e recuperação durável por alarm;
+- [x] Formalizado no
+      [ADR-0027](../decisions/0027-actively-supersede-obsolete-review-workflows.md).
 
 ### 10. Itens explicitamente adiados
 

@@ -16,6 +16,7 @@ related:
   - ../decisions/0018-adopt-two-phase-decoupled-review-generator.md
   - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
   - ../decisions/0025-bound-structural-analysis-and-promote-verifiable-findings.md
+  - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
 ---
 
 # Fluxo de execução de uma review
@@ -50,6 +51,9 @@ sequenceDiagram
         LE-->>CO: duplicate/obsolete
         CO-->>Q: acknowledge without effects
     else new run
+        LE->>LE: persist authority + obsolete prior active runs
+        LE-->>CO: pending superseded Workflow IDs
+        CO->>CO: terminate prior instances with rollback
         CO->>GH: fetch canonical PR diff
         CO->>AN: step prepare-repository
         AN-->>CO: small metadata; context stays in Sandbox
@@ -84,7 +88,9 @@ sequenceDiagram
 
 1. **Authenticate:** nenhuma informação do payload é confiável antes do HMAC.
 2. **Normalize:** a fila recebe um envelope pequeno, versionado e sem token.
-3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica.
+3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica; a
+   promoção persiste obsolescência, cleanup aplicável e supersession antes de
+   qualquer cancelamento externo.
 4. **Acquire:** o diff canônico é obtido pela API do PR; código é obtido no
    head exato com token de instalação emitido sob demanda.
 5. **Investigate:** ferramentas são read-only por padrão e o loop tem orçamento.
@@ -97,7 +103,8 @@ sequenceDiagram
 
 ## Checkpoints implementados
 
-Na ordem normal, o Workflow executa `claim-run`, `start-run`,
+Na ordem normal, o Workflow executa `claim-run`, zero ou mais
+`terminate-superseded-workflow-N`, `start-run`,
 `revalidate-initial-head`, `start-check-run`, `prepare-repository`, `analyze-review`,
 `begin-publication`, `revalidate-current-head`, zero ou mais `publish-inline-N`,
 `publish-summary`, `save-pr-findings`, `record-review-decision`, `complete-check-run`,
@@ -108,13 +115,19 @@ O ciclo de vida no GitHub Check Runs é mantido de forma idempotente:
 
 - Ao iniciar a execução da run (`start-check-run`), cria um Check Run com `status: "in_progress"`, ancorado ao `runId` via `external_id` e armazenado na tabela `runs` do ledger.
 - Se o head for substituído (`completeObsolete`), o Check Run é atualizado para `status: "completed"` com `conclusion: "cancelled"`.
+- Se a instância for terminada ativamente, o rollback registrado em
+  `start-check-run` faz a mesma conclusão `cancelled` para o ID conhecido.
 - Ao concluir a publicação (`complete-check-run`), o Check Run é atualizado para `status: "completed"` com `conclusion: "success"` (0 findings) ou `conclusion: "neutral"` (achados identificados ou escopo parcial), detalhando contagem de achados, arquivos e duração.
 - Em caso de falha terminal (`fail-check-run`), o Check Run é concluído com `conclusion: "failure"`.
 
-Obsolescência e falha registram a mesma obrigação de cleanup durável. Um alarm do
-ledger executa cleanup idempotente até sucesso, independentemente do resultado do
-Workflow. Os nomes são determinísticos; transições usam operation IDs derivados da
-instância e do nome da etapa.
+Obsolescência e falha registram a mesma obrigação de cleanup durável. Em uma
+promoção causal, o ledger também persiste a obrigação de terminar cada Workflow
+anterior. A run nova tenta `terminate({ rollback: true })` antes de preparar o
+repositório. A confirmação antecipa o cleanup; sem confirmação, após 30 segundos
+o alarm prioriza cleanup e retoma cancelamentos pendentes com backoff. Cada
+classe de tarefa possui seu próprio `next_attempt_at`. Os nomes são
+determinísticos; transições usam operation IDs derivados da instância e do nome
+da etapa.
 
 Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
 run antes de iniciar um container faturável. A revalidação final continua
@@ -188,6 +201,8 @@ Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
 - Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
   resposta estruturada com a evidência já coletada.
 - Head SHA mudou: marcar run obsoleta e aguardar o evento mais novo.
+- Falha de cancelamento ativo: manter a run antiga sem autoridade, continuar a
+  run nova e repetir a obrigação persistida pelo alarm.
 - Linha não pertence mais ao diff: não publicar aquele finding.
 - Resposta ausente ou estruturalmente inválida depois de HTTP 200: executar no
   máximo uma síntese sem tools; uma segunda falha encerra a run e publica uma
