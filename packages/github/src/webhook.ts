@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { webhookEnvelopeSchema, type WebhookEnvelope } from "@holon/contracts";
-import { createDeliveryId } from "@holon/domain";
+import { createDeliveryId, type DeliveryId } from "@holon/domain";
 import type { operations } from "@octokit/openapi-webhooks-types";
 
 export type GitHubPullRequestWebhook =
@@ -83,4 +83,106 @@ export function mapPullRequestWebhook(
     },
     schemaVersion: 2,
   });
+}
+
+export interface ReviewCommentWebhookEvent {
+  readonly action: string;
+  readonly authorLogin: string;
+  readonly body: string;
+  readonly commentId: number;
+  readonly createdAt: string;
+  readonly deliveryId: DeliveryId;
+  readonly inReplyToId?: number | undefined;
+  readonly installationId: number;
+  readonly pullRequestNumber: number;
+  readonly repository: {
+    readonly fullName: string;
+    readonly id: number;
+    readonly name: string;
+    readonly owner: string;
+  };
+}
+
+export function mapReviewCommentWebhook(
+  payload: unknown,
+  deliveryId: string,
+): ReviewCommentWebhookEvent {
+  const root = record(payload, "payload");
+  const comment = record(root.comment, "comment");
+  const user = record(comment.user, "comment.user");
+  const pullRequest = record(root.pull_request, "pull_request");
+  const repository = record(root.repository, "repository");
+  const owner = record(repository.owner, "repository.owner");
+  const installation = record(root.installation, "installation");
+
+  const inReplyToId =
+    typeof comment.in_reply_to_id === "number"
+      ? comment.in_reply_to_id
+      : undefined;
+
+  return {
+    action: String(root.action),
+    authorLogin: String(user.login),
+    body: String(comment.body),
+    commentId: Number(comment.id),
+    createdAt: String(comment.created_at),
+    deliveryId: createDeliveryId(deliveryId),
+    inReplyToId,
+    installationId: Number(installation.id),
+    pullRequestNumber: Number(pullRequest.number),
+    repository: {
+      fullName: String(repository.full_name),
+      id: Number(repository.id),
+      name: String(repository.name),
+      owner: String(owner.login),
+    },
+  };
+}
+
+export interface ReviewThreadWebhookEvent {
+  readonly action: "resolved" | "unresolved";
+  readonly authorLogin: string;
+  readonly deliveryId: DeliveryId;
+  readonly installationId: number;
+  readonly pullRequestNumber: number;
+  readonly repository: {
+    readonly fullName: string;
+    readonly id: number;
+    readonly name: string;
+    readonly owner: string;
+  };
+  readonly rootCommentId: number;
+}
+
+export function mapReviewThreadWebhook(
+  payload: unknown,
+  deliveryId: string,
+): ReviewThreadWebhookEvent {
+  const root = record(payload, "payload");
+  const thread = record(root.thread, "thread");
+  const comments = Array.isArray(thread.comments) ? thread.comments : [];
+  if (comments.length === 0) {
+    throw new TypeError("thread.comments must contain at least one comment");
+  }
+  const rootComment = record(comments[0], "thread.comments[0]");
+  const pullRequest = record(root.pull_request, "pull_request");
+  const repository = record(root.repository, "repository");
+  const owner = record(repository.owner, "repository.owner");
+  const sender = record(root.sender, "sender");
+  const installation = record(root.installation, "installation");
+
+  return {
+    action: root.action === "resolved" ? "resolved" : "unresolved",
+    authorLogin: String(sender.login),
+    deliveryId: createDeliveryId(deliveryId),
+    installationId: Number(installation.id),
+    pullRequestNumber: Number(pullRequest.number),
+    repository: {
+      fullName: String(repository.full_name),
+      id: Number(repository.id),
+      name: String(repository.name),
+      owner: String(owner.login),
+    },
+    rootCommentId: Number(rootComment.id),
+  };
 }
