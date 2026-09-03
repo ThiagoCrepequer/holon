@@ -13,18 +13,27 @@ Verificado em 2026-08-29 contra a documentação REST atual do GitHub.
 
 ## Permissões mínimas
 
-| Permissão de repositório | Nível | Motivo                                                            |
-| ------------------------ | ----- | ----------------------------------------------------------------- |
-| Metadata                 | Read  | Concedida implicitamente a GitHub Apps                            |
-| Contents                 | Read  | Clone Git autenticado do repositório selecionado                  |
-| Pull requests            | Write | Obter diff/head e publicar inline comments e Pull Request Reviews |
+| Permissão de repositório | Nível | Motivo                                                                    |
+| ------------------------ | ----- | ------------------------------------------------------------------------- |
+| Metadata                 | Read  | Concedida implicitamente a GitHub Apps                                    |
+| Contents                 | Read  | Clone Git autenticado do repositório selecionado no commit exato (SHA)    |
+| Pull requests            | Write | Obter diff/head, publicar inline comments, replies e reviews estruturados |
+| Checks                   | Write | Criar e gerenciar o Check Run ("Holon Review") e atualizar vereditos      |
+| Actions                  | Read  | Listar e baixar artefatos de cobertura e testes dos workflows do CI       |
 
-Não conceder `Contents: write`, `Issues: write`, administração, Actions ou
-secrets. O resumo usa uma Pull Request Review com `event=COMMENT`, evitando uma
-permissão de Issues apenas para comentar na timeline.
+Não conceder `Contents: write`, `Issues: write`, administração ou secrets. O
+resumo usa uma Pull Request Review com `event=COMMENT` ou `event=REQUEST_CHANGES`
+e sincroniza o Check Run correspondente.
 
-Assine somente o evento `pull_request`. O MVP processa `opened`, `reopened` e
-`synchronize`; outros eventos assinados são aceitos e ignorados pelo ingress.
+### Eventos de Webhook Assinados (Subscribe to events)
+
+Assine os seguintes eventos no GitHub App:
+
+1. `pull_request`: Dispara revisões em `opened`, `reopened` e `synchronize`.
+2. `workflow_run`: Dispara a ingestão de evidências de testes e cobertura após a conclusão do CI (`action=completed`).
+3. `pull_request_review_comment`: Permite ao Holon escutar e processar comandos ChatOps (`/holon dismiss`, `/holon helpful`).
+4. `pull_request_review_thread`: Permite detectar a resolução ou reabertura de conversas no GitHub (`action=resolved`).
+
 Durante o piloto, instale o App apenas em repositórios explicitamente
 selecionados.
 
