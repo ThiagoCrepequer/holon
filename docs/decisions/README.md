@@ -36,6 +36,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                 | Adotar gerador desacoplado em duas fases com gate no host       | `accepted`   | 2026-09-01 |
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)              | Derivar veredito determinístico de review por política no host  | `accepted`   | 2026-09-02 |
 | [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md) | Reconciliar findings entre commits via fingerprinting e ciclo   | `accepted`   | 2026-09-02 |
+| [ADR-0021](0021-capture-human-feedback-and-calibration-signals.md)             | Capturar feedback humano, comandos de dispensa e calibração     | `accepted`   | 2026-09-02 |
 
 ## Regras
 

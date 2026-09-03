@@ -138,22 +138,24 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 6. Re-review e ciclo do finding
 
-- [ ] Identidade canônica por `stableFingerprint` (`fp:[a-f0-9]{64}`) independente de `runId` e linhas absolutas;
-- [ ] Reconciliação formal de estados (`new`, `persistent`, `resolved`, `obsolete`, `reintroduced`);
-- [ ] Supressão determinística de comentários inline duplicados para achados `persistent` em `pull_request.synchronize`;
-- [ ] Publicação de respostas na thread original confirmando resolução para achados `resolved`;
-- [ ] Integração com veredito do ADR-0019 (achados `resolved` não bloqueiam; aprovação automática quando todos forem sanados);
-- [ ] Persistência atômica no SQLite do Durable Object via tabela `pr_findings` (Migration 4);
-- [ ] Formalizado no [ADR-0020](../decisions/0020-reconcile-findings-across-commits-with-stable-fingerprints.md).
+- [x] Identidade canônica por `stableFingerprint` (`fp:[a-f0-9]{64}`) independente de `runId` e linhas absolutas;
+- [x] Reconciliação formal de estados (`new`, `persistent`, `resolved`, `obsolete`, `reintroduced`);
+- [x] Supressão determinística de comentários inline duplicados para achados `persistent` em `pull_request.synchronize`;
+- [x] Publicação de respostas na thread original confirmando resolução para achados `resolved`;
+- [x] Integração com veredito do ADR-0019 (achados `resolved` não bloqueiam; aprovação automática quando todos forem sanados);
+- [x] Persistência atômica no SQLite do Durable Object via tabela `pr_findings` (Migration 4);
+- [x] Formalizado no [ADR-0020](../decisions/0020-reconcile-findings-across-commits-with-stable-fingerprints.md).
 
 ### 7. Feedback e calibração
 
-- capturar rótulos mínimos: útil, falso positivo, severidade incorreta,
-  duplicado, não acionável e perdeu o defeito;
-- preservar exemplos anonimizados somente com autorização e política de
-  retenção;
-- medir concordância entre avaliadores e resolver divergências por adjudicação;
-- promover casos confirmados para o corpus de regressão.
+- [ ] Capturar rótulos mínimos da indústria: `helpful`, `false_positive`, `wrong_severity`, `duplicate`, `not_actionable`, `missed_defect` e `thread_resolved`;
+- [ ] Comandos ChatOps ergonômicos na thread do comentário inline (`/holon dismiss <label> [motivo]`, `/holon helpful`);
+- [ ] Roteamento de webhooks `pull_request_review_comment` e `pull_request_review_thread` validados por HMAC;
+- [ ] Máquina de estados estendida com status `dismissed` e recálculo determinístico do veredito do PR (revertendo `REQUEST_CHANGES` para `APPROVE` no Check Run);
+- [ ] Respostas transparentes do Holon na thread confirmando a dispensa ou registro de feedback;
+- [ ] Persistência durável e sanitizada no SQLite via tabela `finding_feedbacks` (Migration 5);
+- [ ] Módulo de calibração em `@holon/evaluation` com taxas de precisão/FP e exportação para o corpus de regressão;
+- [ ] Formalizado no [ADR-0021](../decisions/0021-capture-human-feedback-and-calibration-signals.md).
 
 ### 8. Analisadores determinísticos
 
