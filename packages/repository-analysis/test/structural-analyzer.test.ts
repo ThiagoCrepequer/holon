@@ -471,5 +471,36 @@ describe("analyzeStructuralImpact", () => {
     expect(report.totalDownstreamReferencesCount).toBe(2);
     expect(report.securitySurfaces).toHaveLength(1);
     expect(report.testGaps).toHaveLength(1);
+    expect(report.repositoryScanTruncated).toBe(false);
+  });
+
+  it("promotes a deterministic destructive SQL signal into a host-verifiable finding", () => {
+    const patch = [
+      "diff --git a/migrations/002.sql b/migrations/002.sql",
+      "--- a/migrations/002.sql",
+      "+++ b/migrations/002.sql",
+      "@@ -0,0 +1 @@",
+      "+DROP TABLE accounts;",
+    ].join("\n");
+
+    const report = analyzeStructuralImpact({
+      changedFiles: [{ patch, path: "migrations/002.sql" }],
+      repositoryFiles: [],
+    });
+
+    expect(report.deterministicFindings).toEqual([
+      expect.objectContaining({
+        confidence: 1,
+        evidence: [
+          expect.objectContaining({ excerpt: "DROP TABLE accounts;" }),
+        ],
+        location: {
+          line: 1,
+          path: "migrations/002.sql",
+          side: "RIGHT",
+        },
+        severity: "critical",
+      }),
+    ]);
   });
 });

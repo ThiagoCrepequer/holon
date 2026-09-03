@@ -1,6 +1,12 @@
-import type { ClaimedPublication, ReviewLedger } from "@holon/application";
+import type {
+  AppliedFindingFeedback,
+  ApplyFindingFeedbackInput,
+  ClaimedPublication,
+  FeedbackLedger,
+  ReviewDecisionContext,
+  ReviewLedger,
+} from "@holon/application";
 import {
-  findingFeedbackRecordSchema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
   publicationIdSchema,
@@ -11,7 +17,6 @@ import {
   runTelemetrySchema,
   runTransitionSchema,
   timestampSchema,
-  trackedFindingSchema,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type RunTelemetry,
@@ -29,6 +34,7 @@ import type {
 import { canTransitionRun } from "@holon/domain";
 import { DurableObject } from "cloudflare:workers";
 
+import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 
@@ -54,74 +60,6 @@ interface CredentialScopeRow extends Record<string, SqlStorageValue> {
   repository_id: number;
   repository_name: string;
   repository_owner: string;
-}
-
-interface PrFindingRow extends Record<string, SqlStorageValue> {
-  diagnostic: string;
-  file_path: string;
-  fingerprint: string;
-  first_seen_head_sha: string;
-  first_seen_run_id: string;
-  github_comment_id: number | null;
-  last_seen_head_sha: string;
-  last_seen_run_id: string;
-  line: number;
-  pr_key: string;
-  severity: string;
-  status: string;
-  updated_at: string;
-}
-
-function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
-  return trackedFindingSchema.parse({
-    diagnostic: row.diagnostic,
-    filePath: row.file_path,
-    fingerprint: row.fingerprint,
-    firstSeenHeadSha: row.first_seen_head_sha,
-    firstSeenRunId: row.first_seen_run_id,
-    ...(row.github_comment_id === null
-      ? {}
-      : { githubCommentId: row.github_comment_id }),
-    lastSeenHeadSha: row.last_seen_head_sha,
-    lastSeenRunId: row.last_seen_run_id,
-    line: row.line,
-    prKey: row.pr_key,
-    severity: row.severity,
-    status: row.status,
-    updatedAt: row.updated_at,
-  });
-}
-
-interface FindingFeedbackRow extends Record<string, SqlStorageValue> {
-  author_login: string;
-  created_at: string;
-  fingerprint: string;
-  github_comment_id: number | null;
-  id: number;
-  label: string;
-  pr_key: string;
-  reason: string | null;
-  target_severity: string | null;
-}
-
-function rowToFindingFeedbackRecord(
-  row: FindingFeedbackRow,
-): FindingFeedbackRecord {
-  return findingFeedbackRecordSchema.parse({
-    authorLogin: row.author_login,
-    createdAt: row.created_at,
-    fingerprint: row.fingerprint,
-    ...(row.github_comment_id === null
-      ? {}
-      : { githubCommentId: row.github_comment_id }),
-    id: row.id,
-    label: row.label,
-    prKey: row.pr_key,
-    ...(row.reason === null ? {} : { reason: row.reason }),
-    ...(row.target_severity === null
-      ? {}
-      : { targetSeverity: row.target_severity }),
-  });
 }
 
 type MutationPurpose = "failure" | "review";
@@ -175,10 +113,16 @@ function shouldPromoteRun(
   return candidateId > latestId;
 }
 
-export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
+export class ReviewLedgerObject
+  extends DurableObject
+  implements ReviewLedger, FeedbackLedger
+{
+  private readonly findingStore: FindingLedgerStore;
+
   public constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     applyLedgerMigrations(this.ctx.storage);
+    this.findingStore = new FindingLedgerStore(this.ctx.storage);
     void this.ctx.blockConcurrencyWhile(async () => {
       if (
         this.pendingCleanup() !== undefined &&
@@ -739,53 +683,14 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
   }
 
   public loadPrFindings(prKey: PrKey): Promise<readonly TrackedFinding[]> {
-    const rows = this.ctx.storage.sql
-      .exec<PrFindingRow>(
-        `SELECT * FROM pr_findings WHERE pr_key = ? ORDER BY file_path, line`,
-        prKey,
-      )
-      .toArray();
-    return Promise.resolve(rows.map(rowToTrackedFinding));
+    return Promise.resolve(this.findingStore.loadPrFindings(prKey));
   }
 
   public savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
   ): Promise<void> {
-    this.ctx.storage.transactionSync(() => {
-      for (const finding of findings) {
-        this.ctx.storage.sql.exec(
-          `INSERT INTO pr_findings (
-             pr_key, fingerprint, first_seen_run_id, last_seen_run_id,
-             first_seen_head_sha, last_seen_head_sha, status, severity,
-             file_path, line, diagnostic, github_comment_id, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(pr_key, fingerprint) DO UPDATE SET
-             last_seen_run_id = excluded.last_seen_run_id,
-             last_seen_head_sha = excluded.last_seen_head_sha,
-             status = excluded.status,
-             severity = excluded.severity,
-             file_path = excluded.file_path,
-             line = excluded.line,
-             diagnostic = excluded.diagnostic,
-             github_comment_id = COALESCE(excluded.github_comment_id, pr_findings.github_comment_id),
-             updated_at = excluded.updated_at`,
-          prKey,
-          finding.fingerprint,
-          finding.firstSeenRunId,
-          finding.lastSeenRunId,
-          finding.firstSeenHeadSha,
-          finding.lastSeenHeadSha,
-          finding.status,
-          finding.severity,
-          finding.filePath,
-          finding.line,
-          finding.diagnostic,
-          finding.githubCommentId ?? null,
-          finding.updatedAt,
-        );
-      }
-    });
+    this.findingStore.savePrFindings(prKey, findings);
     return Promise.resolve();
   }
 
@@ -793,36 +698,16 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     prKey: PrKey,
     commentId: number,
   ): Promise<TrackedFinding | undefined> {
-    const rows = this.ctx.storage.sql
-      .exec<PrFindingRow>(
-        `SELECT * FROM pr_findings WHERE pr_key = ? AND github_comment_id = ? LIMIT 1`,
-        prKey,
-        commentId,
-      )
-      .toArray();
-    const first = rows[0];
-    return Promise.resolve(first ? rowToTrackedFinding(first) : undefined);
+    return Promise.resolve(
+      this.findingStore.findFindingByCommentId(prKey, commentId),
+    );
   }
 
   public recordFindingFeedback(
     prKey: PrKey,
     feedback: FindingFeedbackRecord,
   ): Promise<void> {
-    this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec(
-        `INSERT INTO finding_feedbacks (
-           pr_key, fingerprint, label, author_login, reason, target_severity, github_comment_id, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        prKey,
-        feedback.fingerprint,
-        feedback.label,
-        feedback.authorLogin,
-        feedback.reason ?? null,
-        feedback.targetSeverity ?? null,
-        feedback.githubCommentId ?? null,
-        feedback.createdAt,
-      );
-    });
+    this.findingStore.recordFindingFeedback(prKey, feedback);
     return Promise.resolve();
   }
 
@@ -830,14 +715,37 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
     prKey: PrKey,
     fingerprint?: FindingFingerprint,
   ): Promise<readonly FindingFeedbackRecord[]> {
-    const query = fingerprint
-      ? `SELECT * FROM finding_feedbacks WHERE pr_key = ? AND fingerprint = ? ORDER BY created_at ASC`
-      : `SELECT * FROM finding_feedbacks WHERE pr_key = ? ORDER BY created_at ASC`;
-    const params = fingerprint ? [prKey, fingerprint] : [prKey];
-    const rows = this.ctx.storage.sql
-      .exec<FindingFeedbackRow>(query, ...params)
-      .toArray();
-    return Promise.resolve(rows.map(rowToFindingFeedbackRecord));
+    return Promise.resolve(
+      this.findingStore.loadFindingFeedbacks(prKey, fingerprint),
+    );
+  }
+
+  public recordReviewDecision(
+    runId: RunId,
+    decision: Omit<ReviewDecisionContext, "checkRunId" | "runId">,
+  ): Promise<void> {
+    this.findingStore.recordReviewDecision(runId, decision);
+    return Promise.resolve();
+  }
+
+  public loadLatestReviewDecision(
+    prKey: PrKey,
+  ): Promise<ReviewDecisionContext | undefined> {
+    return Promise.resolve(this.findingStore.loadLatestReviewDecision(prKey));
+  }
+
+  public applyFindingFeedback(
+    input: ApplyFindingFeedbackInput,
+  ): Promise<AppliedFindingFeedback> {
+    return Promise.resolve(this.findingStore.applyFindingFeedback(input));
+  }
+
+  public completeFeedbackReply(
+    deliveryId: string,
+    replyCommentId: number,
+  ): Promise<void> {
+    this.findingStore.completeFeedbackReply(deliveryId, replyCommentId);
+    return Promise.resolve();
   }
 
   public saveCiEvidence(

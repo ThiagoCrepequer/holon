@@ -57,6 +57,11 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<string>;
+  repositoryPermission?(
+    owner: string,
+    repo: string,
+    username: string,
+  ): Promise<string>;
   readonly token: string;
 }
 
@@ -270,6 +275,24 @@ export async function createInstallationSession(
           throw new GitHubDiffTooLargeError();
         }
         return response.data;
+      });
+    },
+    async repositoryPermission(owner, repo, username) {
+      return await executeGitHubRequest(async () => {
+        const response = await octokit.request(
+          "GET /repos/{owner}/{repo}/collaborators/{username}/permission",
+          { owner, repo, username },
+        );
+        const data = record(
+          response.data,
+          "GitHub repository permission response",
+        );
+        if (typeof data.permission !== "string") {
+          throw new TypeError(
+            "GitHub repository permission response.permission must be text",
+          );
+        }
+        return data.permission;
       });
     },
     async listWorkflowRunArtifacts(owner, repo, runId) {

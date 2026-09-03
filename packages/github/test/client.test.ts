@@ -131,6 +131,15 @@ describe("GitHub installation client", () => {
       },
     );
 
+    sdk.request.mockResolvedValueOnce({ data: { permission: "write" } });
+    await expect(
+      session.repositoryPermission?.("acme", "api", "alice"),
+    ).resolves.toBe("write");
+    expect(sdk.request).toHaveBeenLastCalledWith(
+      "GET /repos/{owner}/{repo}/collaborators/{username}/permission",
+      { owner: "acme", repo: "api", username: "alice" },
+    );
+
     sdk.request.mockResolvedValueOnce({
       data: {
         artifacts: [

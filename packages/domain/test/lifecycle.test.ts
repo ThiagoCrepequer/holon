@@ -6,6 +6,14 @@ import type {
 } from "../src/lifecycle.js";
 import { reconcileFindings } from "../src/lifecycle.js";
 
+function completeCoverage(...files: string[]) {
+  return {
+    isComplete: true,
+    pullRequestFiles: files,
+    reviewedFiles: files,
+  };
+}
+
 describe("lifecycle", () => {
   const prKey = "github:100:pr:42" as const;
   const runId1 =
@@ -14,7 +22,6 @@ describe("lifecycle", () => {
     "github:100:pr:42:head:2222222222222222222222222222222222222222" as const;
   const sha1 = "1111111111111111111111111111111111111111";
   const sha2 = "2222222222222222222222222222222222222222";
-
   const finding1: FindingWithFingerprint = {
     confidence: 0.95,
     diagnostic: "SQL injection vulnerability in query builder.",
@@ -60,10 +67,10 @@ describe("lifecycle", () => {
   it("classifies findings as NEW on first review run", () => {
     const result = reconcileFindings({
       baselineFindings: [],
+      coverage: completeCoverage("src/db.ts"),
       currentFindings: [finding1],
       currentHeadSha: sha1,
       currentRunId: runId1,
-      prFiles: ["src/db.ts"],
       prKey,
       timestamp: "2026-09-02T10:00:00.000Z",
     });
@@ -114,10 +121,10 @@ describe("lifecycle", () => {
 
     const result = reconcileFindings({
       baselineFindings: [tracked1],
+      coverage: completeCoverage("src/db.ts"),
       currentFindings: [finding1Moved],
       currentHeadSha: sha2,
       currentRunId: runId2,
-      prFiles: ["src/db.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });
@@ -163,10 +170,10 @@ describe("lifecycle", () => {
     // On commit 2, finding1 is fixed (no current findings), but src/db.ts is still modified in PR
     const result = reconcileFindings({
       baselineFindings: [tracked1],
+      coverage: completeCoverage("src/db.ts"),
       currentFindings: [],
       currentHeadSha: sha2,
       currentRunId: runId2,
-      prFiles: ["src/db.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });
@@ -208,10 +215,10 @@ describe("lifecycle", () => {
     // src/db.ts was removed from PR diff (e.g. reverted)
     const result = reconcileFindings({
       baselineFindings: [tracked1],
+      coverage: completeCoverage("src/other.ts"),
       currentFindings: [],
       currentHeadSha: sha2,
       currentRunId: runId2,
-      prFiles: ["src/other.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });
@@ -249,10 +256,10 @@ describe("lifecycle", () => {
 
     const result = reconcileFindings({
       baselineFindings: [trackedResolved],
+      coverage: completeCoverage("src/db.ts"),
       currentFindings: [finding1],
       currentHeadSha: sha2,
       currentRunId: runId2,
-      prFiles: ["src/db.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });
@@ -313,10 +320,10 @@ describe("lifecycle", () => {
     // and trackedOldFixed is fixed in src/secret.ts (which is still in prFiles)
     const result = reconcileFindings({
       baselineFindings: [tracked1, trackedOldFixed],
+      coverage: completeCoverage("src/db.ts", "src/admin.ts", "src/secret.ts"),
       currentFindings: [finding1, finding2],
       currentHeadSha: sha2,
       currentRunId: runId2,
-      prFiles: ["src/db.ts", "src/admin.ts", "src/secret.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });
@@ -345,5 +352,42 @@ describe("lifecycle", () => {
     );
     expect(newFinding?.status).toBe("new");
     expect(newFinding?.previousCommentId).toBeUndefined();
+  });
+
+  it("preserves active findings outside the successfully reviewed files of a partial run", () => {
+    const tracked: TrackedFinding = {
+      confidence: finding1.confidence,
+      diagnostic: finding1.diagnostic,
+      filePath: finding1.location.path,
+      fingerprint: finding1.fingerprint,
+      firstSeenHeadSha: sha1,
+      firstSeenRunId: runId1,
+      githubCommentId: 9999,
+      lastSeenHeadSha: sha1,
+      lastSeenRunId: runId1,
+      line: 20,
+      prKey,
+      severity: finding1.severity,
+      status: "persistent",
+      updatedAt: "2026-09-02T10:00:00.000Z",
+    };
+
+    const result = reconcileFindings({
+      baselineFindings: [tracked],
+      coverage: {
+        isComplete: false,
+        pullRequestFiles: ["src/db.ts", "src/other.ts"],
+        reviewedFiles: ["src/other.ts"],
+      },
+      currentFindings: [],
+      currentHeadSha: sha2,
+      currentRunId: runId2,
+      prKey,
+      timestamp: "2026-09-02T11:00:00.000Z",
+    });
+
+    expect(result.resolvedFindings).toEqual([]);
+    expect(result.obsoleteFindings).toEqual([]);
+    expect(result.updatedTrackedFindings).toEqual([tracked]);
   });
 });

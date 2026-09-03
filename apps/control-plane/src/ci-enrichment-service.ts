@@ -1,4 +1,4 @@
-import type { ReviewLedger, ReviewPublisher } from "@holon/application";
+import type { CiEvidenceLedger, ReviewPublisher } from "@holon/application";
 import { ingestCiArtifactZips } from "@holon/application";
 import {
   appendCiEvidenceToSummary,
@@ -20,7 +20,11 @@ import {
 } from "@holon/repository-analysis";
 
 import { parseAppId } from "./credential-broker.js";
-import { consoleLogger, type StructuredLogger } from "./observability.js";
+import {
+  consoleLogger,
+  errorKind,
+  type StructuredLogger,
+} from "./observability.js";
 
 export interface CiEnrichmentInput {
   readonly deliveryId: string;
@@ -53,7 +57,7 @@ export interface CiEnrichmentDependencies {
     },
   ) => ReviewPublisher;
   readonly createSession?: typeof createInstallationSession;
-  readonly ledger?: ReviewLedger;
+  readonly ledger?: CiEvidenceLedger;
   readonly logger?: StructuredLogger;
 }
 
@@ -88,7 +92,7 @@ export async function enrichReviewWithCiEvidence(
     );
   } catch (error) {
     logger.emit("ci_enrichment_session_failed", {
-      error: error instanceof Error ? error.message : String(error),
+      errorKind: errorKind(error),
       installationId: input.installationId,
       pullRequestNumber: input.pullRequestNumber,
     });
@@ -130,7 +134,7 @@ export async function enrichReviewWithCiEvidence(
     } catch (error) {
       logger.emit("ci_artifact_download_failed", {
         artifactId: artifact.id,
-        error: error instanceof Error ? error.message : String(error),
+        errorKind: errorKind(error),
       });
     }
   }
@@ -180,7 +184,7 @@ export async function enrichReviewWithCiEvidence(
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
   const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
-  if (ledger?.saveCiEvidence) {
+  if (ledger !== undefined) {
     await ledger.saveCiEvidence(prKey, input.headSha, {
       markdown: evidenceMarkdown,
       workflowRunId: input.workflowRunId,

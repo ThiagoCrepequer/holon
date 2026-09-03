@@ -1,6 +1,10 @@
 import type {
+  CiEvidenceLedger,
+  FindingLifecycleLedger,
   ModelReviewer,
+  ReviewDecisionLedger,
   ReviewPublisher,
+  RunTelemetryLedger,
   TelemetryEmitter,
 } from "@holon/application";
 import {
@@ -72,7 +76,13 @@ export interface RepositoryExecutorBinding {
   ): Promise<RepositoryToolResult>;
 }
 
-export interface WorkflowLedger extends PublicationLedger {
+export interface WorkflowLedger
+  extends
+    PublicationLedger,
+    ReviewDecisionLedger,
+    CiEvidenceLedger,
+    FindingLifecycleLedger,
+    RunTelemetryLedger {
   claimRun(
     run: Parameters<PublicationLedger["claimRun"]>[0],
     workflowInstanceId: string,

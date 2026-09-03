@@ -7,6 +7,7 @@ import type {
 } from "./identity.js";
 
 export interface TrackedFinding {
+  readonly confidence?: number | undefined;
   readonly diagnostic: string;
   readonly filePath: string;
   readonly fingerprint: FindingFingerprint;
@@ -45,10 +46,14 @@ export interface FindingWithFingerprint extends Finding {
 
 export interface ReconcileFindingsInput {
   readonly baselineFindings: readonly TrackedFinding[];
+  readonly coverage: {
+    readonly isComplete: boolean;
+    readonly pullRequestFiles: readonly string[];
+    readonly reviewedFiles: readonly string[];
+  };
   readonly currentFindings: readonly FindingWithFingerprint[];
   readonly currentHeadSha: string;
   readonly currentRunId: RunId;
-  readonly prFiles: readonly string[];
   readonly prKey: PrKey;
   readonly timestamp?: string | undefined;
 }
@@ -89,6 +94,7 @@ export function reconcileFindings(
       // The issue is still active -> persistent
       const tracked: TrackedFinding = {
         ...existing,
+        confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
         line: current.location.line,
@@ -107,6 +113,7 @@ export function reconcileFindings(
       // The issue was resolved before, but has been reintroduced
       const tracked: TrackedFinding = {
         ...existing,
+        confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
         line: current.location.line,
@@ -125,6 +132,7 @@ export function reconcileFindings(
       // Previously dismissed issue still matches: preserve dismissal without blocking
       const tracked: TrackedFinding = {
         ...existing,
+        confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
         line: current.location.line,
@@ -140,6 +148,7 @@ export function reconcileFindings(
     } else {
       // Entirely new issue
       const tracked: TrackedFinding = {
+        confidence: current.confidence,
         diagnostic: current.diagnostic,
         filePath: current.location.path,
         fingerprint: current.fingerprint,
@@ -166,7 +175,8 @@ export function reconcileFindings(
   // 2. Identify newly resolved and obsolete findings from baseline
   const resolvedFindings: TrackedFinding[] = [];
   const obsoleteFindings: TrackedFinding[] = [];
-  const prFilesSet = new Set(input.prFiles);
+  const reviewedFiles = new Set(input.coverage.reviewedFiles);
+  const pullRequestFiles = new Set(input.coverage.pullRequestFiles);
 
   for (const existing of input.baselineFindings) {
     if (handledFingerprints.has(existing.fingerprint)) {
@@ -178,7 +188,7 @@ export function reconcileFindings(
       existing.status === "persistent" ||
       existing.status === "reintroduced"
     ) {
-      if (prFilesSet.has(existing.filePath)) {
+      if (reviewedFiles.has(existing.filePath)) {
         // File is still part of PR diff, but issue is gone -> resolved!
         const resolved: TrackedFinding = {
           ...existing,
@@ -187,7 +197,10 @@ export function reconcileFindings(
         };
         updatedTrackedMap.set(existing.fingerprint, resolved);
         resolvedFindings.push(resolved);
-      } else {
+      } else if (
+        input.coverage.isComplete &&
+        !pullRequestFiles.has(existing.filePath)
+      ) {
         // File is no longer in PR diff -> obsolete
         const obsolete: TrackedFinding = {
           ...existing,
@@ -196,6 +209,10 @@ export function reconcileFindings(
         };
         updatedTrackedMap.set(existing.fingerprint, obsolete);
         obsoleteFindings.push(obsolete);
+      } else {
+        // A partial run has no authority to resolve or obsolete findings in
+        // files it did not successfully review.
+        updatedTrackedMap.set(existing.fingerprint, existing);
       }
     } else {
       // Previously resolved or obsolete remains as is

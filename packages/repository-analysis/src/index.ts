@@ -5,6 +5,7 @@ export * from "./plan.js";
 export * from "./policy.js";
 export * from "./security-surface-detector.js";
 export * from "./structural-analyzer.js";
+export * from "./structural-findings.js";
 export * from "./surface.js";
 export * from "./symbol-extractor.js";
 export * from "./test-gap-detector.js";

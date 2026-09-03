@@ -41,6 +41,7 @@ import type {
   SandboxPort,
   SandboxProvider,
 } from "./sandbox-port.js";
+import { collectStructuralRepositoryInventory } from "./structural-repository-inventory.js";
 
 export {
   RepositoryPreparationError,
@@ -210,7 +211,15 @@ export class RepositoryExecutorService {
       if (resolvedHead.stdout.trim() !== request.headSha)
         throw new RepositoryPreparationError(false, stage, "command-failed");
 
-      const artifacts = buildReviewArtifacts(request);
+      const repositoryInventory = await collectStructuralRepositoryInventory(
+        sandbox,
+        request.canonicalDiff,
+      );
+      const artifacts = buildReviewArtifacts(
+        request,
+        repositoryInventory.files,
+        repositoryInventory.truncated,
+      );
       await sandbox.writeFile(reviewScopePolicyPath, artifacts.policy);
       await sandbox.writeFile(contextPath, artifacts.serializedContext);
       return preparedRepositorySchema.parse({

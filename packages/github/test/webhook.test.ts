@@ -155,7 +155,7 @@ describe("GitHub webhook boundary", () => {
         name: "api",
         owner: { login: "acme" },
       },
-      sender: { author_association: "MEMBER", login: "bob" },
+      sender: { login: "bob" },
       thread: {
         comments: [{ id: 101 }],
       },
@@ -164,7 +164,6 @@ describe("GitHub webhook boundary", () => {
     const event = mapReviewThreadWebhook(threadPayload, "del-456");
     expect(event).toEqual({
       action: "resolved",
-      authorAssociation: "MEMBER",
       authorLogin: "bob",
       deliveryId: "github:del-456",
       installationId: 99,

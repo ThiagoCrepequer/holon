@@ -10,7 +10,8 @@ import type {
 } from "@holon/contracts";
 import type {
   FindingFeedbackRecord,
-  FindingFingerprint,
+  FindingSeverity,
+  FindingStatus,
   PrKey,
   PublicationId,
   PublicationRecord,
@@ -58,27 +59,17 @@ export interface ReviewLedger {
     id: PublicationId,
     githubCommentId: number,
   ): Promise<void>;
-  findFindingByCommentId?(
-    prKey: PrKey,
-    commentId: number,
-  ): Promise<TrackedFinding | undefined>;
-  loadCiEvidence?(
+}
+
+export interface CiEvidenceLedger {
+  loadCiEvidence(
     prKey: PrKey,
     headSha: string,
   ): Promise<
     | { readonly markdown: string; readonly workflowRunId?: number | undefined }
     | undefined
   >;
-  loadFindingFeedbacks?(
-    prKey: PrKey,
-    fingerprint?: FindingFingerprint,
-  ): Promise<readonly FindingFeedbackRecord[]>;
-  loadPrFindings?(prKey: PrKey): Promise<readonly TrackedFinding[]>;
-  recordFindingFeedback?(
-    prKey: PrKey,
-    feedback: FindingFeedbackRecord,
-  ): Promise<void>;
-  saveCiEvidence?(
+  saveCiEvidence(
     prKey: PrKey,
     headSha: string,
     evidence: {
@@ -86,12 +77,78 @@ export interface ReviewLedger {
       readonly workflowRunId?: number | undefined;
     },
   ): Promise<void>;
-  loadRunTelemetry?(runId: string): Promise<RunTelemetry | undefined>;
-  savePrFindings?(
+}
+
+export interface FindingLifecycleLedger {
+  loadPrFindings(prKey: PrKey): Promise<readonly TrackedFinding[]>;
+  savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
   ): Promise<void>;
-  saveRunTelemetry?(telemetry: RunTelemetry): Promise<void>;
+}
+
+export interface RunTelemetryLedger {
+  loadRunTelemetry(runId: string): Promise<RunTelemetry | undefined>;
+  saveRunTelemetry(telemetry: RunTelemetry): Promise<void>;
+}
+
+export interface ReviewDecisionContext {
+  readonly checkRunId?: number | undefined;
+  readonly headSha: string;
+  readonly isDegraded: boolean;
+  readonly runId: RunId;
+  readonly scopeStatus:
+    | "complete"
+    | "partial_by_policy"
+    | "partial_by_failure"
+    | "unsupported";
+  readonly shardsAnalyzed: number;
+  readonly totalShards: number;
+}
+
+export interface ApplyFindingFeedbackInput {
+  readonly authorAssociation?: string | undefined;
+  readonly authorLogin: string;
+  readonly createdAt: string;
+  readonly deliveryId: string;
+  readonly githubCommentId: number;
+  readonly label: FindingFeedbackRecord["label"];
+  readonly prKey: PrKey;
+  readonly reason?: string | undefined;
+  readonly targetCommentId: number;
+  readonly targetSeverity?: FindingSeverity | undefined;
+  readonly update?:
+    | { readonly status: Extract<FindingStatus, "dismissed"> }
+    | { readonly severity: FindingSeverity }
+    | undefined;
+}
+
+export interface AppliedFindingFeedback {
+  readonly activeFindings: readonly TrackedFinding[];
+  readonly decision?: ReviewDecisionContext | undefined;
+  readonly feedback?: FindingFeedbackRecord | undefined;
+  readonly outcome: "applied" | "duplicate" | "not_found";
+  readonly replyCommentId?: number | undefined;
+}
+
+export interface FeedbackLedger {
+  applyFindingFeedback(
+    input: ApplyFindingFeedbackInput,
+  ): Promise<AppliedFindingFeedback>;
+  completeFeedbackReply(
+    deliveryId: string,
+    replyCommentId: number,
+  ): Promise<void>;
+  loadLatestReviewDecision(
+    prKey: PrKey,
+  ): Promise<ReviewDecisionContext | undefined>;
+}
+
+export interface ReviewDecisionLedger {
+  recordReviewDecision(
+    runId: RunId,
+    decision: Omit<ReviewDecisionContext, "checkRunId" | "runId">,
+  ): Promise<void>;
 }
 
 export interface TelemetryEmitter {

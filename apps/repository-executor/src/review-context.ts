@@ -2,10 +2,8 @@ import {
   reviewContextSchema,
   type ExecutorRequest,
   type ReviewContext,
-  type ReviewContextV2,
   type ReviewFileMode,
   type ReviewPlan,
-  type ReviewShard,
 } from "@holon/contracts";
 import {
   analyzeStructuralImpact,
@@ -123,6 +121,11 @@ function serializeBoundedContext(context: ReviewContext): {
 
 export function buildReviewArtifacts(
   request: ExecutorRequest,
+  repositoryFiles: readonly {
+    readonly content: string;
+    readonly path: string;
+  }[],
+  repositoryScanTruncated = false,
 ): ReviewArtifacts {
   const diffFiles = splitPullRequestDiff(request.canonicalDiff);
   const policy = serializeReviewScopePolicy(createReviewScopePolicy(diffFiles));
@@ -180,6 +183,8 @@ export function buildReviewArtifacts(
   );
   const structuralImpact = analyzeStructuralImpact({
     changedFiles: reviewFiles,
+    repositoryFiles,
+    repositoryScanTruncated,
   });
   const unboundedContext = reviewContextSchema.parse(
     request.schemaVersion === 2
@@ -209,18 +214,4 @@ export function buildReviewArtifacts(
     policy,
     serializedContext: serialized,
   };
-}
-
-export function getShardReviewContext(shard: ReviewShard): ReviewContextV2 {
-  const structuralImpact = analyzeStructuralImpact({
-    changedFiles: shard.files,
-  });
-  return reviewContextSchema.parse({
-    changedLines: shard.changedLines,
-    files: shard.files,
-    schemaVersion: 2,
-    structuralImpact,
-    surface: shard.surface,
-    truncated: shard.totalShards > 1,
-  }) as ReviewContextV2;
 }

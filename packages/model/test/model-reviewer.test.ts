@@ -66,7 +66,6 @@ import {
   createGatewayProviderSettings,
   createRedactingRepositoryToolRunner,
   extractAndParseJsonReview,
-  extractCandidateFindingsFromText,
   extractCompactContext,
   isNonRetryableModelError,
   isNonRetryableModelProviderError,
@@ -897,27 +896,7 @@ describe("model review boundary", () => {
     })) as { findings: unknown[]; isDegraded?: boolean; summary: string };
 
     expect(result.isDegraded).toBe(true);
-    expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]).toMatchObject({
-      location: { line: 10, path: "src/index.ts", side: "RIGHT" },
-    });
-  });
-
-  it("extracts candidate findings and handles edge cases", () => {
-    expect(extractCandidateFindingsFromText("")).toEqual([]);
-    expect(extractCandidateFindingsFromText("No files here")).toEqual([]);
-    expect(
-      extractCandidateFindingsFromText(
-        "File at src/a.ts:12 without code excerpt",
-      ),
-    ).toEqual([]);
-    const withCode = extractCandidateFindingsFromText(
-      "File at src/a.ts:12 with code: `const x = 42;` and notes",
-    );
-    expect(withCode).toHaveLength(1);
-    expect(withCode[0]).toMatchObject({
-      location: { line: 12, path: "src/a.ts", side: "RIGHT" },
-    });
+    expect(result.findings).toEqual([]);
   });
 
   it("truncates long investigation summary gracefully during degradation", async () => {

@@ -231,62 +231,6 @@ export function extractAndParseJsonReview(text: string): unknown {
   }
 }
 
-export function extractCandidateFindingsFromText(
-  text: string,
-): readonly unknown[] {
-  if (!text || typeof text !== "string") return [];
-  const findings: unknown[] = [];
-  const fileLinePattern =
-    /(?:^|\s)([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+):(\d+)(?:\b|\s)/gu;
-  let match: RegExpExecArray | null;
-  const seen = new Set<string>();
-
-  while ((match = fileLinePattern.exec(text)) !== null) {
-    const path = match[1]!;
-    const line = Number.parseInt(match[2]!, 10);
-    const key = `${path}:${line}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const afterMatch = text.slice(
-      match.index + match[0].length,
-      match.index + match[0].length + 400,
-    );
-    const codeMatch =
-      /`([^`\n]+)`|((?:return|const|let|var|def|func|export)\s+[^\n]+)/u.exec(
-        afterMatch,
-      );
-    const rawExcerpt = codeMatch?.[1] ?? codeMatch?.[2] ?? codeMatch?.[0];
-    const excerpt = rawExcerpt?.trim();
-
-    if (excerpt && excerpt.length >= 3) {
-      findings.push({
-        confidence: 0.85,
-        diagnostic: `Potential issue identified during investigation at ${path}:${line}`,
-        evidence: [
-          {
-            endLine: null,
-            excerpt: excerpt.slice(0, 290),
-            path,
-            reason: "Identified during investigative analysis",
-            startLine: line,
-          },
-        ],
-        location: {
-          line,
-          path,
-          side: "RIGHT",
-          startLine: null,
-        },
-        severity: "medium",
-        suggestion: null,
-      });
-    }
-    if (findings.length >= 3) break;
-  }
-  return findings;
-}
-
 export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public constructor(
     private readonly config: CloudflareGatewayModelConfig,
@@ -465,8 +409,6 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           .trim();
 
         if (rawFallbackText.length > 0) {
-          const extractedCandidates =
-            extractCandidateFindingsFromText(rawFallbackText);
           const maxSummaryLen = 2_500;
           let summary = rawFallbackText;
           if (summary.length > maxSummaryLen) {
@@ -482,7 +424,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           }
 
           const candidateOutput = {
-            findings: extractedCandidates,
+            findings: [],
             isDegraded: true,
             summary,
           };

@@ -178,6 +178,8 @@ export function buildReviewPromptResult(
             ),
             downstreamReferences:
               context.structuralImpact.downstreamReferences.slice(0, 15),
+            repositoryScanTruncated:
+              context.structuralImpact.repositoryScanTruncated ?? false,
             securitySurfaces: context.structuralImpact.securitySurfaces.slice(
               0,
               10,
