@@ -138,6 +138,7 @@ function runtime(
       readonly event?: unknown;
       readonly route: string;
     }>;
+    readonly workflow?: ReviewRuntime["workflow"];
   } = {},
 ) {
   const posts = options.posts ?? [];
@@ -176,6 +177,7 @@ function runtime(
     logger: options.logger ?? { emit: () => undefined },
     now: options.now ?? (() => "2026-08-29T12:00:05.000Z"),
     wait: () => Promise.resolve(),
+    ...(options.workflow === undefined ? {} : { workflow: options.workflow }),
   };
   return { cleanup, posts, prepareRepositoryV2, resolveContainerId, value };
 }
@@ -347,6 +349,219 @@ describe("ReviewWorkflow", () => {
           )
           .one().count,
       ).toBe(0);
+    });
+  });
+
+  it("actively terminates a superseded workflow only after durable causal handoff", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    const oldRun = createReviewRun(job);
+    await ledger.claimRun(oldRun, "superseded-workflow");
+    await ledger.transition(
+      oldRun.id,
+      "queued",
+      "running",
+      "2026-08-29T12:00:02.000Z",
+      "superseded-workflow:start",
+    );
+    await ledger.registerCredentialScope({
+      containerId: "f".repeat(64),
+      installationId: 99,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      runId: oldRun.id,
+    });
+
+    const newerJob = reviewJobV2Schema.parse({
+      ...job,
+      envelope: {
+        ...job.envelope,
+        action: "synchronize",
+        deliveryId: "github:delivery-newer",
+        pullRequest: {
+          ...job.envelope.pullRequest,
+          headSha: "b".repeat(40),
+          updatedAt: "2026-08-29T12:01:00.000Z",
+        },
+        receivedAt: "2026-08-29T12:01:01.000Z",
+      },
+      runId: `github:42:pr:7:head:${"b".repeat(40)}`,
+    });
+    const terminate = vi.fn(() => Promise.resolve());
+    const get = vi.fn(() =>
+      Promise.resolve({
+        status: () => Promise.resolve({ status: "running" as const }),
+        terminate,
+      }),
+    );
+    const setup = runtime({
+      head: () => "c".repeat(40),
+      workflow: { get },
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("current-workflow", newerJob),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+
+    expect(get).toHaveBeenCalledWith("superseded-workflow");
+    expect(terminate).toHaveBeenCalledOnce();
+    await expect(ledger.runState(oldRun.id)).resolves.toBe("obsolete");
+    await expect(ledger.cleanupState(oldRun.id)).resolves.toBeDefined();
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ state: string }>(
+            "SELECT state FROM workflow_supersessions WHERE superseded_run_id = ?",
+            oldRun.id,
+          )
+          .one().state,
+      ).toBe("completed");
+    });
+  });
+
+  it("continues the latest review when active termination is temporarily unavailable", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    const oldRun = createReviewRun(job);
+    await ledger.claimRun(oldRun, "deferred-workflow");
+    await ledger.transition(
+      oldRun.id,
+      "queued",
+      "running",
+      "2026-08-29T12:00:02.000Z",
+      "deferred-workflow:start",
+    );
+    await ledger.registerCredentialScope({
+      containerId: "f".repeat(64),
+      installationId: 99,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      runId: oldRun.id,
+    });
+
+    const newerJob = reviewJobV2Schema.parse({
+      ...job,
+      envelope: {
+        ...job.envelope,
+        action: "synchronize",
+        deliveryId: "github:delivery-deferred",
+        pullRequest: {
+          ...job.envelope.pullRequest,
+          headSha: "b".repeat(40),
+          updatedAt: "2026-08-29T12:01:00.000Z",
+        },
+        receivedAt: "2026-08-29T12:01:01.000Z",
+      },
+      runId: `github:42:pr:7:head:${"b".repeat(40)}`,
+    });
+    const status = vi.fn(() => Promise.resolve({ status: "running" as const }));
+    const setup = runtime({
+      head: () => "c".repeat(40),
+      workflow: {
+        get: () =>
+          Promise.resolve({
+            status,
+            terminate: () => Promise.reject(new Error("temporarily down")),
+          }),
+      },
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("current-deferred-workflow", newerJob),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+
+    expect(status).toHaveBeenCalledTimes(2);
+    await expect(ledger.runState(oldRun.id)).resolves.toBe("obsolete");
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ state: string }>(
+            "SELECT state FROM workflow_supersessions WHERE superseded_run_id = ?",
+            oldRun.id,
+          )
+          .one().state,
+      ).toBe("pending");
+    });
+  });
+
+  it("registers a rollback that closes a superseded Check Run", async () => {
+    const setup = runtime();
+    const checkRunPatches: Record<string, unknown>[] = [];
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const base = session([]);
+        const request = base.api.request;
+        return Promise.resolve({
+          ...base,
+          api: {
+            ...base.api,
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.startsWith("PATCH") && route.includes("check-runs")) {
+                checkRunPatches.push(parameters);
+              }
+              return request(route, parameters);
+            },
+          },
+        });
+      },
+    };
+    let rollback:
+      | ((input: {
+          readonly error: Error;
+          readonly output: number | undefined;
+        }) => Promise<void>)
+      | undefined;
+    const step = {
+      do: async <T>(
+        name: string,
+        configOrCallback: unknown,
+        maybeCallback?: unknown,
+        rollbackOptions?: unknown,
+      ): Promise<T> => {
+        const callback =
+          typeof configOrCallback === "function"
+            ? configOrCallback
+            : maybeCallback;
+        if (typeof callback !== "function") throw new TypeError("callback");
+        const output = await (callback as () => Promise<T>)();
+        if (name === "start-check-run") {
+          rollback = (
+            rollbackOptions as {
+              rollback: typeof rollback;
+            }
+          ).rollback;
+        }
+        return output;
+      },
+    } as unknown as WorkflowStep;
+
+    await executeReviewWorkflow(
+      env,
+      event("rollback-registration"),
+      step,
+      setup.value,
+    );
+    expect(rollback).toBeTypeOf("function");
+
+    await rollback?.({
+      error: new Error("superseded"),
+      output: 1,
+    });
+
+    expect(checkRunPatches.at(-1)).toMatchObject({
+      conclusion: "cancelled",
+      status: "completed",
     });
   });
 

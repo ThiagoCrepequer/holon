@@ -5,6 +5,7 @@ import {
   renderFinding,
 } from "@holon/application";
 import {
+  runClaimV2ResultSchema,
   reviewJobSchema,
   type CheckRunConclusion,
   type CheckRunOutput,
@@ -20,6 +21,7 @@ import {
   createPrKey,
   evaluateRunSlo,
   type RunState,
+  type RunId,
 } from "@holon/domain";
 import {
   WorkflowEntrypoint,
@@ -48,6 +50,7 @@ import {
   repositoryStep,
   stateStep,
 } from "./workflow-policy.js";
+import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 export type { ReviewRuntime } from "./review-services.js";
 export { parseAppId } from "./credential-broker.js";
@@ -173,39 +176,69 @@ export async function executeReviewWorkflow(
 
   const ensureCheckRunStarted = async (): Promise<number | undefined> =>
     await step
-      .do("start-check-run", publicationStep, async () => {
-        let checkRunId = await services.ledger.checkRunId(run.id);
-        if (checkRunId !== undefined) return checkRunId;
+      .do(
+        "start-check-run",
+        publicationStep,
+        async () => {
+          let checkRunId = await services.ledger.checkRunId(run.id);
+          if (checkRunId !== undefined) return checkRunId;
 
-        const github = await services.createMutationContext();
-        if (github.publisher.findCheckRunByExternalId !== undefined) {
-          const existingId = await github.publisher.findCheckRunByExternalId(
-            run.id,
-          );
-          if (existingId !== undefined) {
-            await services.ledger.recordCheckRunId(run.id, existingId);
-            return existingId;
+          const github = await services.createMutationContext();
+          if (github.publisher.findCheckRunByExternalId !== undefined) {
+            const existingId = await github.publisher.findCheckRunByExternalId(
+              run.id,
+            );
+            if (existingId !== undefined) {
+              await services.ledger.recordCheckRunId(run.id, existingId);
+              return existingId;
+            }
           }
-        }
 
-        if (github.publisher.createCheckRun !== undefined) {
-          checkRunId = await github.publisher.createCheckRun({
-            externalId: run.id,
-            headSha: job.envelope.pullRequest.headSha,
-            name: "Holon Review",
-            output: {
-              summary:
-                "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
-              title: "Holon Review in progress",
+          if (github.publisher.createCheckRun !== undefined) {
+            checkRunId = await github.publisher.createCheckRun({
+              externalId: run.id,
+              headSha: job.envelope.pullRequest.headSha,
+              name: "Holon Review",
+              output: {
+                summary:
+                  "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
+                title: "Holon Review in progress",
+              },
+              startedAt: now(),
+              status: "in_progress",
+            });
+            await services.ledger.recordCheckRunId(run.id, checkRunId);
+            return checkRunId;
+          }
+          return undefined;
+        },
+        {
+          rollback: async ({ output: checkRunId }) => {
+            if (checkRunId === undefined) return;
+            const github = await services.createMutationContext();
+            if (github.publisher.updateCheckRun === undefined) return;
+            await github.publisher.updateCheckRun({
+              checkRunId,
+              completedAt: now(),
+              conclusion: "cancelled",
+              output: {
+                summary:
+                  "A newer commit was pushed to this pull request. This review run was cancelled.",
+                title: "Holon Review Superseded",
+              },
+              status: "completed",
+            });
+          },
+          rollbackConfig: {
+            retries: {
+              backoff: "exponential",
+              delay: "5 seconds",
+              limit: 4,
             },
-            startedAt: now(),
-            status: "in_progress",
-          });
-          await services.ledger.recordCheckRunId(run.id, checkRunId);
-          return checkRunId;
-        }
-        return undefined;
-      })
+            timeout: "2 minutes",
+          },
+        },
+      )
       .catch((checkRunError: unknown) => {
         emit("check_run.start_failed", {
           errorKind: errorKind(checkRunError),
@@ -268,20 +301,61 @@ export async function executeReviewWorkflow(
 
   try {
     const claim = await step.do("claim-run", stateStep, async () => {
-      const outcome = await services.ledger.claimRun(
-        run,
-        workflowInstanceId,
-        causalVersionForJob(job),
+      const result = runClaimV2ResultSchema.parse(
+        await services.ledger.claimRunV2(
+          run,
+          workflowInstanceId,
+          causalVersionForJob(job),
+        ),
       );
       emit("review.started", {
         eventTimestamp: rawEvent.timestamp.toISOString(),
       });
-      return outcome;
+      return result;
     });
-    if (claim === "duplicate") {
+    if (claim.outcome === "duplicate") {
       return { findingsPublished: 0, outcome: "duplicate" } as const;
     }
     runClaimed = true;
+
+    for (const [index, superseded] of claim.supersededWorkflows.entries()) {
+      await step
+        .do(
+          `terminate-superseded-workflow-${index + 1}`,
+          stateStep,
+          async () => {
+            const outcome = await terminateWorkflowIfActive(
+              services.workflow,
+              superseded.workflowInstanceId,
+            );
+            await services.ledger.completeWorkflowSupersession(
+              superseded.runId as RunId,
+              now(),
+            );
+            emit(
+              "workflow.superseded",
+              {
+                outcome,
+                supersededRunId: superseded.runId,
+              },
+              index + 1,
+            );
+          },
+        )
+        .catch((terminationError: unknown) => {
+          // Active termination reduces wasted inference, but stale-head and
+          // publication authorization remain the correctness boundary. The
+          // Durable Object alarm retains and retries the pending obligation.
+          emit(
+            "workflow.supersession_deferred",
+            {
+              errorKind: errorKind(terminationError),
+              supersededRunId: superseded.runId,
+            },
+            index + 1,
+          );
+        });
+    }
 
     await step.do("start-run", stateStep, async () => {
       const current = await services.ledger.runState(run.id);

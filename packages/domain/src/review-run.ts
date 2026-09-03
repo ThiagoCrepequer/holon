@@ -24,7 +24,7 @@ export interface ReviewRun {
 
 const transitions = {
   completed: [],
-  failed_retryable: ["running", "failed_terminal"],
+  failed_retryable: ["running", "failed_terminal", "obsolete"],
   failed_terminal: [],
   obsolete: [],
   publishing: ["completed", "failed_retryable", "obsolete"],
