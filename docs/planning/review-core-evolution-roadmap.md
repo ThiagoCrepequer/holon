@@ -148,14 +148,15 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 7. Feedback e calibração
 
-- [ ] Capturar rótulos mínimos da indústria: `helpful`, `false_positive`, `wrong_severity`, `duplicate`, `not_actionable`, `missed_defect` e `thread_resolved`;
-- [ ] Comandos ChatOps ergonômicos na thread do comentário inline (`/holon dismiss <label> [motivo]`, `/holon helpful`);
-- [ ] Roteamento de webhooks `pull_request_review_comment` e `pull_request_review_thread` validados por HMAC;
-- [ ] Máquina de estados estendida com status `dismissed` e recálculo determinístico do veredito do PR (revertendo `REQUEST_CHANGES` para `APPROVE` no Check Run);
-- [ ] Respostas transparentes do Holon na thread confirmando a dispensa ou registro de feedback;
-- [ ] Persistência durável e sanitizada no SQLite via tabela `finding_feedbacks` (Migration 5);
-- [ ] Módulo de calibração em `@holon/evaluation` com taxas de precisão/FP e exportação para o corpus de regressão;
-- [ ] Formalizado no [ADR-0021](../decisions/0021-capture-human-feedback-and-calibration-signals.md).
+- [x] Capturar rótulos mínimos da indústria: `helpful`, `false_positive`, `wrong_severity`, `duplicate`, `not_actionable`, `missed_defect` e `thread_resolved`;
+- [x] Comandos ChatOps ergonômicos na thread do comentário inline (`/holon dismiss <label> [motivo]`, `/holon helpful`);
+- [x] Roteamento de webhooks `pull_request_review_comment` e `pull_request_review_thread` validados por HMAC;
+- [x] Máquina de estados estendida com status `dismissed` e recálculo determinístico do veredito do PR (revertendo `REQUEST_CHANGES` para `APPROVE` no Check Run);
+- [x] Autorização obrigatória de mantenedores (`OWNER`, `MEMBER`, `COLLABORATOR`) para mitigar privilege escalation e bypass indevido de veredito;
+- [x] Respostas transparentes do Holon na thread confirmando a dispensa ou registro de feedback;
+- [x] Persistência durável e sanitizada no SQLite via tabela `finding_feedbacks` (Migration 5);
+- [x] Módulo de calibração em `@holon/evaluation` com taxas de precisão/FP e exportação para o corpus de regressão;
+- [x] Formalizado no [ADR-0021](../decisions/0021-capture-human-feedback-and-calibration-signals.md).
 
 ### 8. Analisadores determinísticos
 
