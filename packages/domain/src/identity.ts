@@ -11,7 +11,17 @@ export type FindingStatus =
   | "persistent"
   | "resolved"
   | "obsolete"
-  | "reintroduced";
+  | "reintroduced"
+  | "dismissed";
+
+export type FeedbackLabel =
+  | "helpful"
+  | "false_positive"
+  | "wrong_severity"
+  | "duplicate"
+  | "not_actionable"
+  | "missed_defect"
+  | "thread_resolved";
 
 const safeIdentifier = /^[A-Za-z0-9._:-]+$/u;
 const gitSha = /^[a-fA-F0-9]{40}$/u;

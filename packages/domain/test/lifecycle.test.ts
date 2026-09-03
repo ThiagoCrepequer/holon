@@ -69,6 +69,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 1,
       obsoleteCount: 0,
       persistentCount: 0,
@@ -122,6 +123,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 0,
       obsoleteCount: 0,
       persistentCount: 1,
@@ -170,6 +172,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 0,
       obsoleteCount: 0,
       persistentCount: 0,
@@ -214,6 +217,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 0,
       obsoleteCount: 1,
       persistentCount: 0,
@@ -254,6 +258,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 0,
       obsoleteCount: 0,
       persistentCount: 0,
@@ -317,6 +322,7 @@ describe("lifecycle", () => {
     });
 
     expect(result.summary).toEqual({
+      dismissedCount: 0,
       newCount: 1,
       obsoleteCount: 0,
       persistentCount: 1,
