@@ -35,3 +35,13 @@ jobs:
 
       - name: Verify formatting, lint, types, coverage and bundles
         run: pnpm verify
+
+      - name: Upload test and coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-and-coverage-results
+          path: |
+            **/coverage/lcov.info
+            **/junit.xml
+          retention-days: 7
