@@ -95,6 +95,7 @@ export async function handleFeedbackCommentWebhook(
 
   return processFeedbackComment(
     {
+      authorAssociation: event.authorAssociation,
       authorLogin: event.authorLogin,
       body: event.body,
       commentId: event.commentId,
@@ -162,6 +163,7 @@ export async function handleThreadResolvedWebhook(
 
   return processThreadResolved(
     {
+      authorAssociation: event.authorAssociation,
       authorLogin: event.authorLogin,
       prKey,
       pullRequestNumber: event.pullRequestNumber,

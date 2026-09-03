@@ -106,6 +106,7 @@ describe("GitHub webhook boundary", () => {
     const commentPayload = {
       action: "created",
       comment: {
+        author_association: "COLLABORATOR",
         body: "/holon dismiss false-positive",
         created_at: "2026-09-02T10:00:00.000Z",
         id: 12345,
@@ -125,6 +126,7 @@ describe("GitHub webhook boundary", () => {
     const event = mapReviewCommentWebhook(commentPayload, "del-123");
     expect(event).toEqual({
       action: "created",
+      authorAssociation: "COLLABORATOR",
       authorLogin: "alice",
       body: "/holon dismiss false-positive",
       commentId: 12345,
@@ -153,7 +155,7 @@ describe("GitHub webhook boundary", () => {
         name: "api",
         owner: { login: "acme" },
       },
-      sender: { login: "bob" },
+      sender: { author_association: "MEMBER", login: "bob" },
       thread: {
         comments: [{ id: 101 }],
       },
@@ -162,6 +164,7 @@ describe("GitHub webhook boundary", () => {
     const event = mapReviewThreadWebhook(threadPayload, "del-456");
     expect(event).toEqual({
       action: "resolved",
+      authorAssociation: "MEMBER",
       authorLogin: "bob",
       deliveryId: "github:del-456",
       installationId: 99,

@@ -80,6 +80,7 @@ describe("feedback-handler-service", () => {
 
     const event: ReviewCommentWebhookEvent = {
       action: "created",
+      authorAssociation: "COLLABORATOR",
       authorLogin: "alice",
       body: "/holon dismiss false-positive: Handled by bound check",
       commentId: 202,
@@ -135,6 +136,7 @@ describe("feedback-handler-service", () => {
 
     const event: ReviewThreadWebhookEvent = {
       action: "resolved",
+      authorAssociation: "MEMBER",
       authorLogin: "bob",
       deliveryId: "github:del-456",
       installationId: 99,
@@ -224,6 +226,7 @@ describe("feedback-handler-service", () => {
 
     const event: ReviewCommentWebhookEvent = {
       action: "created",
+      authorAssociation: "COLLABORATOR",
       authorLogin: "alice",
       body: "/holon dismiss false-positive",
       commentId: 202,
@@ -250,6 +253,7 @@ describe("feedback-handler-service", () => {
     // Also for thread resolved
     const threadEvent: ReviewThreadWebhookEvent = {
       action: "resolved",
+      authorAssociation: "MEMBER",
       authorLogin: "bob",
       deliveryId: "github:del-456",
       installationId: 99,

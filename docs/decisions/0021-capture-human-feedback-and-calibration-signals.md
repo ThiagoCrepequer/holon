@@ -69,6 +69,10 @@ O Holon analisa Pull Requests, emite apontamentos analíticos e deriva vereditos
      $$\text{Utility Rate} = \frac{\text{Feedbacks Helpful}}{\text{Findings Totais}} \times 100\%$$
    - Permitir que casos com feedbacks confirmados (adjudicados) sejam exportados para o formato de caso de teste em `packages/evaluation/corpus/`.
 
+7. **Autorização Obrigatória para Dispensas e Mitigação de Evasão de Segurança**:
+   - Apenas usuários com `author_association` de mantenedor (`OWNER`, `MEMBER` ou `COLLABORATOR`) têm autorização para executar comandos de dispensa (`/holon dismiss ...`) ou resolver threads com efeito de dispensa de apontamentos.
+   - Comentários de dispensa emitidos por autores não autorizados (como `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR` ou `NONE`) são rejeitados com aviso informativo na thread, sem modificar o status do apontamento nem alterar o veredito do PR. Sinais não dispensatórios (`helpful`) são registrados normalmente para fins de calibração.
+
 ## Consequências
 
 - **Positivas**:

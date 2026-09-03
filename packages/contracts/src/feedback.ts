@@ -28,6 +28,7 @@ export type { FeedbackLabel, FindingFeedbackRecord, ParsedFeedbackCommand };
 
 export const findingFeedbackRecordSchema: z.ZodType<FindingFeedbackRecord> =
   z.strictObject({
+    authorAssociation: z.string().trim().max(50).optional(),
     authorLogin: z.string().trim().min(1).max(100),
     createdAt: timestampSchema,
     fingerprint: findingFingerprintSchema,

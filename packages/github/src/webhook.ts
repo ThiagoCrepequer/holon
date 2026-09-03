@@ -87,6 +87,7 @@ export function mapPullRequestWebhook(
 
 export interface ReviewCommentWebhookEvent {
   readonly action: string;
+  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly body: string;
   readonly commentId: number;
@@ -120,8 +121,14 @@ export function mapReviewCommentWebhook(
       ? comment.in_reply_to_id
       : undefined;
 
+  const authorAssociation =
+    typeof comment.author_association === "string"
+      ? comment.author_association
+      : undefined;
+
   return {
     action: String(root.action),
+    authorAssociation,
     authorLogin: String(user.login),
     body: String(comment.body),
     commentId: Number(comment.id),
@@ -141,6 +148,7 @@ export function mapReviewCommentWebhook(
 
 export interface ReviewThreadWebhookEvent {
   readonly action: "resolved" | "unresolved";
+  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly deliveryId: DeliveryId;
   readonly installationId: number;
@@ -171,8 +179,14 @@ export function mapReviewThreadWebhook(
   const sender = record(root.sender, "sender");
   const installation = record(root.installation, "installation");
 
+  const authorAssociation =
+    typeof sender.author_association === "string"
+      ? sender.author_association
+      : undefined;
+
   return {
     action: root.action === "resolved" ? "resolved" : "unresolved",
+    authorAssociation,
     authorLogin: String(sender.login),
     deliveryId: createDeliveryId(deliveryId),
     installationId: Number(installation.id),

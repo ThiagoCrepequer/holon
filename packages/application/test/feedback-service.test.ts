@@ -80,6 +80,7 @@ describe("feedback-service", () => {
 
     const result = await processFeedbackComment(
       {
+        authorAssociation: "COLLABORATOR",
         authorLogin: "alice",
         body: "/holon dismiss false-positive: Auth is handled by proxy",
         commentId: 202,
@@ -241,6 +242,7 @@ describe("feedback-service", () => {
 
     const result = await processThreadResolved(
       {
+        authorAssociation: "MEMBER",
         authorLogin: "dave",
         prKey,
         pullRequestNumber: 7,
@@ -310,6 +312,7 @@ describe("feedback-service", () => {
 
     const result = await processThreadResolved(
       {
+        authorAssociation: "OWNER",
         authorLogin: "dave",
         prKey,
         pullRequestNumber: 7,
@@ -423,5 +426,113 @@ describe("feedback-service", () => {
     );
 
     expect(result.actionTaken).toBe("ignored");
+  });
+
+  it("rejects dismissal from unauthorized commenter without changing status or verdict", async () => {
+    let storedFindings = [{ ...sampleFinding }];
+    const commentReplies: { body: string; commentId: number }[] = [];
+    const checkRunUpdates: unknown[] = [];
+
+    const ledger: ReviewLedger = {
+      claimPublication: vi.fn(),
+      claimRun: vi.fn(),
+      completePublication: vi.fn(),
+      findFindingByCommentId: vi.fn().mockImplementation((_pk, id) => {
+        return Promise.resolve(
+          storedFindings.find((f) => f.githubCommentId === id),
+        );
+      }),
+      isLatestRun: vi.fn().mockResolvedValue(true),
+      loadFindingFeedbacks: vi.fn().mockResolvedValue([]),
+      loadPrFindings: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve([...storedFindings])),
+      recordFindingFeedback: vi.fn().mockResolvedValue(undefined),
+      savePrFindings: vi.fn().mockImplementation((_prKey, findings) => {
+        storedFindings = [...findings];
+        return Promise.resolve();
+      }),
+      transition: vi.fn(),
+    };
+
+    const publisher: ReviewPublisher = {
+      findCheckRunByExternalId: vi.fn().mockResolvedValue(555),
+      findCommentByMarker: vi.fn(),
+      publish: vi.fn(),
+      replyToComment: vi.fn().mockImplementation((commentId, body) => {
+        commentReplies.push({ body, commentId });
+        return Promise.resolve(999);
+      }),
+      updateCheckRun: vi.fn().mockImplementation((input) => {
+        checkRunUpdates.push(input);
+        return Promise.resolve();
+      }),
+    };
+
+    const result = await processFeedbackComment(
+      {
+        authorAssociation: "NONE",
+        authorLogin: "untrusted_contributor",
+        body: "/holon dismiss false-positive: Not a bug",
+        commentId: 202,
+        inReplyToCommentId: 101,
+        prKey,
+        pullRequestNumber: 7,
+      },
+      ledger,
+      publisher,
+    );
+
+    expect(result.actionTaken).toBe("unauthorized");
+    expect(result.verdictRecalculated).toBeUndefined();
+    expect(result.replyPosted).toBe(true);
+
+    // Finding must NOT be dismissed!
+    expect(storedFindings[0]?.status).toBe("new");
+    // Check Run must NOT be updated!
+    expect(checkRunUpdates).toHaveLength(0);
+    // Reply warning posted
+    expect(commentReplies[0]?.body).toContain(
+      "Apenas mantenedores do repositório",
+    );
+  });
+
+  it("ignores thread resolution from unauthorized commenter", async () => {
+    const storedFindings = [{ ...sampleFinding }];
+    const ledger: ReviewLedger = {
+      claimPublication: vi.fn(),
+      claimRun: vi.fn(),
+      completePublication: vi.fn(),
+      findFindingByCommentId: vi.fn().mockResolvedValue(storedFindings[0]),
+      isLatestRun: vi.fn().mockResolvedValue(true),
+      loadPrFindings: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve([...storedFindings])),
+      recordFindingFeedback: vi.fn().mockResolvedValue(undefined),
+      savePrFindings: vi.fn().mockImplementation((_prKey, _findings) => {
+        return Promise.resolve();
+      }),
+      transition: vi.fn(),
+    };
+
+    const publisher: ReviewPublisher = {
+      findCommentByMarker: vi.fn(),
+      publish: vi.fn(),
+    };
+
+    const result = await processThreadResolved(
+      {
+        authorAssociation: "CONTRIBUTOR",
+        authorLogin: "external_author",
+        prKey,
+        pullRequestNumber: 7,
+        rootCommentId: 101,
+      },
+      ledger,
+      publisher,
+    );
+
+    expect(result.actionTaken).toBe("ignored");
+    expect(storedFindings[0]?.status).toBe("new");
   });
 });

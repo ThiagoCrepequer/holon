@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyFeedbackToFindings,
+  isAuthorizedFeedbackAuthor,
   isDismissalFeedback,
   parseFeedbackCommand,
   type FindingFeedbackRecord,
@@ -284,5 +285,27 @@ describe("reconcileFindings with dismissed state", () => {
     expect(updated?.lastSeenHeadSha).toBe(
       "2222222222222222222222222222222222222222",
     );
+  });
+
+  describe("isAuthorizedFeedbackAuthor", () => {
+    it("authorizes repository owners, members, and collaborators", () => {
+      expect(isAuthorizedFeedbackAuthor("OWNER")).toBe(true);
+      expect(isAuthorizedFeedbackAuthor("owner")).toBe(true);
+      expect(isAuthorizedFeedbackAuthor("MEMBER")).toBe(true);
+      expect(isAuthorizedFeedbackAuthor("member")).toBe(true);
+      expect(isAuthorizedFeedbackAuthor("COLLABORATOR")).toBe(true);
+      expect(isAuthorizedFeedbackAuthor("collaborator")).toBe(true);
+    });
+
+    it("rejects unauthorized associations and empty input", () => {
+      expect(isAuthorizedFeedbackAuthor("CONTRIBUTOR")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("FIRST_TIME_CONTRIBUTOR")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("FIRST_TIMER")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("MANNEQUIN")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("NONE")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("none")).toBe(false);
+      expect(isAuthorizedFeedbackAuthor(undefined)).toBe(false);
+      expect(isAuthorizedFeedbackAuthor("")).toBe(false);
+    });
   });
 });

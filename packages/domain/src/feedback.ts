@@ -8,6 +8,7 @@ import type {
 import type { TrackedFinding } from "./lifecycle.js";
 
 export interface FindingFeedbackRecord {
+  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly createdAt: string;
   readonly fingerprint: FindingFingerprint;
@@ -150,4 +151,17 @@ export function applyFeedbackToFindings(
       status,
     };
   });
+}
+
+export const MAINTAINER_AUTHOR_ASSOCIATIONS = new Set([
+  "COLLABORATOR",
+  "MEMBER",
+  "OWNER",
+]);
+
+export function isAuthorizedFeedbackAuthor(
+  authorAssociation?: string,
+): boolean {
+  if (!authorAssociation) return false;
+  return MAINTAINER_AUTHOR_ASSOCIATIONS.has(authorAssociation.toUpperCase());
 }

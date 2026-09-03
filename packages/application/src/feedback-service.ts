@@ -6,6 +6,7 @@ import type {
 import {
   applyFeedbackToFindings,
   determineReviewVerdict,
+  isAuthorizedFeedbackAuthor,
   isDismissalFeedback,
   parseFeedbackCommand,
 } from "@holon/domain";
@@ -13,6 +14,7 @@ import {
 import type { ReviewLedger, ReviewPublisher } from "./ports.js";
 
 export interface ProcessFeedbackCommentInput {
+  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly body: string;
   readonly commentId: number;
@@ -23,7 +25,7 @@ export interface ProcessFeedbackCommentInput {
 }
 
 export interface ProcessFeedbackCommentResult {
-  readonly actionTaken: "dismissed" | "recorded" | "ignored";
+  readonly actionTaken: "dismissed" | "recorded" | "ignored" | "unauthorized";
   readonly feedback?: FindingFeedbackRecord | undefined;
   readonly newVerdict?: ReviewVerdict | undefined;
   readonly replyPosted?: boolean | undefined;
@@ -31,6 +33,7 @@ export interface ProcessFeedbackCommentResult {
 }
 
 export interface ProcessThreadResolvedInput {
+  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly createdAt?: string | undefined;
   readonly prKey: PrKey;
@@ -66,6 +69,7 @@ export async function processFeedbackComment(
 
   const createdAt = input.createdAt ?? new Date().toISOString();
   const feedbackRecord: FindingFeedbackRecord = {
+    authorAssociation: input.authorAssociation,
     authorLogin: input.authorLogin,
     createdAt,
     fingerprint: finding.fingerprint,
@@ -79,6 +83,22 @@ export async function processFeedbackComment(
   await ledger.recordFindingFeedback?.(input.prKey, feedbackRecord);
 
   if (isDismissalFeedback(command.label)) {
+    if (!isAuthorizedFeedbackAuthor(input.authorAssociation)) {
+      let replyPosted = false;
+      if (publisher.replyToComment) {
+        await publisher.replyToComment(
+          input.commentId,
+          "⚠️ Apenas mantenedores do repositório (com permissão de OWNER, MEMBER ou COLLABORATOR) podem dispensar apontamentos ou alterar o veredito do PR.",
+        );
+        replyPosted = true;
+      }
+      return {
+        actionTaken: "unauthorized",
+        feedback: feedbackRecord,
+        replyPosted,
+      };
+    }
+
     const allFindings = (await ledger.loadPrFindings?.(input.prKey)) ?? [];
     const updatedFindings = applyFeedbackToFindings(allFindings, [
       feedbackRecord,
@@ -190,13 +210,15 @@ export async function processThreadResolved(
   if (
     !finding ||
     finding.status === "dismissed" ||
-    finding.status === "resolved"
+    finding.status === "resolved" ||
+    !isAuthorizedFeedbackAuthor(input.authorAssociation)
   ) {
     return { actionTaken: "ignored" };
   }
 
   const createdAt = input.createdAt ?? new Date().toISOString();
   const feedbackRecord: FindingFeedbackRecord = {
+    authorAssociation: input.authorAssociation,
     authorLogin: input.authorLogin,
     createdAt,
     fingerprint: finding.fingerprint,
