@@ -45,6 +45,7 @@ import {
   createInstallationSession,
   resolveRepositoryInstallation,
 } from "../src/client.js";
+import { isAppAuthenticationError } from "../src/keyring.js";
 
 describe("GitHub installation client", () => {
   beforeEach(() => {
@@ -209,6 +210,79 @@ describe("GitHub installation client", () => {
     expect(options.auth).toBe("installation-token");
     expect(options.throttle.onRateLimit()).toBeUndefined();
     expect(options.throttle.onSecondaryRateLimit()).toBeUndefined();
+  });
+
+  it("preserves local private-key failures at both keyring entry points", async () => {
+    const cases = [
+      {
+        failure: new DOMException("Invalid keyData", "DataError"),
+        operation: () =>
+          createInstallationSession(
+            {
+              appId: 123,
+              appSlug: "holon-reviewer",
+              privateKey: "invalid-private-key",
+            },
+            99,
+            42,
+          ),
+      },
+      {
+        failure: new Error("error:1E08010C:DECODER routines::unsupported"),
+        operation: () =>
+          resolveRepositoryInstallation(
+            {
+              appId: 123,
+              appSlug: "holon-reviewer",
+              privateKey: "invalid-private-key",
+            },
+            "acme",
+            "api",
+          ),
+      },
+    ];
+
+    for (const current of cases) {
+      sdk.auth.mockRejectedValueOnce(current.failure);
+      let failure: unknown;
+      try {
+        await current.operation();
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure).toMatchObject({ name: "GitHubAppAuthenticationError" });
+      expect(isAppAuthenticationError(failure)).toBe(true);
+    }
+  });
+
+  it("preserves HTTP status classification during App authentication", async () => {
+    for (const [status, authenticationFailure] of [
+      [401, true],
+      [403, false],
+    ] as const) {
+      sdk.auth.mockRejectedValueOnce({ status });
+      let failure: unknown;
+      try {
+        await createInstallationSession(
+          {
+            appId: 123,
+            appSlug: "holon-reviewer",
+            privateKey: "private-key",
+          },
+          99,
+          42,
+        );
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure).toMatchObject({
+        name: "GitHubRequestError",
+        statusCode: status,
+      });
+      expect(isAppAuthenticationError(failure)).toBe(authenticationFailure);
+    }
   });
 
   it("rejects a pull request diff that exceeds the executor boundary", async () => {

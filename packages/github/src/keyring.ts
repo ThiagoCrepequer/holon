@@ -3,7 +3,7 @@ import {
   resolveRepositoryInstallation,
   type GitHubInstallationSession,
 } from "./client.js";
-import { GitHubRequestError } from "./errors.js";
+import { GitHubAppAuthenticationError, GitHubRequestError } from "./errors.js";
 
 export interface GitHubAppKeyring {
   readonly appId: number;
@@ -68,15 +68,19 @@ export class MemoryKeyringCircuitBreaker implements KeyringCircuitBreaker {
 
 export const defaultKeyringCircuitBreaker = new MemoryKeyringCircuitBreaker();
 
+function normalizedKeyMaterial(rawKey: string): string {
+  return rawKey
+    .replace(/-----BEGIN [^-]+-----/gu, "")
+    .replace(/-----END [^-]+-----/gu, "")
+    .replace(/\s+/gu, "");
+}
+
 /**
  * Computes a non-secret, deterministic 8-character cryptographic key fingerprint (e.g. `key:3a9f1b2c`)
  * from the normalized Base64/DER bytes of a PEM string, regardless of line endings or whitespace.
  */
 export async function computeKeyFingerprint(rawKey: string): Promise<string> {
-  const base64Only = rawKey
-    .replace(/-----BEGIN [^-]+-----/gu, "")
-    .replace(/-----END [^-]+-----/gu, "")
-    .replace(/\s+/gu, "");
+  const base64Only = normalizedKeyMaterial(rawKey);
 
   if (base64Only.length === 0) {
     return "key:empty";
@@ -112,6 +116,9 @@ export async function computeKeyFingerprint(rawKey: string): Promise<string> {
  * Explicitly excludes 403 (permissions / secondary rate limits), 404, 429, 5xx, or network aborts.
  */
 export function isAppAuthenticationError(error: unknown): boolean {
+  if (error instanceof GitHubAppAuthenticationError) {
+    return true;
+  }
   if (error instanceof GitHubRequestError) {
     return error.statusCode === 401;
   }
@@ -138,7 +145,12 @@ export function isAppAuthenticationError(error: unknown): boolean {
 }
 
 function parseAppId(value: number | string): number {
-  const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (typeof normalized === "string" && !/^[1-9]\d*$/u.test(normalized)) {
+    throw new TypeError("GitHub App ID must be a positive safe integer");
+  }
+  const parsed =
+    typeof normalized === "number" ? normalized : Number(normalized);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new TypeError("GitHub App ID must be a positive safe integer");
   }
@@ -188,7 +200,8 @@ export function resolveGitHubAppKeyring(
   if (
     resolvedCurrent &&
     resolvedPrevious &&
-    resolvedCurrent === resolvedPrevious
+    normalizedKeyMaterial(resolvedCurrent) ===
+      normalizedKeyMaterial(resolvedPrevious)
   ) {
     resolvedPrevious = undefined;
   }
@@ -206,36 +219,19 @@ export interface KeyringOperationOptions {
   readonly onTelemetry?: ((event: KeyringTelemetryEvent) => void) | undefined;
 }
 
-/**
- * Creates a GitHubInstallationSession with resilient key rotation support:
- * 1. Checks circuit breaker: if OPEN and previous key exists, routes directly to previous key.
- * 2. Tries current key. If successful and breaker was open, resets breaker.
- * 3. On 401/JWT authentication error with previous key available, executes single fallback to previous key.
- * 4. If fallback succeeds, trips circuit breaker to silence invalid current key and emits telemetry.
- */
-export async function createInstallationSessionWithKeyring(
+async function executeKeyringOperation<T>(
   keyring: GitHubAppKeyring,
-  installationId: number,
-  repositoryId: number,
+  operation: (privateKey: string) => Promise<T>,
   options?: KeyringOperationOptions,
-): Promise<GitHubInstallationSession> {
+): Promise<T> {
   const circuitBreaker =
     options?.circuitBreaker ?? defaultKeyringCircuitBreaker;
+  const previousPrivateKey = keyring.previousPrivateKey;
 
-  if (circuitBreaker.isOpen() && keyring.previousPrivateKey) {
-    const previousFingerprint = await computeKeyFingerprint(
-      keyring.previousPrivateKey,
-    );
+  if (circuitBreaker.isOpen() && previousPrivateKey) {
+    const previousFingerprint = await computeKeyFingerprint(previousPrivateKey);
     try {
-      return await createInstallationSession(
-        {
-          appId: keyring.appId,
-          appSlug: keyring.appSlug,
-          privateKey: keyring.previousPrivateKey,
-        },
-        installationId,
-        repositoryId,
-      );
+      return await operation(previousPrivateKey);
     } catch (error) {
       options?.onTelemetry?.({
         event: "github_app_auth.all_keys_rejected",
@@ -254,15 +250,7 @@ export async function createInstallationSessionWithKeyring(
     keyring.currentPrivateKey,
   );
   try {
-    const session = await createInstallationSession(
-      {
-        appId: keyring.appId,
-        appSlug: keyring.appSlug,
-        privateKey: keyring.currentPrivateKey,
-      },
-      installationId,
-      repositoryId,
-    );
+    const result = await operation(keyring.currentPrivateKey);
     if (circuitBreaker.isOpen()) {
       circuitBreaker.reset();
       options?.onTelemetry?.({
@@ -273,26 +261,15 @@ export async function createInstallationSessionWithKeyring(
         },
       });
     }
-    return session;
+    return result;
   } catch (error) {
-    if (!keyring.previousPrivateKey || !isAppAuthenticationError(error)) {
+    if (!previousPrivateKey || !isAppAuthenticationError(error)) {
       throw error;
     }
 
-    const previousFingerprint = await computeKeyFingerprint(
-      keyring.previousPrivateKey,
-    );
+    const previousFingerprint = await computeKeyFingerprint(previousPrivateKey);
     try {
-      const session = await createInstallationSession(
-        {
-          appId: keyring.appId,
-          appSlug: keyring.appSlug,
-          privateKey: keyring.previousPrivateKey,
-        },
-        installationId,
-        repositoryId,
-      );
-
+      const result = await operation(previousPrivateKey);
       circuitBreaker.trip();
       options?.onTelemetry?.({
         event: "github_app_auth.circuit_breaker_opened",
@@ -308,8 +285,7 @@ export async function createInstallationSessionWithKeyring(
           primaryFailedFingerprint: currentFingerprint,
         },
       });
-
-      return session;
+      return result;
     } catch (previousError) {
       options?.onTelemetry?.({
         event: "github_app_auth.all_keys_rejected",
@@ -328,6 +304,35 @@ export async function createInstallationSessionWithKeyring(
 }
 
 /**
+ * Creates a GitHubInstallationSession with resilient key rotation support:
+ * 1. Checks circuit breaker: if OPEN and previous key exists, routes directly to previous key.
+ * 2. Tries current key. If successful and breaker was open, resets breaker.
+ * 3. On 401/JWT authentication error with previous key available, executes single fallback to previous key.
+ * 4. If fallback succeeds, trips circuit breaker to silence invalid current key and emits telemetry.
+ */
+export async function createInstallationSessionWithKeyring(
+  keyring: GitHubAppKeyring,
+  installationId: number,
+  repositoryId: number,
+  options?: KeyringOperationOptions,
+): Promise<GitHubInstallationSession> {
+  return await executeKeyringOperation(
+    keyring,
+    async (privateKey) =>
+      await createInstallationSession(
+        {
+          appId: keyring.appId,
+          appSlug: keyring.appSlug,
+          privateKey,
+        },
+        installationId,
+        repositoryId,
+      ),
+    options,
+  );
+}
+
+/**
  * Resolves repository installation ID with resilient key rotation support.
  */
 export async function resolveRepositoryInstallationWithKeyring(
@@ -336,110 +341,18 @@ export async function resolveRepositoryInstallationWithKeyring(
   repo: string,
   options?: KeyringOperationOptions,
 ): Promise<number> {
-  const circuitBreaker =
-    options?.circuitBreaker ?? defaultKeyringCircuitBreaker;
-
-  if (circuitBreaker.isOpen() && keyring.previousPrivateKey) {
-    const previousFingerprint = await computeKeyFingerprint(
-      keyring.previousPrivateKey,
-    );
-    try {
-      return await resolveRepositoryInstallation(
+  return await executeKeyringOperation(
+    keyring,
+    async (privateKey) =>
+      await resolveRepositoryInstallation(
         {
           appId: keyring.appId,
           appSlug: keyring.appSlug,
-          privateKey: keyring.previousPrivateKey,
+          privateKey,
         },
         owner,
         repo,
-      );
-    } catch (error) {
-      options?.onTelemetry?.({
-        event: "github_app_auth.all_keys_rejected",
-        fields: {
-          circuitBreakerOpen: true,
-          errorKind: error instanceof Error ? error.name : "UnknownError",
-          keyFingerprint: previousFingerprint,
-          role: "previous",
-        },
-      });
-      throw error;
-    }
-  }
-
-  const currentFingerprint = await computeKeyFingerprint(
-    keyring.currentPrivateKey,
+      ),
+    options,
   );
-  try {
-    const installationId = await resolveRepositoryInstallation(
-      {
-        appId: keyring.appId,
-        appSlug: keyring.appSlug,
-        privateKey: keyring.currentPrivateKey,
-      },
-      owner,
-      repo,
-    );
-    if (circuitBreaker.isOpen()) {
-      circuitBreaker.reset();
-      options?.onTelemetry?.({
-        event: "github_app_auth.circuit_breaker_reset",
-        fields: {
-          keyFingerprint: currentFingerprint,
-          role: "current",
-        },
-      });
-    }
-    return installationId;
-  } catch (error) {
-    if (!keyring.previousPrivateKey || !isAppAuthenticationError(error)) {
-      throw error;
-    }
-
-    const previousFingerprint = await computeKeyFingerprint(
-      keyring.previousPrivateKey,
-    );
-    try {
-      const installationId = await resolveRepositoryInstallation(
-        {
-          appId: keyring.appId,
-          appSlug: keyring.appSlug,
-          privateKey: keyring.previousPrivateKey,
-        },
-        owner,
-        repo,
-      );
-
-      circuitBreaker.trip();
-      options?.onTelemetry?.({
-        event: "github_app_auth.circuit_breaker_opened",
-        fields: {
-          currentFingerprint,
-          fallbackFingerprint: previousFingerprint,
-        },
-      });
-      options?.onTelemetry?.({
-        event: "github_app_auth.fallback_succeeded",
-        fields: {
-          keyFingerprint: previousFingerprint,
-          primaryFailedFingerprint: currentFingerprint,
-        },
-      });
-
-      return installationId;
-    } catch (previousError) {
-      options?.onTelemetry?.({
-        event: "github_app_auth.all_keys_rejected",
-        fields: {
-          currentFingerprint,
-          errorKind:
-            previousError instanceof Error
-              ? previousError.name
-              : "UnknownError",
-          previousFingerprint,
-        },
-      });
-      throw previousError;
-    }
-  }
 }

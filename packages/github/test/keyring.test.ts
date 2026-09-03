@@ -119,6 +119,19 @@ describe("GitHub App Keyring & Rotation", () => {
       expect(keyring.previousPrivateKey).toBeUndefined();
     });
 
+    it("deduplicates the same DER key across PEM whitespace variants", () => {
+      const keyring = resolveGitHubAppKeyring({
+        GITHUB_APP_ID: 1234,
+        GITHUB_APP_PRIVATE_KEY_CURRENT: samplePem1,
+        GITHUB_APP_PRIVATE_KEY_PREVIOUS: samplePem1
+          .replaceAll("\n", "\r\n")
+          .replace("MIIEowIB", "MIIEowIB\r\n"),
+        GITHUB_APP_SLUG: "holon-app",
+      });
+
+      expect(keyring.previousPrivateKey).toBeUndefined();
+    });
+
     it("throws error when PREVIOUS is configured without CURRENT", () => {
       expect(() =>
         resolveGitHubAppKeyring({
@@ -512,13 +525,15 @@ describe("GitHub App Keyring & Rotation", () => {
 
   describe("Edge cases & fallback handling", () => {
     it("handles invalid App ID gracefully", () => {
-      expect(() =>
-        resolveGitHubAppKeyring({
-          GITHUB_APP_ID: "invalid-id",
-          GITHUB_APP_PRIVATE_KEY: samplePem1,
-          GITHUB_APP_SLUG: "slug",
-        }),
-      ).toThrow("GitHub App ID must be a positive safe integer");
+      for (const appId of ["invalid-id", "123abc", "123.5"]) {
+        expect(() =>
+          resolveGitHubAppKeyring({
+            GITHUB_APP_ID: appId,
+            GITHUB_APP_PRIVATE_KEY: samplePem1,
+            GITHUB_APP_SLUG: "slug",
+          }),
+        ).toThrow("GitHub App ID must be a positive safe integer");
+      }
     });
 
     it("handles base64 decode failure in computeKeyFingerprint", async () => {

@@ -17,6 +17,13 @@ export class GitHubRequestError extends Error {
   }
 }
 
+export class GitHubAppAuthenticationError extends GitHubRequestError {
+  public constructor() {
+    super("upstream_permanent", false);
+    this.name = "GitHubAppAuthenticationError";
+  }
+}
+
 export class GitHubDiffTooLargeError extends GitHubRequestError {
   public constructor() {
     super("invalid_response", false);
@@ -35,6 +42,16 @@ function extractStatusCode(error: unknown): number | undefined {
   const response = record(root?.response);
   const candidate = root?.status ?? response?.status;
   return Number.isSafeInteger(candidate) ? Number(candidate) : undefined;
+}
+
+function isLocalPrivateKeyError(error: unknown): boolean {
+  if (extractStatusCode(error) !== undefined || !(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "DataError") return true;
+  return /(?:asn1|decoder routines|invalid key(?:data)?|no start line|pem routines|private key must|secret or private key must|unsupported key type)/iu.test(
+    error.message,
+  );
 }
 
 function headers(error: unknown): Record<string, unknown> {
@@ -121,6 +138,19 @@ export async function executeGitHubRequest<T>(
   try {
     return await operation();
   } catch (error) {
+    throw classifyGitHubRequestError(error);
+  }
+}
+
+export async function executeGitHubAppAuthenticationRequest<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isLocalPrivateKeyError(error)) {
+      throw new GitHubAppAuthenticationError();
+    }
     throw classifyGitHubRequestError(error);
   }
 }
