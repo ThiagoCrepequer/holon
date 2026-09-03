@@ -100,11 +100,13 @@ describe("CI Enrichment Service", () => {
     expect(result).toEqual({ enriched: false, reason: "no_valid_reports" });
   });
 
-  it("returns summary_not_found when review summary cannot be located", async () => {
+  it("persists CI evidence to ledger when review summary cannot be located yet (CI finishes before review)", async () => {
     const lcov = "SF:src/index.ts\nDA:1,3\nend_of_record\n";
     const zip = zipSync({
       "coverage.lcov": new TextEncoder().encode(lcov),
     });
+
+    const saveCiEvidenceMock = vi.fn().mockResolvedValue(undefined);
 
     const deps: CiEnrichmentDependencies = {
       createPublisher: vi.fn().mockReturnValue({
@@ -123,10 +125,23 @@ describe("CI Enrichment Service", () => {
             "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -0,0 +1,1 @@\n+const x = 1;\n",
           ),
       }),
+      ledger: {
+        claimPublication: vi.fn(),
+        claimRun: vi.fn(),
+        completePublication: vi.fn(),
+        isLatestRun: vi.fn().mockResolvedValue(true),
+        saveCiEvidence: saveCiEvidenceMock,
+        transition: vi.fn(),
+      },
     };
 
     const result = await enrichReviewWithCiEvidence(fakeEnv, baseInput, deps);
-    expect(result).toEqual({ enriched: false, reason: "summary_not_found" });
+    expect(result).toEqual({ enriched: true, reason: "saved_pending_review" });
+    expect(saveCiEvidenceMock).toHaveBeenCalledTimes(1);
+    expect(saveCiEvidenceMock.mock.calls[0]?.[1]).toBe(baseInput.headSha);
+    expect(saveCiEvidenceMock.mock.calls[0]?.[2]?.markdown).toContain(
+      "### 🧪 CI Test & Coverage Evidence",
+    );
   });
 
   it("enriches review comment when valid artifacts and existing summary exist", async () => {

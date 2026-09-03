@@ -5,7 +5,7 @@ export default defineConfig({
     clearMocks: true,
     coverage: {
       provider: "v8",
-      reporter: ["text", "json-summary", "html"],
+      reporter: ["text", "json-summary", "html", "lcov"],
       thresholds: {
         branches: 85,
         functions: 90,
@@ -15,6 +15,10 @@ export default defineConfig({
     },
     environment: "node",
     mockReset: true,
+    outputFile: {
+      junit: "junit.xml",
+    },
+    reporters: ["default", "junit"],
     restoreMocks: true,
   },
 });

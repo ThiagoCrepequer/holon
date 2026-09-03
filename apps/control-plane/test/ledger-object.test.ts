@@ -149,6 +149,7 @@ describe("ReviewLedgerObject", () => {
         { version: 3 },
         { version: 4 },
         { version: 5 },
+        { version: 6 },
       ]);
       expect(
         state.storage.sql
@@ -638,5 +639,24 @@ describe("ReviewLedgerObject", () => {
     } finally {
       executor.cleanup = originalCleanup;
     }
+  });
+
+  it("persists and loads CI evidence per PR key and head sha", async () => {
+    const testPrKey = "github:42:pr:88" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const testHeadSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    const initial = await ledger.loadCiEvidence(testPrKey, testHeadSha);
+    expect(initial).toBeUndefined();
+
+    await ledger.saveCiEvidence(testPrKey, testHeadSha, {
+      markdown: "### 🧪 CI Test Evidence\nCoverage: 95%",
+      workflowRunId: 12345,
+    });
+
+    const loaded = await ledger.loadCiEvidence(testPrKey, testHeadSha);
+    expect(loaded).toBeDefined();
+    expect(loaded?.markdown).toBe("### 🧪 CI Test Evidence\nCoverage: 95%");
+    expect(loaded?.workflowRunId).toBe(12345);
   });
 });

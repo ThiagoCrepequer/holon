@@ -60,6 +60,13 @@ export interface ReviewLedger {
     prKey: PrKey,
     commentId: number,
   ): Promise<TrackedFinding | undefined>;
+  loadCiEvidence?(
+    prKey: PrKey,
+    headSha: string,
+  ): Promise<
+    | { readonly markdown: string; readonly workflowRunId?: number | undefined }
+    | undefined
+  >;
   loadFindingFeedbacks?(
     prKey: PrKey,
     fingerprint?: FindingFingerprint,
@@ -68,6 +75,14 @@ export interface ReviewLedger {
   recordFindingFeedback?(
     prKey: PrKey,
     feedback: FindingFeedbackRecord,
+  ): Promise<void>;
+  saveCiEvidence?(
+    prKey: PrKey,
+    headSha: string,
+    evidence: {
+      readonly markdown: string;
+      readonly workflowRunId?: number | undefined;
+    },
   ): Promise<void>;
   savePrFindings?(
     prKey: PrKey,

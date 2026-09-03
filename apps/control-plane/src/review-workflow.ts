@@ -15,6 +15,7 @@ import {
   type ShardReviewResult,
 } from "@holon/contracts";
 import {
+  appendCiEvidenceToSummary,
   classifyFindingPublication,
   computeStableFingerprint,
   createFindingId,
@@ -620,6 +621,26 @@ export async function executeReviewWorkflow(
       publicationStep,
       async () => {
         const github = await services.createMutationContext();
+        let summaryText = output.summary;
+        if (services.ledger.loadCiEvidence) {
+          try {
+            const ciEvidence = await services.ledger.loadCiEvidence(
+              prKey,
+              job.envelope.pullRequest.headSha,
+            );
+            if (ciEvidence?.markdown) {
+              summaryText = appendCiEvidenceToSummary(
+                summaryText,
+                ciEvidence.markdown,
+              );
+            }
+          } catch (error) {
+            emit("ci_evidence_load_failed", {
+              errorKind: errorKind(error),
+              prKey,
+            });
+          }
+        }
         try {
           const published = await publishAuthorized(
             services.ledger,
@@ -627,7 +648,7 @@ export async function executeReviewWorkflow(
             run.id,
             "summary",
             "summary",
-            output.summary,
+            summaryText,
             { event: output.verdict },
             () => authorizeMutation(github, "review"),
           );
