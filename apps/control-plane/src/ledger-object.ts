@@ -8,11 +8,13 @@ import {
   runClaimSchema,
   runIdSchema,
   runStateSchema,
+  runTelemetrySchema,
   runTransitionSchema,
   timestampSchema,
   trackedFindingSchema,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
+  type RunTelemetry,
   type TrackedFinding,
 } from "@holon/contracts";
 import type {
@@ -883,4 +885,109 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
         : {}),
     });
   }
+
+  public saveRunTelemetry(telemetry: RunTelemetry): Promise<void> {
+    const parsed = runTelemetrySchema.parse(telemetry);
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO run_telemetry (
+           run_id, pr_key, head_sha, duration_ms, queue_wait_ms,
+           input_tokens, output_tokens, reasoning_tokens,
+           estimated_cost_usd, estimated_cost_micro_usd, pricing_model,
+           tool_calls, shards_count, scope_status, terminal_state,
+           verdict, is_degraded, step_timings_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        parsed.runId,
+        parsed.prKey,
+        parsed.headSha,
+        parsed.durationMs,
+        parsed.queueWaitMs,
+        parsed.tokens.inputTokens,
+        parsed.tokens.outputTokens,
+        parsed.tokens.reasoningTokens ?? null,
+        parsed.cost.estimatedCostUsd,
+        parsed.cost.estimatedCostMicroUsd,
+        parsed.cost.pricingModel,
+        parsed.toolCallsCount,
+        parsed.shardsCount,
+        parsed.scopeStatus,
+        parsed.terminalState,
+        parsed.verdict ?? null,
+        parsed.isDegraded ? 1 : 0,
+        JSON.stringify(parsed.stepTimings),
+        parsed.createdAt,
+      );
+    });
+    return Promise.resolve();
+  }
+
+  public loadRunTelemetry(runId: string): Promise<RunTelemetry | undefined> {
+    const rows = this.ctx.storage.sql
+      .exec<RunTelemetryRow>(
+        `SELECT * FROM run_telemetry WHERE run_id = ?`,
+        runId,
+      )
+      .toArray();
+    const first = rows[0];
+    if (!first) return Promise.resolve(undefined);
+    return Promise.resolve(rowToRunTelemetry(first));
+  }
+}
+
+interface RunTelemetryRow extends Record<string, SqlStorageValue> {
+  created_at: string;
+  duration_ms: number;
+  estimated_cost_micro_usd: number;
+  estimated_cost_usd: number;
+  head_sha: string;
+  input_tokens: number;
+  is_degraded: number;
+  output_tokens: number;
+  pricing_model: string;
+  pr_key: string;
+  queue_wait_ms: number;
+  reasoning_tokens: number | null;
+  run_id: string;
+  scope_status: string;
+  shards_count: number;
+  step_timings_json: string;
+  terminal_state: string;
+  tool_calls: number;
+  verdict: string | null;
+}
+
+function rowToRunTelemetry(row: RunTelemetryRow): RunTelemetry {
+  const stepTimings = JSON.parse(row.step_timings_json);
+  return runTelemetrySchema.parse({
+    cost: {
+      currency: "USD",
+      estimatedCostMicroUsd: row.estimated_cost_micro_usd,
+      estimatedCostUsd: row.estimated_cost_usd,
+      pricingModel: row.pricing_model,
+    },
+    createdAt: row.created_at,
+    durationMs: row.duration_ms,
+    headSha: row.head_sha,
+    isDegraded: Boolean(row.is_degraded),
+    prKey: row.pr_key,
+    queueWaitMs: row.queue_wait_ms,
+    runId: row.run_id,
+    scopeStatus: row.scope_status,
+    shardsCount: row.shards_count,
+    stepTimings,
+    terminalState: row.terminal_state,
+    tokens: {
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      ...(row.reasoning_tokens !== null
+        ? { reasoningTokens: row.reasoning_tokens }
+        : {}),
+      totalTokens:
+        row.input_tokens +
+        row.output_tokens +
+        (row.reasoning_tokens !== null ? row.reasoning_tokens : 0),
+    },
+    toolCallsCount: row.tool_calls,
+    ...(row.verdict !== null ? { verdict: row.verdict } : {}),
+  });
 }

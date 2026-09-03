@@ -77,6 +77,7 @@ const finding = {
 function immediateStep(
   stepNames: string[],
   afterStep?: (name: string) => Promise<void>,
+  stepErrors?: Record<string, Error>,
 ): WorkflowStep {
   return {
     do: async <T>(
@@ -85,6 +86,7 @@ function immediateStep(
       maybeCallback?: unknown,
     ): Promise<T> => {
       stepNames.push(name);
+      if (stepErrors?.[name]) throw stepErrors[name];
       const callback =
         typeof configOrCallback === "function"
           ? configOrCallback
@@ -128,7 +130,9 @@ function runtime(
     readonly containerId?: string | null;
     readonly context?: ReviewContextV2;
     readonly head?: () => string;
+    readonly logger?: ReviewRuntime["logger"];
     readonly model?: ReviewRuntime["createModel"];
+    readonly now?: ReviewRuntime["now"];
     readonly posts?: Array<{
       readonly body: unknown;
       readonly event?: unknown;
@@ -169,8 +173,8 @@ function runtime(
       ...(options.containerId === null ? {} : { resolveContainerId }),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
     },
-    logger: { emit: () => undefined },
-    now: () => "2026-08-29T12:00:05.000Z",
+    logger: options.logger ?? { emit: () => undefined },
+    now: options.now ?? (() => "2026-08-29T12:00:05.000Z"),
     wait: () => Promise.resolve(),
   };
   return { cleanup, posts, prepareRepositoryV2, resolveContainerId, value };
@@ -1284,5 +1288,66 @@ describe("ReviewWorkflow", () => {
     expect(body).toContain("Initial clean review.");
     expect(body).toContain("### 🧪 CI Test & Coverage Evidence");
     expect(body).toContain("Coverage: 92.5%");
+  });
+
+  it("emits slo.breached event when execution or queue wait exceeds SLO threshold", async () => {
+    const events: Array<{ event: string; fields: Record<string, unknown> }> =
+      [];
+    const setup = runtime({
+      head: () => "a".repeat(40),
+      logger: {
+        emit: (eventName, fields) => {
+          events.push({ event: eventName, fields });
+        },
+      },
+      now: () => "2026-08-29T12:10:00.000Z", // 10 minutes after event
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("slo-breach-workflow"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    const breach = events.find((e) => e.event === "slo.breached");
+    expect(breach).toBeDefined();
+    expect(breach?.fields.violations).toBeDefined();
+  });
+
+  it("handles terminalization failure and failure notice failure gracefully in workflow catch", async () => {
+    const events: Array<{ event: string; fields: Record<string, unknown> }> =
+      [];
+    const setup = runtime({
+      head: () => {
+        throw new Error("Critical network outage during review");
+      },
+      logger: {
+        emit: (eventName, fields) => {
+          events.push({ event: eventName, fields });
+        },
+      },
+    });
+
+    const stepErrors = {
+      "mark-review-terminal-and-schedule-cleanup": new Error(
+        "Ledger storage error",
+      ),
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("terminal-failure-workflow"),
+        immediateStep([], undefined, stepErrors),
+        setup.value,
+      ),
+    ).rejects.toThrow("HOLON_GITHUB_TRANSIENT:transport");
+
+    expect(
+      events.some((e) => e.event === "review.terminalization_failed"),
+    ).toBe(true);
+    expect(events.some((e) => e.event === "review.failed")).toBe(true);
   });
 });

@@ -41,6 +41,11 @@ import {
   contractBreakSignalSchema,
   testGapSignalSchema,
   securitySurfaceSignalSchema,
+  stepTimingSchema,
+  tokenAccountingSchema,
+  costAccountingSchema,
+  runTelemetrySchema,
+  healthCheckReportSchema,
   trackedFindingSchema,
   updateCheckRunInputSchema,
   webhookEnvelopeSchema,
@@ -1142,6 +1147,88 @@ describe("check run contracts", () => {
         name: "search_structure" as const,
       };
       expect(repositoryToolCallSchema.parse(validCall)).toEqual(validCall);
+    });
+  });
+
+  describe("telemetry contracts", () => {
+    it("validates step timing schema", () => {
+      const timing = {
+        attempt: 1,
+        durationMs: 1250,
+        status: "success" as const,
+        stepName: "prepare_repository",
+      };
+      expect(stepTimingSchema.parse(timing)).toEqual(timing);
+    });
+
+    it("validates token accounting and cost accounting schemas", () => {
+      const tokens = {
+        inputTokens: 1200,
+        outputTokens: 350,
+        reasoningTokens: 150,
+        totalTokens: 1550,
+      };
+      expect(tokenAccountingSchema.parse(tokens)).toEqual(tokens);
+
+      const cost = {
+        currency: "USD" as const,
+        estimatedCostMicroUsd: 12500,
+        estimatedCostUsd: 0.0125,
+        pricingModel: "deepseek-r1",
+      };
+      expect(costAccountingSchema.parse(cost)).toEqual(cost);
+    });
+
+    it("validates run telemetry schema", () => {
+      const telemetry = {
+        cost: {
+          currency: "USD" as const,
+          estimatedCostMicroUsd: 5000,
+          estimatedCostUsd: 0.005,
+          pricingModel: "default-model",
+        },
+        createdAt: new Date().toISOString(),
+        durationMs: 14500,
+        headSha: "a".repeat(40),
+        isDegraded: false,
+        prKey: "github:42:pr:10",
+        queueWaitMs: 320,
+        runId: "run:123",
+        scopeStatus: "complete" as const,
+        shardsCount: 2,
+        stepTimings: [
+          {
+            attempt: 1,
+            durationMs: 4000,
+            status: "success" as const,
+            stepName: "step-1",
+          },
+        ],
+        terminalState: "completed" as const,
+        tokens: {
+          inputTokens: 2000,
+          outputTokens: 500,
+          totalTokens: 2500,
+        },
+        toolCallsCount: 4,
+        verdict: "APPROVE" as const,
+      };
+      expect(runTelemetrySchema.parse(telemetry)).toEqual(telemetry);
+    });
+
+    it("validates health check report schema", () => {
+      const report = {
+        checks: {
+          aiGateway: true,
+          database: true,
+          executor: true,
+        },
+        diagnostics: ["All systems operational"],
+        status: "ok" as const,
+        timestamp: new Date().toISOString(),
+        version: "0.1.0",
+      };
+      expect(healthCheckReportSchema.parse(report)).toEqual(report);
     });
   });
 });

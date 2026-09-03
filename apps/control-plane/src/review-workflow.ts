@@ -12,15 +12,19 @@ import {
   type CheckRunConclusion,
   type CheckRunOutput,
   type ReviewJob,
+  type RunTelemetry,
   type ShardReviewResult,
+  type StepTiming,
   type StructuralImpactReport,
 } from "@holon/contracts";
 import {
   appendCiEvidenceToSummary,
+  calculateInferenceCost,
   classifyFindingPublication,
   computeStableFingerprint,
   createFindingId,
   createPrKey,
+  evaluateRunSlo,
   reconcileFindings,
   type ReconciledFinding,
   type RunState,
@@ -265,6 +269,23 @@ export async function executeReviewWorkflow(
       });
   };
 
+  const workflowStartedAt = now();
+  const stepTimings: StepTiming[] = [];
+  const recordStepTiming = (
+    stepName: string,
+    durationMs: number,
+    status: "success" | "failure",
+    attempt = 1,
+  ) => {
+    const timing: StepTiming = { attempt, durationMs, status, stepName };
+    stepTimings.push(timing);
+    try {
+      void services.telemetry?.emitStepTiming(timing);
+    } catch {
+      // ignore
+    }
+  };
+
   try {
     const claim = await step.do("claim-run", stateStep, async () => {
       const outcome = await services.ledger.claimRun(
@@ -317,6 +338,7 @@ export async function executeReviewWorkflow(
 
     repositoryStarted = true;
     await ensureCheckRunStarted();
+    const prepStart = Date.now();
     await step.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
       const prepared = await services.prepareRepository(1);
@@ -327,6 +349,7 @@ export async function executeReviewWorkflow(
         truncated: prepared.truncated,
       });
     });
+    recordStepTiming("prepare-repository", Date.now() - prepStart, "success");
 
     type ReconciledReviewOutput = AggregatedReviewResult & {
       readonly activeFindings: readonly ReconciledFinding[];
@@ -335,6 +358,7 @@ export async function executeReviewWorkflow(
       readonly updatedTrackedFindings: readonly TrackedFinding[];
     };
 
+    const analysisStart = Date.now();
     const output: ReconciledReviewOutput = await step.do(
       "analyze-review",
       modelStep,
@@ -503,7 +527,9 @@ export async function executeReviewWorkflow(
         }
       },
     );
+    recordStepTiming("analyze-review", Date.now() - analysisStart, "success");
 
+    const pubStart = Date.now();
     await moveTo("begin-publication", "running", "publishing", false);
     const currentBeforePublication = await step.do(
       "revalidate-current-head",
@@ -710,12 +736,56 @@ export async function executeReviewWorkflow(
       checkRunOutput,
     );
 
+    recordStepTiming("publication", Date.now() - pubStart, "success");
+
+    const finishedAt = now();
+    const totalDurationMs = durationFrom(rawEvent.timestamp, finishedAt);
+    const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
+    const usage = services.getAccumulatedUsage();
+    const tokenAccounting = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.inputTokens + usage.outputTokens,
+    };
+    const cost = calculateInferenceCost("deepseek-chat", tokenAccounting);
+    const runTelemetry: RunTelemetry = {
+      cost,
+      createdAt: finishedAt,
+      durationMs: totalDurationMs,
+      headSha: job.envelope.pullRequest.headSha,
+      isDegraded: output.isDegraded === true,
+      prKey,
+      queueWaitMs,
+      runId: run.id,
+      scopeStatus: output.scopeStatus,
+      shardsCount: output.totalShards,
+      stepTimings,
+      terminalState: "completed",
+      tokens: tokenAccounting,
+      toolCallsCount: usage.toolCallsCount,
+      verdict: output.verdict,
+    };
+
+    const slo = evaluateRunSlo(runTelemetry);
+    if (!slo.compliant) {
+      emit("slo.breached", {
+        runId: run.id,
+        violations: slo.violations.join("; "),
+      });
+    }
+
+    if (services.ledger.saveRunTelemetry) {
+      await services.ledger.saveRunTelemetry(runTelemetry).catch(() => {});
+    }
+    void services.telemetry?.emitRunTelemetry(runTelemetry);
+
     const completedAt = await moveTo(
       "complete-run-and-schedule-cleanup",
       "publishing",
       "completed",
       true,
     );
+
     const result = { findingsPublished, outcome: "completed" } as const;
     emit("review.completed", {
       durationMs: durationFrom(rawEvent.timestamp, completedAt),
@@ -730,6 +800,38 @@ export async function executeReviewWorkflow(
         title: "Holon Review Failed",
       });
     }
+
+    const failedAt = now();
+    const failedDurationMs = durationFrom(rawEvent.timestamp, failedAt);
+    const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
+    const usage = services.getAccumulatedUsage();
+    const tokenAccounting = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.inputTokens + usage.outputTokens,
+    };
+    const cost = calculateInferenceCost("unknown", tokenAccounting);
+    const failedTelemetry: RunTelemetry = {
+      cost,
+      createdAt: failedAt,
+      durationMs: failedDurationMs,
+      headSha: job.envelope.pullRequest.headSha,
+      isDegraded: true,
+      prKey,
+      queueWaitMs,
+      runId: run.id,
+      scopeStatus: "partial_by_failure",
+      shardsCount: 1,
+      stepTimings,
+      terminalState: "failed_terminal",
+      tokens: tokenAccounting,
+      toolCallsCount: usage.toolCallsCount,
+    };
+    if (services.ledger.saveRunTelemetry) {
+      await services.ledger.saveRunTelemetry(failedTelemetry).catch(() => {});
+    }
+    void services.telemetry?.emitRunTelemetry(failedTelemetry);
+
     const terminal = await step
       .do("mark-review-terminal-and-schedule-cleanup", stateStep, async () => {
         const occurredAt = now();
@@ -746,6 +848,7 @@ export async function executeReviewWorkflow(
         });
         return undefined;
       });
+
     emit("review.failed", {
       durationMs:
         terminal === undefined

@@ -1,4 +1,8 @@
-import type { ModelReviewer, ReviewPublisher } from "@holon/application";
+import type {
+  ModelReviewer,
+  ReviewPublisher,
+  TelemetryEmitter,
+} from "@holon/application";
 import {
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -42,6 +46,12 @@ import {
   GitHubTransientError,
 } from "./github-operations.js";
 import type { StructuredLogger } from "./observability.js";
+import {
+  AnalyticsEngineTelemetryEmitter,
+  CompositeTelemetryEmitter,
+  StructuredLogTelemetryEmitter,
+  type AnalyticsEngineDatasetLike,
+} from "./telemetry-emitter.js";
 
 export interface RepositoryExecutorBinding {
   cleanup(runId: string): Promise<void>;
@@ -95,6 +105,7 @@ export interface ReviewRuntime {
   readonly executor?: RepositoryExecutorBinding;
   readonly logger?: StructuredLogger;
   readonly now?: () => string;
+  readonly telemetry?: TelemetryEmitter;
   readonly wait?: (delayMilliseconds: number) => Promise<void>;
 }
 
@@ -107,6 +118,12 @@ export interface ReviewServices {
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
   readonly model: ModelReviewer;
+  readonly telemetry: TelemetryEmitter;
+  getAccumulatedUsage(): {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly toolCallsCount: number;
+  };
   createMutationContext(): Promise<GitHubMutationContext>;
   ensureContext(maximumPreparationAttempts: number): Promise<void>;
   loadContext(): Promise<ReviewContextV2>;
@@ -322,9 +339,14 @@ export function createReviewServices(
     throw lastError;
   };
 
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let toolCallsCount = 0;
+
   const toolRunner = createBoundedRepositoryToolRunner(
     createRedactingRepositoryToolRunner({
       run: async (call) => {
+        toolCallsCount += 1;
         if (!(await executor.hasContext(job.runId))) {
           await prepareRepository(2);
         }
@@ -353,9 +375,26 @@ export function createReviewServices(
           model: env.AI_MODEL_ID,
         },
         toolRunner,
-        (usage) => logger.emit("model.usage", { ...logContext, ...usage }),
+        (usage) => {
+          inputTokens += usage.inputTokens ?? 0;
+          outputTokens += usage.outputTokens ?? 0;
+          logger.emit("model.usage", { ...logContext, ...usage });
+        },
       ),
     );
+
+  const telemetry =
+    runtime.telemetry ??
+    new CompositeTelemetryEmitter([
+      new AnalyticsEngineTelemetryEmitter(
+        (
+          env as unknown as {
+            ANALYTICS_ENGINE?: AnalyticsEngineDatasetLike;
+          }
+        ).ANALYTICS_ENGINE,
+      ),
+      new StructuredLogTelemetryEmitter(logger),
+    ]);
 
   const mutationContext = async (): Promise<GitHubMutationContext> => {
     const github = await createSession();
@@ -402,6 +441,12 @@ export function createReviewServices(
     executor,
     ledger,
     model,
+    telemetry,
+    getAccumulatedUsage: () => ({
+      inputTokens,
+      outputTokens,
+      toolCallsCount,
+    }),
     createMutationContext: mutationContext,
     ensureContext: async (maximumPreparationAttempts) => {
       if (!(await executor.hasContext(job.runId))) {

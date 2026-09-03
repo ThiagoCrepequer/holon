@@ -174,12 +174,15 @@ resultado. O plano de implementação está detalhado abaixo.
 
 ### 9. Confiabilidade e observabilidade
 
-- métricas por etapa, causa terminal e parcialidade;
-- latência, tokens, custo, chamadas de ferramenta e cobertura de contexto;
-- metadados seguros de provedor e modelo, sem prompts ou conteúdo do repositório;
-- SLOs separados para aceitação, conclusão, publicação e qualidade;
-- replay controlado de eventos sanitizados;
-- detecção de drift de rota, versão, imagem e contrato.
+- [x] Contratos Zod estritos para temporização de etapas, contabilidade de tokens, custos, telemetria de execução e relatórios de saúde (`@holon/contracts`);
+- [x] Motores puros de domínio para cálculo determinístico de custos (`calculateInferenceCost`) e avaliação de SLOs (`evaluateRunSlo`) com tolerâncias configuráveis (`@holon/domain`);
+- [x] Porta `TelemetryEmitter` em `@holon/application` e adaptadores de telemetria desacoplados em `apps/control-plane` (`AnalyticsEngineTelemetryEmitter`, `StructuredLogTelemetryEmitter`, `CompositeTelemetryEmitter`);
+- [x] Persistência histórica de telemetria por PR no SQLite do Durable Object via tabela `run_telemetry` (Migration 7);
+- [x] Instrumentação durável do `ReviewWorkflow` para medição de latência por step (`prepare-repository`, `analyze-review`, `publication`), contabilidade de tokens acumulados e emissão segura em casos de sucesso e falha;
+- [x] Endpoint de diagnóstico e saúde profunda `GET /healthz` em `apps/control-plane`, aferindo disponibilidade de AI Gateway, Durable Object e Sandbox Executor;
+- [x] Replay offline seguro de telemetria e incidentes em `@holon/evaluation` (`replayIncidentTelemetry`), recalculando custos e validando SLOs sem efeitos colaterais de rede ou mutações no GitHub;
+- [x] Política estrita de _Zero Data Leakage_: jamais registrar diffs, excertos de código, prompts, chaves ou tokens;
+- [x] Formalizado no [ADR-0023](../decisions/0023-adopt-cloudflare-native-operational-reliability-and-observability.md).
 
 ### 10. Itens explicitamente adiados
 

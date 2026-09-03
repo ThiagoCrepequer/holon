@@ -219,6 +219,9 @@ importers:
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@holon/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@holon/model':
         specifier: workspace:*
         version: link:../model

@@ -150,6 +150,7 @@ describe("ReviewLedgerObject", () => {
         { version: 4 },
         { version: 5 },
         { version: 6 },
+        { version: 7 },
       ]);
       expect(
         state.storage.sql
@@ -658,5 +659,54 @@ describe("ReviewLedgerObject", () => {
     expect(loaded).toBeDefined();
     expect(loaded?.markdown).toBe("### 🧪 CI Test Evidence\nCoverage: 95%");
     expect(loaded?.workflowRunId).toBe(12345);
+  });
+
+  it("persists and loads run telemetry accurately", async () => {
+    const testPrKey = "github:42:pr:99" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const telemetryRunId = "test-run-telemetry-1";
+
+    const initial = await ledger.loadRunTelemetry(telemetryRunId);
+    expect(initial).toBeUndefined();
+
+    const telemetry = {
+      cost: {
+        currency: "USD" as const,
+        estimatedCostMicroUsd: 15000,
+        estimatedCostUsd: 0.015,
+        pricingModel: "deepseek-chat",
+      },
+      createdAt: new Date().toISOString(),
+      durationMs: 12000,
+      headSha: "b".repeat(40),
+      isDegraded: false,
+      prKey: testPrKey,
+      queueWaitMs: 400,
+      runId: telemetryRunId,
+      scopeStatus: "complete" as const,
+      shardsCount: 2,
+      stepTimings: [
+        {
+          attempt: 1,
+          durationMs: 3000,
+          status: "success" as const,
+          stepName: "prepare_repository",
+        },
+      ],
+      terminalState: "completed" as const,
+      tokens: {
+        inputTokens: 3000,
+        outputTokens: 600,
+        reasoningTokens: 100,
+        totalTokens: 3700,
+      },
+      toolCallsCount: 5,
+      verdict: "APPROVE" as const,
+    };
+
+    await ledger.saveRunTelemetry(telemetry);
+
+    const loaded = await ledger.loadRunTelemetry(telemetryRunId);
+    expect(loaded).toEqual(telemetry);
   });
 });
