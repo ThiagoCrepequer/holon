@@ -260,10 +260,14 @@ describe("reconcileFindings with dismissed state", () => {
 
     const result = reconcileFindings({
       baselineFindings: [dismissedBaseline],
+      coverage: {
+        isComplete: true,
+        pullRequestFiles: ["src/db.ts"],
+        reviewedFiles: ["src/db.ts"],
+      },
       currentFindings: [currentFinding],
       currentHeadSha: "2222222222222222222222222222222222222222",
       currentRunId: runId2,
-      prFiles: ["src/db.ts"],
       prKey,
       timestamp: "2026-09-02T11:00:00.000Z",
     });

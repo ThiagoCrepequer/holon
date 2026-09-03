@@ -44,6 +44,7 @@ export type {
 };
 
 export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
+  confidence: z.number().min(0).max(1).optional(),
   diagnostic: z.string().trim().min(30).max(600),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,

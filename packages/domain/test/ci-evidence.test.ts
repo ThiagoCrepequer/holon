@@ -6,6 +6,7 @@ import {
   CI_EVIDENCE_MARKER_END,
   CI_EVIDENCE_MARKER_START,
   formatCiEvidenceMarkdown,
+  formatLineIntervals,
   type CiEvidence,
   type LineCoverage,
 } from "../src/index.js";
@@ -168,6 +169,52 @@ describe("ci-evidence domain logic", () => {
     const newEvidenceMarkdown = `${CI_EVIDENCE_MARKER_START}\n### 🧪 CI Evidence\n- **Coverage**: 90%\n${CI_EVIDENCE_MARKER_END}`;
     const reUpdated = appendCiEvidenceToSummary(updated, newEvidenceMarkdown);
     expect(reUpdated).toBe(`${initialSummary}\n\n${newEvidenceMarkdown}`);
+  });
+
+  it("ignores non-executable lines and non-source files in calculateChangedLinesCoverage", () => {
+    const changedLines = [
+      // Typescript source with instrumented line (20) and uninstrumented type/import line (21)
+      { line: 20, path: "src/service.ts", side: "RIGHT" as const },
+      { line: 21, path: "src/service.ts", side: "RIGHT" as const },
+      // Documentation file (.md) - should be completely ignored
+      { line: 1, path: "docs/readme.md", side: "RIGHT" as const },
+      { line: 2, path: "docs/readme.md", side: "RIGHT" as const },
+      // Config file (.json) - should be completely ignored
+      { line: 5, path: "package.json", side: "RIGHT" as const },
+    ];
+
+    const coverageReports: LineCoverage[] = [
+      {
+        hitsByLine: { 20: 3 }, // line 21 has hitsByLine[21] === undefined (type/import/comment)
+        path: "src/service.ts",
+        totalFound: 1,
+        totalHit: 1,
+      },
+    ];
+
+    const result = calculateChangedLinesCoverage(changedLines, coverageReports);
+
+    // Only line 20 is an executable line in a testable source file
+    // Line 21 is non-executable (hits === undefined), docs/readme.md and package.json are non-source files
+    expect(result.totalChangedLines).toBe(1);
+    expect(result.coveredLinesCount).toBe(1);
+    expect(result.uncoveredLinesCount).toBe(0);
+    expect(result.coveragePercentage).toBe(100);
+    expect(result.uncoveredByFile).toEqual([]);
+  });
+
+  it("formats line numbers into compact intervals with formatLineIntervals", () => {
+    expect(formatLineIntervals([])).toBe("");
+    expect(formatLineIntervals([5])).toBe("5");
+    expect(formatLineIntervals([1, 2, 3, 4, 5])).toBe("1–5");
+    expect(formatLineIntervals([1, 2, 3, 5, 7, 8, 9, 20])).toBe(
+      "1–3, 5, 7–9, 20",
+    );
+    // Truncation when exceeding maxRanges
+    const manyRanges = [1, 3, 5, 7, 9, 11, 13, 14, 15]; // 7 ranges: 1, 3, 5, 7, 9, 11, 13-15
+    const formatted = formatLineIntervals(manyRanges, 4);
+    expect(formatted).toContain("1, 3, 5, 7");
+    expect(formatted).toContain("more lines");
   });
 });
 

@@ -148,7 +148,6 @@ export function mapReviewCommentWebhook(
 
 export interface ReviewThreadWebhookEvent {
   readonly action: "resolved" | "unresolved";
-  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
   readonly deliveryId: DeliveryId;
   readonly installationId: number;
@@ -179,14 +178,8 @@ export function mapReviewThreadWebhook(
   const sender = record(root.sender, "sender");
   const installation = record(root.installation, "installation");
 
-  const authorAssociation =
-    typeof sender.author_association === "string"
-      ? sender.author_association
-      : undefined;
-
   return {
     action: root.action === "resolved" ? "resolved" : "unresolved",
-    authorAssociation,
     authorLogin: String(sender.login),
     deliveryId: createDeliveryId(deliveryId),
     installationId: Number(installation.id),

@@ -187,6 +187,25 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 7,
   },
+  {
+    statements: `
+      ALTER TABLE pr_findings ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0;
+
+      ALTER TABLE runs ADD COLUMN decision_head_sha TEXT;
+      ALTER TABLE runs ADD COLUMN decision_scope_status TEXT;
+      ALTER TABLE runs ADD COLUMN decision_shards_analyzed INTEGER;
+      ALTER TABLE runs ADD COLUMN decision_total_shards INTEGER;
+      ALTER TABLE runs ADD COLUMN decision_is_degraded INTEGER;
+
+      ALTER TABLE finding_feedbacks ADD COLUMN delivery_id TEXT;
+      ALTER TABLE finding_feedbacks ADD COLUMN author_association TEXT;
+      ALTER TABLE finding_feedbacks ADD COLUMN reply_comment_id INTEGER;
+      CREATE UNIQUE INDEX finding_feedbacks_delivery
+        ON finding_feedbacks(delivery_id)
+        WHERE delivery_id IS NOT NULL;
+    `,
+    version: 8,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

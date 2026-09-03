@@ -12,13 +12,21 @@ import {
   classifyFindingPublication,
   determineReviewVerdict,
   formatVerdictBadge,
-  type ChangedLine,
   type Finding,
   type FindingSeverity,
   type ReviewVerdictPolicyOptions,
 } from "@holon/domain";
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+
+export interface AggregateShardReviewOptions {
+  readonly additionalFindings?: readonly ReviewFinding[] | undefined;
+  readonly canonicalFindings?: readonly Finding[] | undefined;
+  readonly reconciliation?: ReconciliationSummary | undefined;
+  readonly structuralImpact?: StructuralImpactReport | undefined;
+  readonly unifiedSummary?: string | undefined;
+  readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
+}
 
 export function formatStructuralImpactSection(
   report: StructuralImpactReport,
@@ -42,6 +50,11 @@ export function formatStructuralImpactSection(
   if (report.testGaps.length > 0) {
     parts.push(
       `- 🧪 **Test Gaps**: ${report.testGaps.length} source file(s) modified without corresponding test file in PR`,
+    );
+  }
+  if (report.repositoryScanTruncated === true) {
+    parts.push(
+      "- ⚠️ **Repository Scan**: bounded downstream inventory was partial; absence of references is inconclusive",
     );
   }
   if (parts.length === 0) return "";
@@ -109,15 +122,12 @@ function limitSummary(value: string, maximumCodePoints = 4_000): string {
 export function aggregateShardReviews(
   plan: ReviewPlan,
   shardResults: readonly ShardReviewResult[],
-  _allEligibleChangedLines?: readonly ChangedLine[],
-  options?: ReviewVerdictPolicyOptions,
-  reconciliation?: ReconciliationSummary,
-  structuralImpact?: StructuralImpactReport,
+  options: AggregateShardReviewOptions = {},
 ): AggregatedReviewResult {
   if (plan.scopeStatus === "unsupported") {
     const verdictDetails = determineReviewVerdict({
       findings: [],
-      options,
+      options: options.verdictPolicy,
       scopeStatus: "unsupported",
       shardsAnalyzed: 0,
       totalShards: 0,
@@ -140,6 +150,7 @@ export function aggregateShardReviews(
   let shardsAnalyzed = 0;
 
   const candidateFindings: ReviewFinding[] = [];
+  candidateFindings.push(...(options.additionalFindings ?? []));
   const shardSummaries: string[] = [];
 
   for (const result of shardResults) {
@@ -186,7 +197,9 @@ export function aggregateShardReviews(
     },
   );
 
-  const sortedFindings = verifiedFindings.toSorted(compareFindings);
+  const sortedFindings = (
+    options.canonicalFindings ?? verifiedFindings
+  ).toSorted(compareFindings);
 
   const isAnyShardDegraded = shardResults.some(
     (result) => result.isDegraded === true,
@@ -195,7 +208,7 @@ export function aggregateShardReviews(
   const verdictDetails = determineReviewVerdict({
     findings: sortedFindings,
     isDegraded: isAnyShardDegraded,
-    options,
+    options: options.verdictPolicy,
     scopeStatus,
     shardsAnalyzed,
     totalShards: plan.shards.length,
@@ -209,7 +222,12 @@ export function aggregateShardReviews(
     summarySections.push(verdictDetails.reasons.join(" "));
   }
 
-  if (shardSummaries.length === 0) {
+  if (
+    options.unifiedSummary !== undefined &&
+    options.unifiedSummary.trim().length > 0
+  ) {
+    summarySections.push(options.unifiedSummary.trim());
+  } else if (shardSummaries.length === 0) {
     summarySections.push(
       "Holon reviewed the changes and found no functional regressions or contract breaks.",
     );
@@ -239,15 +257,17 @@ export function aggregateShardReviews(
     );
   }
 
-  if (reconciliation !== undefined) {
-    const reconSection = formatReconciliationSection(reconciliation);
+  if (options.reconciliation !== undefined) {
+    const reconSection = formatReconciliationSection(options.reconciliation);
     if (reconSection.length > 0) {
       summarySections.push(reconSection);
     }
   }
 
-  if (structuralImpact !== undefined) {
-    const structuralSection = formatStructuralImpactSection(structuralImpact);
+  if (options.structuralImpact !== undefined) {
+    const structuralSection = formatStructuralImpactSection(
+      options.structuralImpact,
+    );
     if (structuralSection.length > 0) {
       summarySections.push(structuralSection);
     }
@@ -279,7 +299,7 @@ export function aggregateShardReviews(
     })),
     ...(isAnyShardDegraded ? { isDegraded: true } : {}),
     omissionReasons,
-    reconciliation,
+    reconciliation: options.reconciliation,
     scopeStatus,
     shardsAnalyzed,
     summary: finalSummary,

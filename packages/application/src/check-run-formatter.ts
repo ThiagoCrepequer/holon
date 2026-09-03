@@ -128,6 +128,9 @@ export function formatCheckRunOutput(
     if (si.testGaps.length > 0) {
       parts.push(`${si.testGaps.length} test gap(s)`);
     }
+    if (si.repositoryScanTruncated === true) {
+      parts.push("downstream scan partial");
+    }
     if (parts.length > 0) {
       details.push(`- **Structural Impact**: ${parts.join(", ")}`);
     }

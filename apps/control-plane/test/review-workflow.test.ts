@@ -1350,4 +1350,90 @@ describe("ReviewWorkflow", () => {
     ).toBe(true);
     expect(events.some((e) => e.event === "review.failed")).toBe(true);
   });
+
+  it("emits structured repository.preparation_failed diagnostics when prepareRepository fails", async () => {
+    const events: Array<{ event: string; fields: Record<string, unknown> }> =
+      [];
+    const setup = runtime({
+      logger: {
+        emit: (eventName, fields) => {
+          events.push({ event: eventName, fields });
+        },
+      },
+    });
+    setup.prepareRepositoryV2.mockImplementation(() => {
+      const error = new Error(
+        "HOLON_REPOSITORY_PERMANENT:fetch:command-failed",
+      );
+      error.name = "RepositoryPermanentError";
+      return Promise.reject(error);
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("prepare-repo-failure-workflow"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).rejects.toThrow();
+
+    const prepFailed = events.find(
+      (e) => e.event === "repository.preparation_failed",
+    );
+    expect(prepFailed).toBeDefined();
+    expect(prepFailed?.fields.errorKind).toBe("RepositoryPermanentError");
+    expect(prepFailed?.fields.retryable).toBe(false);
+  });
+
+  it("synthesizes multi-shard summaries into a unified executive summary when all shards succeed", async () => {
+    const files = Array.from({ length: 22 }, (_, index) => ({
+      mode: "structural" as const,
+      patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
+      path: `src/file${index}.ts`,
+    }));
+
+    const changedLines = files.map((file) => ({
+      line: 10,
+      path: file.path,
+      side: "RIGHT" as const,
+    }));
+
+    let synthesizeCalled = false;
+    const setup = runtime({
+      context: {
+        changedLines,
+        files,
+        schemaVersion: 2,
+        truncated: false,
+      },
+      model: () => ({
+        review: (_job, ctx) =>
+          Promise.resolve({
+            output: {
+              findings: [],
+              summary: `Shard review covering ${ctx.files.length} files.`,
+            },
+            promptTruncated: false,
+          }),
+        synthesizeReviewSummary: (_job, input) => {
+          synthesizeCalled = true;
+          expect(input.shardSummaries).toHaveLength(2);
+          return Promise.resolve(
+            "Unified executive summary synthesized across all shards.",
+          );
+        },
+      }),
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("multi-shard-synthesized-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(synthesizeCalled).toBe(true);
+  });
 });

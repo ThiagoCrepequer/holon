@@ -1,4 +1,4 @@
-import type { FindingCandidate, FindingSeverity } from "./finding.js";
+import type { FindingSeverity } from "./finding.js";
 
 export type ReviewVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
@@ -20,7 +20,10 @@ export interface ReviewVerdictPolicyOptions {
 }
 
 export interface DetermineReviewVerdictInput {
-  readonly findings: readonly FindingCandidate[];
+  readonly findings: readonly {
+    readonly confidence: number;
+    readonly severity: FindingSeverity;
+  }[];
   readonly isDegraded?: boolean | undefined;
   readonly options?: ReviewVerdictPolicyOptions | undefined;
   readonly scopeStatus:

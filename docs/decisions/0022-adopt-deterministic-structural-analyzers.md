@@ -1,8 +1,10 @@
 ---
 id: ADR-0022
 kind: decision
-status: accepted
+status: superseded
 date: 2026-09-03
+superseded-by:
+  - 0025-bound-structural-analysis-and-promote-verifiable-findings.md
 owners:
   - core-team
 related:

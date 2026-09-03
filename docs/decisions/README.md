@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-03
 ---
 
 # Decisões
@@ -37,8 +37,10 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)                     | Derivar veredito determinístico de review por política no host        | `accepted`   | 2026-09-02 |
 | [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md)        | Reconciliar findings entre commits via fingerprinting e ciclo         | `accepted`   | 2026-09-02 |
 | [ADR-0021](0021-capture-human-feedback-and-calibration-signals.md)                    | Capturar feedback humano, comandos de dispensa e calibração           | `accepted`   | 2026-09-02 |
-| [ADR-0022](0022-adopt-deterministic-structural-analyzers.md)                          | Adotar analisadores estruturais determinísticos em duas camadas       | `accepted`   | 2026-09-03 |
+| [ADR-0022](0022-adopt-deterministic-structural-analyzers.md)                          | Adotar analisadores estruturais determinísticos em duas camadas       | `superseded` | 2026-09-03 |
 | [ADR-0023](0023-adopt-cloudflare-native-operational-reliability-and-observability.md) | Adotar confiabilidade operacional e observabilidade nativa Cloudflare | `accepted`   | 2026-09-03 |
+| [ADR-0024](0024-persist-canonical-review-decision-for-feedback.md)                    | Persistir a decisão canônica da review para feedback                  | `accepted`   | 2026-09-03 |
+| [ADR-0025](0025-bound-structural-analysis-and-promote-verifiable-findings.md)         | Limitar análise estrutural e promover findings verificáveis           | `accepted`   | 2026-09-03 |
 
 ## Regras
 

@@ -126,12 +126,8 @@ describe("CI Enrichment Service", () => {
           ),
       }),
       ledger: {
-        claimPublication: vi.fn(),
-        claimRun: vi.fn(),
-        completePublication: vi.fn(),
-        isLatestRun: vi.fn().mockResolvedValue(true),
+        loadCiEvidence: vi.fn(),
         saveCiEvidence: saveCiEvidenceMock,
-        transition: vi.fn(),
       },
     };
 

@@ -231,62 +231,6 @@ export function extractAndParseJsonReview(text: string): unknown {
   }
 }
 
-export function extractCandidateFindingsFromText(
-  text: string,
-): readonly unknown[] {
-  if (!text || typeof text !== "string") return [];
-  const findings: unknown[] = [];
-  const fileLinePattern =
-    /(?:^|\s)([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+):(\d+)(?:\b|\s)/gu;
-  let match: RegExpExecArray | null;
-  const seen = new Set<string>();
-
-  while ((match = fileLinePattern.exec(text)) !== null) {
-    const path = match[1]!;
-    const line = Number.parseInt(match[2]!, 10);
-    const key = `${path}:${line}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const afterMatch = text.slice(
-      match.index + match[0].length,
-      match.index + match[0].length + 400,
-    );
-    const codeMatch =
-      /`([^`\n]+)`|((?:return|const|let|var|def|func|export)\s+[^\n]+)/u.exec(
-        afterMatch,
-      );
-    const rawExcerpt = codeMatch?.[1] ?? codeMatch?.[2] ?? codeMatch?.[0];
-    const excerpt = rawExcerpt?.trim();
-
-    if (excerpt && excerpt.length >= 3) {
-      findings.push({
-        confidence: 0.85,
-        diagnostic: `Potential issue identified during investigation at ${path}:${line}`,
-        evidence: [
-          {
-            endLine: null,
-            excerpt: excerpt.slice(0, 290),
-            path,
-            reason: "Identified during investigative analysis",
-            startLine: line,
-          },
-        ],
-        location: {
-          line,
-          path,
-          side: "RIGHT",
-          startLine: null,
-        },
-        severity: "medium",
-        suggestion: null,
-      });
-    }
-    if (findings.length >= 3) break;
-  }
-  return findings;
-}
-
 export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public constructor(
     private readonly config: CloudflareGatewayModelConfig,
@@ -465,8 +409,6 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           .trim();
 
         if (rawFallbackText.length > 0) {
-          const extractedCandidates =
-            extractCandidateFindingsFromText(rawFallbackText);
           const maxSummaryLen = 2_500;
           let summary = rawFallbackText;
           if (summary.length > maxSummaryLen) {
@@ -482,7 +424,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           }
 
           const candidateOutput = {
-            findings: extractedCandidates,
+            findings: [],
             isDegraded: true,
             summary,
           };
@@ -502,6 +444,51 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       }
 
       throw error;
+    }
+  }
+
+  public async synthesizeSummary(
+    summaries: readonly string[],
+  ): Promise<string> {
+    const validSummaries = summaries
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (validSummaries.length <= 1) {
+      return validSummaries[0] ?? "";
+    }
+
+    const model = createGatewayLanguageModel(this.config);
+    const synthesisPrompt = [
+      "Merge the following separate review shard summaries for a single pull request into one unified, cohesive executive summary.",
+      "Eliminate duplicate introductory phrases, repetitive boilerplate, and redundant conclusions.",
+      "Preserve all specific, distinct technical observations, module assessments, and identified gaps.",
+      "Write directly and concisely in GitHub markdown prose without conversational filler.",
+      "",
+      "### Shard Summaries to Unify:",
+      ...validSummaries.map(
+        (summary, idx) => `#### Shard ${idx + 1}\n${summary}`,
+      ),
+    ].join("\n\n");
+
+    try {
+      const result = await generateText({
+        instructions:
+          "You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose.",
+        maxOutputTokens: 2_000,
+        maxRetries: 0,
+        model,
+        prompt: synthesisPrompt,
+        providerOptions: gatewayModelProviderOptions,
+        temperature: 0,
+      });
+
+      const synthesized = result.text?.trim();
+      return synthesized && synthesized.length > 0
+        ? synthesized
+        : validSummaries.join("\n\n");
+    } catch {
+      return validSummaries.join("\n\n");
     }
   }
 }

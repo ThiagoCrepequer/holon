@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-03
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -14,6 +14,8 @@ related:
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
   - ../decisions/0018-adopt-two-phase-decoupled-review-generator.md
+  - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
+  - ../decisions/0025-bound-structural-analysis-and-promote-verifiable-findings.md
 ---
 
 # Fluxo de execução de uma review
@@ -98,7 +100,8 @@ sequenceDiagram
 Na ordem normal, o Workflow executa `claim-run`, `start-run`,
 `revalidate-initial-head`, `start-check-run`, `prepare-repository`, `analyze-review`,
 `begin-publication`, `revalidate-current-head`, zero ou mais `publish-inline-N`,
-`publish-summary`, `complete-check-run`, `complete-run-and-schedule-cleanup` e o
+`publish-summary`, `save-pr-findings`, `record-review-decision`, `complete-check-run`,
+`complete-run-and-schedule-cleanup` e o
 registro durável de cleanup.
 
 O ciclo de vida no GitHub Check Runs é mantido de forma idempotente:
@@ -134,6 +137,14 @@ executa no container uma página fixa construída pelo host com `sed`, limitada 
 heurísticas reduzem ruído e exposição, mas não são um secret scanner e não
 tornam conteúdo elegível confiável.
 
+Na preparação, o executor também extrai lexicalmente símbolos exportados
+modificados ou removidos e consulta o checkout exato com `rg`. Essa busca usa os
+mesmos globs de exclusão, no máximo 100 arquivos candidatos, 64 kB por arquivo e
+1 MB total. `repositoryScanTruncated` torna timeout, falha ou estouro de limite
+visível; inventário vazio sob truncamento nunca prova ausência de dependentes.
+Essa camada não é AST nem resolve tipos. `ast-grep` continua sendo a ferramenta
+estrutural disponível ao modelo durante a investigação.
+
 O contexto filtrado preserva patches completos por arquivo. Para PRs maiores,
 o algoritmo de sharding (`buildReviewPlan`) agrupa arquivos elegíveis por localidade
 de diretório/módulo em shards bounded (`maxShardDiffBytes: 60 kB`, `maxShardFiles: 20`,
@@ -146,6 +157,12 @@ que deduplica achados, ordena por severidade, valida contra o Host Evidence Veri
 (garantindo que path, linha `RIGHT` e excerpt existam no patch canônico) e sintetiza o
 sumário executivo com a classificação de escopo (`complete`, `partial_by_policy`, `partial_by_failure`
 ou `unsupported`).
+
+Quebras determinísticas com linha `RIGHT` e excerpt verificáveis entram como
+candidatas no mesmo agregador e podem influenciar o veredito. Sinais sem âncora,
+incluindo remoções puras, ficam apenas no contexto e no resumo. Depois da
+reconciliação, somente findings canônicos ativos derivam o veredito final;
+findings dispensados, resolvidos ou obsoletos não permanecem bloqueando a run.
 
 O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
 contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise

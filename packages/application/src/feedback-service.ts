@@ -1,17 +1,23 @@
 import type {
   FindingFeedbackRecord,
+  FindingSeverity,
   PrKey,
   ReviewVerdict,
+  TrackedFinding,
 } from "@holon/domain";
 import {
-  applyFeedbackToFindings,
   determineReviewVerdict,
   isAuthorizedFeedbackAuthor,
   isDismissalFeedback,
   parseFeedbackCommand,
 } from "@holon/domain";
 
-import type { ReviewLedger, ReviewPublisher } from "./ports.js";
+import type {
+  AppliedFindingFeedback,
+  ApplyFindingFeedbackInput,
+  FeedbackLedger,
+  ReviewPublisher,
+} from "./ports.js";
 
 export interface ProcessFeedbackCommentInput {
   readonly authorAssociation?: string | undefined;
@@ -19,6 +25,7 @@ export interface ProcessFeedbackCommentInput {
   readonly body: string;
   readonly commentId: number;
   readonly createdAt?: string | undefined;
+  readonly deliveryId: string;
   readonly inReplyToCommentId?: number | undefined;
   readonly prKey: PrKey;
   readonly pullRequestNumber: number;
@@ -33,9 +40,10 @@ export interface ProcessFeedbackCommentResult {
 }
 
 export interface ProcessThreadResolvedInput {
-  readonly authorAssociation?: string | undefined;
   readonly authorLogin: string;
+  readonly authorized: boolean;
   readonly createdAt?: string | undefined;
+  readonly deliveryId: string;
   readonly prKey: PrKey;
   readonly pullRequestNumber: number;
   readonly rootCommentId: number;
@@ -48,251 +56,187 @@ export interface ProcessThreadResolvedResult {
   readonly verdictRecalculated?: boolean | undefined;
 }
 
+function activeVerdictCandidates(findings: readonly TrackedFinding[]) {
+  return findings.map((finding) => ({
+    confidence: finding.confidence ?? 1,
+    severity: finding.severity,
+  }));
+}
+
+function checkRunPresentation(verdict: ReviewVerdict) {
+  return {
+    conclusion:
+      verdict === "APPROVE"
+        ? ("success" as const)
+        : verdict === "REQUEST_CHANGES"
+          ? ("failure" as const)
+          : ("neutral" as const),
+    title:
+      verdict === "APPROVE"
+        ? "Holon Review — Approved"
+        : verdict === "REQUEST_CHANGES"
+          ? "Holon Review — Changes Requested"
+          : "Holon Review — Informational",
+  };
+}
+
+async function publishReplyOnce(
+  application: AppliedFindingFeedback,
+  deliveryId: string,
+  targetCommentId: number,
+  body: string,
+  ledger: FeedbackLedger,
+  publisher: ReviewPublisher,
+): Promise<boolean> {
+  if (application.replyCommentId !== undefined) return false;
+  if (publisher.replyToComment === undefined) return false;
+
+  const marker = `<!-- holon:v1;feedback=${encodeURIComponent(deliveryId)} -->`;
+  const existing = await publisher.findCommentByMarker(marker, "inline");
+  const replyCommentId =
+    existing ??
+    (await publisher.replyToComment(targetCommentId, `${body}\n\n${marker}`));
+  await ledger.completeFeedbackReply(deliveryId, replyCommentId);
+  return existing === undefined;
+}
+
+async function recalculateVerdict(
+  application: AppliedFindingFeedback,
+  summary: string,
+  publisher: ReviewPublisher,
+): Promise<ReviewVerdict | undefined> {
+  const decision = application.decision;
+  if (decision === undefined) return undefined;
+
+  const verdictDetails = determineReviewVerdict({
+    findings: activeVerdictCandidates(application.activeFindings),
+    isDegraded: decision.isDegraded,
+    scopeStatus: decision.scopeStatus,
+    shardsAnalyzed: decision.shardsAnalyzed,
+    totalShards: decision.totalShards,
+  });
+  if (
+    decision.checkRunId !== undefined &&
+    publisher.updateCheckRun !== undefined
+  ) {
+    const presentation = checkRunPresentation(verdictDetails.verdict);
+    await publisher.updateCheckRun({
+      checkRunId: decision.checkRunId,
+      conclusion: presentation.conclusion,
+      output: { summary, title: presentation.title },
+    });
+  }
+  return verdictDetails.verdict;
+}
+
+function findingUpdate(
+  label: FindingFeedbackRecord["label"],
+  targetSeverity?: FindingSeverity,
+): ApplyFindingFeedbackInput["update"] {
+  if (isDismissalFeedback(label)) return { status: "dismissed" };
+  if (label === "wrong_severity" && targetSeverity !== undefined) {
+    return { severity: targetSeverity };
+  }
+  return undefined;
+}
+
 export async function processFeedbackComment(
   input: ProcessFeedbackCommentInput,
-  ledger: ReviewLedger,
+  ledger: FeedbackLedger,
   publisher: ReviewPublisher,
 ): Promise<ProcessFeedbackCommentResult> {
   const command = parseFeedbackCommand(input.body);
-  if (!command) {
-    return { actionTaken: "ignored" };
+  if (command === undefined) return { actionTaken: "ignored" };
+
+  if (
+    (isDismissalFeedback(command.label) ||
+      command.label === "wrong_severity") &&
+    !isAuthorizedFeedbackAuthor(input.authorAssociation)
+  ) {
+    return { actionTaken: "unauthorized" };
   }
 
   const targetCommentId = input.inReplyToCommentId ?? input.commentId;
-  const finding = await ledger.findFindingByCommentId?.(
-    input.prKey,
-    targetCommentId,
-  );
-  if (!finding) {
-    return { actionTaken: "ignored" };
-  }
-
-  const createdAt = input.createdAt ?? new Date().toISOString();
-  const feedbackRecord: FindingFeedbackRecord = {
+  const application = await ledger.applyFindingFeedback({
     authorAssociation: input.authorAssociation,
     authorLogin: input.authorLogin,
-    createdAt,
-    fingerprint: finding.fingerprint,
+    createdAt: input.createdAt ?? new Date().toISOString(),
+    deliveryId: input.deliveryId,
     githubCommentId: input.commentId,
     label: command.label,
     prKey: input.prKey,
     reason: command.reason,
+    targetCommentId,
     targetSeverity: command.targetSeverity,
-  };
+    update: findingUpdate(command.label, command.targetSeverity),
+  });
+  if (application.outcome === "not_found") return { actionTaken: "ignored" };
 
-  await ledger.recordFindingFeedback?.(input.prKey, feedbackRecord);
-
-  if (isDismissalFeedback(command.label)) {
-    if (!isAuthorizedFeedbackAuthor(input.authorAssociation)) {
-      let replyPosted = false;
-      if (publisher.replyToComment) {
-        await publisher.replyToComment(
-          input.commentId,
-          "⚠️ Apenas mantenedores do repositório (com permissão de OWNER, MEMBER ou COLLABORATOR) podem dispensar apontamentos ou alterar o veredito do PR.",
-        );
-        replyPosted = true;
-      }
-      return {
-        actionTaken: "unauthorized",
-        feedback: feedbackRecord,
-        replyPosted,
-      };
-    }
-
-    const allFindings = (await ledger.loadPrFindings?.(input.prKey)) ?? [];
-    const updatedFindings = applyFeedbackToFindings(allFindings, [
-      feedbackRecord,
-    ]);
-    await ledger.savePrFindings?.(input.prKey, updatedFindings);
-
-    const activeCandidates = updatedFindings
-      .filter(
-        (f) =>
-          f.status === "new" ||
-          f.status === "persistent" ||
-          f.status === "reintroduced",
+  const changesVerdict =
+    isDismissalFeedback(command.label) || command.label === "wrong_severity";
+  const newVerdict = changesVerdict
+    ? await recalculateVerdict(
+        application,
+        `Verdict recalculated after finding feedback (${command.label}).`,
+        publisher,
       )
-      .map((f) => ({
-        confidence: 0.9,
-        diagnostic: f.diagnostic,
-        evidence: [
-          {
-            excerpt: f.diagnostic,
-            path: f.filePath,
-            reason: f.diagnostic,
-            startLine: f.line,
-          },
-        ],
-        location: {
-          line: f.line,
-          path: f.filePath,
-          side: "RIGHT" as const,
-        },
-        severity: f.severity,
-      }));
+    : undefined;
 
-    const verdictDetails = determineReviewVerdict({
-      findings: activeCandidates,
-      scopeStatus: "complete",
-    });
-
-    const externalId = `check-run:${input.prKey}`;
-    const checkRunId = await publisher.findCheckRunByExternalId?.(externalId);
-    if (checkRunId && publisher.updateCheckRun) {
-      const conclusion =
-        verdictDetails.verdict === "APPROVE"
-          ? "success"
-          : verdictDetails.verdict === "REQUEST_CHANGES"
-            ? "failure"
-            : "neutral";
-      const title =
-        verdictDetails.verdict === "APPROVE"
-          ? "Holon Review — Approved"
-          : "Holon Review — Changes Requested";
-      await publisher.updateCheckRun({
-        checkRunId,
-        conclusion,
-        output: {
-          summary: `Verdict recalculated after finding dismissal (${command.label}).`,
-          title,
-        },
-      });
-    }
-
-    let replyPosted = false;
-    if (publisher.replyToComment) {
-      const labelText = command.label.replaceAll("_", " ");
-      const reasonText = command.reason ? `: "${command.reason}"` : "";
-      const verdictText = ` Veredito do PR recalculado para **${verdictDetails.verdict}**.`;
-      await publisher.replyToComment(
-        input.commentId,
-        `👀 Defeito dispensado como ${labelText}${reasonText}.${verdictText}`,
-      );
-      replyPosted = true;
-    }
-
-    return {
-      actionTaken: "dismissed",
-      feedback: feedbackRecord,
-      newVerdict: verdictDetails.verdict,
-      replyPosted,
-      verdictRecalculated: true,
-    };
-  }
-
-  if (command.label === "helpful" && publisher.replyToComment) {
-    await publisher.replyToComment(
-      input.commentId,
-      "🙏 Obrigado pelo feedback! Registrado para calibração do modelo.",
-    );
-    return {
-      actionTaken: "recorded",
-      feedback: feedbackRecord,
-      replyPosted: true,
-    };
-  }
+  const reply = changesVerdict
+    ? `👀 Feedback aplicado como ${command.label.replaceAll("_", " ")}.${
+        newVerdict === undefined
+          ? " O veredito será recalculado na próxima execução completa."
+          : ` Veredito do PR recalculado para **${newVerdict}**.`
+      }`
+    : "🙏 Obrigado pelo feedback! Registrado para calibração do modelo.";
+  const replyPosted = await publishReplyOnce(
+    application,
+    input.deliveryId,
+    input.commentId,
+    reply,
+    ledger,
+    publisher,
+  );
 
   return {
-    actionTaken: "recorded",
-    feedback: feedbackRecord,
+    actionTaken: isDismissalFeedback(command.label) ? "dismissed" : "recorded",
+    feedback: application.feedback,
+    ...(newVerdict === undefined ? {} : { newVerdict }),
+    replyPosted,
+    ...(changesVerdict
+      ? { verdictRecalculated: newVerdict !== undefined }
+      : {}),
   };
 }
 
 export async function processThreadResolved(
   input: ProcessThreadResolvedInput,
-  ledger: ReviewLedger,
+  ledger: FeedbackLedger,
   publisher: ReviewPublisher,
 ): Promise<ProcessThreadResolvedResult> {
-  const finding = await ledger.findFindingByCommentId?.(
-    input.prKey,
-    input.rootCommentId,
-  );
-  if (
-    !finding ||
-    finding.status === "dismissed" ||
-    finding.status === "resolved" ||
-    !isAuthorizedFeedbackAuthor(input.authorAssociation)
-  ) {
-    return { actionTaken: "ignored" };
-  }
+  if (!input.authorized) return { actionTaken: "ignored" };
 
-  const createdAt = input.createdAt ?? new Date().toISOString();
-  const feedbackRecord: FindingFeedbackRecord = {
-    authorAssociation: input.authorAssociation,
+  const application = await ledger.applyFindingFeedback({
     authorLogin: input.authorLogin,
-    createdAt,
-    fingerprint: finding.fingerprint,
+    createdAt: input.createdAt ?? new Date().toISOString(),
+    deliveryId: input.deliveryId,
     githubCommentId: input.rootCommentId,
     label: "thread_resolved",
     prKey: input.prKey,
-  };
-
-  await ledger.recordFindingFeedback?.(input.prKey, feedbackRecord);
-
-  const allFindings = (await ledger.loadPrFindings?.(input.prKey)) ?? [];
-  const updatedFindings = applyFeedbackToFindings(allFindings, [
-    feedbackRecord,
-  ]);
-  await ledger.savePrFindings?.(input.prKey, updatedFindings);
-
-  const activeCandidates = updatedFindings
-    .filter(
-      (f) =>
-        f.status === "new" ||
-        f.status === "persistent" ||
-        f.status === "reintroduced",
-    )
-    .map((f) => ({
-      confidence: 0.9,
-      diagnostic: f.diagnostic,
-      evidence: [
-        {
-          excerpt: f.diagnostic,
-          path: f.filePath,
-          reason: f.diagnostic,
-          startLine: f.line,
-        },
-      ],
-      location: {
-        line: f.line,
-        path: f.filePath,
-        side: "RIGHT" as const,
-      },
-      severity: f.severity,
-    }));
-
-  const verdictDetails = determineReviewVerdict({
-    findings: activeCandidates,
-    scopeStatus: "complete",
+    targetCommentId: input.rootCommentId,
+    update: { status: "dismissed" },
   });
+  if (application.outcome === "not_found") return { actionTaken: "ignored" };
 
-  const externalId = `check-run:${input.prKey}`;
-  const checkRunId = await publisher.findCheckRunByExternalId?.(externalId);
-  if (checkRunId && publisher.updateCheckRun) {
-    const conclusion =
-      verdictDetails.verdict === "APPROVE"
-        ? "success"
-        : verdictDetails.verdict === "REQUEST_CHANGES"
-          ? "failure"
-          : "neutral";
-    const title =
-      verdictDetails.verdict === "APPROVE"
-        ? "Holon Review — Approved"
-        : "Holon Review — Changes Requested";
-    await publisher.updateCheckRun({
-      checkRunId,
-      conclusion,
-      output: {
-        summary: "Verdict recalculated after thread resolution.",
-        title,
-      },
-    });
-  }
-
+  const newVerdict = await recalculateVerdict(
+    application,
+    "Verdict recalculated after thread resolution.",
+    publisher,
+  );
   return {
     actionTaken: "dismissed",
-    feedback: feedbackRecord,
-    newVerdict: verdictDetails.verdict,
-    verdictRecalculated: true,
+    feedback: application.feedback,
+    ...(newVerdict === undefined ? {} : { newVerdict }),
+    verdictRecalculated: newVerdict !== undefined,
   };
 }

@@ -262,6 +262,36 @@ describe("contract-break-detector", () => {
     expect(breaks[0]?.description).toContain("deleteUser");
   });
 
+  it("does not treat removed exports in internal apps as contract breaks unless consumed downstream", () => {
+    const symbols = [
+      {
+        change: "deleted" as const,
+        isExported: true,
+        kind: "function" as const,
+        line: 10,
+        name: "internalHelper",
+        path: "apps/repository-executor/src/review-context.ts",
+      },
+    ];
+
+    // Without downstream consumers: no contract break
+    const breaksNoConsumers = detectContractBreaks([], symbols, []);
+    expect(breaksNoConsumers).toHaveLength(0);
+
+    // With downstream consumers: contract break
+    const breaksWithConsumers = detectContractBreaks([], symbols, [
+      {
+        callerLine: 5,
+        callerPath: "apps/control-plane/src/worker.ts",
+        excerpt: "import { internalHelper } from './review-context'",
+        symbolName: "internalHelper",
+        targetPath: "apps/repository-executor/src/review-context.ts",
+      },
+    ]);
+    expect(breaksWithConsumers).toHaveLength(1);
+    expect(breaksWithConsumers[0]?.description).toContain("internalHelper");
+  });
+
   it("detects destructive SQL migrations and handles deletions and malformed patches", () => {
     const files = [
       {
@@ -471,5 +501,36 @@ describe("analyzeStructuralImpact", () => {
     expect(report.totalDownstreamReferencesCount).toBe(2);
     expect(report.securitySurfaces).toHaveLength(1);
     expect(report.testGaps).toHaveLength(1);
+    expect(report.repositoryScanTruncated).toBe(false);
+  });
+
+  it("promotes a deterministic destructive SQL signal into a host-verifiable finding", () => {
+    const patch = [
+      "diff --git a/migrations/002.sql b/migrations/002.sql",
+      "--- a/migrations/002.sql",
+      "+++ b/migrations/002.sql",
+      "@@ -0,0 +1 @@",
+      "+DROP TABLE accounts;",
+    ].join("\n");
+
+    const report = analyzeStructuralImpact({
+      changedFiles: [{ patch, path: "migrations/002.sql" }],
+      repositoryFiles: [],
+    });
+
+    expect(report.deterministicFindings).toEqual([
+      expect.objectContaining({
+        confidence: 1,
+        evidence: [
+          expect.objectContaining({ excerpt: "DROP TABLE accounts;" }),
+        ],
+        location: {
+          line: 1,
+          path: "migrations/002.sql",
+          side: "RIGHT",
+        },
+        severity: "critical",
+      }),
+    ]);
   });
 });

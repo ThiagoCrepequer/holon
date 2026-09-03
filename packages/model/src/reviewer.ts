@@ -27,6 +27,7 @@ export interface ReviewPromptResult {
 
 export interface ReviewGenerator {
   generate(request: ReviewGenerationRequest): Promise<unknown>;
+  synthesizeSummary?(summaries: readonly string[]): Promise<string>;
 }
 
 export interface RepositoryToolResult {
@@ -178,6 +179,8 @@ export function buildReviewPromptResult(
             ),
             downstreamReferences:
               context.structuralImpact.downstreamReferences.slice(0, 15),
+            repositoryScanTruncated:
+              context.structuralImpact.repositoryScanTruncated ?? false,
             securitySurfaces: context.structuralImpact.securitySurfaces.slice(
               0,
               10,
@@ -242,5 +245,17 @@ export class GatewayModelReviewer implements ModelReviewer {
       output: modelReviewOutputSchema.parse(redactModelReviewOutput(output)),
       promptTruncated: prompt.truncated,
     };
+  }
+
+  public async synthesizeReviewSummary(
+    _job: ReviewJob,
+    input: {
+      readonly shardSummaries: readonly string[];
+    },
+  ): Promise<string> {
+    if (this.generator.synthesizeSummary !== undefined) {
+      return await this.generator.synthesizeSummary(input.shardSummaries);
+    }
+    return input.shardSummaries.join("\n\n");
   }
 }

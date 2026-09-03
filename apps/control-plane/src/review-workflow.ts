@@ -1,43 +1,31 @@
 import {
-  aggregateShardReviews,
   createReviewRun,
   determineCheckRunConclusion,
   formatCheckRunOutput,
   renderFinding,
 } from "@holon/application";
 import {
-  modelReviewOutputSchema,
   reviewJobSchema,
-  type AggregatedReviewResult,
   type CheckRunConclusion,
   type CheckRunOutput,
   type ReviewJob,
   type RunTelemetry,
-  type ShardReviewResult,
   type StepTiming,
-  type StructuralImpactReport,
 } from "@holon/contracts";
 import {
   appendCiEvidenceToSummary,
   calculateInferenceCost,
   classifyFindingPublication,
-  computeStableFingerprint,
   createFindingId,
   createPrKey,
   evaluateRunSlo,
-  reconcileFindings,
-  type ReconciledFinding,
   type RunState,
-  type TrackedFinding,
 } from "@holon/domain";
-import { nonRetryableModelFailureCode } from "@holon/model";
-import { buildReviewPlan } from "@holon/repository-analysis";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
-import { NonRetryableError } from "cloudflare:workflows";
 
 import {
   isReviewMutationNotAuthorizedError,
@@ -45,6 +33,7 @@ import {
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
 import { consoleLogger, errorKind } from "./observability.js";
+import { analyzeReview } from "./review-analysis.js";
 import {
   createReviewServices,
   type GitHubMutationContext,
@@ -73,15 +62,6 @@ export class ReviewWorkflow extends WorkflowEntrypoint<
   ) {
     return await executeReviewWorkflow(this.env, event, step);
   }
-}
-
-function contextBytes(context: {
-  readonly files: readonly { readonly patch: string }[];
-}): number {
-  return context.files.reduce(
-    (total, file) => total + new TextEncoder().encode(file.patch).byteLength,
-    0,
-  );
 }
 
 export async function executeReviewWorkflow(
@@ -351,181 +331,11 @@ export async function executeReviewWorkflow(
     });
     recordStepTiming("prepare-repository", Date.now() - prepStart, "success");
 
-    type ReconciledReviewOutput = AggregatedReviewResult & {
-      readonly activeFindings: readonly ReconciledFinding[];
-      readonly resolvedFindings: readonly TrackedFinding[];
-      readonly structuralImpact?: StructuralImpactReport | undefined;
-      readonly updatedTrackedFindings: readonly TrackedFinding[];
-    };
-
     const analysisStart = Date.now();
-    const output: ReconciledReviewOutput = await step.do(
+    const output = await step.do(
       "analyze-review",
       modelStep,
-      async () => {
-        try {
-          await services.ensureContext(2);
-          const context = await services.loadContext();
-          const patchBytes = contextBytes(context);
-          emit("model.input", {
-            changedLineCount: context.changedLines.length,
-            estimatedPatchTokens: Math.ceil(patchBytes / 4),
-            patchBytes,
-            structuralFileCount: context.files.filter(
-              (file) => file.mode === "structural",
-            ).length,
-            surfaceCount: context.surface?.length ?? 0,
-            textualFileCount: context.files.filter(
-              (file) => file.mode === "textual",
-            ).length,
-            truncated: context.truncated,
-          });
-
-          const diffFiles = context.files.map((file) => ({
-            changeType: "modified" as const,
-            newPath: file.path,
-            oldPath: file.path,
-            patch: file.patch,
-            path: file.path,
-          }));
-          const plan = buildReviewPlan(diffFiles);
-
-          if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
-            return {
-              ...aggregateShardReviews(plan, []),
-              activeFindings: [] as readonly ReconciledFinding[],
-              resolvedFindings: [] as readonly TrackedFinding[],
-              structuralImpact: context.structuralImpact,
-              updatedTrackedFindings: [] as readonly TrackedFinding[],
-            };
-          }
-
-          const shardResults: ShardReviewResult[] = [];
-          for (const shard of plan.shards) {
-            const shardContext = {
-              changedLines: shard.changedLines,
-              files: shard.files,
-              schemaVersion: 2 as const,
-              structuralImpact: context.structuralImpact,
-              surface: shard.surface,
-              truncated: shard.totalShards > 1,
-            };
-            if (plan.shards.length === 1) {
-              const reviewResult = await services.model.review(
-                job,
-                shardContext,
-              );
-              const modelOutput = modelReviewOutputSchema.parse(
-                reviewResult.output,
-              );
-              shardResults.push({
-                findings: modelOutput.findings,
-                isDegraded: modelOutput.isDegraded,
-                shardId: shard.id,
-                shardIndex: shard.index,
-                status: "success",
-                summary: modelOutput.summary,
-              });
-            } else {
-              try {
-                const reviewResult = await services.model.review(
-                  job,
-                  shardContext,
-                );
-                const modelOutput = modelReviewOutputSchema.parse(
-                  reviewResult.output,
-                );
-                shardResults.push({
-                  findings: modelOutput.findings,
-                  isDegraded: modelOutput.isDegraded,
-                  shardId: shard.id,
-                  shardIndex: shard.index,
-                  status: "success",
-                  summary: modelOutput.summary,
-                });
-              } catch (error) {
-                const failureCode = nonRetryableModelFailureCode(error);
-                const reason =
-                  failureCode !== undefined
-                    ? `model_${failureCode}`
-                    : error instanceof Error
-                      ? error.message
-                      : "Unknown error";
-                shardResults.push({
-                  errorReason: reason,
-                  findings: [],
-                  shardId: shard.id,
-                  shardIndex: shard.index,
-                  status: "failure",
-                  summary: "",
-                });
-              }
-            }
-          }
-
-          if (
-            shardResults.length > 0 &&
-            shardResults.every((r) => r.status === "failure")
-          ) {
-            throw new Error("All review shards failed during model execution");
-          }
-
-          const rawAggregated = aggregateShardReviews(plan, shardResults);
-
-          const currentWithFingerprints = await Promise.all(
-            rawAggregated.findings.map(async (finding) => {
-              const fingerprint = await computeStableFingerprint({
-                diagnostic: finding.diagnostic,
-                excerpt: finding.evidence[0]?.excerpt ?? "",
-                path: finding.location.path,
-              });
-              return { ...finding, fingerprint };
-            }),
-          );
-
-          const baseline = services.ledger.loadPrFindings
-            ? await services.ledger.loadPrFindings(prKey)
-            : [];
-
-          const prFiles = plan.shards.flatMap((s) =>
-            s.files.map((f) => f.path),
-          );
-
-          const reconciled = reconcileFindings({
-            baselineFindings: baseline,
-            currentFindings: currentWithFingerprints,
-            currentHeadSha: job.envelope.pullRequest.headSha,
-            currentRunId: run.id,
-            prFiles,
-            prKey,
-          });
-
-          const finalAggregated = aggregateShardReviews(
-            plan,
-            shardResults,
-            undefined,
-            undefined,
-            reconciled.summary,
-            context.structuralImpact,
-          );
-
-          return {
-            ...finalAggregated,
-            activeFindings: reconciled.activeFindings,
-            resolvedFindings: reconciled.resolvedFindings,
-            structuralImpact: context.structuralImpact,
-            updatedTrackedFindings: reconciled.updatedTrackedFindings,
-          };
-        } catch (error) {
-          const failureCode = nonRetryableModelFailureCode(error);
-          if (failureCode !== undefined) {
-            throw new NonRetryableError(
-              `HOLON_MODEL_NON_RETRYABLE:${failureCode}`,
-            );
-          }
-          throw error;
-        }
-      },
+      async () => await analyzeReview(job, services, emit),
     );
     recordStepTiming("analyze-review", Date.now() - analysisStart, "success");
 
@@ -656,24 +466,22 @@ export async function executeReviewWorkflow(
       async () => {
         const github = await services.createMutationContext();
         let summaryText = output.summary;
-        if (services.ledger.loadCiEvidence) {
-          try {
-            const ciEvidence = await services.ledger.loadCiEvidence(
-              prKey,
-              job.envelope.pullRequest.headSha,
+        try {
+          const ciEvidence = await services.ledger.loadCiEvidence(
+            prKey,
+            job.envelope.pullRequest.headSha,
+          );
+          if (ciEvidence?.markdown) {
+            summaryText = appendCiEvidenceToSummary(
+              summaryText,
+              ciEvidence.markdown,
             );
-            if (ciEvidence?.markdown) {
-              summaryText = appendCiEvidenceToSummary(
-                summaryText,
-                ciEvidence.markdown,
-              );
-            }
-          } catch (error) {
-            emit("ci_evidence_load_failed", {
-              errorKind: errorKind(error),
-              prKey,
-            });
           }
+        } catch (error) {
+          emit("ci_evidence_load_failed", {
+            errorKind: errorKind(error),
+            prKey,
+          });
         }
         try {
           const published = await publishAuthorized(
@@ -705,9 +513,16 @@ export async function executeReviewWorkflow(
 
     // Persist tracked findings in ledger
     await step.do("save-pr-findings", publicationStep, async () => {
-      if (services.ledger.savePrFindings !== undefined) {
-        await services.ledger.savePrFindings(prKey, trackedToPersist);
-      }
+      await services.ledger.savePrFindings(prKey, trackedToPersist);
+    });
+    await step.do("record-review-decision", stateStep, async () => {
+      await services.ledger.recordReviewDecision(run.id, {
+        headSha: job.envelope.pullRequest.headSha,
+        isDegraded: output.isDegraded === true,
+        scopeStatus: output.scopeStatus,
+        shardsAnalyzed: output.shardsAnalyzed,
+        totalShards: output.totalShards,
+      });
     });
 
     const isPartial =
@@ -774,9 +589,7 @@ export async function executeReviewWorkflow(
       });
     }
 
-    if (services.ledger.saveRunTelemetry) {
-      await services.ledger.saveRunTelemetry(runTelemetry).catch(() => {});
-    }
+    await services.ledger.saveRunTelemetry(runTelemetry).catch(() => {});
     void services.telemetry?.emitRunTelemetry(runTelemetry);
 
     const completedAt = await moveTo(
@@ -827,9 +640,7 @@ export async function executeReviewWorkflow(
       tokens: tokenAccounting,
       toolCallsCount: usage.toolCallsCount,
     };
-    if (services.ledger.saveRunTelemetry) {
-      await services.ledger.saveRunTelemetry(failedTelemetry).catch(() => {});
-    }
+    await services.ledger.saveRunTelemetry(failedTelemetry).catch(() => {});
     void services.telemetry?.emitRunTelemetry(failedTelemetry);
 
     const terminal = await step

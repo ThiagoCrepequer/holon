@@ -151,6 +151,7 @@ describe("ReviewLedgerObject", () => {
         { version: 5 },
         { version: 6 },
         { version: 7 },
+        { version: 8 },
       ]);
       expect(
         state.storage.sql
@@ -480,6 +481,7 @@ describe("ReviewLedgerObject", () => {
     const fingerprint = `fp:${"c".repeat(64)}` as const;
 
     const initialFinding = {
+      confidence: 0.73,
       diagnostic: "SQL injection vulnerability in query builder.",
       filePath: "src/db/query.ts",
       fingerprint,
@@ -574,6 +576,81 @@ describe("ReviewLedgerObject", () => {
       initialFinding.fingerprint,
     );
     expect(scopedFeedbacks).toHaveLength(1);
+  });
+
+  it("applies feedback once and returns the persisted review decision", async () => {
+    const prKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    const fingerprint = `fp:${"d".repeat(64)}` as const;
+    await ledger.claimRun(run, "wf-feedback");
+    await expect(
+      ledger.loadLatestReviewDecision(prKey),
+    ).resolves.toBeUndefined();
+    await runInDurableObject(ledger, (object) => {
+      object.recordCheckRunId(runId, 404);
+    });
+    await ledger.recordReviewDecision(runId, {
+      headSha: "a".repeat(40),
+      isDegraded: true,
+      scopeStatus: "partial_by_failure",
+      shardsAnalyzed: 1,
+      totalShards: 2,
+    });
+    await ledger.savePrFindings(prKey, [
+      {
+        confidence: 0.62,
+        diagnostic: "A persisted finding with enough detail.",
+        filePath: "src/example.ts",
+        fingerprint,
+        firstSeenHeadSha: "a".repeat(40),
+        firstSeenRunId: runId,
+        githubCommentId: 202,
+        lastSeenHeadSha: "a".repeat(40),
+        lastSeenRunId: runId,
+        line: 12,
+        prKey,
+        severity: "high",
+        status: "new",
+        updatedAt: "2026-09-03T12:00:00.000Z",
+      },
+    ]);
+
+    const input = {
+      authorAssociation: "MEMBER",
+      authorLogin: "alice",
+      createdAt: "2026-09-03T12:05:00.000Z",
+      deliveryId: "github:delivery-123",
+      githubCommentId: 303,
+      label: "false_positive" as const,
+      prKey,
+      targetCommentId: 202,
+      update: { status: "dismissed" as const },
+    };
+    const first = await ledger.applyFindingFeedback(input);
+    await ledger.completeFeedbackReply(input.deliveryId, 909);
+    const duplicate = await ledger.applyFindingFeedback(input);
+
+    expect(first).toMatchObject({
+      activeFindings: [],
+      decision: {
+        checkRunId: 404,
+        headSha: "a".repeat(40),
+        isDegraded: true,
+        runId,
+        scopeStatus: "partial_by_failure",
+        shardsAnalyzed: 1,
+        totalShards: 2,
+      },
+      outcome: "applied",
+    });
+    expect(duplicate).toMatchObject({
+      outcome: "duplicate",
+      replyCommentId: 909,
+    });
+    await expect(ledger.loadFindingFeedbacks(prKey)).resolves.toHaveLength(1);
+    await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
+      { confidence: 0.62, status: "dismissed" },
+    ]);
   });
 
   it("rejects claimPublication when run is not in publishing state", async () => {

@@ -4,9 +4,10 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-29
+last-reviewed: 2026-09-03
 related:
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
+  - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
 ---
 
 # Estado e idempotência
@@ -17,13 +18,14 @@ concluído uma operação mesmo quando a resposta não chegou.
 
 ## Identidades
 
-| Identidade  | Forma implementada                                          | Uso                                     |
-| ----------- | ----------------------------------------------------------- | --------------------------------------- |
-| Delivery    | `github:<delivery_id>`                                      | Detectar redelivery literal do webhook  |
-| Run         | `github:<repo_id>:pr:<number>:head:<sha>`                   | Uma análise lógica de uma revisão do PR |
-| Workflow    | `review-<sha256(run-id)>`                                   | Criação idempotente e dono da execução  |
-| Finding     | Hash de run + caminho + intervalo + diagnóstico normalizado | Reconciliar o mesmo finding             |
-| Publication | Run + finding ou `summary`                                  | Impedir comentário duplicado            |
+| Identidade  | Forma implementada                                       | Uso                                     |
+| ----------- | -------------------------------------------------------- | --------------------------------------- |
+| Delivery    | `github:<delivery_id>`                                   | Detectar redelivery literal do webhook  |
+| Run         | `github:<repo_id>:pr:<number>:head:<sha>`                | Uma análise lógica de uma revisão do PR |
+| Workflow    | `review-<sha256(run-id)>`                                | Criação idempotente e dono da execução  |
+| Finding     | Hash estável de path + excerpt + diagnóstico normalizado | Reconciliar entre runs do mesmo PR      |
+| Publication | Run + finding ou `summary`                               | Impedir comentário duplicado            |
+| Feedback    | `github:<delivery_id>`                                   | Aplicar comando e responder uma vez     |
 
 IDs devem ser opacos fora do domínio e nunca incluir segredo.
 
@@ -99,3 +101,16 @@ O schema evolui por `schema_migrations` transacional. Tarefas de cleanup ficam
 em tabela própria; terminalização e criação da tarefa acontecem atomicamente.
 Um alarm tenta uma tarefa pending por vez, registra tentativas e remove o
 credential scope somente após o executor confirmar cleanup.
+
+Cada run persiste o snapshot canônico usado na decisão (`headSha`, escopo,
+shards analisados, degradação e Check Run ID). Findings persistem também a
+confiança validada. Feedback que altera finding é autorizado antes de chegar ao
+ledger e aplicado junto com seu delivery ID na mesma transação SQLite. Em
+redelivery, o ledger retorna o evento já aplicado e o ID de resposta, quando
+conhecido. A resposta no GitHub contém marcador determinístico para reconciliar
+o intervalo entre efeito externo e persistência do ID.
+
+A reconciliação de ciclo de vida é dependente de cobertura: um finding ausente
+só vira `resolved` quando seu arquivo foi revisado, e só vira `obsolete` quando
+uma análise completa prova que o arquivo deixou o PR. Falha de shard, resposta
+degradada ou escopo parcial preservam findings fora da cobertura observada.

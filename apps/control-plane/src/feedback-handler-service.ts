@@ -1,7 +1,7 @@
 import type {
+  FeedbackLedger,
   ProcessFeedbackCommentResult,
   ProcessThreadResolvedResult,
-  ReviewLedger,
   ReviewPublisher,
 } from "@holon/application";
 import {
@@ -18,9 +18,17 @@ import {
 } from "@holon/github";
 
 import { parseAppId } from "./credential-broker.js";
-import { consoleLogger, type StructuredLogger } from "./observability.js";
+import {
+  consoleLogger,
+  errorKind,
+  type StructuredLogger,
+} from "./observability.js";
 
 export interface FeedbackHandlerDependencies {
+  readonly authorizeThreadResolver?: (
+    session: GitHubInstallationSession,
+    event: ReviewThreadWebhookEvent,
+  ) => Promise<boolean>;
   readonly createPublisher?: (
     api: GitHubInstallationSession["api"],
     target: {
@@ -36,9 +44,81 @@ export interface FeedbackHandlerDependencies {
     installationId: number,
     repositoryId: number,
   ) => Promise<GitHubInstallationSession>;
-  readonly ledger?: ReviewLedger;
+  readonly ledger?: FeedbackLedger;
   readonly logger?: StructuredLogger;
   readonly publisher?: ReviewPublisher;
+}
+
+type FeedbackEvent = ReviewCommentWebhookEvent | ReviewThreadWebhookEvent;
+
+function resolveLedger(
+  env: Cloudflare.Env,
+  event: FeedbackEvent,
+  dependencies: FeedbackHandlerDependencies,
+  logger: StructuredLogger,
+) {
+  const prKey = createPrKey({
+    provider: "github",
+    pullRequestNumber: event.pullRequestNumber,
+    repositoryId: event.repository.id,
+  });
+  const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
+  if (ledger === undefined) {
+    logger.emit("feedback_handler_ledger_unavailable", { prKey });
+    return undefined;
+  }
+  return { ledger, prKey };
+}
+
+async function createSession(
+  env: Cloudflare.Env,
+  event: FeedbackEvent,
+  dependencies: FeedbackHandlerDependencies,
+): Promise<GitHubInstallationSession> {
+  const factory = dependencies.createSession ?? createInstallationSession;
+  return await factory(
+    {
+      appId: parseAppId(env.GITHUB_APP_ID),
+      appSlug: env.GITHUB_APP_SLUG,
+      privateKey: env.GITHUB_APP_PRIVATE_KEY,
+    },
+    event.installationId,
+    event.repository.id,
+  );
+}
+
+async function resolvePublisher(
+  event: FeedbackEvent,
+  headSha: string,
+  dependencies: FeedbackHandlerDependencies,
+  session?: GitHubInstallationSession,
+): Promise<ReviewPublisher> {
+  if (dependencies.publisher !== undefined) return dependencies.publisher;
+  if (session === undefined) {
+    throw new TypeError("GitHub session is required to create a publisher");
+  }
+  const factory =
+    dependencies.createPublisher ??
+    ((api, target) => new GitHubReviewPublisher(api, target));
+  return factory(session.api, {
+    expectedAuthorLogin: session.expectedAuthorLogin,
+    headSha,
+    owner: event.repository.owner,
+    pullNumber: event.pullRequestNumber,
+    repo: event.repository.name,
+  });
+}
+
+function sessionFailure(
+  logger: StructuredLogger,
+  event: FeedbackEvent,
+  error: unknown,
+): void {
+  logger.emit("feedback_handler_session_failed", {
+    errorKind: errorKind(error),
+    installationId: event.installationId,
+    pullRequestNumber: event.pullRequestNumber,
+  });
 }
 
 export async function handleFeedbackCommentWebhook(
@@ -47,66 +127,43 @@ export async function handleFeedbackCommentWebhook(
   dependencies: FeedbackHandlerDependencies = {},
 ): Promise<ProcessFeedbackCommentResult> {
   const logger = dependencies.logger ?? consoleLogger;
-  const prKey = createPrKey({
-    provider: "github",
-    pullRequestNumber: event.pullRequestNumber,
-    repositoryId: event.repository.id,
-  });
-  const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
-  if (!ledger) {
-    logger.emit("feedback_handler_ledger_unavailable", { prKey });
+  const resolved = resolveLedger(env, event, dependencies, logger);
+  if (resolved === undefined) return { actionTaken: "ignored" };
+
+  try {
+    const decision = await resolved.ledger.loadLatestReviewDecision(
+      resolved.prKey,
+    );
+    if (decision === undefined) return { actionTaken: "ignored" };
+    const session =
+      dependencies.publisher === undefined
+        ? await createSession(env, event, dependencies)
+        : undefined;
+    const publisher = await resolvePublisher(
+      event,
+      decision.headSha,
+      dependencies,
+      session,
+    );
+    return await processFeedbackComment(
+      {
+        authorAssociation: event.authorAssociation,
+        authorLogin: event.authorLogin,
+        body: event.body,
+        commentId: event.commentId,
+        createdAt: event.createdAt,
+        deliveryId: event.deliveryId,
+        inReplyToCommentId: event.inReplyToId,
+        prKey: resolved.prKey,
+        pullRequestNumber: event.pullRequestNumber,
+      },
+      resolved.ledger,
+      publisher,
+    );
+  } catch (error) {
+    sessionFailure(logger, event, error);
     return { actionTaken: "ignored" };
   }
-
-  let publisher = dependencies.publisher;
-  if (!publisher) {
-    try {
-      const credentials = {
-        appId: parseAppId(env.GITHUB_APP_ID),
-        appSlug: env.GITHUB_APP_SLUG,
-        privateKey: env.GITHUB_APP_PRIVATE_KEY,
-      };
-      const sessionFactory =
-        dependencies.createSession ?? createInstallationSession;
-      const session = await sessionFactory(
-        credentials,
-        event.installationId,
-        event.repository.id,
-      );
-      const publisherFactory =
-        dependencies.createPublisher ??
-        ((api, target) => new GitHubReviewPublisher(api, target));
-      publisher = publisherFactory(session.api, {
-        expectedAuthorLogin: session.expectedAuthorLogin,
-        headSha: "",
-        owner: event.repository.owner,
-        pullNumber: event.pullRequestNumber,
-        repo: event.repository.name,
-      });
-    } catch (error) {
-      logger.emit("feedback_handler_session_failed", {
-        error: error instanceof Error ? error.message : String(error),
-        installationId: event.installationId,
-        pullRequestNumber: event.pullRequestNumber,
-      });
-      return { actionTaken: "ignored" };
-    }
-  }
-
-  return processFeedbackComment(
-    {
-      authorAssociation: event.authorAssociation,
-      authorLogin: event.authorLogin,
-      body: event.body,
-      commentId: event.commentId,
-      createdAt: event.createdAt,
-      inReplyToCommentId: event.inReplyToId,
-      prKey,
-      pullRequestNumber: event.pullRequestNumber,
-    },
-    ledger,
-    publisher,
-  );
 }
 
 export async function handleThreadResolvedWebhook(
@@ -115,61 +172,53 @@ export async function handleThreadResolvedWebhook(
   dependencies: FeedbackHandlerDependencies = {},
 ): Promise<ProcessThreadResolvedResult> {
   const logger = dependencies.logger ?? consoleLogger;
-  const prKey = createPrKey({
-    provider: "github",
-    pullRequestNumber: event.pullRequestNumber,
-    repositoryId: event.repository.id,
-  });
-  const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
-  if (!ledger) {
-    logger.emit("feedback_handler_ledger_unavailable", { prKey });
+  const resolved = resolveLedger(env, event, dependencies, logger);
+  if (resolved === undefined) return { actionTaken: "ignored" };
+
+  try {
+    const decision = await resolved.ledger.loadLatestReviewDecision(
+      resolved.prKey,
+    );
+    if (decision === undefined) return { actionTaken: "ignored" };
+    const session = await createSession(env, event, dependencies);
+    const authorize =
+      dependencies.authorizeThreadResolver ??
+      (async (currentSession, currentEvent) => {
+        if (currentSession.repositoryPermission === undefined) {
+          throw new TypeError(
+            "GitHub session does not support repository permission lookup",
+          );
+        }
+        const permission = await currentSession.repositoryPermission(
+          currentEvent.repository.owner,
+          currentEvent.repository.name,
+          currentEvent.authorLogin,
+        );
+        return ["admin", "maintain", "write"].includes(
+          permission.toLowerCase(),
+        );
+      });
+    const authorized = await authorize(session, event);
+    const publisher = await resolvePublisher(
+      event,
+      decision.headSha,
+      dependencies,
+      session,
+    );
+    return await processThreadResolved(
+      {
+        authorLogin: event.authorLogin,
+        authorized,
+        deliveryId: event.deliveryId,
+        prKey: resolved.prKey,
+        pullRequestNumber: event.pullRequestNumber,
+        rootCommentId: event.rootCommentId,
+      },
+      resolved.ledger,
+      publisher,
+    );
+  } catch (error) {
+    sessionFailure(logger, event, error);
     return { actionTaken: "ignored" };
   }
-
-  let publisher = dependencies.publisher;
-  if (!publisher) {
-    try {
-      const credentials = {
-        appId: parseAppId(env.GITHUB_APP_ID),
-        appSlug: env.GITHUB_APP_SLUG,
-        privateKey: env.GITHUB_APP_PRIVATE_KEY,
-      };
-      const sessionFactory =
-        dependencies.createSession ?? createInstallationSession;
-      const session = await sessionFactory(
-        credentials,
-        event.installationId,
-        event.repository.id,
-      );
-      const publisherFactory =
-        dependencies.createPublisher ??
-        ((api, target) => new GitHubReviewPublisher(api, target));
-      publisher = publisherFactory(session.api, {
-        expectedAuthorLogin: session.expectedAuthorLogin,
-        headSha: "",
-        owner: event.repository.owner,
-        pullNumber: event.pullRequestNumber,
-        repo: event.repository.name,
-      });
-    } catch (error) {
-      logger.emit("feedback_handler_session_failed", {
-        error: error instanceof Error ? error.message : String(error),
-        installationId: event.installationId,
-        pullRequestNumber: event.pullRequestNumber,
-      });
-      return { actionTaken: "ignored" };
-    }
-  }
-
-  return processThreadResolved(
-    {
-      authorAssociation: event.authorAssociation,
-      authorLogin: event.authorLogin,
-      prKey,
-      pullRequestNumber: event.pullRequestNumber,
-      rootCommentId: event.rootCommentId,
-    },
-    ledger,
-    publisher,
-  );
 }

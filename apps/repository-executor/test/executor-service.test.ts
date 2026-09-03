@@ -203,7 +203,9 @@ describe("RepositoryExecutorService", () => {
       structuralImpact: {
         changedSymbols: [],
         contractBreaks: [],
+        deterministicFindings: [],
         downstreamReferences: [],
+        repositoryScanTruncated: false,
         securitySurfaces: [],
         testGaps: [
           {
@@ -495,6 +497,53 @@ describe("RepositoryExecutorService", () => {
         ? Promise.resolve({
             exitCode: 128,
             stderr: "The requested URL returned error: 503",
+            stdout: "",
+            truncated: false,
+          })
+        : originalRun(argv, options);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, legacyInstallationToken),
+    ).rejects.toMatchObject({
+      name: "RepositoryTransientError",
+      retryable: true,
+      stage: "fetch",
+    });
+  });
+
+  it("retries a fetch rejected by a GitHub ref propagation delay (404 / couldn't find remote ref)", async () => {
+    const sandbox = new FakeSandbox();
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv.includes("fetch")
+        ? Promise.resolve({
+            exitCode: 128,
+            stderr: "fatal: couldn't find remote ref refs/pull/46/head",
+            stdout: "",
+            truncated: false,
+          })
+        : originalRun(argv, options);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+
+    await expect(
+      service.prepare(request, legacyInstallationToken),
+    ).rejects.toMatchObject({
+      name: "RepositoryTransientError",
+      retryable: true,
+      stage: "fetch",
+    });
+    expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("retries a fetch rejected by a GitHub 404 repository/ref delay", async () => {
+    const sandbox = new FakeSandbox();
+    const originalRun = sandbox.run.bind(sandbox);
+    sandbox.run = (argv, options) =>
+      argv.includes("fetch")
+        ? Promise.resolve({
+            exitCode: 128,
+            stderr: "The requested URL returned error: 404",
             stdout: "",
             truncated: false,
           })

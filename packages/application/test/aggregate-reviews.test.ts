@@ -430,13 +430,9 @@ describe("aggregateShardReviews", () => {
         totalActiveCount: 0,
       };
 
-      const aggregated = aggregateShardReviews(
-        plan,
-        shardResults,
-        undefined,
-        undefined,
+      const aggregated = aggregateShardReviews(plan, shardResults, {
         reconciliation,
-      );
+      });
 
       expect(aggregated.reconciliation).toEqual(reconciliation);
       expect(aggregated.summary).toContain("Finding Lifecycle (Re-review)");
@@ -507,6 +503,20 @@ describe("aggregateShardReviews", () => {
       expect(formatStructuralImpactSection(emptyReport)).toBe("");
     });
 
+    it("makes an incomplete repository scan explicit", () => {
+      const formatted = formatStructuralImpactSection({
+        changedSymbols: [],
+        contractBreaks: [],
+        downstreamReferences: [],
+        repositoryScanTruncated: true,
+        securitySurfaces: [],
+        testGaps: [],
+      });
+
+      expect(formatted).toContain("Repository Scan");
+      expect(formatted).toContain("absence of references is inconclusive");
+    });
+
     it("injects structural impact section into aggregated summary when provided", () => {
       const shardResults = [
         {
@@ -535,14 +545,9 @@ describe("aggregateShardReviews", () => {
         testGaps: [],
       };
 
-      const aggregated = aggregateShardReviews(
-        plan,
-        shardResults,
-        undefined,
-        undefined,
-        undefined,
-        report,
-      );
+      const aggregated = aggregateShardReviews(plan, shardResults, {
+        structuralImpact: report,
+      });
 
       expect(aggregated.summary).toContain("Structural Impact Analysis");
       expect(aggregated.summary).toContain("Symbols Modified");
@@ -598,10 +603,7 @@ describe("aggregateShardReviews", () => {
             summary: "",
           },
         ],
-        undefined,
-        undefined,
-        undefined,
-        emptyReport,
+        { structuralImpact: emptyReport },
       );
       expect(aggregatedWithEmpty.summary).not.toContain(
         "Structural Impact Analysis",
@@ -630,6 +632,47 @@ describe("aggregateShardReviews", () => {
         "A análise do modelo foi concluída de forma não-estruturada",
       );
       expect(aggregated.summary).not.toContain("All reviewed files clean");
+    });
+
+    it("derives the final verdict only from lifecycle-active findings", () => {
+      const rawFinding = {
+        confidence: 0.95,
+        diagnostic:
+          "This verified defect should be removed by lifecycle state.",
+        evidence: [
+          {
+            excerpt: "const value = calculate();",
+            path: "src/a.ts",
+            reason: "The changed value violates the contract",
+            startLine: 10,
+          },
+        ],
+        location: { line: 10, path: "src/a.ts", side: "RIGHT" as const },
+        severity: "high" as const,
+      };
+      const shardResults = [
+        {
+          findings: [rawFinding],
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success" as const,
+          summary: "A finding was reviewed.",
+        },
+        {
+          findings: [],
+          shardId: "shard-1",
+          shardIndex: 1,
+          status: "success" as const,
+          summary: "The second shard was reviewed.",
+        },
+      ];
+
+      const aggregated = aggregateShardReviews(plan, shardResults, {
+        canonicalFindings: [],
+      });
+
+      expect(aggregated.findings).toEqual([]);
+      expect(aggregated.verdict).toBe("APPROVE");
     });
   });
 });
