@@ -33,10 +33,14 @@ export default defineConfig({
     clearMocks: true,
     coverage: {
       provider: "istanbul",
-      reporter: ["text", "json-summary", "html"],
+      reporter: ["text", "json-summary", "html", "lcov"],
       thresholds: { branches: 85, functions: 90, lines: 90, statements: 90 },
     },
     mockReset: true,
+    outputFile: {
+      junit: "junit.xml",
+    },
+    reporters: ["default", "junit"],
     restoreMocks: true,
   },
 });
