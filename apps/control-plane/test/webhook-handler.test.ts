@@ -1,3 +1,4 @@
+import type { HealthCheckReport } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -331,6 +332,45 @@ describe("GitHub webhook HTTP boundary", () => {
     await expect(unresolvedResult.response.json()).resolves.toMatchObject({
       accepted: true,
       ignored: true,
+    });
+  });
+
+  it("serves health and healthz endpoints accurately", async () => {
+    const app = createWebhookApp();
+    const resHealth = await app.request("http://localhost/health");
+    expect(resHealth.status).toBe(200);
+    await expect(resHealth.json()).resolves.toEqual({ status: "ok" });
+
+    // Degraded healthcheck: missing env bindings
+    const resDegraded = await app.request("http://localhost/healthz");
+    expect(resDegraded.status).toBe(503);
+    const degradedReport = (await resDegraded.json()) as HealthCheckReport;
+    expect(degradedReport.status).toBe("degraded");
+    expect(degradedReport.checks).toEqual({
+      aiGateway: false,
+      database: false,
+      executor: false,
+    });
+
+    // Fully operational healthcheck
+    const resHealthy = await app.request(
+      "http://localhost/healthz",
+      undefined,
+      {
+        AI_GATEWAY_ACCOUNT_ID: "acc-1",
+        AI_GATEWAY_API_TOKEN: "tok-1",
+        AI_GATEWAY_ID: "gw-1",
+        REVIEW_LEDGERS: {} as unknown as DurableObjectNamespace,
+        SANDBOX: {} as unknown as Fetcher,
+      },
+    );
+    expect(resHealthy.status).toBe(200);
+    const healthyReport = (await resHealthy.json()) as HealthCheckReport;
+    expect(healthyReport.status).toBe("ok");
+    expect(healthyReport.checks).toEqual({
+      aiGateway: true,
+      database: true,
+      executor: true,
     });
   });
 });

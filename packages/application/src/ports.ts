@@ -3,6 +3,8 @@ import type {
   ModelReviewOutput,
   ReviewContextV2,
   ReviewJob,
+  RunTelemetry,
+  StepTiming,
   TrackedFinding,
   UpdateCheckRunInput,
 } from "@holon/contracts";
@@ -84,10 +86,17 @@ export interface ReviewLedger {
       readonly workflowRunId?: number | undefined;
     },
   ): Promise<void>;
+  loadRunTelemetry?(runId: string): Promise<RunTelemetry | undefined>;
   savePrFindings?(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
   ): Promise<void>;
+  saveRunTelemetry?(telemetry: RunTelemetry): Promise<void>;
+}
+
+export interface TelemetryEmitter {
+  emitRunTelemetry(telemetry: RunTelemetry): Promise<void> | void;
+  emitStepTiming(step: StepTiming): Promise<void> | void;
 }
 
 export interface PublishCommentInput {

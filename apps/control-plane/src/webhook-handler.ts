@@ -1,4 +1,4 @@
-import { pullRequestActions } from "@holon/contracts";
+import { type HealthCheckReport, pullRequestActions } from "@holon/contracts";
 import {
   mapPullRequestWebhook,
   mapReviewCommentWebhook,
@@ -56,6 +56,48 @@ export function createWebhookApp() {
   const app = new Hono<{ Bindings: Cloudflare.Env }>();
 
   app.get("/health", (context) => context.json({ status: "ok" }));
+  app.get("/healthz", (context) => {
+    const checks = {
+      aiGateway: Boolean(
+        context.env?.AI_GATEWAY_ACCOUNT_ID &&
+        context.env?.AI_GATEWAY_API_TOKEN &&
+        context.env?.AI_GATEWAY_ID,
+      ),
+      database: Boolean(
+        context.env?.REVIEW_LEDGERS ||
+        (context.env as unknown as { REVIEW_LEDGER?: unknown })?.REVIEW_LEDGER,
+      ),
+      executor: Boolean(
+        (
+          context.env as unknown as {
+            REPOSITORY_EXECUTOR?: unknown;
+            REPOSITORY_EXECUTORS?: unknown;
+            SANDBOX?: unknown;
+          }
+        )?.SANDBOX ||
+        (
+          context.env as unknown as {
+            REPOSITORY_EXECUTOR?: unknown;
+            REPOSITORY_EXECUTORS?: unknown;
+          }
+        )?.REPOSITORY_EXECUTOR ||
+        (
+          context.env as unknown as {
+            REPOSITORY_EXECUTOR?: unknown;
+            REPOSITORY_EXECUTORS?: unknown;
+          }
+        )?.REPOSITORY_EXECUTORS,
+      ),
+    };
+    const allHealthy = Object.values(checks).every(Boolean);
+    const report: HealthCheckReport = {
+      checks,
+      status: allHealthy ? "ok" : "degraded",
+      timestamp: new Date().toISOString(),
+      version: "0.1.0",
+    };
+    return context.json(report, allHealthy ? 200 : 503);
+  });
   app.post("/webhooks/github", async (context) => {
     const signature = context.req.header("x-hub-signature-256") ?? "";
     const delivery = context.req.header("x-github-delivery") ?? "";

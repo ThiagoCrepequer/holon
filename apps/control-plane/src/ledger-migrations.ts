@@ -160,6 +160,33 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 6,
   },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS run_telemetry (
+        run_id TEXT PRIMARY KEY,
+        pr_key TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        queue_wait_ms INTEGER NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        reasoning_tokens INTEGER,
+        estimated_cost_usd REAL NOT NULL,
+        estimated_cost_micro_usd INTEGER NOT NULL,
+        pricing_model TEXT NOT NULL,
+        tool_calls INTEGER NOT NULL,
+        shards_count INTEGER NOT NULL,
+        scope_status TEXT NOT NULL,
+        terminal_state TEXT NOT NULL,
+        verdict TEXT,
+        is_degraded INTEGER NOT NULL,
+        step_timings_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS run_telemetry_pr_key ON run_telemetry(pr_key);
+    `,
+    version: 7,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

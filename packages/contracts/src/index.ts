@@ -8,4 +8,5 @@ export * from "./review-plan.js";
 export * from "./review-verdict.js";
 export * from "./shared.js";
 export * from "./structural-analysis.js";
+export * from "./telemetry.js";
 export * from "./webhook.js";
