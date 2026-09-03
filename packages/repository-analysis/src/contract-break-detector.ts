@@ -1,4 +1,8 @@
-import type { ChangedSymbol, ContractBreakSignal } from "@holon/contracts";
+import type {
+  ChangedSymbol,
+  ContractBreakSignal,
+  DownstreamReference,
+} from "@holon/contracts";
 import { parsePatch } from "diff";
 
 const sqlDestructivePatterns: readonly {
@@ -24,15 +28,38 @@ const sqlDestructivePatterns: readonly {
   },
 ];
 
+function isContractBoundary(
+  path: string,
+  symbolName: string,
+  downstreamReferences?: readonly DownstreamReference[],
+): boolean {
+  // Only internal application modules (apps/*) without downstream consumers are exempt from contract break alerts.
+  // In shared packages (packages/*, libs/*) or standard repository libraries (src/*, lib/*), exports form the API surface.
+  if (path.startsWith("apps/")) {
+    const isEntrypoint =
+      /(?:^|\/)(?:index|api|contracts?|public-api)\.[a-z]+$/iu.test(path);
+    const hasDownstream =
+      downstreamReferences !== undefined &&
+      downstreamReferences.some((ref) => ref.symbolName === symbolName);
+    return isEntrypoint || hasDownstream;
+  }
+  return true;
+}
+
 export function detectContractBreaks(
   files: readonly { readonly patch: string; readonly path: string }[],
   changedSymbols: readonly ChangedSymbol[],
+  downstreamReferences?: readonly DownstreamReference[],
 ): readonly ContractBreakSignal[] {
   const breaks: ContractBreakSignal[] = [];
 
-  // 1. Detect removed exported symbols
+  // 1. Detect removed exported symbols on contract boundaries
   for (const symbol of changedSymbols) {
-    if (symbol.isExported && symbol.change === "deleted") {
+    if (
+      symbol.isExported &&
+      symbol.change === "deleted" &&
+      isContractBoundary(symbol.path, symbol.name, downstreamReferences)
+    ) {
       breaks.push({
         description: `Exported ${symbol.kind} '${symbol.name}' was removed from ${symbol.path}`,
         kind: "exported_symbol_removed",

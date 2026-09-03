@@ -262,6 +262,36 @@ describe("contract-break-detector", () => {
     expect(breaks[0]?.description).toContain("deleteUser");
   });
 
+  it("does not treat removed exports in internal apps as contract breaks unless consumed downstream", () => {
+    const symbols = [
+      {
+        change: "deleted" as const,
+        isExported: true,
+        kind: "function" as const,
+        line: 10,
+        name: "internalHelper",
+        path: "apps/repository-executor/src/review-context.ts",
+      },
+    ];
+
+    // Without downstream consumers: no contract break
+    const breaksNoConsumers = detectContractBreaks([], symbols, []);
+    expect(breaksNoConsumers).toHaveLength(0);
+
+    // With downstream consumers: contract break
+    const breaksWithConsumers = detectContractBreaks([], symbols, [
+      {
+        callerLine: 5,
+        callerPath: "apps/control-plane/src/worker.ts",
+        excerpt: "import { internalHelper } from './review-context'",
+        symbolName: "internalHelper",
+        targetPath: "apps/repository-executor/src/review-context.ts",
+      },
+    ]);
+    expect(breaksWithConsumers).toHaveLength(1);
+    expect(breaksWithConsumers[0]?.description).toContain("internalHelper");
+  });
+
   it("detects destructive SQL migrations and handles deletions and malformed patches", () => {
     const files = [
       {

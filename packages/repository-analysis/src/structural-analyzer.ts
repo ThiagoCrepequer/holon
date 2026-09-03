@@ -35,6 +35,7 @@ export function analyzeStructuralImpact(
   const contractBreaks = detectContractBreaks(
     input.changedFiles,
     changedSymbols,
+    downstream.references,
   );
   const testGaps = detectTestGaps(input.changedFiles);
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);

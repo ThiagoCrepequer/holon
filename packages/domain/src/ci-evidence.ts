@@ -77,6 +77,77 @@ function findCoverageForPath(
   });
 }
 
+const SOURCE_CODE_EXTENSIONS = new Set([
+  "c",
+  "cc",
+  "cjs",
+  "cpp",
+  "cs",
+  "go",
+  "java",
+  "js",
+  "jsx",
+  "kt",
+  "mjs",
+  "php",
+  "py",
+  "rb",
+  "rs",
+  "swift",
+  "ts",
+  "tsx",
+]);
+
+function isTestableSourceFile(path: string): boolean {
+  const parts = path.split(".");
+  if (parts.length < 2) return false;
+  const ext = parts[parts.length - 1]?.toLowerCase() ?? "";
+  return SOURCE_CODE_EXTENSIONS.has(ext);
+}
+
+/**
+ * Formats an array of sorted line numbers into compact ranges.
+ * E.g., [1, 2, 3, 5, 7, 8, 9] => "1–3, 5, 7–9"
+ */
+export function formatLineIntervals(
+  lines: readonly number[],
+  maxRanges = 6,
+): string {
+  if (lines.length === 0) return "";
+  const sorted = [...new Set(lines)].toSorted((a, b) => a - b);
+  const ranges: string[] = [];
+
+  let start = sorted[0]!;
+  let end = start;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i]!;
+    if (current === end + 1) {
+      end = current;
+    } else {
+      ranges.push(start === end ? `${start}` : `${start}–${end}`);
+      start = current;
+      end = current;
+    }
+  }
+  ranges.push(start === end ? `${start}` : `${start}–${end}`);
+
+  if (ranges.length <= maxRanges) {
+    return ranges.join(", ");
+  }
+
+  const shown = ranges.slice(0, maxRanges).join(", ");
+  const displayedLineCount = ranges.slice(0, maxRanges).reduce((acc, r) => {
+    const parts = r.split("–");
+    return (
+      acc + (parts.length === 2 ? Number(parts[1]) - Number(parts[0]) + 1 : 1)
+    );
+  }, 0);
+  const remainingCount = sorted.length - displayedLineCount;
+
+  return `${shown} (...and ${remainingCount} more lines)`;
+}
+
 /**
  * Pure function: calculates the test execution coverage specifically on the lines
  * changed in the Pull Request (side RIGHT).
@@ -117,19 +188,30 @@ export function calculateChangedLinesCoverage(
     // Sort line numbers ascending
     const sortedLines = [...new Set(lines)].toSorted((a, b) => a - b);
 
-    for (const line of sortedLines) {
-      if (!coverage) {
-        uncoveredCount++;
-        uncoveredInFile.push(line);
+    if (!coverage) {
+      // If the file is not a testable source file (e.g. docs, configs, manifests), ignore it
+      if (!isTestableSourceFile(path)) {
         continue;
       }
-
-      const hits = coverage.hitsByLine[line];
-      if (hits !== undefined && hits > 0) {
-        coveredCount++;
-      } else {
+      // Source file without any coverage report: all lines are uncovered
+      for (const line of sortedLines) {
         uncoveredCount++;
         uncoveredInFile.push(line);
+      }
+    } else {
+      for (const line of sortedLines) {
+        const hits = coverage.hitsByLine[line];
+        // In LCOV, lines without DA: entries are non-executable declarations (imports, interfaces, types, comments, whitespace).
+        // They must NOT be counted as executable code lines.
+        if (hits === undefined) {
+          continue;
+        }
+        if (hits > 0) {
+          coveredCount++;
+        } else {
+          uncoveredCount++;
+          uncoveredInFile.push(line);
+        }
       }
     }
 
@@ -191,7 +273,7 @@ export function formatCiEvidenceMarkdown(
     if (changedLinesCoverage.uncoveredByFile.length > 0) {
       lines.push("  - **Uncovered lines**:");
       for (const item of changedLinesCoverage.uncoveredByFile.slice(0, 5)) {
-        const lineStr = item.lines.join(", ");
+        const lineStr = formatLineIntervals(item.lines);
         lines.push(`    - \`${item.path}\`: lines ${lineStr}`);
       }
       if (changedLinesCoverage.uncoveredByFile.length > 5) {

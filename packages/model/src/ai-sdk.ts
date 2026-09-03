@@ -446,6 +446,51 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       throw error;
     }
   }
+
+  public async synthesizeSummary(
+    summaries: readonly string[],
+  ): Promise<string> {
+    const validSummaries = summaries
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (validSummaries.length <= 1) {
+      return validSummaries[0] ?? "";
+    }
+
+    const model = createGatewayLanguageModel(this.config);
+    const synthesisPrompt = [
+      "Merge the following separate review shard summaries for a single pull request into one unified, cohesive executive summary.",
+      "Eliminate duplicate introductory phrases, repetitive boilerplate, and redundant conclusions.",
+      "Preserve all specific, distinct technical observations, module assessments, and identified gaps.",
+      "Write directly and concisely in GitHub markdown prose without conversational filler.",
+      "",
+      "### Shard Summaries to Unify:",
+      ...validSummaries.map(
+        (summary, idx) => `#### Shard ${idx + 1}\n${summary}`,
+      ),
+    ].join("\n\n");
+
+    try {
+      const result = await generateText({
+        instructions:
+          "You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose.",
+        maxOutputTokens: 2_000,
+        maxRetries: 0,
+        model,
+        prompt: synthesisPrompt,
+        providerOptions: gatewayModelProviderOptions,
+        temperature: 0,
+      });
+
+      const synthesized = result.text?.trim();
+      return synthesized && synthesized.length > 0
+        ? synthesized
+        : validSummaries.join("\n\n");
+    } catch {
+      return validSummaries.join("\n\n");
+    }
+  }
 }
 
 export const AiSdkReviewGenerator = TwoPhaseReviewGenerator;

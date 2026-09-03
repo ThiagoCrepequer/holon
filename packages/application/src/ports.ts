@@ -34,6 +34,12 @@ export interface ModelReviewResult {
 
 export interface ModelReviewer {
   review(job: ReviewJob, context: ReviewContextV2): Promise<ModelReviewResult>;
+  synthesizeReviewSummary?(
+    job: ReviewJob,
+    input: {
+      readonly shardSummaries: readonly string[];
+    },
+  ): Promise<string>;
 }
 
 export type ClaimedPublication =

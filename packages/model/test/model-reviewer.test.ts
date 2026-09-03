@@ -935,4 +935,59 @@ describe("model review boundary", () => {
     expect(result.summary.length).toBeLessThanOrEqual(2500);
     expect(result.summary.endsWith("...")).toBe(true);
   });
+
+  it("synthesizes multi-shard review summaries via LLM when multiple summaries exist", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    sdk.generateText.mockResolvedValueOnce({
+      finishReason: "stop",
+      text: "Unified synthesized review summary merging shard 1 and shard 2 without duplicates.",
+    });
+
+    const unified = await generator.synthesizeSummary([
+      "Shard 1: reviewed control-plane successfully.",
+      "Shard 2: reviewed repository-executor successfully.",
+    ]);
+
+    expect(unified).toBe(
+      "Unified synthesized review summary merging shard 1 and shard 2 without duplicates.",
+    );
+
+    // Single summary returns directly without invoking LLM
+    const single = await generator.synthesizeSummary(["Only one shard."]);
+    expect(single).toBe("Only one shard.");
+  });
+
+  it("falls back gracefully to joined summaries if synthesizeSummary fails", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: () => Promise.resolve({ content: "", truncated: false }) },
+    );
+
+    sdk.generateText.mockRejectedValueOnce(new Error("LLM failure"));
+
+    const fallback = await generator.synthesizeSummary([
+      "Shard 1 summary",
+      "Shard 2 summary",
+    ]);
+
+    expect(fallback).toBe("Shard 1 summary\n\nShard 2 summary");
+  });
 });

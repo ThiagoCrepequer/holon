@@ -24,6 +24,7 @@ export interface AggregateShardReviewOptions {
   readonly canonicalFindings?: readonly Finding[] | undefined;
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
+  readonly unifiedSummary?: string | undefined;
   readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
 }
 
@@ -221,7 +222,12 @@ export function aggregateShardReviews(
     summarySections.push(verdictDetails.reasons.join(" "));
   }
 
-  if (shardSummaries.length === 0) {
+  if (
+    options.unifiedSummary !== undefined &&
+    options.unifiedSummary.trim().length > 0
+  ) {
+    summarySections.push(options.unifiedSummary.trim());
+  } else if (shardSummaries.length === 0) {
     summarySections.push(
       "Holon reviewed the changes and found no functional regressions or contract breaks.",
     );

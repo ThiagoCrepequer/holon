@@ -158,8 +158,28 @@ export async function analyzeReview(
       plan,
       context.structuralImpact,
     );
+
+    const successfulSummaries = shardResults
+      .filter((r) => r.status === "success" && r.summary.trim().length > 0)
+      .map((r) => r.summary.trim());
+
+    let unifiedSummary: string | undefined;
+    if (
+      successfulSummaries.length > 1 &&
+      typeof services.model.synthesizeReviewSummary === "function"
+    ) {
+      try {
+        unifiedSummary = await services.model.synthesizeReviewSummary(job, {
+          shardSummaries: successfulSummaries,
+        });
+      } catch {
+        unifiedSummary = undefined;
+      }
+    }
+
     const rawAggregated = aggregateShardReviews(plan, shardResults, {
       additionalFindings: context.structuralImpact?.deterministicFindings ?? [],
+      unifiedSummary,
     });
     const currentWithFingerprints = await Promise.all(
       rawAggregated.findings.map(async (finding) => ({
