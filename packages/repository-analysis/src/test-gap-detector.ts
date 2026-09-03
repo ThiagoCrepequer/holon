@@ -6,6 +6,7 @@ const sourceExtensions = new Set([
   ".js",
   ".jsx",
   ".mjs",
+  ".cjs",
   ".py",
   ".go",
   ".rs",
@@ -51,8 +52,19 @@ function deriveExpectedTestPath(sourcePath: string): string {
     const filename = sourcePath.split("/").pop() ?? "";
     return `tests/test_${filename}`;
   }
-  // TypeScript / JavaScript
-  return sourcePath.replace(/\.(?:ts|tsx|js|jsx)$/u, ".test.ts");
+  if (sourcePath.endsWith(".rs")) {
+    const filename = sourcePath.split("/").pop()?.replace(/\.rs$/u, "") ?? "";
+    return `tests/${filename}.rs`;
+  }
+  if (sourcePath.endsWith(".java")) {
+    return sourcePath.replace(/(\w+)\.java$/u, "$1Test.java");
+  }
+  // TypeScript / JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs)
+  if (/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(sourcePath)) {
+    return sourcePath.replace(/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u, ".test.ts");
+  }
+  // Safe generic fallback: replaces extension with .test.<ext>
+  return sourcePath.replace(/(\.[^.]+)$/u, ".test$1");
 }
 
 export function detectTestGaps(

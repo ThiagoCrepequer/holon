@@ -527,11 +527,11 @@ describe("model output and publication ledger", () => {
           suggestion: "   ", // empty whitespace, should become null
         },
       ],
-      summary: "s".repeat(900), // > 800 chars, should be clamped
+      summary: "s".repeat(2700), // > 2500 chars, should be clamped
     };
 
     const parsed = modelReviewTransportSchema.parse(rawImperfection);
-    expect(parsed.summary.length).toBe(800);
+    expect(parsed.summary.length).toBe(2500);
     expect(parsed.summary.endsWith("...")).toBe(true);
     const firstFinding = parsed.findings[0]!;
     const firstEvidence = firstFinding.evidence[0]!;
@@ -567,9 +567,21 @@ describe("model output and publication ledger", () => {
     };
     const maximumOutput = modelReviewOutputSchema.parse({
       findings: Array.from({ length: 3 }, () => maximumFinding),
-      summary: "s".repeat(800),
+      summary: "s".repeat(2500),
     });
     expect(JSON.stringify(maximumOutput).length).toBeLessThan(1_000_000);
+  });
+
+  it("parses isDegraded flag when present in model review output", () => {
+    const degradedTransport = {
+      findings: [],
+      isDegraded: true,
+      summary: "Degraded analysis fallback text",
+    };
+    const parsed = parseModelReviewTransport(degradedTransport);
+    expect(parsed.isDegraded).toBe(true);
+    expect(parsed.summary).toBe("Degraded analysis fallback text");
+    expect(parsed.findings).toEqual([]);
   });
 
   it("validates publication reconciliation data", () => {

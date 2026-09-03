@@ -56,7 +56,8 @@ export const reviewFindingSchema = z.strictObject({
 
 export const modelReviewOutputSchema = z.strictObject({
   findings: z.array(reviewFindingSchema).max(3),
-  summary: z.string().trim().min(1).max(800),
+  isDegraded: z.boolean().optional(),
+  summary: z.string().trim().min(1).max(2_500),
 });
 
 /**
@@ -123,13 +124,24 @@ const resilientSuggestion = z.preprocess((val) => {
   return val;
 }, z.string().trim().min(1).max(800).nullable());
 
-const resilientSummary = z.preprocess(
-  (val) =>
-    typeof val === "string" && val.trim().length > 800
-      ? `${val.trim().slice(0, 797)}...`
-      : val,
-  z.string().trim().min(1).max(800),
-);
+const resilientSummary = z.preprocess((val) => {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed.length > 2_500) {
+      const slice = trimmed.slice(0, 2_497);
+      const lastBreak = Math.max(
+        slice.lastIndexOf(". "),
+        slice.lastIndexOf("\n"),
+      );
+      if (lastBreak > 2_000) {
+        return `${slice.slice(0, lastBreak + 1)}...`;
+      }
+      return `${slice}...`;
+    }
+    return trimmed;
+  }
+  return val;
+}, z.string().trim().min(1).max(2_500));
 
 const resilientSeverity = z.preprocess(
   (val) => (typeof val === "string" ? val.toLowerCase().trim() : val),
@@ -184,6 +196,7 @@ export const modelReviewTransportSchema = z
         )
         .max(3),
     ),
+    isDegraded: z.boolean().optional(),
     summary: resilientSummary,
   })
   .strip();
@@ -205,6 +218,9 @@ export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
       },
       ...(finding.suggestion === null ? { suggestion: undefined } : {}),
     })),
+    ...(transport.isDegraded !== undefined
+      ? { isDegraded: transport.isDegraded }
+      : {}),
     summary: transport.summary,
   });
 }

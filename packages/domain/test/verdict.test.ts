@@ -168,6 +168,21 @@ describe("determineReviewVerdict", () => {
       expect(result.reasons[0]).toContain("All reviewed files clean");
     });
 
+    it("returns COMMENT when review is degraded instead of approving", () => {
+      const result = determineReviewVerdict({
+        findings: [],
+        isDegraded: true,
+        scopeStatus: "complete",
+        shardsAnalyzed: 1,
+        totalShards: 1,
+      });
+      expect(result.verdict).toBe("COMMENT");
+      expect(result.reasons[0]).toContain(
+        "A análise do modelo foi concluída de forma não-estruturada",
+      );
+      expect(result.reasons[0]).not.toContain("All reviewed files clean");
+    });
+
     it("returns APPROVE when only low severity advisory findings exist", () => {
       const low1 = makeFinding("low", 0.85);
       const low2 = makeFinding("low", 0.9);

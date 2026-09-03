@@ -43,6 +43,7 @@ export const reviewPlanSchema = z.strictObject({
 export const shardReviewResultSchema = z.strictObject({
   errorReason: z.string().optional(),
   findings: z.array(reviewFindingSchema),
+  isDegraded: z.boolean().optional(),
   shardId: z.string().min(1).max(100),
   shardIndex: z.number().int().nonnegative(),
   status: z.enum(["success", "failure"]),
@@ -51,6 +52,7 @@ export const shardReviewResultSchema = z.strictObject({
 
 export const aggregatedReviewResultSchema = z.strictObject({
   findings: z.array(reviewFindingSchema),
+  isDegraded: z.boolean().optional(),
   omissionReasons: z.array(z.string().min(1).max(300)),
   scopeStatus: reviewScopeStatusSchema,
   shardsAnalyzed: z.number().int().nonnegative(),

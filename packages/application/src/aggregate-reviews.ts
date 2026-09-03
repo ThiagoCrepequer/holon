@@ -188,8 +188,13 @@ export function aggregateShardReviews(
 
   const sortedFindings = verifiedFindings.toSorted(compareFindings);
 
+  const isAnyShardDegraded = shardResults.some(
+    (result) => result.isDegraded === true,
+  );
+
   const verdictDetails = determineReviewVerdict({
     findings: sortedFindings,
+    isDegraded: isAnyShardDegraded,
     options,
     scopeStatus,
     shardsAnalyzed,
@@ -272,6 +277,7 @@ export function aggregateShardReviews(
       severity: f.severity,
       ...(f.suggestion !== undefined ? { suggestion: f.suggestion } : {}),
     })),
+    ...(isAnyShardDegraded ? { isDegraded: true } : {}),
     omissionReasons,
     reconciliation,
     scopeStatus,

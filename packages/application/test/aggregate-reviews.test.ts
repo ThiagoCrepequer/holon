@@ -607,5 +607,29 @@ describe("aggregateShardReviews", () => {
         "Structural Impact Analysis",
       );
     });
+
+    it("propagates isDegraded and sets verdict to COMMENT with notice instead of APPROVE", () => {
+      const shardResults = [
+        {
+          findings: [],
+          isDegraded: true,
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success" as const,
+          summary: "Investigation notes...",
+        },
+      ];
+
+      const singleShardPlan = { ...plan, shards: [plan.shards[0]!] };
+      const aggregated = aggregateShardReviews(singleShardPlan, shardResults);
+
+      expect(aggregated.isDegraded).toBe(true);
+      expect(aggregated.verdict).toBe("COMMENT");
+      expect(aggregated.summary).toContain("Verdict: Informational Comment");
+      expect(aggregated.summary).toContain(
+        "A análise do modelo foi concluída de forma não-estruturada",
+      );
+      expect(aggregated.summary).not.toContain("All reviewed files clean");
+    });
   });
 });

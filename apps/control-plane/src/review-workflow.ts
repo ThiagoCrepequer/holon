@@ -396,6 +396,7 @@ export async function executeReviewWorkflow(
               );
               shardResults.push({
                 findings: modelOutput.findings,
+                isDegraded: modelOutput.isDegraded,
                 shardId: shard.id,
                 shardIndex: shard.index,
                 status: "success",
@@ -412,6 +413,7 @@ export async function executeReviewWorkflow(
                 );
                 shardResults.push({
                   findings: modelOutput.findings,
+                  isDegraded: modelOutput.isDegraded,
                   shardId: shard.id,
                   shardIndex: shard.index,
                   status: "success",

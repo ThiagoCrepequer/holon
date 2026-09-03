@@ -350,6 +350,33 @@ describe("test-gap-detector", () => {
     expect(detectTestGaps(files)).toEqual([]);
   });
 
+  it("handles .mjs, .cjs, .rs, .java without returning the source path itself", () => {
+    const files = [
+      { patch: "+export const x = 1;", path: "src/handler.mjs" },
+      { patch: "+module.exports = {};", path: "src/util.cjs" },
+      { patch: "+fn run() {}", path: "src/engine.rs" },
+      { patch: "+class Engine {}", path: "src/Engine.java" },
+    ];
+    const gaps = detectTestGaps(files);
+    expect(gaps).toHaveLength(4);
+    expect(
+      gaps.find((g) => g.sourcePath === "src/handler.mjs")
+        ?.expectedTestPathPattern,
+    ).toBe("src/handler.test.ts");
+    expect(
+      gaps.find((g) => g.sourcePath === "src/util.cjs")
+        ?.expectedTestPathPattern,
+    ).toBe("src/util.test.ts");
+    expect(
+      gaps.find((g) => g.sourcePath === "src/engine.rs")
+        ?.expectedTestPathPattern,
+    ).toBe("tests/engine.rs");
+    expect(
+      gaps.find((g) => g.sourcePath === "src/Engine.java")
+        ?.expectedTestPathPattern,
+    ).toBe("src/EngineTest.java");
+  });
+
   it("does not report a gap when corresponding test file is in diff", () => {
     const files = [
       {
