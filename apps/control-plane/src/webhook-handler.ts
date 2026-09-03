@@ -1,8 +1,17 @@
 import { pullRequestActions } from "@holon/contracts";
-import { mapPullRequestWebhook, verifyWebhookSignature } from "@holon/github";
+import {
+  mapPullRequestWebhook,
+  mapReviewCommentWebhook,
+  mapReviewThreadWebhook,
+  verifyWebhookSignature,
+} from "@holon/github";
 import { Hono } from "hono";
 
 import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
+import {
+  handleFeedbackCommentWebhook,
+  handleThreadResolvedWebhook,
+} from "./feedback-handler-service.js";
 
 const maximumWebhookBytes = 2_000_000;
 
@@ -70,7 +79,12 @@ export function createWebhookApp() {
     ) {
       return context.json({ error: "invalid_signature" }, 401);
     }
-    if (event !== "pull_request" && event !== "workflow_run")
+    if (
+      event !== "pull_request" &&
+      event !== "workflow_run" &&
+      event !== "pull_request_review_comment" &&
+      event !== "pull_request_review_thread"
+    )
       return context.json({ accepted: true, ignored: true }, 202);
 
     const rawBody = new TextDecoder().decode(rawBytes);
@@ -167,6 +181,54 @@ export function createWebhookApp() {
         }
       }
       return context.json({ accepted: true, ignored: true }, 202);
+    }
+
+    if (event === "pull_request_review_comment") {
+      try {
+        const commentEvent = mapReviewCommentWebhook(payload, delivery);
+        if (commentEvent.action !== "created") {
+          return context.json({ accepted: true, ignored: true }, 202);
+        }
+        const handlePromise = handleFeedbackCommentWebhook(
+          context.env,
+          commentEvent,
+        );
+        try {
+          context.executionCtx.waitUntil(handlePromise);
+        } catch {
+          // Safe fallback in test harnesses without ExecutionContext
+        }
+        return context.json(
+          { accepted: true, deliveryId: delivery, feedback: true },
+          202,
+        );
+      } catch {
+        return context.json({ error: "invalid_payload" }, 400);
+      }
+    }
+
+    if (event === "pull_request_review_thread") {
+      try {
+        const threadEvent = mapReviewThreadWebhook(payload, delivery);
+        if (threadEvent.action !== "resolved") {
+          return context.json({ accepted: true, ignored: true }, 202);
+        }
+        const handlePromise = handleThreadResolvedWebhook(
+          context.env,
+          threadEvent,
+        );
+        try {
+          context.executionCtx.waitUntil(handlePromise);
+        } catch {
+          // Safe fallback in test harnesses without ExecutionContext
+        }
+        return context.json(
+          { accepted: true, deliveryId: delivery, feedback: true },
+          202,
+        );
+      } catch {
+        return context.json({ error: "invalid_payload" }, 400);
+      }
     }
 
     if (

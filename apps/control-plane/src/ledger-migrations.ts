@@ -94,7 +94,7 @@ const ledgerMigrations: readonly LedgerMigration[] = [
         last_seen_run_id TEXT NOT NULL,
         first_seen_head_sha TEXT NOT NULL,
         last_seen_head_sha TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('new', 'persistent', 'resolved', 'obsolete', 'reintroduced')),
+        status TEXT NOT NULL CHECK (status IN ('new', 'persistent', 'resolved', 'obsolete', 'reintroduced', 'dismissed')),
         severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
         file_path TEXT NOT NULL,
         line INTEGER NOT NULL,
@@ -106,6 +106,45 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       CREATE INDEX IF NOT EXISTS pr_findings_status ON pr_findings(pr_key, status);
     `,
     version: 4,
+  },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS finding_feedbacks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pr_key TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        label TEXT NOT NULL,
+        author_login TEXT NOT NULL,
+        reason TEXT,
+        target_severity TEXT,
+        github_comment_id INTEGER,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS finding_feedbacks_pr_fp ON finding_feedbacks(pr_key, fingerprint);
+
+      DROP TABLE IF EXISTS pr_findings_v5;
+      CREATE TABLE pr_findings_v5 (
+        pr_key TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        first_seen_run_id TEXT NOT NULL,
+        last_seen_run_id TEXT NOT NULL,
+        first_seen_head_sha TEXT NOT NULL,
+        last_seen_head_sha TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('new', 'persistent', 'resolved', 'obsolete', 'reintroduced', 'dismissed')),
+        severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+        file_path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        diagnostic TEXT NOT NULL,
+        github_comment_id INTEGER,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (pr_key, fingerprint)
+      );
+      INSERT OR IGNORE INTO pr_findings_v5 SELECT * FROM pr_findings;
+      DROP TABLE pr_findings;
+      ALTER TABLE pr_findings_v5 RENAME TO pr_findings;
+      CREATE INDEX IF NOT EXISTS pr_findings_status ON pr_findings(pr_key, status);
+    `,
+    version: 5,
   },
 ] as const;
 
