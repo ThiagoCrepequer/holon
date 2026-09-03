@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregatedReviewResultSchema,
+  calibrationMetricsSchema,
   ciEvidenceSchema,
   createCheckRunInputSchema,
   executorRequestSchema,
+  feedbackLabelSchema,
+  findingFeedbackRecordSchema,
   findingFingerprintSchema,
   findingStatusSchema,
   lineCoverageSchema,
+  parsedFeedbackCommandSchema,
   testExecutionReportSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -905,8 +909,9 @@ describe("check run contracts", () => {
       ).toThrow();
     });
 
-    it("validates reconciliationSummarySchema", () => {
+    it("validates reconciliationSummarySchema with dismissedCount", () => {
       const summary = {
+        dismissedCount: 1,
         newCount: 1,
         obsoleteCount: 0,
         persistentCount: 2,
@@ -941,9 +946,81 @@ describe("check run contracts", () => {
         },
         previousCommentId: 98765,
         severity: "high" as const,
-        status: "persistent" as const,
+        status: "dismissed" as const,
       };
       expect(reconciledFindingSchema.parse(reconciled)).toEqual(reconciled);
+    });
+  });
+
+  describe("feedback schemas", () => {
+    const validFingerprint = `fp:${"a".repeat(64)}`;
+
+    it("validates feedbackLabelSchema", () => {
+      expect(feedbackLabelSchema.parse("false_positive")).toBe(
+        "false_positive",
+      );
+      expect(feedbackLabelSchema.parse("helpful")).toBe("helpful");
+      expect(feedbackLabelSchema.parse("wrong_severity")).toBe(
+        "wrong_severity",
+      );
+      expect(feedbackLabelSchema.parse("duplicate")).toBe("duplicate");
+      expect(feedbackLabelSchema.parse("not_actionable")).toBe(
+        "not_actionable",
+      );
+      expect(feedbackLabelSchema.parse("missed_defect")).toBe("missed_defect");
+      expect(feedbackLabelSchema.parse("thread_resolved")).toBe(
+        "thread_resolved",
+      );
+      expect(() => feedbackLabelSchema.parse("invalid_label")).toThrow();
+    });
+
+    it("validates findingFeedbackRecordSchema", () => {
+      const record = {
+        authorLogin: "alice",
+        createdAt: "2026-09-02T10:00:00.000Z",
+        fingerprint: validFingerprint,
+        githubCommentId: 12345,
+        label: "false_positive" as const,
+        prKey: "github:42:pr:7",
+        reason: "Input validated by framework",
+      };
+      expect(findingFeedbackRecordSchema.parse(record)).toEqual(record);
+
+      expect(() =>
+        findingFeedbackRecordSchema.parse({
+          ...record,
+          prKey: "invalid-pr-key",
+        }),
+      ).toThrow();
+    });
+
+    it("validates parsedFeedbackCommandSchema", () => {
+      const command = {
+        label: "wrong_severity" as const,
+        reason: "Should be low priority",
+        targetSeverity: "low" as const,
+      };
+      expect(parsedFeedbackCommandSchema.parse(command)).toEqual(command);
+    });
+
+    it("validates calibrationMetricsSchema", () => {
+      const metrics = {
+        falsePositiveCount: 2,
+        falsePositiveRate: 0.2,
+        helpfulCount: 7,
+        totalFeedbacks: 10,
+        totalReviewedFindings: 20,
+        utilityRate: 0.7,
+        wrongSeverityCount: 1,
+      };
+      expect(calibrationMetricsSchema.parse(metrics)).toEqual(metrics);
+
+      expect(() =>
+        calibrationMetricsSchema.parse({
+          ...metrics,
+          falsePositiveRate: 1.5,
+        }),
+      ).toThrow();
     });
   });
 });
