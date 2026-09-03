@@ -26,7 +26,7 @@ import {
 } from "@holon/contracts";
 import { createPrKey, type RunId, type RunState } from "@holon/domain";
 import {
-  createInstallationSession,
+  createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
   type GitHubInstallationSession,
 } from "@holon/github";
@@ -44,7 +44,11 @@ import {
 import { NonRetryableError } from "cloudflare:workflows";
 
 import type { PublicationLedger } from "./authorized-publication.js";
-import { createExpectedContainerId, parseAppId } from "./credential-broker.js";
+import { createExpectedContainerId } from "./credential-broker.js";
+import {
+  createKeyringTelemetryOptions,
+  resolveControlPlaneKeyring,
+} from "./github-credentials.js";
 import {
   executeGitHubOperation,
   GitHubTransientError,
@@ -250,22 +254,22 @@ export function createReviewServices(
   const ledger: WorkflowLedger = env.REVIEW_LEDGERS.getByName(prKeyFor(job));
   const wait = runtime.wait ?? ((delay) => scheduler.wait(delay));
   const createSession = async () =>
-    await executeGitHubOperation(
-      async () =>
-        await (runtime.createSession?.(
+    await executeGitHubOperation(async () => {
+      if (runtime.createSession) {
+        return await runtime.createSession(
           job.envelope.installationId,
           job.envelope.repository.id,
-        ) ??
-          createInstallationSession(
-            {
-              appId: parseAppId(env.GITHUB_APP_ID),
-              appSlug: env.GITHUB_APP_SLUG,
-              privateKey: env.GITHUB_APP_PRIVATE_KEY,
-            },
-            job.envelope.installationId,
-            job.envelope.repository.id,
-          )),
-    );
+        );
+      }
+      const keyring = resolveControlPlaneKeyring(env);
+      const keyringOptions = createKeyringTelemetryOptions(logger, logContext);
+      return await createInstallationSessionWithKeyring(
+        keyring,
+        job.envelope.installationId,
+        job.envelope.repository.id,
+        keyringOptions,
+      );
+    });
 
   const resolveCredentialContainerId = async (): Promise<string> => {
     try {

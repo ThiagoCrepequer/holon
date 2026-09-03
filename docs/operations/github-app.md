@@ -51,7 +51,13 @@ brutos antes de fazer parsing. A entrega vira um envelope mínimo sem token.
 ## Credenciais
 
 Guarde App ID, App slug, chave privada e webhook secret em bindings externos ao
-código. Tokens de instalação são emitidos sob demanda e restritos ao repository
+código. O desenho do Holon permite rotação sem downtime de chaves privadas (até
+25 ativas no GitHub) através das variáveis `GITHUB_APP_PRIVATE_KEY_CURRENT` e
+`GITHUB_APP_PRIVATE_KEY_PREVIOUS` (com fallback retrocompatível para
+`GITHUB_APP_PRIVATE_KEY`). A propriedade ainda deve ser confirmada em rollout
+controlado; siga o [runbook de rotação de chaves](github-app-key-rotation-runbook.md).
+
+Tokens de instalação são emitidos sob demanda e restritos ao repository
 ID da run. Eles não entram na Queue, SQLite, parâmetros ou filesystem do Sandbox
 e são injetados no tráfego Git somente pelo outbound handler após autorização
 do credential broker.
@@ -62,6 +68,7 @@ media type `diff`. Não substituir essa leitura por comparação direta entre
 
 Fontes primárias:
 
+- [Managing private keys for GitHub Apps](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
 - [GitHub App permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps)
 - [Pull request reviews](https://docs.github.com/en/rest/pulls/reviews)
 - [Pull request review comments](https://docs.github.com/en/rest/pulls/comments)

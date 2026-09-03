@@ -9,9 +9,12 @@ import {
   formatCiEvidenceMarkdown,
 } from "@holon/domain";
 import {
-  createInstallationSession,
+  createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
+  type GitHubAppCredentials,
+  type GitHubAppKeyring,
   type GitHubInstallationSession,
+  type KeyringOperationOptions,
 } from "@holon/github";
 import {
   collectChangedLines,
@@ -19,7 +22,10 @@ import {
   splitPullRequestDiff,
 } from "@holon/repository-analysis";
 
-import { parseAppId } from "./credential-broker.js";
+import {
+  createKeyringTelemetryOptions,
+  resolveControlPlaneKeyring,
+} from "./github-credentials.js";
 import {
   consoleLogger,
   errorKind,
@@ -56,7 +62,12 @@ export interface CiEnrichmentDependencies {
       readonly repo: string;
     },
   ) => ReviewPublisher;
-  readonly createSession?: typeof createInstallationSession;
+  readonly createSession?: (
+    credentialsOrKeyring: GitHubAppCredentials | GitHubAppKeyring,
+    installationId: number,
+    repositoryId: number,
+    options?: KeyringOperationOptions,
+  ) => Promise<GitHubInstallationSession>;
   readonly ledger?: CiEvidenceLedger;
   readonly logger?: StructuredLogger;
 }
@@ -72,23 +83,28 @@ export async function enrichReviewWithCiEvidence(
 ): Promise<CiEnrichmentResult> {
   const logger = dependencies.logger ?? consoleLogger;
   const sessionFactory =
-    dependencies.createSession ?? createInstallationSession;
+    dependencies.createSession ?? createInstallationSessionWithKeyring;
   const publisherFactory =
     dependencies.createPublisher ??
     ((api, target) => new GitHubReviewPublisher(api, target));
 
   let session: GitHubInstallationSession;
   try {
+    const keyring = resolveControlPlaneKeyring(env);
+    const keyringOptions = createKeyringTelemetryOptions(logger, {
+      installationId: input.installationId,
+      pullRequestNumber: input.pullRequestNumber,
+    });
     const credentials = {
-      appId: parseAppId(env.GITHUB_APP_ID),
-      appSlug: env.GITHUB_APP_SLUG,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY,
+      ...keyring,
+      privateKey: keyring.currentPrivateKey,
     };
 
     session = await sessionFactory(
       credentials,
       input.installationId,
       input.repository.id,
+      keyringOptions,
     );
   } catch (error) {
     logger.emit("ci_enrichment_session_failed", {

@@ -7,6 +7,7 @@ import { throttling } from "@octokit/plugin-throttling";
 
 import {
   classifyGitHubRequestError,
+  executeGitHubAppAuthenticationRequest,
   executeGitHubRequest,
   GitHubDiffTooLargeError,
 } from "./errors.js";
@@ -74,7 +75,7 @@ export async function resolveRepositoryInstallation(
     appId: credentials.appId,
     privateKey: credentials.privateKey,
   });
-  const authentication = await executeGitHubRequest(() =>
+  const authentication = await executeGitHubAppAuthenticationRequest(() =>
     auth({ type: "app" }),
   );
   const octokit = new Octokit({ auth: authentication.token });
@@ -228,7 +229,7 @@ export async function createInstallationSession(
     appId: credentials.appId,
     privateKey: credentials.privateKey,
   });
-  const authentication = await executeGitHubRequest(() =>
+  const authentication = await executeGitHubAppAuthenticationRequest(() =>
     auth({
       installationId,
       repositoryIds: [repositoryId],

@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-03
 related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
@@ -48,12 +48,18 @@ SQLite, filesystem ou parâmetros persistidos do Sandbox.
 
 ## Segredos
 
-- Chave privada do GitHub App, webhook secret e credenciais de modelo ficam em
-  Workers Secrets ou Secrets Store.
+- Chaves privadas do GitHub App (`GITHUB_APP_PRIVATE_KEY_CURRENT`,
+  `GITHUB_APP_PRIVATE_KEY_PREVIOUS` ou legado `GITHUB_APP_PRIVATE_KEY`), webhook
+  secret e credenciais de modelo ficam em Workers Secrets ou Secrets Store.
+  O desenho de rotação sem downtime utiliza o Keyring centralizado com circuit
+  breaker (ADR-0026) e segue o runbook operacional correspondente; a propriedade
+  ainda depende de confirmação em rollout controlado no ambiente real.
 - Variáveis comuns não são segredos.
 - KV não armazena credenciais.
 - Logs nunca registram headers `Authorization`, chave privada, token de
-  instalação ou corpo bruto contendo material sensível.
+  instalação ou corpo bruto contendo material sensível. Identificadores de chave
+  são expostos exclusivamente via fingerprint determinístico não-secreto
+  (`key:[a-f0-9]{8}`).
 
 ## Política de execução
 

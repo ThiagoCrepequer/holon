@@ -5,10 +5,14 @@ import {
   type GitHubCredentialResponse,
 } from "@holon/contracts";
 import {
-  createInstallationSession,
-  resolveRepositoryInstallation,
+  createInstallationSessionWithKeyring,
+  GitHubRequestError,
+  resolveRepositoryInstallationWithKeyring,
+  type GitHubAppKeyring,
 } from "@holon/github";
 import { WorkerEntrypoint } from "cloudflare:workers";
+
+import { resolveControlPlaneKeyring } from "./github-credentials.js";
 
 const maximumSandboxIdLength = 63;
 const runCoordinates =
@@ -24,7 +28,9 @@ interface CredentialLedger {
 
 interface CredentialBrokerEnv {
   readonly GITHUB_APP_ID: string;
-  readonly GITHUB_APP_PRIVATE_KEY: string;
+  readonly GITHUB_APP_PRIVATE_KEY?: string | undefined;
+  readonly GITHUB_APP_PRIVATE_KEY_CURRENT?: string | undefined;
+  readonly GITHUB_APP_PRIVATE_KEY_PREVIOUS?: string | undefined;
   readonly GITHUB_APP_SLUG: string;
   readonly REVIEW_LEDGERS: {
     getByName(name: string): CredentialLedger;
@@ -36,22 +42,14 @@ interface InstallationCredential {
   readonly token: string;
 }
 
-type SessionFactory = (
-  credentials: {
-    readonly appId: number;
-    readonly appSlug: string;
-    readonly privateKey: string;
-  },
+export type KeyringSessionFactory = (
+  keyring: GitHubAppKeyring,
   installationId: number,
   repositoryId: number,
 ) => Promise<InstallationCredential>;
 
-type InstallationResolver = (
-  credentials: {
-    readonly appId: number;
-    readonly appSlug: string;
-    readonly privateKey: string;
-  },
+export type KeyringInstallationResolver = (
+  keyring: GitHubAppKeyring,
   owner: string,
   repository: string,
 ) => Promise<number>;
@@ -107,8 +105,8 @@ function prKeyFromRequest(request: GitHubCredentialRequest): string {
 export async function issueGitHubCredential(
   env: CredentialBrokerEnv,
   rawRequest: unknown,
-  createSession: SessionFactory = createInstallationSession,
-  resolveInstallation: InstallationResolver = resolveRepositoryInstallation,
+  createSession: KeyringSessionFactory = createInstallationSessionWithKeyring,
+  resolveInstallation: KeyringInstallationResolver = resolveRepositoryInstallationWithKeyring,
 ): Promise<GitHubCredentialResponse> {
   const request = parseCredentialRequest(rawRequest);
   const ledger = env.REVIEW_LEDGERS.getByName(prKeyFromRequest(request));
@@ -120,21 +118,20 @@ export async function issueGitHubCredential(
   ) {
     throw new Error("Credential request is not authorized");
   }
-  const credentials = {
-    appId: parseAppId(env.GITHUB_APP_ID),
-    appSlug: env.GITHUB_APP_SLUG,
-    privateKey: env.GITHUB_APP_PRIVATE_KEY,
-  };
+  const keyring = resolveControlPlaneKeyring(env as unknown as Cloudflare.Env);
   let installationId = request.installationId;
   if (installationId === undefined) {
     try {
       installationId = await resolveInstallation(
-        credentials,
+        keyring,
         request.repositoryOwner,
         request.repositoryName,
       );
-    } catch {
-      throw new CredentialRepositoryNotInstalledError();
+    } catch (error) {
+      if (error instanceof GitHubRequestError && error.statusCode === 404) {
+        throw new CredentialRepositoryNotInstalledError();
+      }
+      throw error;
     }
     const resolvedRequest = { ...request, installationId };
     if (
@@ -146,7 +143,7 @@ export async function issueGitHubCredential(
     }
   }
   const session = await createSession(
-    credentials,
+    keyring,
     installationId,
     request.repositoryId,
   );

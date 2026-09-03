@@ -96,12 +96,19 @@ Nomes esperados pelo control plane:
 GITHUB_WEBHOOK_SECRET
 GITHUB_APP_ID
 GITHUB_APP_SLUG
+GITHUB_APP_PRIVATE_KEY_CURRENT
+GITHUB_APP_PRIVATE_KEY_PREVIOUS
 GITHUB_APP_PRIVATE_KEY
 AI_GATEWAY_ACCOUNT_ID
 AI_GATEWAY_ID
 AI_GATEWAY_API_TOKEN
 AI_MODEL_ID
 ```
+
+`GITHUB_APP_PRIVATE_KEY_CURRENT` é o nome preferencial;
+`GITHUB_APP_PRIVATE_KEY_PREVIOUS` é opcional durante rotação. O nome legado
+`GITHUB_APP_PRIVATE_KEY` permanece como alternativa ao atual para compatibilidade
+com versões N-1.
 
 O control plane espera a rota de review neste binding:
 
