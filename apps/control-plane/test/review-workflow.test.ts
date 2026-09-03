@@ -1350,4 +1350,39 @@ describe("ReviewWorkflow", () => {
     ).toBe(true);
     expect(events.some((e) => e.event === "review.failed")).toBe(true);
   });
+
+  it("emits structured repository.preparation_failed diagnostics when prepareRepository fails", async () => {
+    const events: Array<{ event: string; fields: Record<string, unknown> }> =
+      [];
+    const setup = runtime({
+      logger: {
+        emit: (eventName, fields) => {
+          events.push({ event: eventName, fields });
+        },
+      },
+    });
+    setup.prepareRepositoryV2.mockImplementation(() => {
+      const error = new Error(
+        "HOLON_REPOSITORY_PERMANENT:fetch:command-failed",
+      );
+      error.name = "RepositoryPermanentError";
+      return Promise.reject(error);
+    });
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("prepare-repo-failure-workflow"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).rejects.toThrow();
+
+    const prepFailed = events.find(
+      (e) => e.event === "repository.preparation_failed",
+    );
+    expect(prepFailed).toBeDefined();
+    expect(prepFailed?.fields.errorKind).toBe("RepositoryPermanentError");
+    expect(prepFailed?.fields.retryable).toBe(false);
+  });
 });

@@ -80,10 +80,11 @@ function assertPreparationSuccessful(
     throw new RepositoryPreparationError(true, stage, "timed-out");
   }
   if (result.exitCode === 0) return;
+  const output = `${result.stderr}\n${result.stdout}`;
   const transientFetchFailure =
     stage === "fetch" &&
-    /could not resolve host|failed to connect|connection (?:reset|timed out)|operation timed out|requested url returned error: (?:408|409|425|429|5\d\d)|remote end hung up unexpectedly|early eof/iu.test(
-      result.stderr,
+    /could not resolve host|failed to connect|connection (?:reset|timed out)|operation timed out|requested url returned error: (?:404|408|409|425|429|5\d\d)|couldn't find remote ref|remote end hung up unexpectedly|early eof|repository (?:'.*?' )?not found/iu.test(
+      output,
     );
   const retryable = result.exitCode === 143 || transientFetchFailure;
   throw new RepositoryPreparationError(

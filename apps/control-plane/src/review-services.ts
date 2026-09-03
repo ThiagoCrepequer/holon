@@ -49,7 +49,7 @@ import {
   executeGitHubOperation,
   GitHubTransientError,
 } from "./github-operations.js";
-import type { StructuredLogger } from "./observability.js";
+import { errorKind, type StructuredLogger } from "./observability.js";
 import {
   AnalyticsEngineTelemetryEmitter,
   CompositeTelemetryEmitter,
@@ -190,7 +190,11 @@ function legacyContextAsV2(rawContext: unknown): ReviewContextV2 {
   });
 }
 
-function normalizeRepositoryFailure(error: unknown): never {
+function normalizeRepositoryFailure(
+  error: unknown,
+  logger?: StructuredLogger,
+  logContext?: Readonly<Record<string, number | string>>,
+): never {
   if (
     error instanceof NonRetryableError ||
     error instanceof GitHubTransientError
@@ -202,6 +206,12 @@ function normalizeRepositoryFailure(error: unknown): never {
       error.name === "RepositoryTransientError" ||
       error.message.startsWith("HOLON_REPOSITORY_TRANSIENT:")
     ) {
+      logger?.emit("repository.preparation_failed", {
+        ...logContext,
+        errorKind: "RepositoryTransientError",
+        reason: error.message.slice(0, 100),
+        retryable: true,
+      });
       throw new RepositoryTransientError("repository");
     }
     if (
@@ -210,9 +220,21 @@ function normalizeRepositoryFailure(error: unknown): never {
       error instanceof TypeError ||
       error.message.startsWith("HOLON_REPOSITORY_PERMANENT:")
     ) {
+      logger?.emit("repository.preparation_failed", {
+        ...logContext,
+        errorKind: "RepositoryPermanentError",
+        reason: error.message.slice(0, 100),
+        retryable: false,
+      });
       throw new NonRetryableError("HOLON_REPOSITORY_NON_RETRYABLE");
     }
   }
+  logger?.emit("repository.preparation_failed", {
+    ...logContext,
+    errorKind: errorKind(error),
+    reason: "unknown",
+    retryable: true,
+  });
   throw new RepositoryTransientError("executor");
 }
 
@@ -325,7 +347,7 @@ export function createReviewServices(
       }
       return preparedRepositoryV2Schema.parse(prepared);
     } catch (error) {
-      return normalizeRepositoryFailure(error);
+      return normalizeRepositoryFailure(error, logger, logContext);
     }
   };
 
