@@ -837,4 +837,50 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
       .toArray();
     return Promise.resolve(rows.map(rowToFindingFeedbackRecord));
   }
+
+  public saveCiEvidence(
+    prKey: PrKey,
+    headSha: string,
+    evidence: { readonly markdown: string; readonly workflowRunId?: number },
+  ): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO ci_evidences (
+           pr_key, head_sha, markdown_content, workflow_run_id, created_at
+         ) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+        prKey,
+        headSha,
+        evidence.markdown,
+        evidence.workflowRunId ?? null,
+      );
+    });
+    return Promise.resolve();
+  }
+
+  public loadCiEvidence(
+    prKey: PrKey,
+    headSha: string,
+  ): Promise<
+    | { readonly markdown: string; readonly workflowRunId?: number | undefined }
+    | undefined
+  > {
+    const rows = this.ctx.storage.sql
+      .exec<{
+        markdown_content: string;
+        workflow_run_id: number | null;
+      }>(
+        `SELECT markdown_content, workflow_run_id FROM ci_evidences WHERE pr_key = ? AND head_sha = ?`,
+        prKey,
+        headSha,
+      )
+      .toArray();
+    const first = rows[0];
+    if (!first) return Promise.resolve(undefined);
+    return Promise.resolve({
+      markdown: first.markdown_content,
+      ...(first.workflow_run_id !== null
+        ? { workflowRunId: first.workflow_run_id }
+        : {}),
+    });
+  }
 }

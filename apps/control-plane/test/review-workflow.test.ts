@@ -1234,4 +1234,55 @@ describe("ReviewWorkflow", () => {
 
     expect(result2.outcome).toBe("completed");
   });
+
+  it("incorporates pre-existing CI evidence saved in ledger into initial review summary", async () => {
+    const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
+    const targetSha = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    const prKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+
+    await ledger.saveCiEvidence(prKey, targetSha, {
+      markdown: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
+      workflowRunId: 789,
+    });
+
+    const setup = runtime({
+      head: () => targetSha,
+      model: () => ({
+        review: async () => ({
+          output: { findings: [], summary: "Initial clean review." },
+          promptTruncated: false,
+        }),
+      }),
+      posts,
+    });
+
+    const targetJob: ReviewJob = reviewJobV2Schema.parse({
+      ...job,
+      envelope: {
+        ...job.envelope,
+        pullRequest: {
+          ...job.envelope.pullRequest,
+          headSha: targetSha,
+        },
+      },
+      runId: `github:42:pr:7:head:${targetSha}`,
+    });
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("ci-evidence-handshake", targetJob),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+
+    const summaryPost = posts.find((p) => p.route.includes("/reviews"));
+    expect(summaryPost).toBeDefined();
+    const body = summaryPost?.body as string;
+    expect(body).toContain("Initial clean review.");
+    expect(body).toContain("### 🧪 CI Test & Coverage Evidence");
+    expect(body).toContain("Coverage: 92.5%");
+  });
 });

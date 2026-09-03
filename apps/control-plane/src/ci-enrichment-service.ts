@@ -1,4 +1,4 @@
-import type { ReviewPublisher } from "@holon/application";
+import type { ReviewLedger, ReviewPublisher } from "@holon/application";
 import { ingestCiArtifactZips } from "@holon/application";
 import {
   appendCiEvidenceToSummary,
@@ -53,6 +53,7 @@ export interface CiEnrichmentDependencies {
     },
   ) => ReviewPublisher;
   readonly createSession?: typeof createInstallationSession;
+  readonly ledger?: ReviewLedger;
   readonly logger?: StructuredLogger;
 }
 
@@ -168,7 +169,6 @@ export async function enrichReviewWithCiEvidence(
     ? calculateChangedLinesCoverage(changedLines, evidence.coverage)
     : undefined;
 
-  // 5. Locate existing review summary comment by deterministic marker
   const prKey = createPrKey({
     provider: "github",
     pullRequestNumber: input.pullRequestNumber,
@@ -176,6 +176,18 @@ export async function enrichReviewWithCiEvidence(
   });
   const runId = createRunId(prKey, input.headSha);
   const summaryMarker = buildPublicationMarker(runId, "summary");
+  const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
+
+  // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
+  const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
+  if (ledger?.saveCiEvidence) {
+    await ledger.saveCiEvidence(prKey, input.headSha, {
+      markdown: evidenceMarkdown,
+      workflowRunId: input.workflowRunId,
+    });
+  }
+
+  // 6. Locate existing review summary comment by deterministic marker
   const publisher = publisherFactory(session.api, {
     expectedAuthorLogin: session.expectedAuthorLogin,
     headSha: input.headSha,
@@ -190,15 +202,14 @@ export async function enrichReviewWithCiEvidence(
   );
 
   if (!existingReview) {
-    logger.emit("ci_enrichment_summary_not_found", {
+    logger.emit("ci_enrichment_saved_pending_review", {
       pullRequestNumber: input.pullRequestNumber,
       runId,
     });
-    return { enriched: false, reason: "summary_not_found" };
+    return { enriched: true, reason: "saved_pending_review" };
   }
 
-  // 6. Format and update the review comment
-  const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
+  // 7. Format and update the review comment in-place
   const updatedSummary = appendCiEvidenceToSummary(
     existingReview.body,
     evidenceMarkdown,

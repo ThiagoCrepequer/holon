@@ -57,6 +57,15 @@ sequenceDiagram
 9. Localiza o comentário de review emitido pelo Holon através do marcador unificado `<!-- holon:v1;run=...;finding=summary -->`.
 10. Substitui ou anexa deterministicamente o bloco delimitado `<!-- holon:ci-evidence:start -->...<!-- holon:ci-evidence:end -->` no comentário de review existente via `PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}`.
 
+### 2.1 Resiliência à Ordem de Execução (Bidirectional Handshake via Ledger)
+
+Devido à natureza assíncrona concorrente entre pipelines do GitHub Actions e workflows do Holon na Cloudflare, dois cenários de temporização ocorrem naturalmente:
+
+- **Cenário A (CI conclui antes da análise de IA)**: O webhook `workflow_run.completed` ingere os artefatos e persiste a evidência formatada no SQLite do Durable Object (`ReviewLedger.saveCiEvidence`). Quando o `ReviewWorkflow` finaliza a análise de IA, ele consulta `loadCiEvidence` e publica o resumo inicial já incorporando a seção de evidências de CI.
+- **Cenário B (Análise de IA conclui antes do CI)**: O `ReviewWorkflow` publica o comentário de resumo inicial. Quando o webhook `workflow_run.completed` chega em seguida, ele persiste a evidência no ledger, localiza o comentário de resumo publicado via marcador determinístico e atualiza-o _in-place_.
+
+Em ambos os cenários, elimina-se qualquer condição de corrida e garante-se que a timeline do Pull Request receba o relatório consolidado sem duplicação de comentários.
+
 ## 3. Contratos e Modelagem
 
 - **LineCoverage** (`@holon/contracts`, `packages/contracts/src/ci-evidence.ts`):

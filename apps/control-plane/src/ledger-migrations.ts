@@ -146,6 +146,20 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 5,
   },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS ci_evidences (
+        pr_key TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        markdown_content TEXT NOT NULL,
+        workflow_run_id INTEGER,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (pr_key, head_sha)
+      );
+      CREATE INDEX IF NOT EXISTS ci_evidences_pr_head ON ci_evidences(pr_key, head_sha);
+    `,
+    version: 6,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {
