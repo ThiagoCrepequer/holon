@@ -1,6 +1,7 @@
 export * from "./check-run.js";
 export * from "./ci-evidence.js";
 export * from "./executor.js";
+export * from "./feedback.js";
 export * from "./finding-lifecycle.js";
 export * from "./review-output.js";
 export * from "./review-plan.js";

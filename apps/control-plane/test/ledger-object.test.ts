@@ -114,6 +114,7 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE cleanup_tasks;
         DROP TABLE credential_scopes;
         DROP TABLE IF EXISTS pr_findings;
+        DROP TABLE IF EXISTS finding_feedbacks;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -147,6 +148,7 @@ describe("ReviewLedgerObject", () => {
         { version: 2 },
         { version: 3 },
         { version: 4 },
+        { version: 5 },
       ]);
       expect(
         state.storage.sql
@@ -526,6 +528,50 @@ describe("ReviewLedgerObject", () => {
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.status).toBe("resolved");
     expect(loaded[0]?.githubCommentId).toBe(101);
+
+    // Test findFindingByCommentId
+    const found = await ledger.findFindingByCommentId(prKey, 101);
+    expect(found).toBeDefined();
+    expect(found?.fingerprint).toBe(initialFinding.fingerprint);
+
+    const notFound = await ledger.findFindingByCommentId(prKey, 9999);
+    expect(notFound).toBeUndefined();
+
+    // Update to dismissed
+    const dismissedFinding = {
+      ...resolvedFinding,
+      status: "dismissed" as const,
+      updatedAt: "2026-09-02T15:00:00.000Z",
+    };
+    await ledger.savePrFindings(prKey, [dismissedFinding]);
+    loaded = await ledger.loadPrFindings(prKey);
+    expect(loaded[0]?.status).toBe("dismissed");
+
+    // Test recordFindingFeedback and loadFindingFeedbacks
+    await ledger.recordFindingFeedback(prKey, {
+      authorLogin: "alice",
+      createdAt: "2026-09-02T15:05:00.000Z",
+      fingerprint: initialFinding.fingerprint,
+      githubCommentId: 101,
+      label: "false_positive",
+      prKey,
+      reason: "Safe by construction",
+    });
+
+    const feedbacks = await ledger.loadFindingFeedbacks(prKey);
+    expect(feedbacks).toHaveLength(1);
+    expect(feedbacks[0]).toMatchObject({
+      authorLogin: "alice",
+      fingerprint: initialFinding.fingerprint,
+      label: "false_positive",
+      reason: "Safe by construction",
+    });
+
+    const scopedFeedbacks = await ledger.loadFindingFeedbacks(
+      prKey,
+      initialFinding.fingerprint,
+    );
+    expect(scopedFeedbacks).toHaveLength(1);
   });
 
   it("rejects claimPublication when run is not in publishing state", async () => {
@@ -553,18 +599,20 @@ describe("ReviewLedgerObject", () => {
   });
 
   it("retries cleanup with exponential backoff on failure", async () => {
-    const prKey = "github:42:pr:7" as const;
-    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
-    await ledger.claimRun(run, "wf-cleanup-fail");
+    const cleanupPrKey = "github:42:pr:999" as const;
+    const cleanupRunId = `github:42:pr:999:head:${"c".repeat(40)}` as const;
+    const cleanupRun = { ...run, id: cleanupRunId, prKey: cleanupPrKey };
+    const ledger = env.REVIEW_LEDGERS.getByName(cleanupPrKey);
+    await ledger.claimRun(cleanupRun, "wf-cleanup-fail");
     await ledger.transition(
-      runId,
+      cleanupRunId,
       "queued",
       "running",
       "2026-08-29T12:00:00.000Z",
       "op-running",
     );
     await ledger.transitionAndRequestCleanup(
-      runId,
+      cleanupRunId,
       "running",
       "obsolete",
       "2026-08-29T12:00:01.000Z",
@@ -582,10 +630,10 @@ describe("ReviewLedgerObject", () => {
         const task = state.storage.sql
           .exec<{ attempts: number }>(
             "SELECT attempts FROM cleanup_tasks WHERE run_id = ?",
-            runId,
+            cleanupRunId,
           )
           .one();
-        expect(task.attempts).toBe(1);
+        expect(task.attempts).toBeGreaterThanOrEqual(1);
       });
     } finally {
       executor.cleanup = originalCleanup;

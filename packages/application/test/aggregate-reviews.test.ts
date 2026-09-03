@@ -362,6 +362,7 @@ describe("aggregateShardReviews", () => {
   describe("reconciliation formatting", () => {
     it("formats reconciliation summary section correctly", () => {
       const summary = {
+        dismissedCount: 0,
         newCount: 1,
         obsoleteCount: 0,
         persistentCount: 2,
@@ -380,6 +381,7 @@ describe("aggregateShardReviews", () => {
 
     it("returns empty string when all counts are 0", () => {
       const summary = {
+        dismissedCount: 0,
         newCount: 0,
         obsoleteCount: 0,
         persistentCount: 0,
@@ -388,6 +390,22 @@ describe("aggregateShardReviews", () => {
         totalActiveCount: 0,
       };
       expect(formatReconciliationSection(summary)).toBe("");
+    });
+
+    it("formats dismissed count in reconciliation summary section", () => {
+      const summary = {
+        dismissedCount: 2,
+        newCount: 0,
+        obsoleteCount: 0,
+        persistentCount: 0,
+        reintroducedCount: 0,
+        resolvedCount: 0,
+        totalActiveCount: 0,
+      };
+      const section = formatReconciliationSection(summary);
+      expect(section).toContain(
+        "🚫 **2** issue(s) dismissed by human feedback",
+      );
     });
 
     it("injects reconciliation section into aggregated summary when provided", () => {
@@ -402,6 +420,7 @@ describe("aggregateShardReviews", () => {
       ];
 
       const reconciliation = {
+        dismissedCount: 0,
         newCount: 0,
         obsoleteCount: 0,
         persistentCount: 0,

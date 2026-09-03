@@ -256,4 +256,81 @@ describe("GitHub webhook HTTP boundary", () => {
       readBoundedRequestBody(new Request("https://holon.test"), 3),
     ).resolves.toEqual(new Uint8Array());
   });
+
+  it("handles pull_request_review_comment created event and ignores other actions", async () => {
+    const commentPayload = {
+      action: "created",
+      comment: {
+        body: "/holon dismiss false-positive",
+        created_at: "2026-09-02T10:00:00Z",
+        id: 12345,
+        in_reply_to_id: 101,
+        user: { login: "alice" },
+      },
+      installation: { id: 99 },
+      pull_request: { number: 7 },
+      repository: {
+        full_name: "acme/api",
+        id: 42,
+        name: "api",
+        owner: { login: "acme" },
+      },
+    };
+
+    const createdResult = await request(JSON.stringify(commentPayload), {
+      "x-github-event": "pull_request_review_comment",
+    });
+    expect(createdResult.response.status).toBe(202);
+    await expect(createdResult.response.json()).resolves.toMatchObject({
+      accepted: true,
+      feedback: true,
+    });
+
+    const editedResult = await request(
+      JSON.stringify({ ...commentPayload, action: "edited" }),
+      { "x-github-event": "pull_request_review_comment" },
+    );
+    expect(editedResult.response.status).toBe(202);
+    await expect(editedResult.response.json()).resolves.toMatchObject({
+      accepted: true,
+      ignored: true,
+    });
+  });
+
+  it("handles pull_request_review_thread resolved event and ignores other actions", async () => {
+    const threadPayload = {
+      action: "resolved",
+      installation: { id: 99 },
+      pull_request: { number: 7 },
+      repository: {
+        full_name: "acme/api",
+        id: 42,
+        name: "api",
+        owner: { login: "acme" },
+      },
+      sender: { login: "bob" },
+      thread: {
+        comments: [{ id: 101 }],
+      },
+    };
+
+    const resolvedResult = await request(JSON.stringify(threadPayload), {
+      "x-github-event": "pull_request_review_thread",
+    });
+    expect(resolvedResult.response.status).toBe(202);
+    await expect(resolvedResult.response.json()).resolves.toMatchObject({
+      accepted: true,
+      feedback: true,
+    });
+
+    const unresolvedResult = await request(
+      JSON.stringify({ ...threadPayload, action: "unresolved" }),
+      { "x-github-event": "pull_request_review_thread" },
+    );
+    expect(unresolvedResult.response.status).toBe(202);
+    await expect(unresolvedResult.response.json()).resolves.toMatchObject({
+      accepted: true,
+      ignored: true,
+    });
+  });
 });

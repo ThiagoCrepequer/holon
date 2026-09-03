@@ -41,6 +41,11 @@ export function formatReconciliationSection(
   if (summary.reintroducedCount > 0) {
     parts.push(`- 🔁 **${summary.reintroducedCount}** issue(s) reintroduced.`);
   }
+  if (summary.dismissedCount > 0) {
+    parts.push(
+      `- 🚫 **${summary.dismissedCount}** issue(s) dismissed by human feedback.`,
+    );
+  }
   if (parts.length === 0) return "";
   return ["### Finding Lifecycle (Re-review)", ...parts].join("\n");
 }

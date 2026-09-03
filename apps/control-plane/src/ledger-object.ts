@@ -1,5 +1,6 @@
 import type { ClaimedPublication, ReviewLedger } from "@holon/application";
 import {
+  findingFeedbackRecordSchema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
   publicationIdSchema,
@@ -10,10 +11,12 @@ import {
   runTransitionSchema,
   timestampSchema,
   trackedFindingSchema,
+  type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type TrackedFinding,
 } from "@holon/contracts";
 import type {
+  FindingFingerprint,
   PrKey,
   PublicationId,
   PublicationRecord,
@@ -84,6 +87,38 @@ function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
     severity: row.severity,
     status: row.status,
     updatedAt: row.updated_at,
+  });
+}
+
+interface FindingFeedbackRow extends Record<string, SqlStorageValue> {
+  author_login: string;
+  created_at: string;
+  fingerprint: string;
+  github_comment_id: number | null;
+  id: number;
+  label: string;
+  pr_key: string;
+  reason: string | null;
+  target_severity: string | null;
+}
+
+function rowToFindingFeedbackRecord(
+  row: FindingFeedbackRow,
+): FindingFeedbackRecord {
+  return findingFeedbackRecordSchema.parse({
+    authorLogin: row.author_login,
+    createdAt: row.created_at,
+    fingerprint: row.fingerprint,
+    ...(row.github_comment_id === null
+      ? {}
+      : { githubCommentId: row.github_comment_id }),
+    id: row.id,
+    label: row.label,
+    prKey: row.pr_key,
+    ...(row.reason === null ? {} : { reason: row.reason }),
+    ...(row.target_severity === null
+      ? {}
+      : { targetSeverity: row.target_severity }),
   });
 }
 
@@ -750,5 +785,56 @@ export class ReviewLedgerObject extends DurableObject implements ReviewLedger {
       }
     });
     return Promise.resolve();
+  }
+
+  public findFindingByCommentId(
+    prKey: PrKey,
+    commentId: number,
+  ): Promise<TrackedFinding | undefined> {
+    const rows = this.ctx.storage.sql
+      .exec<PrFindingRow>(
+        `SELECT * FROM pr_findings WHERE pr_key = ? AND github_comment_id = ? LIMIT 1`,
+        prKey,
+        commentId,
+      )
+      .toArray();
+    const first = rows[0];
+    return Promise.resolve(first ? rowToTrackedFinding(first) : undefined);
+  }
+
+  public recordFindingFeedback(
+    prKey: PrKey,
+    feedback: FindingFeedbackRecord,
+  ): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO finding_feedbacks (
+           pr_key, fingerprint, label, author_login, reason, target_severity, github_comment_id, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        prKey,
+        feedback.fingerprint,
+        feedback.label,
+        feedback.authorLogin,
+        feedback.reason ?? null,
+        feedback.targetSeverity ?? null,
+        feedback.githubCommentId ?? null,
+        feedback.createdAt,
+      );
+    });
+    return Promise.resolve();
+  }
+
+  public loadFindingFeedbacks(
+    prKey: PrKey,
+    fingerprint?: FindingFingerprint,
+  ): Promise<readonly FindingFeedbackRecord[]> {
+    const query = fingerprint
+      ? `SELECT * FROM finding_feedbacks WHERE pr_key = ? AND fingerprint = ? ORDER BY created_at ASC`
+      : `SELECT * FROM finding_feedbacks WHERE pr_key = ? ORDER BY created_at ASC`;
+    const params = fingerprint ? [prKey, fingerprint] : [prKey];
+    const rows = this.ctx.storage.sql
+      .exec<FindingFeedbackRow>(query, ...params)
+      .toArray();
+    return Promise.resolve(rows.map(rowToFindingFeedbackRecord));
   }
 }

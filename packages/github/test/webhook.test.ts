@@ -2,7 +2,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { mapPullRequestWebhook, verifyWebhookSignature } from "../src/index.js";
+import {
+  mapPullRequestWebhook,
+  mapReviewCommentWebhook,
+  mapReviewThreadWebhook,
+  verifyWebhookSignature,
+} from "../src/index.js";
 
 const payload = JSON.stringify({ action: "opened" });
 
@@ -95,5 +100,82 @@ describe("GitHub webhook boundary", () => {
         "2026-08-29T12:00:00.000Z",
       ),
     ).toThrow();
+  });
+
+  it("maps pull_request_review_comment payloads into ReviewCommentWebhookEvent", () => {
+    const commentPayload = {
+      action: "created",
+      comment: {
+        author_association: "COLLABORATOR",
+        body: "/holon dismiss false-positive",
+        created_at: "2026-09-02T10:00:00.000Z",
+        id: 12345,
+        in_reply_to_id: 101,
+        user: { login: "alice" },
+      },
+      installation: { id: 99 },
+      pull_request: { number: 7 },
+      repository: {
+        full_name: "acme/api",
+        id: 42,
+        name: "api",
+        owner: { login: "acme" },
+      },
+    };
+
+    const event = mapReviewCommentWebhook(commentPayload, "del-123");
+    expect(event).toEqual({
+      action: "created",
+      authorAssociation: "COLLABORATOR",
+      authorLogin: "alice",
+      body: "/holon dismiss false-positive",
+      commentId: 12345,
+      createdAt: "2026-09-02T10:00:00.000Z",
+      deliveryId: "github:del-123",
+      inReplyToId: 101,
+      installationId: 99,
+      pullRequestNumber: 7,
+      repository: {
+        fullName: "acme/api",
+        id: 42,
+        name: "api",
+        owner: "acme",
+      },
+    });
+  });
+
+  it("maps pull_request_review_thread payloads into ReviewThreadWebhookEvent", () => {
+    const threadPayload = {
+      action: "resolved",
+      installation: { id: 99 },
+      pull_request: { number: 7 },
+      repository: {
+        full_name: "acme/api",
+        id: 42,
+        name: "api",
+        owner: { login: "acme" },
+      },
+      sender: { author_association: "MEMBER", login: "bob" },
+      thread: {
+        comments: [{ id: 101 }],
+      },
+    };
+
+    const event = mapReviewThreadWebhook(threadPayload, "del-456");
+    expect(event).toEqual({
+      action: "resolved",
+      authorAssociation: "MEMBER",
+      authorLogin: "bob",
+      deliveryId: "github:del-456",
+      installationId: 99,
+      pullRequestNumber: 7,
+      repository: {
+        fullName: "acme/api",
+        id: 42,
+        name: "api",
+        owner: "acme",
+      },
+      rootCommentId: 101,
+    });
   });
 });

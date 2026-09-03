@@ -30,6 +30,7 @@ export interface ReconciledFinding extends Finding {
 }
 
 export interface ReconciliationSummary {
+  readonly dismissedCount: number;
   readonly newCount: number;
   readonly obsoleteCount: number;
   readonly persistentCount: number;
@@ -54,6 +55,7 @@ export interface ReconcileFindingsInput {
 
 export interface ReconciledLifecycleResult {
   readonly activeFindings: readonly ReconciledFinding[];
+  readonly dismissedFindings: readonly ReconciledFinding[];
   readonly obsoleteFindings: readonly TrackedFinding[];
   readonly resolvedFindings: readonly TrackedFinding[];
   readonly summary: ReconciliationSummary;
@@ -69,6 +71,7 @@ export function reconcileFindings(
   );
 
   const activeFindings: ReconciledFinding[] = [];
+  const dismissedFindings: ReconciledFinding[] = [];
   const handledFingerprints = new Set<FindingFingerprint>();
   const updatedTrackedMap = new Map<FindingFingerprint, TrackedFinding>();
 
@@ -117,6 +120,22 @@ export function reconcileFindings(
         firstSeenHeadSha: existing.firstSeenHeadSha,
         previousCommentId: existing.githubCommentId,
         status: "reintroduced",
+      });
+    } else if (existing !== undefined && existing.status === "dismissed") {
+      // Previously dismissed issue still matches: preserve dismissal without blocking
+      const tracked: TrackedFinding = {
+        ...existing,
+        lastSeenHeadSha: input.currentHeadSha,
+        lastSeenRunId: input.currentRunId,
+        line: current.location.line,
+        updatedAt: now,
+      };
+      updatedTrackedMap.set(current.fingerprint, tracked);
+      dismissedFindings.push({
+        ...current,
+        firstSeenHeadSha: existing.firstSeenHeadSha,
+        previousCommentId: existing.githubCommentId,
+        status: "dismissed",
       });
     } else {
       // Entirely new issue
@@ -195,7 +214,10 @@ export function reconcileFindings(
   const obsoleteCount = obsoleteFindings.length;
   const totalActiveCount = activeFindings.length;
 
+  const dismissedCount = dismissedFindings.length;
+
   const summary: ReconciliationSummary = {
+    dismissedCount,
     newCount,
     obsoleteCount,
     persistentCount,
@@ -206,6 +228,7 @@ export function reconcileFindings(
 
   return {
     activeFindings,
+    dismissedFindings,
     obsoleteFindings,
     resolvedFindings,
     summary,

@@ -32,6 +32,7 @@ export const findingStatusSchema: z.ZodType<FindingStatus> = z.enum([
   "resolved",
   "obsolete",
   "reintroduced",
+  "dismissed",
 ]);
 
 export type {
@@ -58,14 +59,16 @@ export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
   updatedAt: timestampSchema,
 });
 
-export const reconciliationSummarySchema = z.strictObject({
-  newCount: z.number().int().nonnegative(),
-  obsoleteCount: z.number().int().nonnegative(),
-  persistentCount: z.number().int().nonnegative(),
-  reintroducedCount: z.number().int().nonnegative(),
-  resolvedCount: z.number().int().nonnegative(),
-  totalActiveCount: z.number().int().nonnegative(),
-});
+export const reconciliationSummarySchema: z.ZodType<ReconciliationSummary> =
+  z.strictObject({
+    dismissedCount: z.number().int().nonnegative(),
+    newCount: z.number().int().nonnegative(),
+    obsoleteCount: z.number().int().nonnegative(),
+    persistentCount: z.number().int().nonnegative(),
+    reintroducedCount: z.number().int().nonnegative(),
+    resolvedCount: z.number().int().nonnegative(),
+    totalActiveCount: z.number().int().nonnegative(),
+  });
 
 export const reconciledFindingSchema = reviewFindingSchema.extend({
   fingerprint: findingFingerprintSchema,
