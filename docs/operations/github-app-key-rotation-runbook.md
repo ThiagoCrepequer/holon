@@ -14,14 +14,17 @@ related:
 # Runbook: Rotação de Chave Privada do GitHub App
 
 Este runbook define o procedimento operacional para rotacionar a chave privada
-do GitHub App utilizado pelo Holon sem indisponibilidade de serviço (_zero downtime_)
-e com garantia de compatibilidade com versões N-1 do Cloudflare Worker.
+do GitHub App utilizado pelo Holon com uma janela de compatibilidade para o
+Worker N-1. O fluxo foi verificado localmente, mas ainda precisa ser confirmado
+por um primeiro rollout controlado contra GitHub e Cloudflare reais antes de ser
+tratado como garantia de _zero downtime_.
 
 ## Pré-requisitos
 
 1. Acesso administrativo às configurações do GitHub App no GitHub.
 2. Acesso à CLI do Cloudflare (`wrangler`) com permissão de deploy e segredos no ambiente alvo.
-3. Versão do Holon com suporte ao Keyring (ADR-0026) já implantada ou em processo de deploy.
+3. `jq` disponível localmente para montar o payload sem copiar o PEM para a linha de comando.
+4. Versão do Holon com suporte ao Keyring (ADR-0026) já implantada ou em processo de deploy.
 
 ## Visão Geral do Ciclo de Rotação
 
@@ -56,13 +59,26 @@ atualize as variáveis em conjunto ou via deploy versionado:
 - `GITHUB_APP_PRIVATE_KEY_PREVIOUS`: Conteúdo PEM da **chave antiga**.
 - `GITHUB_APP_PRIVATE_KEY`: Conteúdo PEM da **chave nova** (garante que, se houver rollback do Worker para uma versão N-1 que lê apenas a variável legada, ela continue funcionando).
 
-Exemplo via Wrangler:
+O repositório fixa Wrangler 4.127.1, que suporta atualização de múltiplos
+secrets em uma única requisição. O comando abaixo lê os PEMs sem colocá-los nos
+argumentos ou persistir uma cópia adicional no repositório:
 
 ```bash
-wrangler secret put GITHUB_APP_PRIVATE_KEY_CURRENT < nova-chave.pem
-wrangler secret put GITHUB_APP_PRIVATE_KEY_PREVIOUS < antiga-chave.pem
-wrangler secret put GITHUB_APP_PRIVATE_KEY < nova-chave.pem
+jq -n \
+  --rawfile current nova-chave.pem \
+  --rawfile previous antiga-chave.pem \
+  '{
+    GITHUB_APP_PRIVATE_KEY_CURRENT: $current,
+    GITHUB_APP_PRIVATE_KEY_PREVIOUS: $previous,
+    GITHUB_APP_PRIVATE_KEY: $current
+  }' \
+  | pnpm --filter @holon/control-plane exec wrangler secret bulk
 ```
+
+`wrangler secret bulk` cria uma única versão com o conjunto completo. Não
+substitua esse comando por vários `wrangler secret put`: cada `put` cria e
+implanta imediatamente uma versão distinta, reintroduzindo estados
+intermediários.
 
 ### Etapa 3: Janela de observação e validação
 
@@ -82,7 +98,7 @@ wrangler secret put GITHUB_APP_PRIVATE_KEY < nova-chave.pem
 1. Remova a variável `GITHUB_APP_PRIVATE_KEY_PREVIOUS` do ambiente do Cloudflare Worker:
 
 ```bash
-wrangler secret delete GITHUB_APP_PRIVATE_KEY_PREVIOUS
+pnpm --filter @holon/control-plane exec wrangler secret delete GITHUB_APP_PRIVATE_KEY_PREVIOUS
 ```
 
 2. A variável legada `GITHUB_APP_PRIVATE_KEY` deve ser mantida com o valor da nova chave enquanto houver possibilidade de rollback para versões de código que não suportavam as variáveis do Keyring.
@@ -97,8 +113,21 @@ Se durante a Etapa 3 (Janela de Observação) a nova chave falhar ou apresentar 
 2. **Ação Manual de Rollback**:
    Caso deseje cancelar a rotação e retornar permanentemente para a chave antiga:
    ```bash
-   wrangler secret put GITHUB_APP_PRIVATE_KEY_CURRENT < antiga-chave.pem
-   wrangler secret put GITHUB_APP_PRIVATE_KEY < antiga-chave.pem
-   wrangler secret delete GITHUB_APP_PRIVATE_KEY_PREVIOUS
+   jq -n \
+     --rawfile previous antiga-chave.pem \
+     '{
+       GITHUB_APP_PRIVATE_KEY_CURRENT: $previous,
+       GITHUB_APP_PRIVATE_KEY_PREVIOUS: null,
+       GITHUB_APP_PRIVATE_KEY: $previous
+     }' \
+     | pnpm --filter @holon/control-plane exec wrangler secret bulk
    ```
    Em seguida, exclua a chave nova não utilizada no GitHub App.
+
+## Fontes primárias
+
+Verificadas em 2026-09-03:
+
+- [GitHub: gerenciamento de chaves privadas para GitHub Apps](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
+- [Cloudflare Workers: secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+- [Wrangler: comandos `secret put` e `secret bulk`](https://developers.cloudflare.com/workers/wrangler/commands/workers/#secret)

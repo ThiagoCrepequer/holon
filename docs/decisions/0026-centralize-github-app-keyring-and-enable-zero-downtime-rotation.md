@@ -9,7 +9,7 @@ related:
   - 0014-version-executor-rpc-and-broker-github-credentials.md
   - 0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../architecture/security-and-trust-boundaries.md
-  - ../architecture/github-app.md
+  - ../operations/github-app.md
 ---
 
 # Centralizar keyring do GitHub App e habilitar rotação sem indisponibilidade
@@ -78,11 +78,29 @@ de chave traria riscos severos de produção:
 
 ### Positivas
 
-- Rotação de credenciais do GitHub App sem interrupção de serviço nem indisponibilidade.
-- Rollback seguro de código para versões N-1 sem quebra por chave revogada.
-- Eliminação do risco de bloqueio anti-abuso via circuit breaker.
+- Viabiliza rotação de credenciais do GitHub App sem interrupção quando o
+  procedimento operacional é seguido e validado no ambiente alvo.
+- Mantém um caminho de rollback de código para versões N-1 durante a janela de
+  compatibilidade da chave legada.
+- Reduz tentativas repetidas com uma chave inválida por isolate via circuit
+  breaker em memória.
 - Diagnóstico preciso de falhas no broker de credenciais sem mascaramento de causas.
 
 ### Negativas
 
 - Gerenciamento operacional temporário de múltiplas chaves durante a janela de transição.
+
+## Estado de verificação
+
+O comportamento foi verificado localmente por testes unitários e pelo gate
+`pnpm verify`. Ainda não foi exercitado contra um GitHub App real nem por uma
+rotação de secrets em uma conta Cloudflare; portanto, _zero downtime_ permanece
+uma propriedade de desenho a confirmar no primeiro rollout controlado.
+
+## Evidência
+
+Verificada em 2026-09-03:
+
+- [GitHub: gerenciamento e rotação de chaves privadas de GitHub Apps](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
+- [GitHub: limites de taxa da REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
+- [Cloudflare Workers: secrets e upload conjunto](https://developers.cloudflare.com/workers/configuration/secrets/)
