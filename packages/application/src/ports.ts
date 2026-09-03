@@ -7,6 +7,8 @@ import type {
   UpdateCheckRunInput,
 } from "@holon/contracts";
 import type {
+  FindingFeedbackRecord,
+  FindingFingerprint,
   PrKey,
   PublicationId,
   PublicationRecord,
@@ -54,7 +56,19 @@ export interface ReviewLedger {
     id: PublicationId,
     githubCommentId: number,
   ): Promise<void>;
+  findFindingByCommentId?(
+    prKey: PrKey,
+    commentId: number,
+  ): Promise<TrackedFinding | undefined>;
+  loadFindingFeedbacks?(
+    prKey: PrKey,
+    fingerprint?: FindingFingerprint,
+  ): Promise<readonly FindingFeedbackRecord[]>;
   loadPrFindings?(prKey: PrKey): Promise<readonly TrackedFinding[]>;
+  recordFindingFeedback?(
+    prKey: PrKey,
+    feedback: FindingFeedbackRecord,
+  ): Promise<void>;
   savePrFindings?(
     prKey: PrKey,
     findings: readonly TrackedFinding[],

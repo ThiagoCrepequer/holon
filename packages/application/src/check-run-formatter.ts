@@ -97,7 +97,7 @@ export function formatCheckRunOutput(
   details.push(`- **Findings identified**: ${findingCount}`);
   if (reconciliation !== undefined) {
     details.push(
-      `- **Lifecycle**: ${reconciliation.resolvedCount} resolved, ${reconciliation.persistentCount} persistent, ${reconciliation.newCount} new${reconciliation.reintroducedCount > 0 ? `, ${reconciliation.reintroducedCount} reintroduced` : ""}`,
+      `- **Lifecycle**: ${reconciliation.resolvedCount} resolved, ${reconciliation.persistentCount} persistent, ${reconciliation.newCount} new${reconciliation.reintroducedCount > 0 ? `, ${reconciliation.reintroducedCount} reintroduced` : ""}${reconciliation.dismissedCount > 0 ? `, ${reconciliation.dismissedCount} dismissed` : ""}`,
     );
   }
   if (scopeStatus === "partial_by_failure") {

@@ -104,6 +104,7 @@ describe("check-run-formatter", () => {
     const outputApprovedWithResolutions = formatCheckRunOutput({
       findings: [],
       reconciliation: {
+        dismissedCount: 0,
         newCount: 0,
         obsoleteCount: 0,
         persistentCount: 0,
@@ -119,6 +120,24 @@ describe("check-run-formatter", () => {
     );
     expect(outputApprovedWithResolutions.summary).toContain(
       "- **Lifecycle**: 2 resolved, 0 persistent, 0 new",
+    );
+
+    const outputWithDismissed = formatCheckRunOutput({
+      findings: [],
+      reconciliation: {
+        dismissedCount: 1,
+        newCount: 0,
+        obsoleteCount: 0,
+        persistentCount: 0,
+        reintroducedCount: 1,
+        resolvedCount: 1,
+        totalActiveCount: 0,
+      },
+      summary: "Findings updated.",
+      verdict: "APPROVE",
+    });
+    expect(outputWithDismissed.summary).toContain(
+      "- **Lifecycle**: 1 resolved, 0 persistent, 0 new, 1 reintroduced, 1 dismissed",
     );
 
     const outputComment = formatCheckRunOutput({
