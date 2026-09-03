@@ -10,14 +10,20 @@ import {
 } from "@holon/application";
 import { createPrKey } from "@holon/domain";
 import {
-  createInstallationSession,
+  createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
+  type GitHubAppCredentials,
+  type GitHubAppKeyring,
   type GitHubInstallationSession,
+  type KeyringOperationOptions,
   type ReviewCommentWebhookEvent,
   type ReviewThreadWebhookEvent,
 } from "@holon/github";
 
-import { parseAppId } from "./credential-broker.js";
+import {
+  createKeyringTelemetryOptions,
+  resolveControlPlaneKeyring,
+} from "./github-credentials.js";
 import {
   consoleLogger,
   errorKind,
@@ -40,9 +46,10 @@ export interface FeedbackHandlerDependencies {
     },
   ) => ReviewPublisher;
   readonly createSession?: (
-    credentials: { appId: number; appSlug: string; privateKey: string },
+    credentialsOrKeyring: GitHubAppCredentials | GitHubAppKeyring,
     installationId: number,
     repositoryId: number,
+    options?: KeyringOperationOptions,
   ) => Promise<GitHubInstallationSession>;
   readonly ledger?: FeedbackLedger;
   readonly logger?: StructuredLogger;
@@ -74,16 +81,24 @@ async function createSession(
   env: Cloudflare.Env,
   event: FeedbackEvent,
   dependencies: FeedbackHandlerDependencies,
+  logger?: StructuredLogger,
 ): Promise<GitHubInstallationSession> {
-  const factory = dependencies.createSession ?? createInstallationSession;
+  const factory =
+    dependencies.createSession ?? createInstallationSessionWithKeyring;
+  const keyring = resolveControlPlaneKeyring(env);
+  const keyringOptions = createKeyringTelemetryOptions(logger, {
+    installationId: event.installationId,
+    pullRequestNumber: event.pullRequestNumber,
+  });
+  const credentials = {
+    ...keyring,
+    privateKey: keyring.currentPrivateKey,
+  };
   return await factory(
-    {
-      appId: parseAppId(env.GITHUB_APP_ID),
-      appSlug: env.GITHUB_APP_SLUG,
-      privateKey: env.GITHUB_APP_PRIVATE_KEY,
-    },
+    credentials,
     event.installationId,
     event.repository.id,
+    keyringOptions,
   );
 }
 
@@ -137,7 +152,7 @@ export async function handleFeedbackCommentWebhook(
     if (decision === undefined) return { actionTaken: "ignored" };
     const session =
       dependencies.publisher === undefined
-        ? await createSession(env, event, dependencies)
+        ? await createSession(env, event, dependencies, logger)
         : undefined;
     const publisher = await resolvePublisher(
       event,
@@ -180,7 +195,7 @@ export async function handleThreadResolvedWebhook(
       resolved.prKey,
     );
     if (decision === undefined) return { actionTaken: "ignored" };
-    const session = await createSession(env, event, dependencies);
+    const session = await createSession(env, event, dependencies, logger);
     const authorize =
       dependencies.authorizeThreadResolver ??
       (async (currentSession, currentEvent) => {

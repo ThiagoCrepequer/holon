@@ -12,6 +12,7 @@ last-reviewed: 2026-08-31
 - [Desenvolvimento local](local-development.md)
 - [Execução das avaliações](evaluations.md)
 - [Configuração do GitHub App](github-app.md)
+- [Rotação de Chave do GitHub App (Runbook)](github-app-key-rotation-runbook.md)
 - [Provisionamento e deploy](deployment.md)
 
 Estes documentos distinguem comandos de validação local de efeitos remotos. Um

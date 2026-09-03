@@ -29,7 +29,9 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 3. Configure o GitHub App conforme [github-app.md](github-app.md).
 4. Configure no control plane os nomes externos listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
-   `wrangler secret put` para credenciais; App, account e gateway IDs podem ser
+   `wrangler secret put` para credenciais (`GITHUB_APP_PRIVATE_KEY_CURRENT`,
+   `GITHUB_APP_PRIVATE_KEY_PREVIOUS` ou legado `GITHUB_APP_PRIVATE_KEY`, seguindo o
+   [runbook de rotação de chave](github-app-key-rotation-runbook.md)); App, account e gateway IDs podem ser
    variáveis por ambiente. Configure o binding existente como
    `AI_MODEL_ID=dynamic/pr-review`; o token Cloudflare precisa de
    `AI Gateway Run`. A chave OpenRouter permanece exclusivamente no BYOK.

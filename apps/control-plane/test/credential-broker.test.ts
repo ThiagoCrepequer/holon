@@ -1,4 +1,5 @@
 import type { RunId } from "@holon/domain";
+import { GitHubRequestError } from "@holon/github";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -227,12 +228,41 @@ describe("GitHubCredentialBrokerEntrypoint", () => {
         },
         v1Request,
         createSession,
-        () => Promise.reject(new Error("provider detail")),
+        () =>
+          Promise.reject(
+            new GitHubRequestError("upstream_permanent", false, 404),
+          ),
       ),
     ).rejects.toMatchObject({
       message: "Credential repository is not installed for this GitHub App",
       name: "CredentialRepositoryNotInstalledError",
     });
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("preserves non-404 upstream errors (auth failure, rate limit, outage) without mapping to not installed", async () => {
+    const { installationId: _installationId, ...v1Request } = request;
+    const createSession = vi.fn();
+    const rateLimitError = new GitHubRequestError("rate_limited", true, 429);
+    await expect(
+      issueGitHubCredential(
+        {
+          GITHUB_APP_ID: "123",
+          GITHUB_APP_PRIVATE_KEY: "private-key",
+          GITHUB_APP_SLUG: "holon-reviewer",
+          REVIEW_LEDGERS: {
+            getByName: () => ({
+              authorizeCredential: () => Promise.resolve(true),
+              bootstrapCredentialScope: () => Promise.resolve(false),
+              canBootstrapCredentialScope: () => Promise.resolve(false),
+            }),
+          },
+        },
+        v1Request,
+        createSession,
+        () => Promise.reject(rateLimitError),
+      ),
+    ).rejects.toThrow(rateLimitError);
     expect(createSession).not.toHaveBeenCalled();
   });
 
