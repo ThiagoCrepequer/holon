@@ -16,10 +16,12 @@ import { classifyPullRequestDiffFile } from "./policy.js";
 import { mapReviewSurface } from "./surface.js";
 
 export interface BuildReviewPlanOptions {
+  readonly additionalExcludes?: readonly string[] | undefined;
   readonly maxShardDiffBytes?: number | undefined;
   readonly maxShardFiles?: number | undefined;
   readonly maxShardLines?: number | undefined;
   readonly maxShards?: number | undefined;
+  readonly policyExcludedFilesCount?: number | undefined;
 }
 
 interface EligibleFile {
@@ -49,12 +51,18 @@ export function buildReviewPlan(
   const maxShards = options?.maxShards ?? 5;
 
   let unsupportedFilesCount = 0;
+  let policyExcludedFilesCount = options?.policyExcludedFilesCount ?? 0;
   const eligibleFiles: EligibleFile[] = [];
 
   for (const file of diffFiles) {
-    const mode = classifyPullRequestDiffFile(file);
-    if (mode === undefined || !isNonBinaryPullRequestPatch(file.patch)) {
+    const globalMode = classifyPullRequestDiffFile(file);
+    if (globalMode === undefined || !isNonBinaryPullRequestPatch(file.patch)) {
       unsupportedFilesCount += 1;
+      continue;
+    }
+    const mode = classifyPullRequestDiffFile(file, options?.additionalExcludes);
+    if (mode === undefined) {
+      policyExcludedFilesCount += 1;
       continue;
     }
     const patchBytes = utf8ByteLength(file.patch);
@@ -73,6 +81,20 @@ export function buildReviewPlan(
   }
 
   if (eligibleFiles.length === 0) {
+    if (policyExcludedFilesCount > 0) {
+      return reviewPlanSchema.parse({
+        omissionReasons: [
+          `All ${policyExcludedFilesCount} eligible file(s) in this pull request were excluded by repository policy.`,
+        ],
+        schemaVersion: 2,
+        scopeStatus: "partial_by_policy",
+        shards: [],
+        totalEligibleBytes: 0,
+        totalEligibleFiles: 0,
+        totalEligibleLines: 0,
+        unsupportedFilesCount: unsupportedFilesCount + policyExcludedFilesCount,
+      });
+    }
     return reviewPlanSchema.parse({
       omissionReasons: [
         "No supported or non-binary files found in the pull request diff.",
@@ -195,6 +217,13 @@ export function buildReviewPlan(
 
   const omissionReasons: string[] = [];
   let scopeStatus: "complete" | "partial_by_policy" = "complete";
+
+  if (policyExcludedFilesCount > 0) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push(
+      `${policyExcludedFilesCount} eligible file(s) excluded by repository policy.`,
+    );
+  }
 
   let selectedRawShards = rawShards;
   if (rawShards.length > maxShards) {

@@ -1,6 +1,7 @@
 export * from "./contract-break-detector.js";
 export * from "./diff.js";
 export * from "./downstream-tracer.js";
+export * from "./glob-matcher.js";
 export * from "./plan.js";
 export * from "./policy.js";
 export * from "./security-surface-detector.js";

@@ -1,6 +1,7 @@
 import type { ReviewFileMode } from "@holon/contracts";
 
 import type { PullRequestDiffFile } from "./diff.js";
+import { matchesAnyPathGlob } from "./glob-matcher.js";
 
 const structuralExtension = /\.(?:[cm]?js|[cm]?ts|jsx|tsx)$/iu;
 
@@ -326,7 +327,10 @@ function isNormalizedRepositoryPath(path: string): boolean {
     .every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 
-export function classifyReviewPath(path: string): ReviewFileMode | undefined {
+export function classifyReviewPath(
+  path: string,
+  additionalExcludes?: readonly string[],
+): ReviewFileMode | undefined {
   const basename = path.slice(path.lastIndexOf("/") + 1);
   if (
     !isNormalizedRepositoryPath(path) ||
@@ -336,6 +340,13 @@ export function classifyReviewPath(path: string): ReviewFileMode | undefined {
     binaryExtensionNames.has(extension(basename) ?? "") ||
     isSecretFile(basename) ||
     isLockFile(basename)
+  ) {
+    return undefined;
+  }
+  if (
+    additionalExcludes !== undefined &&
+    additionalExcludes.length > 0 &&
+    matchesAnyPathGlob(path, additionalExcludes)
   ) {
     return undefined;
   }
@@ -383,35 +394,47 @@ function hasCompatibleDiffPaths(file: PullRequestDiffFile): boolean {
  */
 export function classifyPullRequestDiffFile(
   file: PullRequestDiffFile,
+  additionalExcludes?: readonly string[],
 ): ReviewFileMode | undefined {
   if (!hasCompatibleDiffPaths(file)) return undefined;
   const paths = [file.oldPath, file.newPath].filter(
     (path): path is string => path !== undefined,
   );
-  if (paths.some((path) => classifyReviewPath(path) === undefined)) {
+  if (
+    paths.some(
+      (path) => classifyReviewPath(path, additionalExcludes) === undefined,
+    )
+  ) {
     return undefined;
   }
-  return classifyReviewPath(file.path);
+  return classifyReviewPath(file.path, additionalExcludes);
 }
 
 export function isReviewablePullRequestDiffFile(
   file: PullRequestDiffFile,
+  additionalExcludes?: readonly string[],
 ): boolean {
-  return classifyPullRequestDiffFile(file) !== undefined;
+  return classifyPullRequestDiffFile(file, additionalExcludes) !== undefined;
 }
 
-export function isReviewablePath(path: string): boolean {
-  return classifyReviewPath(path) !== undefined;
+export function isReviewablePath(
+  path: string,
+  additionalExcludes?: readonly string[],
+): boolean {
+  return classifyReviewPath(path, additionalExcludes) !== undefined;
 }
 
 export function selectReviewableFiles(
   paths: readonly string[],
   maximumFiles: number,
+  additionalExcludes?: readonly string[],
 ): readonly string[] {
   if (!Number.isSafeInteger(maximumFiles) || maximumFiles <= 0) {
     throw new TypeError("maximumFiles must be a positive safe integer");
   }
-  return [...new Set(paths.filter(isReviewablePath))]
+  return [
+    ...new Set(paths.filter((p) => isReviewablePath(p, additionalExcludes))),
+  ]
     .toSorted()
     .slice(0, maximumFiles);
 }
