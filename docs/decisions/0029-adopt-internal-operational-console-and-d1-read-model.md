@@ -61,8 +61,10 @@ Consultar o estado operacional diretamente nos Durable Objects de PR (`ReviewLed
 
 6. **Perímetro de Segurança com Cloudflare Access**:
    A aplicação `apps/admin` é protegida pelo Cloudflare Access em staging e produção.
-   O middleware server-side valida a assinatura RS256 de `Cf-Access-Jwt-Assertion` contra o JWKS corporativo, checa audience (`ACCESS_AUD`), vigência temporal e sufixo de domínio corporativo em emails autorizados, rejeitando tokens de aplicação não-humana (`type === "app"`).
+   O middleware server-side valida a assinatura RS256 de `Cf-Access-Jwt-Assertion` contra o JWKS corporativo, checa audience (`ACCESS_AUD`), vigência temporal e sufixo de domínio corporativo em emails autorizados, e exige `email` válido e `sub` não vazio como identidade humana positiva.
    `workers.dev` e `preview_urls` permanecem explicitamente desativados.
+
+   **Errata registrada em 2026-09-04**: a versão inicial deste ADR descrevia incorretamente `type === "app"` como identificador de token não humano. A [documentação do application token do Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/) mostra que esse claim também está presente no token de uma sessão humana. Service tokens são rejeitados porque não fornecem o `email` verificado de usuário e apresentam `sub` vazio; o middleware não autoriza apenas pela ausência desses sinais, mas exige positivamente ambos os claims humanos.
 
 7. **Outbox Durável no Ledger e Multiplexação do Alarm**:
    A tabela `projection_tasks` é adicionada ao SQLite do `ReviewLedgerObject`.
