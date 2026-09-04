@@ -18,10 +18,18 @@ Este runbook orienta a equipe de engenharia e sustentação na resposta a incide
 
 ## 1. Resposta a Incidentes
 
-### 1.1. Alerta de Degradação na Interface
+### 1.1. Estados operacionais na interface
 
-Quando qualquer subsistema apresentar anomalias, um banner de alerta vermelho/âmbar será renderizado no topo de todas as páginas do console:
-`Atenção: O sistema está operando em modo degradado. Algumas informações podem estar desatualizadas ou indisponíveis.`
+O dashboard separa dois estados que exigem respostas diferentes:
+
+- `Operational Degradation Detected`: uma métrica válida ultrapassou seu SLO;
+  atualmente isso ocorre quando a mensagem mais antiga da Queue excede 300 s.
+- `Optional Telemetry Unavailable`: a consulta do Analytics Engine ou da Queue
+  Metrics API não pôde ser executada. O core de reviews, D1 e RPC continuam
+  disponíveis; configure o token ausente ou investigue a API upstream.
+
+Um painel opcional sem credenciais nunca deve ser apresentado como `Healthy`
+nem como degradação confirmada.
 
 ### 1.2. Diagnóstico via Endpoint de Prontidão
 
@@ -30,7 +38,7 @@ Para inspecionar o status exato de cada subsistema:
 ```bash
 curl -H "cf-access-jwt-assertion: <SEU_TOKEN_ACCESS>" \
      -H "Accept: application/json" \
-     https://admin.holon.internal/readiness
+     https://admin-holon.crepequer.dev/readiness
 ```
 
 Exemplo de resposta de diagnóstico:
@@ -55,7 +63,45 @@ Exemplo de resposta de diagnóstico:
 | **D1 Database**       | `checks.d1 == "degraded"`             | Timeout na query `SELECT 1` ou indisponibilidade regional D1.                              | Verificar status da Cloudflare. Confirmar binding `DB` em `wrangler.jsonc`.                                                              |
 | **Control Plane RPC** | `checks.rpc == "degraded"`            | Binding `ADMIN_READ_API` desconectado ou versão de schema incompatível.                    | Verificar se o Worker `apps/control-plane` está deployado e se o método `pingV1()` responde com schema version 1.                        |
 | **Queue Metrics**     | `checks.queueMetrics == "degraded"`   | A mensagem mais antiga da fila principal ultrapassou o SLO configurado (300 s por padrão). | Inspecionar a fila principal e a DLQ usando métricas e o CLI de replay. Avaliar erros no consumer de projeções.                          |
-| **Analytics Engine**  | `checks.analyticsEngine == "unknown"` | Credenciais `CF_ANALYTICS_API_TOKEN` ou `CF_ACCOUNT_ID` ausentes.                          | O console continuará operando normalmente exibindo apenas métricas do D1. Configure o segredo se desejar tendências de latência p50/p95. |
+| **Queue Metrics**     | `checks.queueMetrics == "unknown"`    | Token `CF_QUEUES_READ_TOKEN` ausente/inválido ou Metrics API indisponível.                 | Confirmar o secret com permissão `Queues Read`; buscar o evento estruturado sem tratar o painel como saudável.                           |
+| **Analytics Engine**  | `checks.analyticsEngine == "unknown"` | Token `CF_ANALYTICS_API_TOKEN` ausente/inválido ou SQL API indisponível.                   | O console continuará operando normalmente exibindo apenas métricas do D1. Configure o segredo se desejar tendências de latência p50/p95. |
+
+O status global é `degraded` somente quando D1/RPC falham ou quando a Queue
+ultrapassa o SLO. É `partial` quando os checks essenciais estão saudáveis e ao
+menos uma integração opcional está `unknown`.
+
+### 1.4. Diferenciar o 503 de prefetch de uma falha real
+
+Um registro com status `503`, corpo vazio e cabeçalho
+`cf-speculation-refused: prefetch refused: disabled for worker requests` é uma
+tentativa especulativa do navegador recusada pela Cloudflare, não a resposta da
+navegação autenticada. A orientação oficial informa que esses 503 de prefetch
+podem ser ignorados. Confirme o request real sem `Sec-Purpose: prefetch` e use o
+JSON sanitizado de `/readiness` para diagnosticar o Worker.
+
+Fonte primária verificada em 2026-09-04:
+[Cloudflare Error 503](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-503/).
+
+### 1.5. Logs do Worker
+
+Os Workers Logs persistem invocações HTTP, execuções do cron, consumo da fila, exceções não tratadas e logs estruturados emitidos pela aplicação. Consulte **Workers & Pages > holon-admin > Observability > Logs**. Para acompanhamento em tempo real:
+
+```bash
+pnpm --filter @holon/admin exec wrangler tail holon-admin --format pretty
+```
+
+Para isolar integrações opcionais:
+
+```bash
+pnpm --filter @holon/admin exec wrangler tail holon-admin \
+  --search holon.admin.integration_unavailable \
+  --format json
+```
+
+Os campos possíveis são `integration`, `reason` e `upstreamStatus`. Filtre pelo
+método, URL, status e tipo de handler nos invocation logs. Nunca inclua JWTs,
+cookies, tokens, prompts, diffs ou conteúdo de repositórios privados em buscas
+compartilhadas ou registros operacionais.
 
 ---
 

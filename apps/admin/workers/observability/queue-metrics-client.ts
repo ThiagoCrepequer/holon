@@ -6,6 +6,11 @@
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json.js";
+import {
+  consoleObservabilityLogger,
+  type IntegrationUnavailableReason,
+  type ObservabilityLogger,
+} from "./safe-log.js";
 
 export interface QueueHealthData {
   readonly backlogCount: number;
@@ -16,7 +21,10 @@ export interface QueueHealthData {
 
 export type QueueMetricsResult =
   | { readonly status: "ok"; readonly data: QueueHealthData }
-  | { readonly status: "unavailable"; readonly reason?: string | undefined };
+  | {
+      readonly status: "unavailable";
+      readonly reason: IntegrationUnavailableReason;
+    };
 
 export interface QueueMetricsConfig {
   readonly accountId?: string | undefined;
@@ -26,6 +34,7 @@ export interface QueueMetricsConfig {
   readonly fetchFn?: typeof fetch | undefined;
   readonly nowEpochMs?: (() => number) | undefined;
   readonly maxOldestMessageAgeSeconds?: number | undefined;
+  readonly logger?: ObservabilityLogger | undefined;
 }
 
 const queueMetricsResponseSchema = z.object({
@@ -47,10 +56,24 @@ export async function queryQueueHealth(
     fetchFn = fetch,
     nowEpochMs = Date.now,
     maxOldestMessageAgeSeconds = 300,
+    logger = consoleObservabilityLogger,
   } = config;
 
+  const unavailable = (
+    reason: IntegrationUnavailableReason,
+    upstreamStatus?: number,
+  ): QueueMetricsResult => {
+    logger({
+      event: "holon.admin.integration_unavailable",
+      integration: "queue_metrics",
+      reason,
+      ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
+    });
+    return { status: "unavailable", reason };
+  };
+
   if (!accountId || !apiToken || !queueId) {
-    return { status: "unavailable", reason: "missing_configuration" };
+    return unavailable("missing_configuration");
   }
 
   const headers = {
@@ -82,7 +105,8 @@ export async function queryQueueHealth(
     ]);
 
     if (!queueRes.ok || (dlqRes && !dlqRes.ok)) {
-      return { status: "unavailable", reason: "queue_api_error" };
+      const upstreamStatus = !queueRes.ok ? queueRes.status : dlqRes?.status;
+      return unavailable("upstream_error", upstreamStatus);
     }
 
     const queueData = queueMetricsResponseSchema.parse(
@@ -122,6 +146,6 @@ export async function queryQueueHealth(
       },
     };
   } catch {
-    return { status: "unavailable", reason: "request_failed" };
+    return unavailable("request_failed");
   }
 }

@@ -670,7 +670,9 @@ Manter `AnalyticsEngineTelemetryEmitter` no control plane como único writer. Do
 | `scopeStatus`                | `blob4`          |
 | `verdict`                    | `blob5`          |
 | `prKey`                      | `blob6`          |
-| `schemaVersion`              | `blob7`          |
+| `policySource`               | `blob7`          |
+| `effectivePolicyDigest`      | `blob8`          |
+| `sourceDigest`               | `blob9`          |
 | `durationMs`                 | `double1`        |
 | `reviewAdmissionQueueWaitMs` | `double2`        |
 | `inputTokens`                | `double3`        |
@@ -811,7 +813,7 @@ Middleware server-side obrigatório antes de loaders e endpoints:
 - validar RS256, issuer, `exp`, `nbf` e audience esperada;
 - aceitar `aud` string ou array somente quando contém `ACCESS_AUD`;
 - exigir e-mail normalizado no domínio corporativo configurado;
-- rejeitar `payload.type === "app"` para sessão humana;
+- exigir identidade humana positiva com `email` válido e `sub` não vazio; não rejeitar apenas por `payload.type === "app"`, pois a Cloudflare usa esse claim tanto em sessões humanas quanto em service tokens;
 - em `unknown kid`, invalidar cache e tentar um único refresh do JWKS;
 - limitar timeout e tamanho da resposta JWKS;
 - falhar fechado quando não houver chave válida;

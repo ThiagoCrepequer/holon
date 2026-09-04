@@ -111,6 +111,10 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(html).toContain("System Overview");
     expect(html).toContain("staff@example.com");
     expect(html).toContain("Total Runs");
+    expect(html).toContain("Optional Telemetry Unavailable");
+    expect(html).toContain("Queue Pipeline");
+    expect(html).toContain("Unavailable");
+    expect(html).not.toContain("Operational Degradation Detected");
   });
 
   it("renders runs listing (GET /runs) with search and filters", async () => {
