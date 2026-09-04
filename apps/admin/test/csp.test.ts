@@ -37,10 +37,9 @@ describe("CSP and security headers", () => {
     const nonce = "1234567890abcdef1234567890abcdef";
     const csp = buildCspDirective(nonce, { isDev: true });
 
-    expect(csp).toContain(`script-src 'self' 'nonce-${nonce}'`);
-    expect(csp).toContain(
-      `style-src-elem 'self' 'nonce-${nonce}' 'unsafe-inline'`,
-    );
+    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("style-src-elem 'self' 'unsafe-inline'");
+    expect(csp).not.toContain(`nonce-${nonce}`);
     expect(csp).toContain("connect-src 'self' ws: wss:");
   });
 

@@ -6,6 +6,38 @@
  * React hydration errors regardless of the user's browser locale.
  */
 
+export function parseUtcDate(
+  value: string | number | Date | null | undefined,
+): Date | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "number") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === "string") {
+    let str = value.trim();
+    if (!str) return null;
+    if (/^\d+$/.test(str)) {
+      const d = new Date(Number.parseInt(str, 10));
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    if (!str.includes("T") && str.includes(" ")) {
+      str = str.replace(" ", "T");
+    }
+    if (!str.endsWith("Z") && !/[+-]\d{2}(?::?\d{2})?$/.test(str)) {
+      str += "Z";
+    }
+    const d = new Date(str);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 const integerFormatter = new Intl.NumberFormat("en-US");
 
 export function formatNumber(value: number | null | undefined): string {
@@ -29,9 +61,8 @@ const fullDateTimeUtcFormatter = new Intl.DateTimeFormat("en-US", {
 export function formatDateTimeUtc(
   value: string | number | Date | null | undefined,
 ): string {
-  if (!value) return "";
-  const date = typeof value === "object" ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = parseUtcDate(value);
+  if (!date) return "";
   return `${fullDateTimeUtcFormatter.format(date)} UTC`;
 }
 
@@ -47,8 +78,7 @@ const tableDateTimeUtcFormatter = new Intl.DateTimeFormat("en-US", {
 export function formatTableDateTimeUtc(
   value: string | number | Date | null | undefined,
 ): string {
-  if (!value) return "—";
-  const date = typeof value === "object" ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  const date = parseUtcDate(value);
+  if (!date) return "—";
   return `${tableDateTimeUtcFormatter.format(date)} UTC`;
 }

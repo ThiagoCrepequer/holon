@@ -76,6 +76,7 @@ export async function handleConsoleRequest(
     return applySecurityHeaders(
       await requestHandler(request, loadContext),
       nonce,
+      { isDev: import.meta.env.DEV },
     );
   } catch (error) {
     if (error instanceof AccessAuthError) return error.toResponse();
@@ -89,6 +90,7 @@ export async function handleConsoleRequest(
         },
       }),
       nonce,
+      { isDev: import.meta.env.DEV },
     );
   }
 }

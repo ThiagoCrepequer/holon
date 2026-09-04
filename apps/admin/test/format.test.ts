@@ -28,10 +28,21 @@ describe("Deterministic formatting helpers", () => {
       expect(formatted).toBe("Sep 4, 2026, 18:02:31 UTC");
     });
 
+    it("normalizes SQLite datetime string without timezone to UTC", () => {
+      const formatted = formatDateTimeUtc("2026-09-04 18:02:31");
+      expect(formatted).toBe("Sep 4, 2026, 18:02:31 UTC");
+    });
+
     it("formats Date object deterministically in UTC", () => {
       const date = new Date("2026-01-15T09:30:00.000Z");
       const formatted = formatDateTimeUtc(date);
       expect(formatted).toBe("Jan 15, 2026, 09:30:00 UTC");
+    });
+
+    it("handles numeric epoch timestamp strings", () => {
+      const formatted = formatDateTimeUtc("1788544951000");
+      expect(formatted).toContain("2026");
+      expect(formatted).toContain("UTC");
     });
 
     it("handles empty or invalid inputs", () => {

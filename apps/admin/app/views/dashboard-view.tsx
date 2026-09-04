@@ -70,7 +70,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Degraded Alert */}
       <DegradedBanner degradedServices={degradedServices} />
 
-      <div className="mb-6 rounded-lg border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-xs text-blue-900">
+      <div
+        suppressHydrationWarning
+        className="mb-6 rounded-lg border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-xs text-blue-900"
+      >
         Data is available only from the projection cutover
         {watermark.enabledAt
           ? ` at ${formatDateTimeUtc(watermark.enabledAt)}`
