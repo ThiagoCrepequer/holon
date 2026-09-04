@@ -68,7 +68,6 @@ import {
   AnalyticsEngineTelemetryEmitter,
   CompositeTelemetryEmitter,
   StructuredLogTelemetryEmitter,
-  type AnalyticsEngineDatasetLike,
 } from "./telemetry-emitter.js";
 import type { WorkflowController } from "./workflow-superseding.js";
 
@@ -162,12 +161,7 @@ export interface GitHubMutationContext {
 }
 
 function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
-  // Wrangler narrows local `vars` to the configured literal, while deployed
-  // environments intentionally override this rollout flag to "true".
-  return (
-    (env as unknown as { readonly ADMIN_PROJECTION_ENABLED?: string })
-      .ADMIN_PROJECTION_ENABLED === "true"
-  );
+  return env.ADMIN_PROJECTION_ENABLED === "true";
 }
 
 export interface ReviewServices {
@@ -527,13 +521,7 @@ export function createReviewServices(
   const telemetry =
     runtime.telemetry ??
     new CompositeTelemetryEmitter([
-      new AnalyticsEngineTelemetryEmitter(
-        (
-          env as unknown as {
-            ANALYTICS_ENGINE?: AnalyticsEngineDatasetLike;
-          }
-        ).ANALYTICS_ENGINE,
-      ),
+      new AnalyticsEngineTelemetryEmitter(env.ANALYTICS_ENGINE),
       new StructuredLogTelemetryEmitter(logger),
     ]);
 
