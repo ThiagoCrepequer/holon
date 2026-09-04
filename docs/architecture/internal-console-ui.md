@@ -102,3 +102,18 @@ vazias; nenhuma referência externa foi apresentada como evidência visual. A
 composição foi avaliada na interface local e nas referências fornecidas pelo
 usuário. Os testes distinguem ausência de reviews, falha real, ausência de
 telemetria e integração disponível sem amostras.
+
+## Movimento do painel de detalhes
+
+O painel usa transições de `transform` (280 ms para abrir e 220 ms para fechar)
+e o backdrop usa apenas opacidade, sem blur. O estado controlado permanece na
+rota até `onOpenChangeComplete(false)`, inclusive ao usar Close, Escape e os
+links de retorno dentro do painel. Não há timer duplicando a duração do CSS.
+Movimento reduzido desativa as transições; a navegação continua funcionando
+quando não existem animações ativas. A estrutura inclui `Drawer.Viewport` para
+coordenação de toque e rolagem do Base UI.
+
+Consultados em **2026-09-04**: [Base UI Drawer](https://base-ui.com/react/components/drawer)
+e [Tailwind Animations](https://tailwind-animations.com/). As utilidades CSS da
+biblioteca não substituem o controle de montagem da rota; a implementação usa
+o ciclo de transições do Base UI já instalado.
