@@ -11,6 +11,7 @@ export interface CheckRunFormattingOptions {
   readonly fileCount?: number | undefined;
   readonly findings: readonly Finding[];
   readonly partial?: boolean | undefined;
+  readonly policySource?: string | undefined;
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly scopeStatus?:
     | "complete"
@@ -23,6 +24,7 @@ export interface CheckRunFormattingOptions {
   readonly summary: string;
   readonly totalShards?: number | undefined;
   readonly verdict?: ReviewVerdict | undefined;
+  readonly waiversCount?: number | undefined;
 }
 
 export function determineCheckRunConclusion(
@@ -97,6 +99,18 @@ export function formatCheckRunOutput(
     details.push(`- **Files analyzed**: ${fileCount}`);
   }
   details.push(`- **Findings identified**: ${findingCount}`);
+  if (
+    options.policySource !== undefined &&
+    options.policySource !== "default"
+  ) {
+    details.push(
+      `- **Repository Policy**: \`${options.policySource}\`${options.waiversCount !== undefined && options.waiversCount > 0 ? ` (${options.waiversCount} file waiver${options.waiversCount === 1 ? "" : "s"} applied)` : ""}`,
+    );
+  } else if (options.waiversCount !== undefined && options.waiversCount > 0) {
+    details.push(
+      `- **Policy Waivers**: ${options.waiversCount} file(s) waived by repository policy`,
+    );
+  }
   if (reconciliation !== undefined) {
     details.push(
       `- **Lifecycle**: ${reconciliation.resolvedCount} resolved, ${reconciliation.persistentCount} persistent, ${reconciliation.newCount} new${reconciliation.reintroducedCount > 0 ? `, ${reconciliation.reintroducedCount} reintroduced` : ""}${reconciliation.dismissedCount > 0 ? `, ${reconciliation.dismissedCount} dismissed` : ""}`,
@@ -106,7 +120,13 @@ export function formatCheckRunOutput(
     details.push(
       "- **Scope**: Partial (some changes could not be analyzed due to an execution failure)",
     );
-  } else if (scopeStatus === "partial_by_policy" || isPartial) {
+  } else if (scopeStatus === "partial_by_policy") {
+    details.push(
+      options.waiversCount !== undefined && options.waiversCount > 0
+        ? `- **Scope**: Partial by policy (${options.waiversCount} eligible file(s) waived by repository policy)`
+        : "- **Scope**: Partial by policy (some files waived by repository policy or limits)",
+    );
+  } else if (isPartial) {
     details.push(
       "- **Scope**: Partial (some files or patches exceeded deterministic limits)",
     );

@@ -10,18 +10,25 @@ import type {
 import {
   executorRequestV1Schema,
   executorRequestV2Schema,
+  executorRequestV3Schema,
   preparedRepositoryV1Schema,
   preparedRepositoryV2Schema,
+  preparedRepositoryV3Schema,
   repositoryToolResultSchema,
   reviewContextV1Schema,
   reviewContextV2Schema,
+  reviewContextV3Schema,
   type ExecutorRequestV1,
   type ExecutorRequestV2,
+  type ExecutorRequestV3,
   type GitHubCredentialRequest,
   type PreparedRepositoryV2,
+  type PreparedRepositoryV3,
+  type RepositoryPolicy,
   type RepositoryToolCall,
   type RepositoryToolResult,
   type ReviewContextV2,
+  type ReviewContextV3,
   type ReviewJob,
   type RunClaimV2Result,
 } from "@holon/contracts";
@@ -55,6 +62,7 @@ import {
   GitHubTransientError,
 } from "./github-operations.js";
 import { errorKind, type StructuredLogger } from "./observability.js";
+import { createDefaultRepositoryPolicy } from "./repository-policy-resolver.js";
 import {
   AnalyticsEngineTelemetryEmitter,
   CompositeTelemetryEmitter,
@@ -68,6 +76,7 @@ export interface RepositoryExecutorBinding {
   hasContext(runId: string): Promise<boolean>;
   loadContext?(runId: string): Promise<unknown>;
   loadContextV2?(runId: string): Promise<ReviewContextV2>;
+  loadContextV3?(runId: string): Promise<ReviewContextV3>;
   prepare?(
     request: ExecutorRequestV1,
     installationToken: string,
@@ -75,6 +84,9 @@ export interface RepositoryExecutorBinding {
   prepareRepositoryV2?(
     request: ExecutorRequestV2,
   ): Promise<PreparedRepositoryV2>;
+  prepareRepositoryV3?(
+    request: ExecutorRequestV3,
+  ): Promise<PreparedRepositoryV3>;
   resolveContainerId?(runId: string): Promise<string> | string;
   runTool(
     runId: string,
@@ -138,6 +150,10 @@ export interface ReviewRuntime {
 export interface GitHubMutationContext {
   readonly publisher: ReviewPublisher;
   readCurrentHead(): Promise<string>;
+  readCurrentRefs(): Promise<{
+    readonly baseSha: string;
+    readonly headSha: string;
+  }>;
 }
 
 export interface ReviewServices {
@@ -152,10 +168,21 @@ export interface ReviewServices {
     readonly toolCallsCount: number;
   };
   createMutationContext(): Promise<GitHubMutationContext>;
-  ensureContext(maximumPreparationAttempts: number): Promise<void>;
-  loadContext(): Promise<ReviewContextV2>;
-  prepareRepository(maximumAttempts: number): Promise<PreparedRepositoryV2>;
+  createSession(): Promise<GitHubInstallationSession>;
+  ensureContext(
+    maximumPreparationAttempts: number,
+    effectivePolicy?: RepositoryPolicy,
+  ): Promise<void>;
+  loadContext(): Promise<ReviewContextV3 | ReviewContextV2>;
+  prepareRepository(
+    maximumAttempts: number,
+    effectivePolicy?: RepositoryPolicy,
+  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2>;
   readCurrentHead(): Promise<string>;
+  readCurrentRefs(): Promise<{
+    readonly baseSha: string;
+    readonly headSha: string;
+  }>;
   registerCredentialScope(): Promise<void>;
 }
 
@@ -168,20 +195,25 @@ function prKeyFor(job: ReviewJob) {
 }
 
 export class RepositoryTransientError extends Error {
-  public constructor(reason: "executor" | "repository") {
-    super(`HOLON_REPOSITORY_TRANSIENT:${reason}`);
+  public constructor(
+    reason: "executor" | "repository",
+    options?: ErrorOptions,
+  ) {
+    super(`HOLON_REPOSITORY_TRANSIENT:${reason}`, options);
     this.name = "RepositoryTransientError";
   }
 }
 
-type ExecutorV2Method =
+type ExecutorRpcMethod =
   | "loadContextV2"
+  | "loadContextV3"
   | "prepareRepositoryV2"
+  | "prepareRepositoryV3"
   | "resolveContainerId";
 
 export function isExecutorRpcMethodUnavailable(
   error: unknown,
-  method: ExecutorV2Method,
+  method: ExecutorRpcMethod,
 ): boolean {
   return (
     error instanceof TypeError &&
@@ -306,8 +338,18 @@ export function createReviewServices(
     }
   };
 
-  const prepareOnce = async (): Promise<PreparedRepositoryV2> => {
+  let activePolicy: RepositoryPolicy | undefined;
+
+  const prepareOnce = async (
+    policy?: RepositoryPolicy,
+  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2> => {
     try {
+      const effectivePolicy =
+        policy ??
+        activePolicy ??
+        (await createDefaultRepositoryPolicy(job.envelope.pullRequest.baseSha));
+      activePolicy = effectivePolicy;
+
       const github = await createSession();
       const canonicalDiff = await executeGitHubOperation(() =>
         github.pullRequestDiff(
@@ -325,44 +367,79 @@ export function createReviewServices(
         repositoryId: job.envelope.repository.id,
         runId: job.runId,
       } as const;
-      const request = executorRequestV2Schema.parse({
+
+      const requestV3 = executorRequestV3Schema.parse({
         ...commonRequest,
+        effectivePolicy,
         installationId: job.envelope.installationId,
         repositoryName: job.envelope.repository.name,
         repositoryOwner: job.envelope.repository.owner,
-        schemaVersion: 2,
+        schemaVersion: 3,
       });
+
       let prepared: unknown;
       try {
-        if (executor.prepareRepositoryV2 === undefined) {
+        if (executor.prepareRepositoryV3 === undefined) {
           throw new TypeError(
-            'The RPC receiver does not implement the method "prepareRepositoryV2".',
+            'The RPC receiver does not implement the method "prepareRepositoryV3".',
           );
         }
-        prepared = await executor.prepareRepositoryV2(request);
+        prepared = await executor.prepareRepositoryV3(requestV3);
+        return preparedRepositoryV3Schema.parse(prepared);
       } catch (error) {
-        if (!isExecutorRpcMethodUnavailable(error, "prepareRepositoryV2")) {
+        if (!isExecutorRpcMethodUnavailable(error, "prepareRepositoryV3")) {
           throw error;
         }
-        if (executor.prepare === undefined) {
-          throw new RepositoryTransientError("executor");
+
+        // Rollout policy: downgrade to V2 is strictly forbidden if custom repository policy exists
+        if (effectivePolicy.source !== "default") {
+          logger.emit("repository.preparation_failed", {
+            ...logContext,
+            errorKind: "RepositoryV3RequiredError",
+            reason:
+              "Custom repository policy requires executor RPC V3, but executor does not support prepareRepositoryV3",
+            retryable: true,
+          });
+          throw new RepositoryTransientError("executor", { cause: error });
         }
-        // Rollout-only bridge: the installation token exists only in this
-        // call frame and is never stored or forwarded to the sandbox by the
-        // dual-stack executor. Functional v2 failures never enter this path.
-        const legacyRequest = executorRequestV1Schema.parse({
+
+        const requestV2 = executorRequestV2Schema.parse({
           ...commonRequest,
-          schemaVersion: 1,
-        });
-        const legacy = preparedRepositoryV1Schema.parse(
-          await executor.prepare(legacyRequest, github.token),
-        );
-        return preparedRepositoryV2Schema.parse({
-          ...legacy,
+          installationId: job.envelope.installationId,
+          repositoryName: job.envelope.repository.name,
+          repositoryOwner: job.envelope.repository.owner,
           schemaVersion: 2,
         });
+
+        try {
+          if (executor.prepareRepositoryV2 === undefined) {
+            throw new TypeError(
+              'The RPC receiver does not implement the method "prepareRepositoryV2".',
+              { cause: error },
+            );
+          }
+          prepared = await executor.prepareRepositoryV2(requestV2);
+        } catch (v2Error) {
+          if (!isExecutorRpcMethodUnavailable(v2Error, "prepareRepositoryV2")) {
+            throw v2Error;
+          }
+          if (executor.prepare === undefined) {
+            throw new RepositoryTransientError("executor", { cause: v2Error });
+          }
+          const legacyRequest = executorRequestV1Schema.parse({
+            ...commonRequest,
+            schemaVersion: 1,
+          });
+          const legacy = preparedRepositoryV1Schema.parse(
+            await executor.prepare(legacyRequest, github.token),
+          );
+          return preparedRepositoryV2Schema.parse({
+            ...legacy,
+            schemaVersion: 2,
+          });
+        }
+        return preparedRepositoryV2Schema.parse(prepared);
       }
-      return preparedRepositoryV2Schema.parse(prepared);
     } catch (error) {
       return normalizeRepositoryFailure(error, logger, logContext);
     }
@@ -370,14 +447,15 @@ export function createReviewServices(
 
   const prepareRepository = async (
     maximumAttempts: number,
-  ): Promise<PreparedRepositoryV2> => {
+    policy?: RepositoryPolicy,
+  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2> => {
     if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts <= 0) {
       throw new TypeError("maximumAttempts must be a positive safe integer");
     }
     let lastError: unknown;
     for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
       try {
-        return await prepareOnce();
+        return await prepareOnce(policy);
       } catch (error) {
         if (error instanceof NonRetryableError) throw error;
         lastError = error;
@@ -397,7 +475,7 @@ export function createReviewServices(
       run: async (call) => {
         toolCallsCount += 1;
         if (!(await executor.hasContext(job.runId))) {
-          await prepareRepository(2);
+          await prepareRepository(2, activePolicy);
         }
         return repositoryToolResultSchema.parse(
           await executor.runTool(job.runId, call),
@@ -483,6 +561,25 @@ export function createReviewServices(
             job.envelope.pullRequest.number,
           ),
         ),
+      readCurrentRefs: () =>
+        executeGitHubOperation(async () => {
+          if (typeof github.currentPullRequestRefs === "function") {
+            return await github.currentPullRequestRefs(
+              job.envelope.repository.owner,
+              job.envelope.repository.name,
+              job.envelope.pullRequest.number,
+            );
+          }
+          const headSha = await github.currentHeadSha(
+            job.envelope.repository.owner,
+            job.envelope.repository.name,
+            job.envelope.pullRequest.number,
+          );
+          return {
+            baseSha: job.envelope.pullRequest.baseSha,
+            headSha,
+          };
+        }),
     };
   };
 
@@ -498,12 +595,23 @@ export function createReviewServices(
       toolCallsCount,
     }),
     createMutationContext: mutationContext,
-    ensureContext: async (maximumPreparationAttempts) => {
+    createSession: async () => await createSession(),
+    ensureContext: async (maximumPreparationAttempts, effectivePolicy) => {
       if (!(await executor.hasContext(job.runId))) {
-        await prepareRepository(maximumPreparationAttempts);
+        await prepareRepository(maximumPreparationAttempts, effectivePolicy);
       }
     },
     loadContext: async () => {
+      if (executor.loadContextV3 !== undefined) {
+        try {
+          const loaded = await executor.loadContextV3(job.runId);
+          return reviewContextV3Schema.parse(loaded);
+        } catch (error) {
+          if (!isExecutorRpcMethodUnavailable(error, "loadContextV3")) {
+            throw error;
+          }
+        }
+      }
       try {
         if (executor.loadContextV2 === undefined) {
           throw new TypeError(
@@ -517,7 +625,7 @@ export function createReviewServices(
           throw error;
         }
         if (executor.loadContext === undefined) {
-          throw new RepositoryTransientError("executor");
+          throw new RepositoryTransientError("executor", { cause: error });
         }
         return legacyContextAsV2(await executor.loadContext(job.runId));
       }
@@ -532,6 +640,27 @@ export function createReviewServices(
           job.envelope.pullRequest.number,
         ),
       );
+    },
+    readCurrentRefs: async () => {
+      const github = await createSession();
+      return await executeGitHubOperation(async () => {
+        if (typeof github.currentPullRequestRefs === "function") {
+          return await github.currentPullRequestRefs(
+            job.envelope.repository.owner,
+            job.envelope.repository.name,
+            job.envelope.pullRequest.number,
+          );
+        }
+        const headSha = await github.currentHeadSha(
+          job.envelope.repository.owner,
+          job.envelope.repository.name,
+          job.envelope.pullRequest.number,
+        );
+        return {
+          baseSha: job.envelope.pullRequest.baseSha,
+          headSha,
+        };
+      });
     },
     registerCredentialScope: async () => {
       await ledger.registerCredentialScope({

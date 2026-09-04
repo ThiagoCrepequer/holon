@@ -14,6 +14,11 @@ import {
   type StepTiming,
 } from "@holon/contracts";
 import {
+  RepositoryPolicyConflictError,
+  RepositoryPolicySchemaError,
+  RepositoryPolicyScopeError,
+  RepositoryPolicySecurityError,
+  RepositoryPolicySyntaxError,
   appendCiEvidenceToSummary,
   calculateInferenceCost,
   classifyFindingPublication,
@@ -28,6 +33,7 @@ import {
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
+import { NonRetryableError } from "cloudflare:workflows";
 
 import {
   isReviewMutationNotAuthorizedError,
@@ -35,6 +41,7 @@ import {
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
 import { consoleLogger, errorKind } from "./observability.js";
+import { resolveRepositoryPolicy } from "./repository-policy-resolver.js";
 import { analyzeReview } from "./review-analysis.js";
 import {
   createReviewServices,
@@ -147,7 +154,11 @@ export async function executeReviewWorkflow(
     github: GitHubMutationContext,
     purpose: "failure" | "review",
   ): Promise<boolean> => {
-    if ((await github.readCurrentHead()) !== job.envelope.pullRequest.headSha) {
+    const refs = await github.readCurrentRefs();
+    if (
+      refs.headSha !== job.envelope.pullRequest.headSha ||
+      refs.baseSha !== job.envelope.pullRequest.baseSha
+    ) {
       return false;
     }
     return await services.ledger.authorizeMutation(run.id, purpose);
@@ -161,7 +172,7 @@ export async function executeReviewWorkflow(
     if (repositoryStarted) {
       await updateCheckRunCompleted("cancel-check-run", "cancelled", {
         summary:
-          "A newer commit was pushed to this pull request. This review run was cancelled.",
+          "A newer commit or updated base was detected on this pull request. This review run was superseded.",
         title: "Holon Review Superseded",
       });
     }
@@ -377,14 +388,20 @@ export async function executeReviewWorkflow(
       }
     });
 
-    const initialHeadIsCurrent = await step.do(
-      "revalidate-initial-head",
+    const initialRefsAreCurrent = await step.do(
+      "revalidate-initial-refs",
       publicationStep,
-      async () =>
-        (await services.ledger.isLatestRun(run.id)) &&
-        (await services.readCurrentHead()) === job.envelope.pullRequest.headSha,
+      async () => {
+        const isLatest = await services.ledger.isLatestRun(run.id);
+        if (!isLatest) return false;
+        const refs = await services.readCurrentRefs();
+        return (
+          refs.headSha === job.envelope.pullRequest.headSha &&
+          refs.baseSha === job.envelope.pullRequest.baseSha
+        );
+      },
     );
-    if (!initialHeadIsCurrent) {
+    if (!initialRefsAreCurrent) {
       return await completeObsolete(
         "running",
         "mark-obsolete-before-preparation",
@@ -392,12 +409,41 @@ export async function executeReviewWorkflow(
       );
     }
 
+    const effectivePolicy = await step.do(
+      "resolve-repository-policy",
+      repositoryStep,
+      async () => {
+        try {
+          const session = await services.createSession();
+          return await resolveRepositoryPolicy(
+            session,
+            job.envelope.repository.owner,
+            job.envelope.repository.name,
+            job.envelope.pullRequest.baseSha,
+          );
+        } catch (policyError) {
+          if (
+            policyError instanceof RepositoryPolicyConflictError ||
+            policyError instanceof RepositoryPolicySyntaxError ||
+            policyError instanceof RepositoryPolicySchemaError ||
+            policyError instanceof RepositoryPolicyScopeError ||
+            policyError instanceof RepositoryPolicySecurityError
+          ) {
+            throw new NonRetryableError(
+              `HOLON_REPOSITORY_POLICY:${policyError.name}:${policyError.message}`,
+            );
+          }
+          throw policyError;
+        }
+      },
+    );
+
     repositoryStarted = true;
     await ensureCheckRunStarted();
     const prepStart = Date.now();
     await step.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
-      const prepared = await services.prepareRepository(1);
+      const prepared = await services.prepareRepository(1, effectivePolicy);
       emit("repository.prepared", {
         changedLineCount: prepared.changedLineCount,
         contextBytes: prepared.contextBytes,
@@ -418,11 +464,17 @@ export async function executeReviewWorkflow(
     const pubStart = Date.now();
     await moveTo("begin-publication", "running", "publishing", false);
     const currentBeforePublication = await step.do(
-      "revalidate-current-head",
+      "revalidate-current-refs",
       publicationStep,
-      async () =>
-        (await services.ledger.isLatestRun(run.id)) &&
-        (await services.readCurrentHead()) === job.envelope.pullRequest.headSha,
+      async () => {
+        const isLatest = await services.ledger.isLatestRun(run.id);
+        if (!isLatest) return false;
+        const refs = await services.readCurrentRefs();
+        return (
+          refs.headSha === job.envelope.pullRequest.headSha &&
+          refs.baseSha === job.envelope.pullRequest.baseSha
+        );
+      },
     );
     if (!currentBeforePublication) {
       return await completeObsolete(
@@ -613,6 +665,7 @@ export async function executeReviewWorkflow(
       durationMs: durationFrom(rawEvent.timestamp, now()),
       findings: output.findings,
       partial: isPartial,
+      policySource: output.policySource,
       reconciliation: output.reconciliation,
       scopeStatus: output.scopeStatus,
       shardsAnalyzed: output.shardsAnalyzed,
@@ -620,6 +673,7 @@ export async function executeReviewWorkflow(
       summary: output.summary,
       totalShards: output.totalShards,
       verdict: output.verdict,
+      waiversCount: output.waiversCount,
     });
     await updateCheckRunCompleted(
       "complete-check-run",
@@ -682,12 +736,36 @@ export async function executeReviewWorkflow(
     });
     return result;
   } catch (error) {
+    const isPolicyError =
+      error instanceof RepositoryPolicyConflictError ||
+      error instanceof RepositoryPolicySyntaxError ||
+      error instanceof RepositoryPolicySchemaError ||
+      error instanceof RepositoryPolicyScopeError ||
+      error instanceof RepositoryPolicySecurityError ||
+      (error instanceof Error &&
+        (error.message.startsWith("HOLON_REPOSITORY_POLICY:") ||
+          error.name.startsWith("RepositoryPolicy")));
+
+    const policyErrorMessage =
+      isPolicyError && error instanceof Error
+        ? error.message.startsWith("HOLON_REPOSITORY_POLICY:")
+          ? error.message.replace(/^HOLON_REPOSITORY_POLICY:[^:]*:/, "")
+          : error.message
+        : undefined;
+
     if (runClaimed) {
-      await updateCheckRunCompleted("fail-check-run", "failure", {
-        summary:
-          "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
-        title: "Holon Review Failed",
-      });
+      await updateCheckRunCompleted(
+        "fail-check-run",
+        isPolicyError ? "neutral" : "failure",
+        {
+          summary: isPolicyError
+            ? `A política configurada para o repositório (.github/holon.yml ou .holon.yml) é inválida:\n\n> ${policyErrorMessage ?? "Erro de configuração"}`
+            : "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
+          title: isPolicyError
+            ? "Política de repositório inválida"
+            : "Holon Review Failed",
+        },
+      );
     }
 
     const failedAt = now();
@@ -747,8 +825,14 @@ export async function executeReviewWorkflow(
       await step
         .do("publish-failure-notice", publicationStep, async () => {
           const github = await services.createMutationContext();
-          await publishFailureNoticeAuthorized(github.publisher, run.id, () =>
-            authorizeMutation(github, "failure"),
+          const noticeBody = isPolicyError
+            ? `Holon encontrou um erro na política configurada para o repositório (.github/holon.yml ou .holon.yml) e interrompeu a revisão:\n\n> ${policyErrorMessage ?? "Erro de configuração"}\n\nCorrija o arquivo de configuração no branch base para retomar as revisões automáticas.`
+            : undefined;
+          await publishFailureNoticeAuthorized(
+            github.publisher,
+            run.id,
+            () => authorizeMutation(github, "failure"),
+            noticeBody,
           );
         })
         .catch((publicationError: unknown) => {

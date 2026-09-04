@@ -38,6 +38,7 @@ catalog:
   typescript: 7.0.2
   vitest: 4.1.11
   wrangler: 4.127.1
+  yaml: 2.9.0
   zod: 4.5.4
 
 disallowWorkspaceCycles: true

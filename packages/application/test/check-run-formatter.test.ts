@@ -230,4 +230,30 @@ describe("check-run-formatter", () => {
     });
     expect(outputEmptyImpact.summary).not.toContain("- **Structural Impact**:");
   });
+
+  it("formats check run output with repository policy and waivers", () => {
+    const outputCustomPolicy = formatCheckRunOutput({
+      findings: [],
+      policySource: ".github/holon.yml",
+      scopeStatus: "partial_by_policy",
+      summary: "Review completed.",
+      waiversCount: 3,
+    });
+    expect(outputCustomPolicy.summary).toContain(
+      "- **Repository Policy**: `.github/holon.yml` (3 file waivers applied)",
+    );
+    expect(outputCustomPolicy.summary).toContain(
+      "- **Scope**: Partial by policy (3 eligible file(s) waived by repository policy)",
+    );
+
+    const outputDefaultWithWaivers = formatCheckRunOutput({
+      findings: [],
+      policySource: "default",
+      summary: "Review completed.",
+      waiversCount: 1,
+    });
+    expect(outputDefaultWithWaivers.summary).toContain(
+      "- **Policy Waivers**: 1 file(s) waived by repository policy",
+    );
+  });
 });

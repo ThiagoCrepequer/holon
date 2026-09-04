@@ -22,9 +22,11 @@ import type { ReviewServices } from "./review-services.js";
 
 export type ReconciledReviewOutput = AggregatedReviewResult & {
   readonly activeFindings: readonly ReconciledFinding[];
+  readonly policySource?: string | undefined;
   readonly resolvedFindings: readonly TrackedFinding[];
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly updatedTrackedFindings: readonly TrackedFinding[];
+  readonly waiversCount?: number | undefined;
 };
 
 type EmitReviewEvent = (
@@ -133,6 +135,14 @@ export async function analyzeReview(
       truncated: context.truncated,
     });
 
+    const verdictPolicy =
+      context.schemaVersion === 3 &&
+      context.verdictStrictness === "block_all_confident_medium"
+        ? { mediumSeverityThreshold: 1 }
+        : undefined;
+
+    const policyExcludedFilesCount =
+      context.schemaVersion === 3 ? context.waiversCount : 0;
     const plan = buildReviewPlan(
       context.files.map((file) => ({
         changeType: "modified" as const,
@@ -141,14 +151,23 @@ export async function analyzeReview(
         patch: file.patch,
         path: file.path,
       })),
+      { policyExcludedFilesCount },
     );
-    if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
+    if (
+      plan.scopeStatus === "unsupported" ||
+      plan.scopeStatus === "partial_by_policy" ||
+      plan.shards.length === 0
+    ) {
       return {
-        ...aggregateShardReviews(plan, []),
+        ...aggregateShardReviews(plan, [], { verdictPolicy }),
         activeFindings: [],
+        policySource:
+          context.schemaVersion === 3 ? context.policySource : undefined,
         resolvedFindings: [],
         structuralImpact: context.structuralImpact,
         updatedTrackedFindings: [],
+        waiversCount:
+          context.schemaVersion === 3 ? context.waiversCount : undefined,
       };
     }
 
@@ -180,6 +199,7 @@ export async function analyzeReview(
     const rawAggregated = aggregateShardReviews(plan, shardResults, {
       additionalFindings: context.structuralImpact?.deterministicFindings ?? [],
       unifiedSummary,
+      verdictPolicy,
     });
     const currentWithFingerprints = await Promise.all(
       rawAggregated.findings.map(async (finding) => ({
@@ -218,13 +238,18 @@ export async function analyzeReview(
       canonicalFindings: reconciled.activeFindings,
       reconciliation: reconciled.summary,
       structuralImpact: context.structuralImpact,
+      verdictPolicy,
     });
     return {
       ...finalAggregated,
       activeFindings: reconciled.activeFindings,
+      policySource:
+        context.schemaVersion === 3 ? context.policySource : undefined,
       resolvedFindings: reconciled.resolvedFindings,
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
+      waiversCount:
+        context.schemaVersion === 3 ? context.waiversCount : undefined,
     };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);
