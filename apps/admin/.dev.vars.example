@@ -1,3 +1,5 @@
 # Local Development Environment Variables for Holon Internal Console
+# Accepted only by vite dev and only for loopback requests.
+DEV_BYPASS_AUTH=true
 DEV_USER_EMAIL=operator@holon.internal
 ADMIN_CURSOR_HMAC_KEYS={"primary":{"kid":"dev-key","secretHex":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}

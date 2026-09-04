@@ -44,8 +44,13 @@ export default function LatencyChartClient({
       title="Latency Trend (Percentiles)"
       description="Sample-adjusted p50 and p95 execution latency from Analytics Engine"
       empty={points.length === 0}
-      emptyMessage="Analytics Engine latency data is currently unavailable"
-      className="h-full flex flex-col justify-between"
+      emptyTitle={trend ? "No latency samples" : "Latency metrics unavailable"}
+      emptyMessage={
+        trend
+          ? "No execution latency samples were recorded in this period."
+          : "Analytics Engine latency data is currently unavailable"
+      }
+      className="dashboard-panel latency-chart h-full flex flex-col justify-between"
       height="full"
       onToggleTable={() => setShowTable((current) => !current)}
       showTable={showTable}
@@ -78,6 +83,16 @@ export default function LatencyChartClient({
         ) : undefined
       }
     >
+      <div className="chart-legend">
+        <span>
+          <i />
+          p50 · Median
+        </span>
+        <span>
+          <i />
+          p95 · 95th percentile
+        </span>
+      </div>
       {points.length > 0 ? (
         <div
           className="h-64 w-full flex-1 min-h-[250px]"
@@ -87,7 +102,7 @@ export default function LatencyChartClient({
           <ResponsiveContainer
             width="100%"
             height="100%"
-            minWidth={280}
+            minWidth={0}
             minHeight={256}
           >
             <LineChart
@@ -95,25 +110,34 @@ export default function LatencyChartClient({
               margin={{ top: 8, right: 12, bottom: 8, left: 0 }}
             >
               <CartesianGrid
-                stroke="#e4e4e7"
+                stroke="var(--border)"
                 strokeDasharray="3 3"
                 vertical={false}
               />
               <XAxis
                 dataKey="bucket"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: "var(--text-muted)" }}
                 tickFormatter={formatBucketTick}
               />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: "var(--text-muted)" }}
                 tickFormatter={formatRoundedDuration}
               />
-              <Tooltip formatter={formatPreciseDuration} />
+              <Tooltip
+                formatter={formatPreciseDuration}
+                contentStyle={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 8,
+                  color: "var(--text-primary)",
+                }}
+                labelStyle={{ color: "var(--text-secondary)" }}
+              />
               <Line
                 type="monotone"
                 dataKey="p50DurationMs"
                 name="p50"
-                stroke="#2563eb"
+                stroke="var(--chart-1)"
                 strokeWidth={2}
                 dot={false}
                 isAnimationActive={false}
@@ -122,7 +146,8 @@ export default function LatencyChartClient({
                 type="monotone"
                 dataKey="p95DurationMs"
                 name="p95"
-                stroke="#f97316"
+                stroke="var(--chart-2)"
+                strokeDasharray="5 4"
                 strokeWidth={2}
                 dot={false}
                 isAnimationActive={false}

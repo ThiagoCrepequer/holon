@@ -1,4 +1,3 @@
-import { Badge } from "@holon/ui";
 import * as React from "react";
 
 import type { OperationalNotice } from "../operational-status.js";
@@ -17,9 +16,9 @@ export const OperationalStatusBanner: React.FC<
   return (
     <div
       role={hasDegradation ? "alert" : "status"}
-      className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-xs flex items-start gap-3"
+      className={`operational-notice${hasDegradation ? " is-degraded" : ""}`}
     >
-      <div className="shrink-0 mt-0.5 text-amber-600">
+      <div className="operational-notice-icon">
         <svg
           aria-hidden="true"
           className="w-5 h-5"
@@ -35,27 +34,23 @@ export const OperationalStatusBanner: React.FC<
           />
         </svg>
       </div>
-      <div className="flex-1">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+      <div className="operational-notice-body">
+        <h4 className="operational-notice-title">
           {hasDegradation
             ? "Operational Degradation Detected"
             : "Optional Telemetry Unavailable"}
         </h4>
-        <p className="mt-1 text-xs text-amber-700">
+        <p className="operational-notice-description">
           {hasDegradation
             ? "At least one operational subsystem has breached its configured health threshold."
-            : "Core review processing remains available. Configure the optional integrations or wait for upstream recovery to restore these panels."}
+            : "Core review processing remains available. Optional metrics will appear when integrations are available."}
         </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="operational-notice-services">
           {notices.map((notice) => (
-            <Badge
-              key={notice.service}
-              variant={notice.state === "degraded" ? "warning" : "info"}
-              size="sm"
-            >
+            <span key={notice.service} className="operational-notice-service">
               {notice.service} ·{" "}
               {notice.state === "degraded" ? "Degraded" : "Unavailable"}
-            </Badge>
+            </span>
           ))}
         </div>
       </div>

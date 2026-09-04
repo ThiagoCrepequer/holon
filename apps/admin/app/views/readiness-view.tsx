@@ -16,6 +16,7 @@ import * as React from "react";
 
 import type { ReadinessReport } from "../../workers/observability/readiness.js";
 import { Layout } from "../components/layout.js";
+import { PageHeader } from "../components/page-header.js";
 import { formatDateTimeUtc } from "../utils/format.js";
 
 export interface ReadinessViewProps {
@@ -56,21 +57,16 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
 
   return (
     <Layout userEmail={userEmail} currentPath="/readiness">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight text-zinc-950">
-          System Readiness
-        </h1>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Real-time probe status of backend dependencies and operational
-          infrastructure
-        </p>
-      </div>
+      <PageHeader
+        title="System Readiness"
+        description="Availability of the services that power code reviews."
+      />
 
-      <Card className="mb-6">
+      <Card className="console-panel section-gap">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
             <CardTitle>Overall Operational Status</CardTitle>
-            <CardDescription className="text-xs text-zinc-400 mt-0.5">
+            <CardDescription className="text-xs text-[var(--text-disabled)] mt-0.5">
               Probe conducted at {formatDateTimeUtc(report.timestamp)}
             </CardDescription>
           </div>
@@ -90,11 +86,11 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
         </CardHeader>
       </Card>
 
-      <Card>
+      <Card className="console-panel">
         <CardHeader className="pb-3">
           <CardTitle>Subsystem Dependency Probes</CardTitle>
         </CardHeader>
-        <CardContent className="p-0 border-t border-zinc-200 overflow-hidden rounded-b-xl">
+        <CardContent className="p-0 border-t border-[var(--border)] overflow-hidden rounded-b-xl">
           <Table>
             <TableHeader>
               <TableRow>
@@ -107,19 +103,21 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
             <TableBody>
               {probeEntries.map((probe) => (
                 <TableRow key={probe.name}>
-                  <TableCell className="font-medium text-zinc-900">
+                  <TableCell className="font-medium text-[var(--text-primary)]">
                     {probe.name}
                   </TableCell>
-                  <TableCell className="text-xs text-zinc-500">
+                  <TableCell className="text-xs text-[var(--text-muted)]">
                     {probe.desc}
                   </TableCell>
                   <TableCell className="text-xs">
                     {probe.critical ? (
-                      <span className="font-semibold text-zinc-900">
+                      <span className="font-semibold text-[var(--text-primary)]">
                         Required
                       </span>
                     ) : (
-                      <span className="text-zinc-400">Optional</span>
+                      <span className="text-[var(--text-disabled)]">
+                        Optional
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

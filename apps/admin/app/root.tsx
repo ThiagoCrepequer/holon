@@ -14,14 +14,14 @@ import {
 
 export function Layout({ children }: { readonly children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head suppressHydrationWarning>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>
-      <body className="min-h-screen bg-zinc-50 text-zinc-900 antialiased">
+      <body className="min-h-screen bg-[var(--surface-muted)] text-[var(--text-primary)] antialiased">
         {children}
         <ScrollRestoration />
         <Scripts />
@@ -46,7 +46,7 @@ export function ErrorBoundary() {
   return (
     <main className="mx-auto max-w-2xl p-8 text-center">
       <h1 className="text-xl font-semibold">{status}</h1>
-      <p className="mt-2 text-sm text-zinc-600">{message}</p>
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">{message}</p>
       <a className="mt-4 inline-block underline" href="/">
         Return to overview
       </a>

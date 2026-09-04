@@ -19,9 +19,12 @@ import { Link } from "react-router";
 import type { AnalyticsTrendData } from "../../workers/observability/analytics-client.js";
 import type { QueueHealthData } from "../../workers/observability/queue-metrics-client.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../../workers/types.js";
+import { ConsoleIcon } from "../components/console-icon.js";
 import { LatencyChart } from "../components/latency-chart.js";
 import { Layout } from "../components/layout.js";
 import { OperationalStatusBanner } from "../components/operational-status-banner.js";
+import { PageHeader } from "../components/page-header.js";
+import { VerdictDistribution } from "../components/verdict-distribution.js";
 import type { OperationalNotice } from "../operational-status.js";
 import {
   formatDateTimeUtc,
@@ -65,91 +68,70 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const totalTokensFormatted = formatNumber(summary.totalTokens);
 
-  const approveCount = summary.verdictDistribution.approve;
-  const requestChangesCount = summary.verdictDistribution.requestChanges;
-  const commentCount = summary.verdictDistribution.comment;
-  const totalVerdicts = approveCount + requestChangesCount + commentCount;
-
   const windows: Array<"24h" | "7d" | "30d"> = ["24h", "7d", "30d"];
 
   return (
     <Layout userEmail={userEmail} currentPath="/">
-      <OperationalStatusBanner notices={operationalNotices} />
-
       {/* Header & Window Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-950">
-            System Overview
-          </h1>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Operational status and telemetry for autonomous code reviews
-          </p>
-          <div
-            suppressHydrationWarning
-            className="flex items-center gap-2 mt-2 text-[11px] text-zinc-400 font-mono"
-          >
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-            <span>
-              Projection cutover:
-              {watermark.enabledAt
-                ? ` ${formatDateTimeUtc(watermark.enabledAt)}`
-                : " (watermark unavailable)"}
-            </span>
-            <span>&bull;</span>
-            <span>
-              {watermark.lastReceivedAt
-                ? `Last projection: ${formatDateTimeUtc(watermark.lastReceivedAt)}`
-                : "No projection received"}
-            </span>
-          </div>
-        </div>
-
+      <PageHeader
+        title="System Overview"
+        description="Review outcomes, execution time and repository activity."
+      >
         {/* Time Window Switcher */}
-        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs shadow-2xs">
+        <div className="window-selector" role="group" aria-label="Time window">
           {windows.map((w) => (
             <Link
               key={w}
               to={`/?window=${w}`}
-              className={`px-3 py-1 font-medium rounded-md transition-colors ${
-                window === w
-                  ? "bg-zinc-900 text-white shadow-xs font-semibold"
-                  : "text-zinc-600 hover:text-zinc-900"
-              }`}
+              aria-current={window === w ? "true" : undefined}
+              className={window === w ? "is-active" : undefined}
             >
               {w.toUpperCase()}
             </Link>
           ))}
         </div>
-      </div>
+      </PageHeader>
+
+      <OperationalStatusBanner notices={operationalNotices} />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+      <div className="dashboard-metrics">
         <MetricCard
+          emphasis="primary"
+          icon={<ConsoleIcon name="runs" />}
           label="Total Runs"
           value={formatNumber(summary.totalRuns)}
-          subtitle="Exact count from D1"
+          subtitle="Reviews in this period"
           tone="neutral"
         />
         <MetricCard
+          icon={<ConsoleIcon name="pulse" />}
           label="Success Rate"
-          value={`${successRate}%`}
-          subtitle={`${formatNumber(summary.completedRuns)} completed`}
+          value={summary.totalRuns === 0 ? "—" : `${successRate}%`}
+          subtitle={
+            summary.totalRuns === 0
+              ? "No reviews in this period"
+              : `${formatNumber(summary.completedRuns)} completed`
+          }
           tone={
-            successRate >= 90
-              ? "success"
-              : successRate >= 70
-                ? "warning"
-                : "danger"
+            summary.totalRuns === 0
+              ? "neutral"
+              : successRate >= 90
+                ? "success"
+                : successRate >= 70
+                  ? "warning"
+                  : "danger"
           }
         />
         <MetricCard
+          icon={<ConsoleIcon name="clock" />}
           label="Avg Duration"
-          value={`${avgDurationSeconds}s`}
+          value={summary.totalRuns === 0 ? "—" : `${avgDurationSeconds}s`}
           subtitle="Per executed run"
           tone="neutral"
         />
         <MetricCard
+          icon={<ConsoleIcon name="tokens" />}
           label="Total Tokens"
           value={totalTokensFormatted}
           subtitle="Input + output + reasoning"
@@ -158,139 +140,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Latency Trend & Verdict Distribution Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch mb-6">
+      <div className="dashboard-analysis">
         {/* Latency Trend (Analytics Engine) */}
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="latency-panel">
           <LatencyChart trend={analyticsTrend} />
         </div>
 
         {/* Verdict Distribution & Queue Freshness Stacked Column */}
-        <div className="flex flex-col gap-5 h-full">
-          {/* Verdict Distribution Card */}
-          <Card className="flex-1 flex flex-col justify-between">
-            <CardHeader className="pb-3">
-              <CardTitle>Verdict Distribution</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3.5">
-              {/* Proportional distribution bar */}
-              <div className="space-y-1.5">
-                <div className="w-full h-2 rounded-full bg-zinc-100 overflow-hidden flex gap-0.5">
-                  {totalVerdicts > 0 ? (
-                    <>
-                      {approveCount > 0 && (
-                        <div
-                          className="bg-emerald-500 rounded-xs h-full"
-                          style={{ flex: approveCount }}
-                          title={`Approve: ${approveCount} (${Math.round((approveCount / totalVerdicts) * 100)}%)`}
-                        />
-                      )}
-                      {requestChangesCount > 0 && (
-                        <div
-                          className="bg-rose-500 rounded-xs h-full"
-                          style={{ flex: requestChangesCount }}
-                          title={`Request Changes: ${requestChangesCount} (${Math.round((requestChangesCount / totalVerdicts) * 100)}%)`}
-                        />
-                      )}
-                      {commentCount > 0 && (
-                        <div
-                          className="bg-blue-500 rounded-xs h-full"
-                          style={{ flex: commentCount }}
-                          title={`Comment: ${commentCount} (${Math.round((commentCount / totalVerdicts) * 100)}%)`}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full bg-zinc-100" />
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2.5 pt-1">
-                <div className="flex items-center justify-between">
-                  <Badge variant="success" size="sm">
-                    Approve
-                  </Badge>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-zinc-900">
-                      {formatNumber(approveCount)}
-                    </span>
-                    <span className="font-mono text-[11px] text-zinc-400 w-8 text-right">
-                      {totalVerdicts > 0
-                        ? `${Math.round((approveCount / totalVerdicts) * 100)}%`
-                        : "0%"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Badge variant="danger" size="sm">
-                    Request Changes
-                  </Badge>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-zinc-900">
-                      {formatNumber(requestChangesCount)}
-                    </span>
-                    <span className="font-mono text-[11px] text-zinc-400 w-8 text-right">
-                      {totalVerdicts > 0
-                        ? `${Math.round((requestChangesCount / totalVerdicts) * 100)}%`
-                        : "0%"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Badge variant="info" size="sm">
-                    Comment
-                  </Badge>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-zinc-900">
-                      {formatNumber(commentCount)}
-                    </span>
-                    <span className="font-mono text-[11px] text-zinc-400 w-8 text-right">
-                      {totalVerdicts > 0
-                        ? `${Math.round((commentCount / totalVerdicts) * 100)}%`
-                        : "0%"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="dashboard-side-panels">
+          <VerdictDistribution distribution={summary.verdictDistribution} />
 
           {/* Queue Freshness Card */}
-          <Card className="flex-1 flex flex-col justify-between">
+          <Card className="dashboard-panel queue-panel">
             <CardHeader className="pb-2">
               <CardTitle>Queue Freshness</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2.5 text-xs">
+            <CardContent className="queue-content space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500 font-medium">
+                <span className="text-[var(--text-muted)] font-medium">
                   Backlog Messages:
                 </span>
-                <span className="font-mono font-semibold text-zinc-900">
+                <span className="font-mono font-semibold text-[var(--text-primary)]">
                   {queueHealth ? queueHealth.backlogCount : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500 font-medium">
+                <span className="text-[var(--text-muted)] font-medium">
                   Dead Letter Queue:
                 </span>
                 <span
-                  className={`font-mono font-semibold ${queueHealth && queueHealth.dlqCount > 0 ? "text-rose-600 font-bold" : "text-zinc-900"}`}
+                  className={`font-mono font-semibold ${queueHealth && queueHealth.dlqCount > 0 ? "text-[var(--danger-text)] font-bold" : "text-[var(--text-primary)]"}`}
                 >
                   {queueHealth ? queueHealth.dlqCount : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500 font-medium">
+                <span className="text-[var(--text-muted)] font-medium">
                   Oldest Message:
                 </span>
-                <span className="font-mono font-semibold text-zinc-900">
+                <span className="font-mono font-semibold text-[var(--text-primary)]">
                   {queueHealth?.oldestMessageAgeSeconds === undefined
                     ? "—"
                     : `${queueHealth.oldestMessageAgeSeconds}s`}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500 font-medium">
+                <span className="text-[var(--text-muted)] font-medium">
                   Pipeline State:
                 </span>
                 <Badge
@@ -317,22 +212,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Recent Runs Table */}
-      <Card>
+      <Card className="dashboard-panel recent-runs">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle>Recent Projections</CardTitle>
-          <Link
-            to="/runs"
-            className="text-xs font-medium text-zinc-600 hover:text-zinc-950 underline underline-offset-4"
-          >
+          <CardTitle>Recent reviews</CardTitle>
+          <Link to="/runs" className="console-text-link">
             View all runs &rarr;
           </Link>
         </CardHeader>
-        <CardContent className="p-0 border-t border-zinc-200 overflow-hidden rounded-b-xl">
+        <CardContent className="p-0 border-t border-[var(--border)] overflow-hidden rounded-b-xl">
           {recentRuns.length === 0 ? (
-            <div className="py-12">
+            <div className="reviews-empty">
               <EmptyState
                 title="No review runs recorded"
-                description="No review runs recorded in this time period."
+                description="Completed, failed and superseded reviews will appear here after their results arrive."
               />
             </div>
           ) : (
@@ -351,12 +243,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {recentRuns.map((run) => (
                   <TableRow key={run.run_id}>
                     <TableCell>
-                      <div className="font-medium text-zinc-900">
+                      <div className="font-medium text-[var(--text-primary)]">
                         {run.repository_owner}/{run.repository_name}#
                         {run.pr_number}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className="font-mono text-[11px] text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200/60">
+                        <span className="font-mono text-[11px] text-[var(--text-muted)] bg-[var(--surface-hover)] px-1.5 py-0.5 rounded border border-[var(--border)]/60">
                           {run.head_sha.slice(0, 7)}
                         </span>
                       </div>
@@ -396,13 +288,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         ? `${(run.execution_duration_ms / 1000).toFixed(1)}s`
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-xs text-zinc-500 font-mono">
+                    <TableCell className="text-xs text-[var(--text-muted)] font-mono">
                       {formatTableDateTimeUtc(run.terminal_at)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link
                         to={`/runs/${encodeURIComponent(run.run_id)}`}
-                        className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-950 rounded-md transition-colors shadow-2xs"
+                        className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] bg-[var(--surface-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--text-primary)] rounded-md transition-colors shadow-2xs"
                       >
                         Inspect
                       </Link>
@@ -414,6 +306,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </CardContent>
       </Card>
+      <div className="projection-metadata">
+        {" "}
+        <div
+          suppressHydrationWarning
+          className="flex items-center gap-2 mt-2 text-[11px] text-[var(--text-disabled)] font-mono"
+        >
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--text-disabled)] shrink-0" />
+          <span>
+            Projection cutover:
+            {watermark.enabledAt
+              ? ` ${formatDateTimeUtc(watermark.enabledAt)}`
+              : " (watermark unavailable)"}
+          </span>
+          <span>&bull;</span>
+          <span>
+            {watermark.lastReceivedAt
+              ? `Last projection: ${formatDateTimeUtc(watermark.lastReceivedAt)}`
+              : "No projection received"}
+          </span>
+        </div>
+      </div>
     </Layout>
   );
 };

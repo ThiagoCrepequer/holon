@@ -12,14 +12,15 @@ export interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   tone?: MetricTone;
   icon?: React.ReactNode;
   loading?: boolean;
+  emphasis?: "standard" | "primary";
 }
 
 const toneValueStyles: Record<MetricTone, string> = {
-  neutral: "text-zinc-900",
-  success: "text-emerald-700",
-  warning: "text-amber-700",
-  danger: "text-rose-700",
-  info: "text-blue-700",
+  neutral: "text-[var(--text-primary)]",
+  success: "text-[var(--success-text)]",
+  warning: "text-[var(--warning-text)]",
+  danger: "text-[var(--danger-text)]",
+  info: "text-[var(--info-text)]",
 };
 
 export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
@@ -31,19 +32,29 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
       tone = "neutral",
       icon,
       loading = false,
+      emphasis = "standard",
       className,
       ...props
     },
     ref,
   ) => {
+    const labelId = React.useId();
     return (
-      <Card ref={ref} className={cn("overflow-hidden", className)} {...props}>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+      <Card
+        ref={ref}
+        role="group"
+        aria-labelledby={labelId}
+        className={cn("metric-card", className)}
+        data-emphasis={emphasis}
+        aria-busy={loading || undefined}
+        {...props}
+      >
+        <CardHeader className="metric-card-header">
+          <CardTitle id={labelId} className="metric-card-label">
             {label}
           </CardTitle>
           {icon && (
-            <div aria-hidden="true" className="text-zinc-400">
+            <div aria-hidden="true" className="metric-card-icon">
               {icon}
             </div>
           )}
@@ -53,12 +64,12 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
             <div className="space-y-2 py-1">
               <div
                 aria-hidden="true"
-                className="h-7 w-24 bg-zinc-200 animate-pulse rounded"
+                className="h-7 w-24 bg-[var(--surface-subtle)] animate-pulse rounded"
               />
               {subtitle && (
                 <div
                   aria-hidden="true"
-                  className="h-3 w-32 bg-zinc-100 animate-pulse rounded"
+                  className="h-3 w-32 bg-[var(--surface-hover)] animate-pulse rounded"
                 />
               )}
             </div>
@@ -66,14 +77,14 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
             <>
               <div
                 className={cn(
-                  "text-2xl font-bold font-mono tracking-tight tabular-nums",
+                  "metric-card-value tabular-nums",
                   toneValueStyles[tone],
                 )}
               >
                 {value}
               </div>
               {subtitle && (
-                <p className="text-xs text-zinc-400 mt-1">{subtitle}</p>
+                <p className="metric-card-description">{subtitle}</p>
               )}
             </>
           )}

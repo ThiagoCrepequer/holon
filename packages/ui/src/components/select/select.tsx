@@ -15,11 +15,11 @@ export const SelectTrigger = React.forwardRef<
   <BaseSelect.Trigger
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-900 shadow-xs transition-colors select-none",
-      "hover:border-zinc-300 hover:bg-zinc-50/50 active:bg-zinc-100/50",
-      "outline-none focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10",
-      "focus-visible:outline-none focus-visible:border-zinc-900 focus-visible:ring-1 focus-visible:ring-zinc-900/10",
-      "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-zinc-50",
+      "inline-flex h-9 items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--text-primary)] shadow-xs transition-colors select-none",
+      "hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]/50 active:bg-[var(--surface-hover)]/50",
+      "outline-none focus:outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]",
+      "focus-visible:outline-none focus-visible:border-[var(--accent)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]",
+      "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[var(--surface-muted)]",
       className,
     )}
     {...props}
@@ -36,7 +36,7 @@ export const SelectValue = React.forwardRef<
   <BaseSelect.Value
     ref={ref}
     className={cn(
-      "truncate text-left text-zinc-900 data-[placeholder]:text-zinc-400",
+      "truncate text-left text-[var(--text-primary)] data-[placeholder]:text-[var(--text-disabled)]",
       className,
     )}
     {...props}
@@ -50,7 +50,7 @@ export const SelectIcon = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <BaseSelect.Icon
     ref={ref}
-    className={cn("text-zinc-500 shrink-0", className)}
+    className={cn("text-[var(--text-muted)] shrink-0", className)}
     {...props}
   >
     {children ?? (
@@ -92,7 +92,7 @@ export const SelectPopup = React.forwardRef<
   <BaseSelect.Popup
     ref={ref}
     className={cn(
-      "min-w-[var(--anchor-width)] max-h-60 overflow-auto rounded-lg border border-zinc-200 bg-white p-1 text-zinc-900 shadow-lg outline-none",
+      "min-w-[var(--anchor-width)] max-h-60 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[var(--text-primary)] shadow-lg outline-none",
       "transition-all data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
       className,
     )}
@@ -108,9 +108,9 @@ export const SelectItem = React.forwardRef<
   <BaseSelect.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-md py-1.5 pl-2.5 pr-7 text-xs text-zinc-800 outline-none transition-colors",
-      "data-[highlighted]:bg-zinc-100 data-[highlighted]:text-zinc-900",
-      "data-[selected]:font-medium data-[selected]:text-zinc-950",
+      "relative flex w-full cursor-default select-none items-center rounded-md py-1.5 pl-2.5 pr-7 text-xs text-[var(--text-primary)] outline-none transition-colors",
+      "data-[highlighted]:bg-[var(--surface-hover)] data-[highlighted]:text-[var(--text-primary)]",
+      "data-[selected]:font-medium data-[selected]:text-[var(--text-primary)]",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
       className,
     )}
@@ -140,7 +140,7 @@ export const SelectItemIndicator = React.forwardRef<
   <BaseSelect.ItemIndicator
     ref={ref}
     className={cn(
-      "absolute right-2 flex items-center justify-center text-zinc-900",
+      "absolute right-2 flex items-center justify-center text-[var(--text-primary)]",
       className,
     )}
     {...props}
@@ -172,7 +172,7 @@ export const SelectGroupLabel = React.forwardRef<
   <BaseSelect.GroupLabel
     ref={ref}
     className={cn(
-      "py-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400",
+      "py-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-disabled)]",
       className,
     )}
     {...props}
@@ -186,7 +186,7 @@ export const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseSelect.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-zinc-100", className)}
+    className={cn("-mx-1 my-1 h-px bg-[var(--surface-hover)]", className)}
     {...props}
   />
 ));
@@ -279,7 +279,7 @@ export const SelectField = React.forwardRef<
         {label && (
           <label
             htmlFor={selectId}
-            className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1"
+            className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1"
           >
             {label}
           </label>
@@ -323,7 +323,7 @@ export const SelectField = React.forwardRef<
           </SelectTrigger>
           <SelectPortal>
             <SelectPositioner sideOffset={4} className="z-50">
-              <SelectPopup className="min-w-[var(--anchor-width)] max-h-60 overflow-auto rounded-lg border border-zinc-200 bg-white p-1 text-zinc-900 shadow-lg outline-none">
+              <SelectPopup className="min-w-[var(--anchor-width)] max-h-60 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[var(--text-primary)] shadow-lg outline-none">
                 {options.map((option) => (
                   <SelectItem
                     key={option.value}
@@ -341,7 +341,7 @@ export const SelectField = React.forwardRef<
         {error && (
           <p
             id={errorId}
-            className="mt-1 text-[11px] text-rose-600 font-medium"
+            className="mt-1 text-[11px] text-[var(--danger-text)] font-medium"
           >
             {error}
           </p>

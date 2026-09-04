@@ -16,7 +16,7 @@ export const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
         ref={ref}
         role="status"
         className={cn(
-          "flex flex-col items-center justify-center p-8 text-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/50",
+          "flex flex-col items-center justify-center p-8 text-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/50",
           className,
         )}
         {...props}
@@ -24,14 +24,18 @@ export const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
         {icon && (
           <div
             aria-hidden="true"
-            className="flex items-center justify-center w-10 h-10 mb-3 rounded-full bg-zinc-100 text-zinc-500"
+            className="flex items-center justify-center w-10 h-10 mb-3 rounded-full bg-[var(--surface-hover)] text-[var(--text-muted)]"
           >
             {icon}
           </div>
         )}
-        <h4 className="text-sm font-semibold text-zinc-900">{title}</h4>
+        <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+          {title}
+        </h4>
         {description && (
-          <p className="mt-1 text-xs text-zinc-500 max-w-sm">{description}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)] max-w-sm">
+            {description}
+          </p>
         )}
         {action && <div className="mt-4">{action}</div>}
       </div>

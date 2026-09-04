@@ -43,27 +43,27 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
     <>
       {/* Breadcrumb */}
       <nav
-        className="mb-4 text-xs text-zinc-500 flex items-center gap-1.5"
+        className="mb-4 text-xs text-[var(--text-muted)] flex items-center gap-1.5"
         aria-label="Breadcrumb"
       >
         <Link
           to="/runs"
-          className="hover:text-zinc-950 underline underline-offset-2"
+          className="hover:text-[var(--text-primary)] underline underline-offset-2"
         >
           Runs
         </Link>
         <span>/</span>
-        <span className="font-mono text-zinc-700 truncate max-w-sm">
+        <span className="font-mono text-[var(--text-secondary)] truncate max-w-sm">
           {run.run_id}
         </span>
       </nav>
 
       {/* Header Card */}
-      <Card className="mb-6">
+      <Card className="section-gap">
         <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold text-zinc-950">
+              <h1 className="text-lg font-semibold text-[var(--text-primary)] break-words">
                 {run.repository_owner}/{run.repository_name} #{run.pr_number}
               </h1>
               <Badge
@@ -90,14 +90,14 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                 {run.terminal_state}
               </Badge>
             </div>
-            <CardDescription className="font-mono text-xs text-zinc-400 mt-1">
+            <CardDescription className="font-mono text-xs text-[var(--text-muted)] mt-1 break-all">
               Commit SHA: {run.head_sha} &bull; Run ID: {run.run_id}
             </CardDescription>
           </div>
 
           <Link
             to="/runs"
-            className="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-md transition-colors shrink-0"
+            className="px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] bg-[var(--surface-hover)] hover:bg-[var(--surface-subtle)] rounded-md transition-colors shrink-0"
           >
             &larr; Back to list
           </Link>
@@ -108,7 +108,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       {rpcError && (
         <div
           role="alert"
-          className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800 text-xs flex items-center gap-2"
+          className="operational-notice is-degraded flex-wrap text-xs"
         >
           <span className="font-semibold">RPC Drill-down degraded:</span>
           <span>
@@ -118,20 +118,20 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       )}
 
       {/* Execution Telemetry Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               Duration
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-[var(--text-primary)] tracking-tight">
               {run.execution_duration_ms
                 ? `${(run.execution_duration_ms / 1000).toFixed(2)}s`
                 : "—"}
             </div>
-            <div className="text-xs text-zinc-400 mt-1">
+            <div className="text-xs text-[var(--text-disabled)] mt-1">
               Queue wait:{" "}
               {run.review_admission_wait_ms
                 ? `${run.review_admission_wait_ms}ms`
@@ -142,15 +142,15 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               Total Tokens
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-[var(--text-primary)] tracking-tight">
               {formatNumber((run.input_tokens ?? 0) + (run.output_tokens ?? 0))}
             </div>
-            <div className="text-xs text-zinc-400 mt-1">
+            <div className="text-xs text-[var(--text-disabled)] mt-1">
               In: {formatNumber(run.input_tokens)} &bull; Out:{" "}
               {formatNumber(run.output_tokens)}
             </div>
@@ -159,15 +159,15 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               Cost (USD)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-[var(--text-primary)] tracking-tight">
               ${((run.estimated_cost_micro_usd ?? 0) / 1000000).toFixed(4)}
             </div>
-            <div className="text-xs text-zinc-400 mt-1 font-mono truncate">
+            <div className="text-xs text-[var(--text-disabled)] mt-1 font-mono truncate">
               {run.pricing_model ?? "standard"}
             </div>
           </CardContent>
@@ -175,15 +175,15 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+            <CardTitle className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               Scope & Shards
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-[var(--text-primary)] tracking-tight">
               {run.scope_status ?? "complete"}
             </div>
-            <div className="text-xs text-zinc-400 mt-1">
+            <div className="text-xs text-[var(--text-disabled)] mt-1">
               {run.shards_count ?? 1} shard(s) evaluated
             </div>
           </CardContent>
@@ -191,11 +191,11 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       </div>
 
       {/* Findings Section */}
-      <Card className="mb-6">
+      <Card className="section-gap">
         <CardHeader className="pb-3">
           <CardTitle>
             Findings & Diagnostics
-            <span className="ml-2 text-xs font-normal text-zinc-500 font-mono">
+            <span className="ml-2 text-xs font-normal text-[var(--text-muted)] font-mono">
               ({rpcDetail ? rpcDetail.currentFindings.length : 0} items)
             </span>
           </CardTitle>
@@ -213,7 +213,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
               {rpcDetail.currentFindings.map((f) => (
                 <div
                   key={f.fingerprint}
-                  className="p-4 rounded-lg border border-zinc-200 bg-zinc-50/50 space-y-2"
+                  className="p-4 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/50 space-y-2"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
@@ -229,7 +229,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                       >
                         {f.severity.toUpperCase()}
                       </Badge>
-                      <span className="font-mono text-xs font-semibold text-zinc-900">
+                      <span className="font-mono text-xs font-semibold text-[var(--text-primary)]">
                         {f.filePath}:{f.line}
                       </span>
                     </div>
@@ -238,7 +238,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                     </Badge>
                   </div>
 
-                  <p className="text-xs text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
                     {f.diagnostic}
                   </p>
                 </div>
@@ -256,7 +256,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           </CardHeader>
           <CardContent className="text-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-zinc-500">Status:</span>
+              <span className="text-[var(--text-muted)]">Status:</span>
               <Badge
                 variant={
                   rpcDetail.structuredCi.status === "available"
@@ -270,14 +270,14 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
             </div>
             {rpcDetail.structuredCi.workflowName && (
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500">Workflow:</span>
-                <span className="font-medium text-zinc-900">
+                <span className="text-[var(--text-muted)]">Workflow:</span>
+                <span className="font-medium text-[var(--text-primary)]">
                   {rpcDetail.structuredCi.workflowName}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-zinc-500">
+              <span className="text-[var(--text-muted)]">
                 Jobs (Passed / Failed / Total):
               </span>
               <span className="font-mono font-medium">
@@ -296,7 +296,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         <DrawerPopup>
           <DrawerHeader>
             <DrawerTitle>Run detail</DrawerTitle>
-            <DrawerClose className="rounded-md px-2 py-1 text-xs hover:bg-zinc-100">
+            <DrawerClose className="rounded-md px-2 py-1 text-xs hover:bg-[var(--surface-hover)]">
               Close
             </DrawerClose>
           </DrawerHeader>

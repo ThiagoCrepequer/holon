@@ -184,7 +184,7 @@ describe("admin views", () => {
     expect(degraded).toContain("400s");
     expect(degraded).toContain("Operational Degradation Detected");
     expect(degraded).toContain("Queue Pipeline · Degraded");
-    expect(degraded).toContain("Operations");
+    expect(degraded).toContain("Workspace");
     expect(degraded).toContain("Strict Access Isolation");
     expect(degraded).toContain("operator@example.com");
 
@@ -227,7 +227,7 @@ describe("admin views", () => {
         window="30d"
       />,
     );
-    expect(empty).toContain("0%");
+    expect(empty).toContain("No reviews in this period");
     expect(empty).toContain("Healthy");
     expect(empty).not.toContain("Optional Telemetry Unavailable");
   });

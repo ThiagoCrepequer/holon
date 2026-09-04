@@ -12,7 +12,7 @@ describe("Badge component", () => {
   it("renders default neutral small badge", () => {
     const html = renderToStaticMarkup(<Badge>Neutral</Badge>);
     expect(html).toContain("Neutral");
-    expect(html).toContain("bg-zinc-100");
+    expect(html).toContain("bg-[var(--surface-hover)]");
     expect(html).toContain("px-2 py-0.5 text-xs");
   });
 
@@ -48,7 +48,7 @@ describe("Badge component", () => {
     );
     expect(withDot).toContain('aria-hidden="true"');
     expect(withDot).toContain("w-1.5 h-1.5 rounded-full");
-    expect(withDot).toContain("bg-emerald-500");
+    expect(withDot).toContain("bg-[var(--success)]");
 
     const withoutDot = renderToStaticMarkup(<Badge dot={false}>Active</Badge>);
     expect(withoutDot).not.toContain("w-1.5 h-1.5 rounded-full");
