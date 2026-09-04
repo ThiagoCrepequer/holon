@@ -41,7 +41,7 @@ Criação do banco de dados relacional para projeções de runs e quarentena:
 
 ```bash
 # Criação do banco D1 no ambiente de produção
-wrangler d1 create holon-admin
+wrangler d1 create holon-admin-d1
 ```
 
 O ID retornado deve ser inserido em `apps/admin/wrangler.jsonc` no bloco `d1_databases`.
@@ -49,7 +49,7 @@ O ID retornado deve ser inserido em `apps/admin/wrangler.jsonc` no bloco `d1_dat
 Execução do schema inicial:
 
 ```bash
-wrangler d1 execute holon-admin --file=migrations/0001_initial_schema.sql --remote
+pnpm --filter @holon/admin d1:migrate:remote
 ```
 
 ### 2.2. Filas Cloudflare Queues
@@ -58,10 +58,10 @@ Duas filas dedicadas com retenção de 4 dias (345.600 segundos):
 
 ```bash
 # Fila principal de projeções
-wrangler queues create holon-admin-projections --retention-period-secs=345600
+wrangler queues create holon-admin-projections --message-retention-period-secs=345600
 
 # Dead Letter Queue (DLQ)
-wrangler queues create holon-admin-projections-dlq --retention-period-secs=345600
+wrangler queues create holon-admin-projections-dlq --message-retention-period-secs=345600
 ```
 
 > [!IMPORTANT]
@@ -92,7 +92,7 @@ wrangler queues create holon-admin-projections-dlq --retention-period-secs=34560
 Execute no diretório `apps/admin`:
 
 ```bash
-# Keyring de HMAC para criptografia e validação de cursores de paginação
+# Keyring de HMAC para assinatura e validação de cursores de paginação
 # Formato: {"primary":{"kid":"k1","secretHex":"..."},"secondary":{"kid":"k2","secretHex":"..."}}
 wrangler secret put ADMIN_CURSOR_HMAC_KEYS
 
@@ -112,14 +112,9 @@ wrangler secret put CF_QUEUES_READ_TOKEN
 - `PROJECTION_QUEUE_ID`: ID ou nome da fila de projeção.
 - `PROJECTION_DLQ_ID`: ID ou nome da DLQ.
 
-### 3.3. Segredo do `apps/control-plane`
+### 3.3. Flag de rollout do `apps/control-plane`
 
-Para geração das assinaturas HMAC de integridade do payload de projeção (`admin_projection_outbox`):
-
-```bash
-# Chave secreta de HMAC SHA-256 (32 bytes hexadecimais)
-wrangler secret put ADMIN_PROJECTION_HMAC_KEY
-```
+Configure `ADMIN_PROJECTION_ENABLED="false"` no primeiro deploy do control plane. Depois que migration, consumer e prontidão do admin estiverem validados, altere para `"true"` e faça novo deploy. O `payloadHash` da projeção é SHA-256 não chaveado e não exige segredo compartilhado; ele serve para identidade/idempotência e detecção de corrupção. A autenticidade do produtor é garantida pelo binding da Queue configurado na conta Cloudflare.
 
 ---
 
@@ -140,7 +135,7 @@ Seguindo a ordem de dependência:
 
 1. **Deploy das migrações do D1**:
    ```bash
-   wrangler d1 migrations apply holon-admin --remote
+   pnpm --filter @holon/admin d1:migrate:remote
    ```
 2. **Deploy do Control Plane** (disponibiliza a RPC `ADMIN_READ_API` e o outbox de projeção):
    ```bash
@@ -152,3 +147,10 @@ Seguindo a ordem de dependência:
    ```
 4. **Validação de prontidão**:
    Acesse a URL `https://admin.holon.internal/readiness` e certifique-se de que todos os subsistemas essenciais (`d1`, `rpc`) reportam estado `healthy`.
+5. **Ativação controlada do producer**:
+   - confirme que a UI exibe o watermark `projection_enabled_at` da migration;
+   - altere `ADMIN_PROJECTION_ENABLED` para `"true"` no ambiente pretendido;
+   - faça novo deploy do control plane e valide a chegada de uma projeção sintética;
+   - em rollback, reverta a flag para `"false"`; tarefas já persistidas no outbox podem terminar o envio, mas nenhuma tarefa nova será criada.
+
+O middleware rejeita requisições quando `ACCESS_TEAM_NAME`, `ACCESS_AUD` ou `AUTHORIZED_EMAIL_DOMAIN` estão ausentes ou vazios. `ADMIN_CURSOR_HMAC_KEYS` também é obrigatório; não existe chave padrão para desenvolvimento no runtime.

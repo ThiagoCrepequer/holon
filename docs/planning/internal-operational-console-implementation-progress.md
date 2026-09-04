@@ -16,17 +16,17 @@ Este documento rastreia o progresso contínuo e verificável da implementação 
 
 ## Status Geral por Fase
 
-| Fase       | Descrição                                                                 | Status    | Data de Conclusão |
-| :--------- | :------------------------------------------------------------------------ | :-------- | :---------------- |
-| **Fase 0** | Preflight, pesquisa datada e ADR-0029                                     | Concluída | 2026-09-04        |
-| **Fase 1** | Contratos e políticas puras                                               | Concluída | 2026-09-04        |
-| **Fase 2** | Skeleton do apps/admin (Worker composto, bindings, migration)             | Concluída | 2026-09-04        |
-| **Fase 3** | D1 e Queue consumer (idempotência, quarentena, retenção, paginação)       | Concluída | 2026-09-04        |
-| **Fase 4** | Control plane: producer, outbox no ledger, alarm multiplexado e RPC V1    | Concluída | 2026-09-04        |
-| **Fase 5** | Design system `@holon/ui` (tokens, componentes, acessibilidade)           | Concluída | 2026-09-04        |
-| **Fase 6** | Rotas e dashboard (SSR React Router, loaders, drawer, visualizações)      | Concluída | 2026-09-04        |
-| **Fase 7** | Segurança e operação (Access JWT, CSP, Analytics/Queue adapters, CLI DLQ) | Concluída | 2026-09-04        |
-| **Fase 8** | Verificação completa e consolidação de qualidade                          | Concluída | 2026-09-04        |
+| Fase       | Descrição                                                                 | Status       | Data de Conclusão |
+| :--------- | :------------------------------------------------------------------------ | :----------- | :---------------- |
+| **Fase 0** | Preflight, pesquisa datada e ADR-0029                                     | Concluída    | 2026-09-04        |
+| **Fase 1** | Contratos e políticas puras                                               | Concluída    | 2026-09-04        |
+| **Fase 2** | Skeleton do apps/admin (Worker composto, bindings, migration)             | Concluída    | 2026-09-04        |
+| **Fase 3** | D1 e Queue consumer (idempotência, quarentena, retenção, paginação)       | Concluída    | 2026-09-04        |
+| **Fase 4** | Control plane: producer, outbox no ledger, alarm multiplexado e RPC V1    | Concluída    | 2026-09-04        |
+| **Fase 5** | Design system `@holon/ui` (tokens, componentes, acessibilidade)           | Concluída    | 2026-09-04        |
+| **Fase 6** | Rotas e dashboard (SSR React Router, loaders, drawer, visualizações)      | Concluída    | 2026-09-04        |
+| **Fase 7** | Segurança e operação (Access JWT, CSP, Analytics/Queue adapters, CLI DLQ) | Concluída    | 2026-09-04        |
+| **Fase 8** | Verificação completa e consolidação de qualidade                          | Em andamento | —                 |
 
 ---
 
@@ -81,8 +81,8 @@ Este documento rastreia o progresso contínuo e verificável da implementação 
 - [x] Criação do workspace `packages/ui`.
 - [x] Tokens semânticos e folha de estilos `theme.css`.
 - [x] Componentes: button, icon-button, badge, card, metric-card, dialog, drawer, select, tabs, table, skeleton, empty-state, chart-frame.
-- [x] Acessibilidade completa (WCAG 2.2 AA, ARIA, foco, navegação por teclado, reduced motion, tabular-nums).
-- [x] Testes de componentes com Vitest e renderToStaticMarkup (100% statements, lines, funcs; 98.52% branches).
+- [x] Componentes com contratos de acessibilidade (ARIA, foco, navegação por teclado, reduced motion, tabular-nums).
+- [x] Testes de componentes com Vitest, Testing Library e Axe, incluindo interação real de foco/fechamento do diálogo.
 
 ### Fase 6 — Rotas e dashboard
 
@@ -91,7 +91,7 @@ Este documento rastreia o progresso contínuo e verificável da implementação 
 - [x] Rota `/runs`: filtros, paginação, busca estruturada, empty states específicos.
 - [x] Rota `/runs/:runId`: visualização drawer/page, chamada RPC via Service Binding sob demanda, exibição de telemetria e findings consolidados.
 - [x] Equivalentes tabulares/textuais acessíveis para dados gráficos.
-- [x] Verificação de hidratação, ausência de vazamento de secrets e bundle size.
+- [x] Build SSR/cliente via plugin oficial Cloudflare Vite e React Router, com gráfico carregado em chunk cliente e fallback estável de hidratação.
 
 ### Fase 7 — Segurança e operação
 
@@ -100,13 +100,16 @@ Este documento rastreia o progresso contínuo e verificável da implementação 
 - [x] Adaptadores server-side para Cloudflare Analytics Engine SQL API e Queue Metrics API com degradação tolerante.
 - [x] Endpoint `/readiness` com probes paralelas.
 - [x] CLI de replay DLQ em `tooling/admin-cli/replay-dlq.ts` (`--dry-run` default, sem exibição de corpos de mensagem).
+- [x] Validação estrita de respostas externas e RPC, replay com validação de schema/hash e confirmação vinculada ao ambiente e IDs das filas.
+- [x] Feature flag `ADMIN_PROJECTION_ENABLED`, watermark de cutover e cron diário de retenção.
 - [x] Runbooks operacionais em `docs/operations/`.
 
 ### Fase 8 — Verificação completa
 
-- [x] Execução das suítes de testes unitários e de integração.
-- [x] `pnpm format:check` (oxfmt).
-- [x] `pnpm lint` (oxlint).
-- [x] `pnpm typecheck` (tsc across all workspaces).
-- [x] `pnpm test:coverage` satisfazendo os thresholds rigorosos (85% branches, 90% functions/lines/statements).
-- [x] Verificação de integridade do build (`pnpm verify`).
+- [x] Execução das suítes focadas de control plane, admin, contracts, CLI e design system.
+- [x] `pnpm format:check`, `pnpm lint` e `pnpm typecheck` sobre o head corrigido do PR.
+- [x] Gates de cobertura dos pacotes alterados: control plane, admin (Workers + cliente), CLI e design system.
+- [x] Build de produção SSR/cliente do `apps/admin`.
+- [ ] Executar `pnpm verify` global sobre o head final em CI ou ambiente local com suporte completo a Workers/Containers.
+- [ ] Executar jornadas Playwright e regressão visual em staging protegido por Access; requer credenciais e autorização explícita para efeito externo.
+- [ ] Confirmar o rollout contra conta Cloudflare, GitHub App e repositório privado reais. A implementação permanece localmente verificada até essa prova.

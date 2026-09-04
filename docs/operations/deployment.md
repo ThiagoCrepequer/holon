@@ -61,7 +61,7 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 8. Execute as migrations D1 do read model e faça deploy do `apps/admin`:
 
    ```bash
-   pnpm --filter @holon/admin d1:migrate:staging
+   pnpm --filter @holon/admin d1:migrate:remote
    pnpm --filter @holon/admin deploy
    ```
 

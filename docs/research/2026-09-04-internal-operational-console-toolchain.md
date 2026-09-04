@@ -24,6 +24,8 @@ Qual conjunto de tecnologias, contratos e padrões arquiteturais permite impleme
 - **React Router v8 e Cloudflare Workers**: O template oficial do Cloudflare Workers com React Router v8 e Vite (`@cloudflare/vite-plugin`) suporta SSR direto na borda, mantendo o ponto de entrada em `workers/app.ts`. O Worker pode compor os handlers `fetch`, `queue` e `scheduled` no mesmo export default (`satisfies ExportedHandler<AdminEnv, AdminRunProjectionEventV1>`).
 - **Cloudflare D1 como Read Model**: D1 oferece SQLite segregado na borda com transações locais e índices customizados. O uso de `ON CONFLICT(run_id) DO NOTHING` associado a queries de verificação pós-inserção permite idempotência estrita sem mascarar erros de integridade ou colisões de hash.
 - **Cloudflare Queues para Projeção Assíncrona**: O desacoplamento via fila garante entrega _at-least-once_. Os métodos individuais `message.ack()` e `message.retry()` permitem processar lotes onde mensagens válidas são reconhecidas e falhas pontuais são retentadas individualmente sem duplicar processamento de mensagens bem-sucedidas.
+- **Pull consumer e replay**: O Pull API usa `visibility_timeout_ms`; mensagens publicadas com content type `json` chegam com o campo `body` codificado em Base64 e precisam ser decodificadas antes da validação. No push REST, `content_type: "json"` recebe o objeto JSON no campo `body`, não uma string JSON. O ACK usa o `lease_id` e só deve ocorrer após o push confirmado.
+- **Métricas de Queue**: O endpoint REST atual é `GET /accounts/{account_id}/queues/{queue_id}/metrics` e retorna `backlog_count`, `backlog_bytes` e `oldest_message_timestamp_ms` como métricas best-effort. O SLO de frescor deve ser calculado pela idade da mensagem mais antiga, em vez de inferido apenas pelo tamanho do backlog.
 - **Cloudflare Analytics Engine para Tendências**: Analytics Engine opera via SQL API e agregação com `_sample_interval`. Trata-se de telemetria aproximada best-effort; nunca deve substituir o D1 em consultas financeiras e contagens exatas.
 - **Service Bindings para Detalhe Read-Only**: O consumo de dados pontuais da PR via RPC (`ADMIN_READ_API`) direcionado ao `AdminReadEntrypoint` no control-plane elimina endpoints HTTP públicos para inspeção do ledger e evita acoplar o banco analítico ao estado transacional do Durable Object.
 - **Segurança de Borda com Cloudflare Access**: O header `Cf-Access-Jwt-Assertion` assinado com RS256 deve ser validado via JWKS da equipe Cloudflare. A validação de claims (`aud`, `iss`, `exp`, `nbf`, `type !== "app"` e sufixo de email corporativo) garante acesso restrito a operadores humanos autenticados.
@@ -68,6 +70,8 @@ Verificadas em 2026-09-04:
 - [Cloudflare Vite Plugin Documentation](https://developers.cloudflare.com/workers/vite-plugin/)
 - [Cloudflare D1 Documentation](https://developers.cloudflare.com/d1/)
 - [Cloudflare Queues JavaScript API & Retries](https://developers.cloudflare.com/queues/configuration/javascript-apis/)
+- [Cloudflare Queues Pull Consumers](https://developers.cloudflare.com/queues/configuration/pull-consumers/)
+- [Cloudflare Queues Get Metrics API](https://developers.cloudflare.com/api/resources/queues/methods/get_metrics/)
 - [Cloudflare Analytics Engine SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/)
 - [Cloudflare Access JWT Validation](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/)
 - [RFC 8785: JSON Canonicalization Scheme (JCS)](https://www.rfc-editor.org/rfc/rfc8785)
