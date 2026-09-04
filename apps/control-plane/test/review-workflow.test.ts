@@ -554,6 +554,23 @@ describe("ReviewWorkflow", () => {
     );
     expect(rollback).toBeTypeOf("function");
 
+    // When the run is not obsolete, rollback should NOT overwrite the check run
+    const patchCountBefore = checkRunPatches.length;
+    await rollback?.({
+      error: new Error("unrelated-error"),
+      output: 1,
+    });
+    expect(checkRunPatches.length).toBe(patchCountBefore);
+
+    // When the run state is obsolete, rollback should update the check run to cancelled
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await runInDurableObject(ledger, (_object, state) => {
+      state.storage.sql.exec(
+        "UPDATE runs SET state = 'obsolete' WHERE id = ?",
+        job.runId,
+      );
+    });
+
     await rollback?.({
       error: new Error("superseded"),
       output: 1,

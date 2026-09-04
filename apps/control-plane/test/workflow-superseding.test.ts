@@ -74,4 +74,39 @@ describe("terminateWorkflowIfActive", () => {
       terminateWorkflowIfActive(workflow.value, "workflow-retry"),
     ).rejects.toBe(failure);
   });
+
+  it("treats instance not found on get as already-terminal", async () => {
+    const workflow: WorkflowController = {
+      get: () => Promise.reject(new Error("Workflow instance not found")),
+    };
+
+    await expect(
+      terminateWorkflowIfActive(workflow, "workflow-missing"),
+    ).resolves.toBe("already-terminal");
+  });
+
+  it("treats instance not found on status as already-terminal", async () => {
+    const workflow: WorkflowController = {
+      get: () =>
+        Promise.resolve({
+          status: () => Promise.reject(new Error("instance.not_found")),
+          terminate: () => Promise.resolve(),
+        }),
+    };
+
+    await expect(
+      terminateWorkflowIfActive(workflow, "workflow-missing-status"),
+    ).resolves.toBe("already-terminal");
+  });
+
+  it("treats instance not found on terminate as already-terminal", async () => {
+    const workflow = controller({
+      states: ["running"],
+      terminateError: new Error("instance not found"),
+    });
+
+    await expect(
+      terminateWorkflowIfActive(workflow.value, "workflow-missing-term"),
+    ).resolves.toBe("already-terminal");
+  });
 });

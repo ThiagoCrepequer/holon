@@ -215,6 +215,8 @@ export async function executeReviewWorkflow(
         {
           rollback: async ({ output: checkRunId }) => {
             if (checkRunId === undefined) return;
+            const currentRunState = await services.ledger.runState(run.id);
+            if (currentRunState !== "obsolete") return;
             const github = await services.createMutationContext();
             if (github.publisher.updateCheckRun === undefined) return;
             await github.publisher.updateCheckRun({
