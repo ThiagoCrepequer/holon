@@ -57,6 +57,16 @@ Exemplo de resposta de diagnóstico:
 | **Queue Metrics**     | `checks.queueMetrics == "degraded"`   | A mensagem mais antiga da fila principal ultrapassou o SLO configurado (300 s por padrão). | Inspecionar a fila principal e a DLQ usando métricas e o CLI de replay. Avaliar erros no consumer de projeções.                          |
 | **Analytics Engine**  | `checks.analyticsEngine == "unknown"` | Credenciais `CF_ANALYTICS_API_TOKEN` ou `CF_ACCOUNT_ID` ausentes.                          | O console continuará operando normalmente exibindo apenas métricas do D1. Configure o segredo se desejar tendências de latência p50/p95. |
 
+### 1.4. Logs do Worker
+
+Os Workers Logs persistem invocações HTTP, execuções do cron, consumo da fila, exceções não tratadas e logs estruturados emitidos pela aplicação. Consulte **Workers & Pages > holon-admin > Observability > Logs**. Para acompanhamento em tempo real:
+
+```bash
+pnpm --filter @holon/admin exec wrangler tail holon-admin --format pretty
+```
+
+Filtre pelo método, URL, status e tipo de handler. Nunca inclua JWTs, cookies, tokens, prompts, diffs ou conteúdo de repositórios privados em buscas compartilhadas ou registros operacionais.
+
 ---
 
 ## 2. Reprocessamento de Mensagens da DLQ
