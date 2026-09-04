@@ -79,7 +79,7 @@ wrangler queues create holon-admin-projections-dlq --message-retention-period-se
    - Ação: `Allow`.
    - Regra obrigatória: seletor **Email** com o endereço Hotmail exato do operador autorizado.
    - Não use `Emails ending in @hotmail.com`: essa regra permitiria que qualquer conta Hotmail autenticada satisfizesse a política do Access.
-   - Rejeição obrigatória: Service Tokens (`type: "app"` são rejeitados pelo código da aplicação para acesso interativo).
+   - Rejeição obrigatória: o Worker exige identidade humana positiva, com `email` válido e `sub` não vazio. Não use `type: "app"` como discriminador: a Cloudflare atribui esse claim tanto a sessões humanas quanto a service tokens. O payload documentado de service token não possui `email`, possui `sub` vazio e é rejeitado pelo middleware.
 3. Obtenha os valores para configuração:
    - **Team Name**: Subdomínio do Access (`<team>.cloudflareaccess.com`).
    - **Audience (AUD)**: Hash de audiência da aplicação gerado pelo Access.
@@ -167,3 +167,5 @@ Seguindo a ordem de dependência:
    - em rollback, reverta a flag para `"false"`; tarefas já persistidas no outbox podem terminar o envio, mas nenhuma tarefa nova será criada.
 
 O middleware rejeita requisições quando `ACCESS_TEAM_NAME`, `ACCESS_AUD` ou `AUTHORIZED_EMAIL_DOMAIN` estão ausentes ou vazios. `ADMIN_CURSOR_HMAC_KEYS` também é obrigatório; não existe chave padrão para desenvolvimento no runtime.
+
+Após verificar assinatura, issuer, audience e vigência temporal, o middleware exige `email` e `sub` de usuário não vazios. Conforme a [estrutura oficial do application token](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/) verificada em 2026-09-04, `type: "app"` identifica o token da aplicação e aparece tanto em autenticação humana quanto em service tokens; portanto, ele não identifica sozinho uma credencial automatizada.
