@@ -8,9 +8,6 @@ import { handleConsoleRequest } from "./router.js";
 export interface AdminEnv extends Env {
   readonly CF_ANALYTICS_API_TOKEN?: string;
   readonly CF_QUEUES_READ_TOKEN?: string;
-  readonly PROJECTION_QUEUE_ID?: string;
-  readonly PROJECTION_DLQ_ID?: string;
-  readonly AUTHORIZED_EMAIL_DOMAIN?: string;
   readonly DEV_BYPASS_AUTH?: string;
   readonly DEV_USER_EMAIL?: string;
 }
