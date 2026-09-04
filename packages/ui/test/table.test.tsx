@@ -44,4 +44,29 @@ describe("Table component", () => {
     expect(html).toContain("run-1");
     expect(html).toContain("Total: 1");
   });
+
+  it("supports containerClassName and bordered options", () => {
+    const defaultHtml = renderToStaticMarkup(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell>Item</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(defaultHtml).not.toContain("border-zinc-200 rounded-lg");
+
+    const borderedHtml = renderToStaticMarkup(
+      <Table bordered containerClassName="custom-container">
+        <TableBody>
+          <TableRow>
+            <TableCell>Item</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(borderedHtml).toContain("border-zinc-200 rounded-lg");
+    expect(borderedHtml).toContain("custom-container");
+  });
 });

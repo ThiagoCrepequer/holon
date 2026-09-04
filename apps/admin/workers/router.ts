@@ -4,6 +4,7 @@ import { adminRequestContext } from "../app/server/request-context.js";
 import type { AdminEnv } from "./app.js";
 import {
   AccessAuthError,
+  type AccessIdentity,
   type AccessValidationConfig,
   validateAccessJwt,
 } from "./security/access-jwt.js";
@@ -11,8 +12,24 @@ import { applySecurityHeaders, generateCspNonce } from "./security/csp.js";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
-  import.meta.env.MODE,
 );
+
+export function isLocalDevelopment(request: Request, env: AdminEnv): boolean {
+  if (env.DEV_BYPASS_AUTH !== "true") {
+    return false;
+  }
+  try {
+    const { hostname } = new URL(request.url);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function handleConsoleRequest(
   request: Request,
@@ -49,8 +66,21 @@ export async function handleConsoleRequest(
     expectedAudience: env.ACCESS_AUD ?? "",
     authorizedEmailDomain: env.AUTHORIZED_EMAIL_DOMAIN ?? "",
   };
+  const isDev = isLocalDevelopment(request, env);
   try {
-    const identity = await validateAccessJwt(request, authConfig);
+    let identity: AccessIdentity;
+    if (
+      isDev &&
+      !authConfigOverride &&
+      !request.headers.get("cf-access-jwt-assertion")
+    ) {
+      identity = {
+        email: env.DEV_USER_EMAIL ?? "operator@holon.internal",
+        sub: "local-dev-operator",
+      };
+    } else {
+      identity = await validateAccessJwt(request, authConfig);
+    }
     const nonce = generateCspNonce();
     const loadContext = new RouterContextProvider();
     loadContext.set(adminRequestContext, {
@@ -62,6 +92,7 @@ export async function handleConsoleRequest(
     return applySecurityHeaders(
       await requestHandler(request, loadContext),
       nonce,
+      { isDev },
     );
   } catch (error) {
     if (error instanceof AccessAuthError) return error.toResponse();
@@ -75,6 +106,7 @@ export async function handleConsoleRequest(
         },
       }),
       nonce,
+      { isDev },
     );
   }
 }

@@ -39,7 +39,7 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
     return (
       <Card ref={ref} className={cn("overflow-hidden", className)} {...props}>
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+          <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
             {label}
           </CardTitle>
           {icon && (
@@ -66,14 +66,14 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
             <>
               <div
                 className={cn(
-                  "text-2xl font-semibold tracking-tight tabular-nums",
+                  "text-2xl font-bold font-mono tracking-tight tabular-nums",
                   toneValueStyles[tone],
                 )}
               >
                 {value}
               </div>
               {subtitle && (
-                <p className="text-xs text-zinc-500 mt-1">{subtitle}</p>
+                <p className="text-xs text-zinc-400 mt-1">{subtitle}</p>
               )}
             </>
           )}

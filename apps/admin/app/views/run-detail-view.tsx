@@ -20,6 +20,7 @@ import { Link, useNavigate } from "react-router";
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
 import { useHydrated } from "../hooks/use-hydrated.js";
+import { formatNumber } from "../utils/format.js";
 
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
@@ -117,20 +118,20 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       )}
 
       {/* Execution Telemetry Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs text-zinc-500 uppercase">
+            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Duration
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono">
+            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
               {run.execution_duration_ms
                 ? `${(run.execution_duration_ms / 1000).toFixed(2)}s`
                 : "—"}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-0.5">
+            <div className="text-xs text-zinc-400 mt-1">
               Queue wait:{" "}
               {run.review_admission_wait_ms
                 ? `${run.review_admission_wait_ms}ms`
@@ -141,33 +142,32 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs text-zinc-500 uppercase">
+            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Total Tokens
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono">
-              {(
-                (run.input_tokens ?? 0) + (run.output_tokens ?? 0)
-              ).toLocaleString()}
+            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
+              {formatNumber((run.input_tokens ?? 0) + (run.output_tokens ?? 0))}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-0.5">
-              In: {run.input_tokens ?? 0} &bull; Out: {run.output_tokens ?? 0}
+            <div className="text-xs text-zinc-400 mt-1">
+              In: {formatNumber(run.input_tokens)} &bull; Out:{" "}
+              {formatNumber(run.output_tokens)}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs text-zinc-500 uppercase">
+            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Cost (USD)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono">
+            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
               ${((run.estimated_cost_micro_usd ?? 0) / 1000000).toFixed(4)}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-0.5 font-mono truncate">
+            <div className="text-xs text-zinc-400 mt-1 font-mono truncate">
               {run.pricing_model ?? "standard"}
             </div>
           </CardContent>
@@ -175,15 +175,15 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs text-zinc-500 uppercase">
+            <CardTitle className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Scope & Shards
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold font-mono">
+            <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
               {run.scope_status ?? "complete"}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-0.5">
+            <div className="text-xs text-zinc-400 mt-1">
               {run.shards_count ?? 1} shard(s) evaluated
             </div>
           </CardContent>

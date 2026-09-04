@@ -45,6 +45,7 @@ export {
   TableFooter,
   TableHead,
   TableHeader,
+  type TableProps,
   TableRow,
 } from "./components/table/table.js";
 
@@ -114,4 +115,7 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  SelectField,
+  type SelectFieldOption,
+  type SelectFieldProps,
 } from "./components/select/select.js";

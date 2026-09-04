@@ -93,3 +93,11 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Base UI scrollbar utility to prevent runtime inline <style> injection under strict CSP */
+.base-ui-disable-scrollbar {
+  scrollbar-width: none;
+}
+.base-ui-disable-scrollbar::-webkit-scrollbar {
+  display: none;
+}

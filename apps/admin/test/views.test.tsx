@@ -184,6 +184,9 @@ describe("admin views", () => {
     expect(degraded).toContain("400s");
     expect(degraded).toContain("Operational Degradation Detected");
     expect(degraded).toContain("Queue Pipeline · Degraded");
+    expect(degraded).toContain("Operations");
+    expect(degraded).toContain("Strict Access Isolation");
+    expect(degraded).toContain("operator@example.com");
 
     const unavailable = render(
       <DashboardView
@@ -246,6 +249,9 @@ describe("admin views", () => {
     );
     expect(populated).toContain("Next Page");
     expect(populated).toContain("repositoryId=42");
+    expect(populated).toContain("verdict-select");
+    expect(populated).toContain("state-select");
+    expect(populated).toContain("period-select");
 
     const unfilteredEmpty = render(<RunsView runs={[]} />, "/runs");
     expect(unfilteredEmpty).toContain("No runs in this time window");

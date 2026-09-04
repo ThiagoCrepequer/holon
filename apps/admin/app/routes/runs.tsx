@@ -20,12 +20,15 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     throw data("Invalid run filters", { status: 400 });
   }
   const storage = new D1AdminStorage(env.DB);
+  const keyring = parseCursorKeyring(
+    env.ADMIN_CURSOR_HMAC_KEYS ||
+      (env.DEV_BYPASS_AUTH === "true"
+        ? '{"primary":{"kid":"dev-key","secretHex":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}'
+        : undefined),
+  );
   let result;
   try {
-    result = await storage.listRuns(
-      filters,
-      parseCursorKeyring(env.ADMIN_CURSOR_HMAC_KEYS),
-    );
+    result = await storage.listRuns(filters, keyring);
   } catch {
     throw data("Invalid or expired cursor", { status: 400 });
   }

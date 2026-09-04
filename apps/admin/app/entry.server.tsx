@@ -14,17 +14,20 @@ export default async function handleRequest(
   routerContext: EntryContext,
   loadContext: RouterContextProvider,
 ) {
-  const { nonce } = loadContext.get(adminRequestContext);
+  const { env, nonce } = loadContext.get(adminRequestContext);
   if (request.method === "HEAD") {
     return new Response(null, {
       status: responseStatusCode,
       headers: responseHeaders,
     });
   }
-  const body = await renderToReadableStream(
-    <ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
-    { signal: AbortSignal.timeout(6_000) },
-  );
+  const isDev = env.DEV_BYPASS_AUTH === "true";
+  const routerProps = isDev
+    ? { context: routerContext, url: request.url }
+    : { context: routerContext, url: request.url, nonce };
+  const body = await renderToReadableStream(<ServerRouter {...routerProps} />, {
+    signal: AbortSignal.timeout(6_000),
+  });
   responseHeaders.set("content-type", "text/html; charset=utf-8");
   return new Response(body, {
     status: responseStatusCode,
