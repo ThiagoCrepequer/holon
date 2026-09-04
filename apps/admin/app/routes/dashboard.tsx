@@ -18,7 +18,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const storage = new D1AdminStorage(env.DB);
   const keyring = parseCursorKeyring(
     env.ADMIN_CURSOR_HMAC_KEYS ||
-      (import.meta.env.DEV
+      (env.DEV_BYPASS_AUTH === "true"
         ? '{"primary":{"kid":"dev-key","secretHex":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}'
         : undefined),
   );

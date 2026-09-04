@@ -12,8 +12,24 @@ import { applySecurityHeaders, generateCspNonce } from "./security/csp.js";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
-  import.meta.env.MODE,
 );
+
+export function isLocalDevelopment(request: Request, env: AdminEnv): boolean {
+  if (env.DEV_BYPASS_AUTH !== "true") {
+    return false;
+  }
+  try {
+    const { hostname } = new URL(request.url);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function handleConsoleRequest(
   request: Request,
@@ -50,13 +66,13 @@ export async function handleConsoleRequest(
     expectedAudience: env.ACCESS_AUD ?? "",
     authorizedEmailDomain: env.AUTHORIZED_EMAIL_DOMAIN ?? "",
   };
+  const isDev = isLocalDevelopment(request, env);
   try {
     let identity: AccessIdentity;
     if (
-      import.meta.env.DEV &&
+      isDev &&
       !authConfigOverride &&
-      !request.headers.get("cf-access-jwt-assertion") &&
-      (env.DEV_BYPASS_AUTH === "true" || !env.ACCESS_AUD)
+      !request.headers.get("cf-access-jwt-assertion")
     ) {
       identity = {
         email: env.DEV_USER_EMAIL ?? "operator@holon.internal",
@@ -76,7 +92,7 @@ export async function handleConsoleRequest(
     return applySecurityHeaders(
       await requestHandler(request, loadContext),
       nonce,
-      { isDev: import.meta.env.DEV },
+      { isDev },
     );
   } catch (error) {
     if (error instanceof AccessAuthError) return error.toResponse();
@@ -90,7 +106,7 @@ export async function handleConsoleRequest(
         },
       }),
       nonce,
-      { isDev: import.meta.env.DEV },
+      { isDev },
     );
   }
 }

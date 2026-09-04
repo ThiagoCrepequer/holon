@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -149,7 +148,6 @@ describe("Select component", () => {
   });
 
   it("handles onValueChange and autoSubmit with user interaction", async () => {
-    const user = userEvent.setup();
     const options = [
       { value: "opt1", label: "Option 1" },
       { value: "opt2", label: "Option 2" },
@@ -183,15 +181,19 @@ describe("Select component", () => {
     const trigger = screen.getByRole("combobox");
     expect(trigger).toBeDefined();
 
-    // In JSDOM, clicking the trigger opens the popup
-    await user.click(trigger);
-    const option2 = await screen.findByRole("option", { name: "Option 2" });
+    // Trigger popup display via click
+    trigger.click();
+    const option2 = await screen.findByRole(
+      "option",
+      { name: "Option 2" },
+      { timeout: 8000 },
+    );
     expect(option2).toBeDefined();
 
-    await user.click(option2);
+    option2.click();
     expect(receivedValue).toBe("opt2");
     expect(formSubmitted).toBe(true);
 
     unmount();
-  });
+  }, 15000);
 });

@@ -13,7 +13,7 @@ import { parseRpcRunDetail } from "../app/routes/run-detail.js";
 import type { AdminEnv } from "../workers/app.js";
 import { D1AdminStorage } from "../workers/d1-adapter.js";
 import type { AdminReadRpcClient } from "../workers/observability/readiness.js";
-import { handleConsoleRequest } from "../workers/router.js";
+import { handleConsoleRequest, isLocalDevelopment } from "../workers/router.js";
 import { createSampleProjectionEvent, setupTestDatabase } from "./helpers.js";
 
 describe("apps/admin router and server-side rendered views", () => {
@@ -330,5 +330,82 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(() => parseRpcRunDetail({ schemaVersion: 1 })).toThrow(
       "Invalid RPC run detail response",
     );
+  });
+
+  describe("isLocalDevelopment and authentication bypass boundaries", () => {
+    it("identifies local development requests only when flag is true and hostname is localhost/loopback", () => {
+      const devEnv = { ...env, DEV_BYPASS_AUTH: "true" } as AdminEnv;
+      const prodEnv = { ...env, DEV_BYPASS_AUTH: undefined } as AdminEnv;
+
+      expect(
+        isLocalDevelopment(new Request("http://localhost:8787/"), devEnv),
+      ).toBe(true);
+      expect(
+        isLocalDevelopment(new Request("http://127.0.0.1:8787/"), devEnv),
+      ).toBe(true);
+      expect(
+        isLocalDevelopment(new Request("http://[::1]:8787/"), devEnv),
+      ).toBe(true);
+
+      // Fails when flag is missing or false
+      expect(
+        isLocalDevelopment(new Request("http://localhost:8787/"), prodEnv),
+      ).toBe(false);
+      expect(
+        isLocalDevelopment(new Request("http://localhost:8787/"), {
+          ...env,
+          DEV_BYPASS_AUTH: "false",
+        }),
+      ).toBe(false);
+
+      // Fails for remote hostnames even when DEV_BYPASS_AUTH="true"
+      expect(
+        isLocalDevelopment(
+          new Request("https://admin-holon.crepequer.dev/"),
+          devEnv,
+        ),
+      ).toBe(false);
+      expect(
+        isLocalDevelopment(new Request("https://admin.example.com/"), devEnv),
+      ).toBe(false);
+
+      // Fails gracefully for invalid URLs
+      expect(
+        isLocalDevelopment(
+          { url: "not-a-valid-url" } as unknown as Request,
+          devEnv,
+        ),
+      ).toBe(false);
+    });
+
+    it("allows unauthenticated requests on localhost when DEV_BYPASS_AUTH=true", async () => {
+      const devEnv = {
+        ...env,
+        DEV_BYPASS_AUTH: "true",
+        DEV_USER_EMAIL: "dev-tester@holon.internal",
+      } as AdminEnv;
+
+      const req = new Request("http://localhost:8787/?window=24h");
+      const resp = await handleConsoleRequest(req, devEnv, mockCtx);
+      expect(resp.status).toBe(200);
+      const html = await resp.text();
+      expect(html).toContain("dev-tester@holon.internal");
+    });
+
+    it("rejects unauthenticated requests on remote hosts even when DEV_BYPASS_AUTH=true", async () => {
+      const devEnv = {
+        ...env,
+        DEV_BYPASS_AUTH: "true",
+      } as AdminEnv;
+
+      const req = new Request("https://admin-holon.crepequer.dev/?window=24h");
+      const resp = await handleConsoleRequest(
+        req,
+        devEnv,
+        mockCtx,
+        authConfig(),
+      );
+      expect(resp.status).toBe(401);
+    });
   });
 });

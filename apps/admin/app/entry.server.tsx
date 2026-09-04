@@ -14,14 +14,15 @@ export default async function handleRequest(
   routerContext: EntryContext,
   loadContext: RouterContextProvider,
 ) {
-  const { nonce } = loadContext.get(adminRequestContext);
+  const { env, nonce } = loadContext.get(adminRequestContext);
   if (request.method === "HEAD") {
     return new Response(null, {
       status: responseStatusCode,
       headers: responseHeaders,
     });
   }
-  const routerProps = import.meta.env.DEV
+  const isDev = env.DEV_BYPASS_AUTH === "true";
+  const routerProps = isDev
     ? { context: routerContext, url: request.url }
     : { context: routerContext, url: request.url, nonce };
   const body = await renderToReadableStream(<ServerRouter {...routerProps} />, {
