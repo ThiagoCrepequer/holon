@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "holon-admin-d1",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "df9bbb0e-6443-4cdd-87b8-d64a4ce2606a",
       "migrations_dir": "migrations",
     },
   ],
