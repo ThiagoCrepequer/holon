@@ -146,3 +146,30 @@ credencial do modelo.
   parcialmente o caminho remoto em 2026-08-31; consulte o
   [snapshot datado](../research/2026-08-31-live-github-app-review-smoke.md) sem
   generalizar essa amostra para o gate local.
+
+## Console operacional local
+
+Na raiz do monorepo, copie `apps/admin/.dev.vars.example` para
+`apps/admin/.dev.vars` sem sobrescrever uma configuração existente. O arquivo
+local deve conter `DEV_BYPASS_AUTH=true`, `DEV_USER_EMAIL` e a chave HMAC de
+exemplo (exclusivamente local).
+
+```bash
+cp -n apps/admin/.dev.vars.example apps/admin/.dev.vars
+pnpm --filter @holon/admin d1:migrate:local
+pnpm --filter @holon/admin dev --host 127.0.0.1
+```
+
+Acesse `http://127.0.0.1:5173` (ou a porta indicada pelo Vite). Reinicie o
+servidor após alterar `.dev.vars`. O bypass continua restrito a hostnames de
+loopback no middleware; URLs remotas exigem Cloudflare Access.
+
+**Verificado em 2026-09-04:** quando `secrets.required` existe, o Wrangler
+[filtra as variáveis locais por essa lista](https://developers.cloudflare.com/workers/configuration/secrets/).
+O `vite.config.ts` acrescenta as duas variáveis de desenvolvimento à lista apenas
+em `vite dev`. `vite build` e `vite preview` preservam a configuração de deploy,
+sem declarar essas variáveis locais como secrets obrigatórios de produção.
+
+Opcionalmente, `pnpm --filter @holon/admin d1:seed:local` insere dados de exemplo.
+Esse seed **apaga as execuções existentes no D1 local** antes de inserir os dados.
+Não atua sobre o banco remoto.
