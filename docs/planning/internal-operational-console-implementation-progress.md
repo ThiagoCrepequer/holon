@@ -102,6 +102,8 @@ Este documento rastreia o progresso contínuo e verificável da implementação 
 - [x] CLI de replay DLQ em `tooling/admin-cli/replay-dlq.ts` (`--dry-run` default, sem exibição de corpos de mensagem).
 - [x] Validação estrita de respostas externas e RPC, replay com validação de schema/hash e confirmação vinculada ao ambiente e IDs das filas.
 - [x] Feature flag `ADMIN_PROJECTION_ENABLED`, watermark de cutover e cron diário de retenção.
+- [x] Binding writer `ANALYTICS_ENGINE`, IDs de leitura das filas e ativação do producer versionados após o provisionamento dos recursos reais.
+- [x] Estados visuais separados para degradação confirmada e telemetria opcional indisponível, com logs estruturados allowlisted.
 - [x] Runbooks operacionais em `docs/operations/`.
 
 ### Fase 8 — Verificação completa
