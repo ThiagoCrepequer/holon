@@ -130,6 +130,11 @@ async function emitAndRecordProjection(
   ) => void,
   prefix: string,
 ): Promise<void> {
+  const projectionQueue = services.adminProjectionQueue;
+  if (projectionQueue === undefined) {
+    return;
+  }
+
   try {
     const event = await step.do(
       `${prefix}-build-admin-projection`,
@@ -149,10 +154,8 @@ async function emitAndRecordProjection(
 
     await step.do(`${prefix}-publish-admin-projection`, stateStep, async () => {
       try {
-        if (services.adminProjectionQueue !== undefined) {
-          await services.adminProjectionQueue.send(event);
-          await services.ledger.markProjectionTaskCompleted(payloadInput.runId);
-        }
+        await projectionQueue.send(event);
+        await services.ledger.markProjectionTaskCompleted(payloadInput.runId);
       } catch (sendError) {
         await services.ledger.scheduleProjectionRetry(
           payloadInput.runId,
@@ -1123,53 +1126,54 @@ export async function executeReviewWorkflow(
         });
     }
 
-    const failedTerminalAt = terminal?.occurredAt ?? failedAt;
-    const timestamps = buildProjectionTimestamps(
-      rawEvent.timestamp,
-      workflowStartedAt,
-      failedTerminalAt,
-      analysisStartedAtIso,
-    );
-    const failedProjectionPayload: AdminRunProjectionPayloadV1 = {
-      headSha: job.envelope.pullRequest.headSha,
-      prKey,
-      projectedFrom: "workflow",
-      projectionRequestedAt: now(),
-      pullRequestNumber: job.envelope.pullRequest.number,
-      recordVersion: 1,
-      repository: {
-        id: job.envelope.repository.id,
-        name: job.envelope.repository.name,
-        owner: job.envelope.repository.owner,
-      },
-      reviewPhaseReached,
-      runId: run.id,
-      schemaVersion: 1,
-      scopeStatus: "partial_by_failure",
-      telemetry: {
-        estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
-        executionDurationMs: failedDurationMs,
-        inputTokens: tokenAccounting.inputTokens,
-        isDegraded: true,
-        outputTokens: tokenAccounting.outputTokens,
-        pricingModel: cost.pricingModel,
-        reasoningTokens: null,
-        reviewAdmissionQueueWaitMs: queueWaitMs,
-        shardsCount: 1,
-        toolCallsCount: usage.toolCallsCount,
-      },
-      terminalState: "failed_terminal",
-      timestamps,
-      verdict: null,
-    };
+    if (terminal?.changed === true) {
+      const timestamps = buildProjectionTimestamps(
+        rawEvent.timestamp,
+        workflowStartedAt,
+        terminal.occurredAt,
+        analysisStartedAtIso,
+      );
+      const failedProjectionPayload: AdminRunProjectionPayloadV1 = {
+        headSha: job.envelope.pullRequest.headSha,
+        prKey,
+        projectedFrom: "workflow",
+        projectionRequestedAt: now(),
+        pullRequestNumber: job.envelope.pullRequest.number,
+        recordVersion: 1,
+        repository: {
+          id: job.envelope.repository.id,
+          name: job.envelope.repository.name,
+          owner: job.envelope.repository.owner,
+        },
+        reviewPhaseReached,
+        runId: run.id,
+        schemaVersion: 1,
+        scopeStatus: "partial_by_failure",
+        telemetry: {
+          estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
+          executionDurationMs: failedDurationMs,
+          inputTokens: tokenAccounting.inputTokens,
+          isDegraded: true,
+          outputTokens: tokenAccounting.outputTokens,
+          pricingModel: cost.pricingModel,
+          reasoningTokens: null,
+          reviewAdmissionQueueWaitMs: queueWaitMs,
+          shardsCount: 1,
+          toolCallsCount: usage.toolCallsCount,
+        },
+        terminalState: "failed_terminal",
+        timestamps,
+        verdict: null,
+      };
 
-    await emitAndRecordProjection(
-      step,
-      services,
-      failedProjectionPayload,
-      emit,
-      "failed",
-    );
+      await emitAndRecordProjection(
+        step,
+        services,
+        failedProjectionPayload,
+        emit,
+        "failed",
+      );
+    }
 
     throw error;
   }

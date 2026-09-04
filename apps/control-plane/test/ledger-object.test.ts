@@ -386,6 +386,100 @@ describe("ReviewLedgerObject", () => {
     });
   });
 
+  it("schedules recovery for a projection whose processing lease expires after eviction", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    const event = await buildAdminProjectionEventV1({
+      headSha: "a".repeat(40),
+      prKey: "github:42:pr:7",
+      projectedFrom: "workflow",
+      projectionRequestedAt: new Date().toISOString(),
+      pullRequestNumber: 7,
+      recordVersion: 1,
+      repository: { id: 42, name: "api", owner: "acme" },
+      reviewPhaseReached: "publishing",
+      runId,
+      schemaVersion: 1,
+      scopeStatus: "complete",
+      telemetry: {
+        estimatedCostMicroUsd: 0,
+        executionDurationMs: 1,
+        inputTokens: 0,
+        isDegraded: false,
+        outputTokens: 0,
+        pricingModel: "unknown",
+        reasoningTokens: null,
+        reviewAdmissionQueueWaitMs: 0,
+        shardsCount: 1,
+        toolCallsCount: 0,
+      },
+      terminalState: "completed",
+      timestamps: {
+        analysisStartedAt: null,
+        terminalAt: new Date().toISOString(),
+        webhookReceivedAt: new Date().toISOString(),
+        workflowStartedAt: new Date().toISOString(),
+      },
+      verdict: "APPROVE",
+    });
+    await ledger.recordProjectionTask(event);
+
+    const leaseExpiresAt = Date.now() + 60_000;
+    await runInDurableObject(ledger, async (_object, state) => {
+      state.storage.sql.exec(
+        "UPDATE projection_tasks SET state = 'processing', lease_expires_at = ? WHERE run_id = ?",
+        new Date(leaseExpiresAt).toISOString(),
+        runId,
+      );
+      await state.storage.deleteAlarm();
+    });
+    await evictDurableObject(ledger);
+
+    await ledger.recordProjectionTask(event);
+    await runInDurableObject(ledger, async (_object, state) => {
+      expect(await state.storage.getAlarm()).toBe(leaseExpiresAt);
+    });
+  });
+
+  it("prunes completed and exhausted projection tasks after their retention windows", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    const now = Date.now();
+    await runInDurableObject(ledger, async (_object, state) => {
+      const insert = (
+        id: string,
+        stateName: "completed" | "exhausted",
+        ageDays: number,
+      ) => {
+        const completedAt = new Date(now - ageDays * 86_400_000).toISOString();
+        state.storage.sql.exec(
+          `INSERT INTO projection_tasks (
+             run_id, event_id, payload_json, payload_hash, state, attempts,
+             requested_at, next_attempt_at, completed_at
+           ) VALUES (?, ?, '{}', ?, ?, 1, ?, ?, ?)`,
+          id,
+          `event:${id}`,
+          "a".repeat(64),
+          stateName,
+          completedAt,
+          completedAt,
+          completedAt,
+        );
+      };
+      insert(`github:42:pr:7:head:${"b".repeat(40)}`, "completed", 8);
+      insert(`github:42:pr:7:head:${"c".repeat(40)}`, "exhausted", 31);
+      await _object.alarm();
+    });
+
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ count: number }>(
+            "SELECT COUNT(*) AS count FROM projection_tasks",
+          )
+          .one().count,
+      ).toBe(0);
+    });
+  });
+
   it("claims, reconciles and completes an idempotent publication", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await ledger.claimRun(run, "workflow-publication");

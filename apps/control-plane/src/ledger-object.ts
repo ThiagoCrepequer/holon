@@ -714,6 +714,8 @@ export class ReviewLedgerObject
 
     await this.processDueProjection(startedAt.toISOString());
 
+    this.pruneProjectionTasks(startedAt);
+
     await this.ensureMaintenanceAlarm();
   }
 
@@ -893,21 +895,66 @@ export class ReviewLedgerObject
 
   private nextMaintenanceAt(): number | undefined {
     const row = this.ctx.storage.sql
-      .exec<{ next_attempt_at: string }>(
-        `SELECT MIN(next_attempt_at) AS next_attempt_at
-         FROM (
-           SELECT next_attempt_at FROM cleanup_tasks WHERE state = 'pending'
-           UNION ALL
-           SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
-           UNION ALL
-           SELECT next_attempt_at FROM projection_tasks WHERE state = 'pending'
-         )`,
+      .exec<{
+        completed_at: string | null;
+        exhausted_at: string | null;
+        lease_expires_at: string | null;
+        next_attempt_at: string | null;
+      }>(
+        `SELECT
+           (SELECT MIN(next_attempt_at) FROM (
+             SELECT next_attempt_at FROM cleanup_tasks WHERE state = 'pending'
+             UNION ALL
+             SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
+             UNION ALL
+             SELECT next_attempt_at FROM projection_tasks WHERE state = 'pending'
+           )) AS next_attempt_at,
+           (SELECT MIN(lease_expires_at) FROM projection_tasks
+             WHERE state = 'processing' AND lease_expires_at IS NOT NULL) AS lease_expires_at,
+           (SELECT MIN(completed_at) FROM projection_tasks
+             WHERE state = 'completed' AND completed_at IS NOT NULL) AS completed_at,
+           (SELECT MIN(completed_at) FROM projection_tasks
+             WHERE state = 'exhausted' AND completed_at IS NOT NULL) AS exhausted_at`,
       )
       .toArray()[0];
-    if (row?.next_attempt_at === undefined || row.next_attempt_at === null) {
+    if (row === undefined) {
       return undefined;
     }
-    return Math.max(Date.now(), Date.parse(row.next_attempt_at));
+
+    const candidates = [
+      row.next_attempt_at === null
+        ? undefined
+        : Date.parse(row.next_attempt_at),
+      row.lease_expires_at === null
+        ? undefined
+        : Date.parse(row.lease_expires_at),
+      row.completed_at === null
+        ? undefined
+        : Date.parse(row.completed_at) + 7 * 86_400_000,
+      row.exhausted_at === null
+        ? undefined
+        : Date.parse(row.exhausted_at) + 30 * 86_400_000,
+    ].filter((candidate): candidate is number =>
+      candidate === undefined ? false : Number.isFinite(candidate),
+    );
+    if (candidates.length === 0) return undefined;
+    return Math.max(Date.now(), Math.min(...candidates));
+  }
+
+  private pruneProjectionTasks(now: Date): void {
+    const completedBefore = new Date(
+      now.getTime() - 7 * 86_400_000,
+    ).toISOString();
+    const exhaustedBefore = new Date(
+      now.getTime() - 30 * 86_400_000,
+    ).toISOString();
+    this.ctx.storage.sql.exec(
+      `DELETE FROM projection_tasks
+       WHERE (state = 'completed' AND completed_at IS NOT NULL AND completed_at <= ?)
+          OR (state = 'exhausted' AND completed_at IS NOT NULL AND completed_at <= ?)`,
+      completedBefore,
+      exhaustedBefore,
+    );
   }
 
   private async ensureMaintenanceAlarm(): Promise<void> {
@@ -1015,8 +1062,10 @@ export class ReviewLedgerObject
     } catch (error) {
       const kind = errorKind(error).slice(0, 100);
       if (currentAttempts >= 20) {
+        const exhaustedAt = new Date().toISOString();
         this.ctx.storage.sql.exec(
-          "UPDATE projection_tasks SET state = 'exhausted', lease_expires_at = NULL, last_error_kind = ? WHERE run_id = ?",
+          "UPDATE projection_tasks SET state = 'exhausted', completed_at = ?, lease_expires_at = NULL, last_error_kind = ? WHERE run_id = ?",
+          exhaustedAt,
           kind,
           task.run_id,
         );
@@ -1266,6 +1315,7 @@ export class ReviewLedgerObject
       new Date().toISOString(),
       parsedRunId,
     );
+    await this.ensureMaintenanceAlarm();
   }
 
   public async scheduleProjectionRetry(
@@ -1284,14 +1334,17 @@ export class ReviewLedgerObject
 
     const attempts = (task?.attempts ?? 0) + 1;
     if (attempts >= 20) {
+      const exhaustedAt = new Date().toISOString();
       this.ctx.storage.sql.exec(
         `UPDATE projection_tasks
          SET state = 'exhausted',
              attempts = ?,
+             completed_at = ?,
              lease_expires_at = NULL,
              last_error_kind = ?
          WHERE run_id = ?`,
         attempts,
+        exhaustedAt,
         kind,
         parsedRunId,
       );

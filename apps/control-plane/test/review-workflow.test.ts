@@ -1659,13 +1659,17 @@ describe("ReviewWorkflow", () => {
         "Ledger storage error",
       ),
     };
+    const sendProjection = vi.fn(() => Promise.resolve());
+    const projectionQueue = {
+      send: sendProjection,
+    } as unknown as Queue<unknown>;
 
     await expect(
       executeReviewWorkflow(
         env,
         event("terminal-failure-workflow"),
         immediateStep([], undefined, stepErrors),
-        setup.value,
+        { ...setup.value, adminProjectionQueue: projectionQueue },
       ),
     ).rejects.toThrow("HOLON_GITHUB_TRANSIENT:transport");
 
@@ -1673,6 +1677,7 @@ describe("ReviewWorkflow", () => {
       events.some((e) => e.event === "review.terminalization_failed"),
     ).toBe(true);
     expect(events.some((e) => e.event === "review.failed")).toBe(true);
+    expect(sendProjection).not.toHaveBeenCalled();
   });
 
   it("emits structured repository.preparation_failed diagnostics when prepareRepository fails", async () => {
@@ -1798,20 +1803,47 @@ describe("ReviewWorkflow", () => {
     expect(sendMock).toHaveBeenCalled();
   });
 
-  it("proceeds with review when ADMIN_PROJECTION_QUEUE is not configured in env", async () => {
+  it("does not project when the rollout flag is disabled", async () => {
     const setup = runtime();
+    const send = vi.fn();
+    const stepNames: string[] = [];
     const envWithoutQueue = {
       ...env,
-      ADMIN_PROJECTION_QUEUE: undefined,
+      ADMIN_PROJECTION_ENABLED: "false",
+      ADMIN_PROJECTION_QUEUE: { send },
     } as unknown as Cloudflare.Env;
 
     const result = await executeReviewWorkflow(
       envWithoutQueue,
       event("no-queue-run"),
+      immediateStep(stepNames),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(send).not.toHaveBeenCalled();
+    expect(
+      stepNames.some((stepName) => stepName.includes("admin-projection")),
+    ).toBe(false);
+  });
+
+  it("projects when the rollout flag is enabled", async () => {
+    const setup = runtime();
+    const send = vi.fn(() => Promise.resolve());
+    const envWithQueue = {
+      ...env,
+      ADMIN_PROJECTION_ENABLED: "true",
+      ADMIN_PROJECTION_QUEUE: { send },
+    } as unknown as Cloudflare.Env;
+
+    const result = await executeReviewWorkflow(
+      envWithQueue,
+      event("enabled-queue-run"),
       immediateStep([]),
       setup.value,
     );
 
     expect(result.outcome).toBe("completed");
+    expect(send).toHaveBeenCalledOnce();
   });
 });

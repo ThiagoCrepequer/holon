@@ -161,6 +161,15 @@ export interface GitHubMutationContext {
   }>;
 }
 
+function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
+  // Wrangler narrows local `vars` to the configured literal, while deployed
+  // environments intentionally override this rollout flag to "true".
+  return (
+    (env as unknown as { readonly ADMIN_PROJECTION_ENABLED?: string })
+      .ADMIN_PROJECTION_ENABLED === "true"
+  );
+}
+
 export interface ReviewServices {
   readonly adminProjectionQueue?: Queue<unknown> | undefined;
   readonly executor: RepositoryExecutorBinding;
@@ -590,7 +599,8 @@ export function createReviewServices(
 
   return {
     adminProjectionQueue:
-      runtime.adminProjectionQueue ?? env.ADMIN_PROJECTION_QUEUE,
+      runtime.adminProjectionQueue ??
+      (isAdminProjectionEnabled(env) ? env.ADMIN_PROJECTION_QUEUE : undefined),
     executor,
     ledger,
     model,

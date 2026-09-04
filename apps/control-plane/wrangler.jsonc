@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ADMIN_PROJECTION_ENABLED": "false",
+  },
   "durable_objects": {
     "bindings": [
       {
