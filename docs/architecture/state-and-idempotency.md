@@ -9,6 +9,7 @@ related:
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
   - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
+  - ../decisions/0028-adopt-declarative-repository-policy.md
 ---
 
 # Estado e idempotência
@@ -53,7 +54,8 @@ stateDiagram-v2
 
 ## Regras
 
-- A run é imutavelmente associada a um head SHA.
+- A run é imutavelmente associada ao par de refs observado; a política é
+  ancorada ao `baseSha` e a análise ao `headSha`.
 - Um evento novo não altera a run antiga; cria uma nova identidade.
 - A run mais nova é ordenada por `pull_request.updated_at`, depois por
   `receivedAt`; run ID apenas desempata valores idênticos.
@@ -94,8 +96,9 @@ cláusula `WHERE`; quando os retries duráveis acabam, estados ativos passam a
 
 Workflows executa a etapa com retries delimitados. Antes de qualquer publicação,
 o caso de uso exige simultaneamente que a run ainda seja a mais recente no
-ledger e que o GitHub reporte o mesmo `head.sha`; a verificação é repetida antes
-de cada mutação externa. Timeout após efeito externo é reconciliado no endpoint
+ledger e que o GitHub reporte os mesmos `head.sha` e `base.sha`; a verificação é
+repetida antes de cada mutação externa. O Check Run antigo só pode ser concluído
+como `cancelled` após detectar obsolescência. Timeout após efeito externo é reconciliado no endpoint
 correspondente ao tipo de publicação. A busca tem paginação limitada e só
 aceita o login exato do GitHub App com tipo `Bot`. Os `POST`s desativam
 o retry interno do Octokit para que somente essa reconciliação possa decidir
@@ -105,6 +108,10 @@ O schema evolui por `schema_migrations` transacional. Tarefas de cleanup ficam
 em tabela própria; terminalização e criação da tarefa acontecem atomicamente.
 Um alarm tenta uma tarefa pending por vez, registra tentativas e remove o
 credential scope somente após o executor confirmar cleanup.
+
+`run_telemetry` persiste a fonte da política e os digests da fonte e da política
+efetiva. O output durável do step de resolução é reutilizado em retries e em
+reconstruções do Sandbox, evitando depender de estado isolado em memória.
 
 Cada run persiste o snapshot canônico usado na decisão (`headSha`, escopo,
 shards analisados, degradação e Check Run ID). Findings persistem também a

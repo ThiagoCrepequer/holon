@@ -117,6 +117,18 @@ describe("repository-policy-resolver", () => {
       ).rejects.toThrow(RepositoryPolicySyntaxError);
     });
 
+    it("rejects standalone YAML anchors before conversion to JavaScript", async () => {
+      const yaml = "version: &policyVersion 1";
+      await expect(
+        parseAndValidatePolicy(
+          yaml,
+          new TextEncoder().encode(yaml),
+          ".github/holon.yml",
+          sampleBaseSha,
+        ),
+      ).rejects.toThrow(RepositoryPolicySyntaxError);
+    });
+
     it("rejects YAML explicit tags with RepositoryPolicySyntaxError", async () => {
       const yaml = ["version: !custom 1"].join("\n");
       const rawBytes = new TextEncoder().encode(yaml);
@@ -302,7 +314,7 @@ describe("repository-policy-resolver", () => {
 
     it("resolves primary policy from .github/holon.yml", async () => {
       const yaml =
-        "version: 1\nreview:\n  additional_excludes:\n    - 'docs/**'";
+        "version: 1\nreview:\n  additional_excludes:\n    - 'generated/**'";
       const session = mockSession({
         ".github/holon.yml": {
           content: yaml,
@@ -317,7 +329,7 @@ describe("repository-policy-resolver", () => {
         sampleBaseSha,
       );
       expect(policy.source).toBe(".github/holon.yml");
-      expect(policy.additionalExcludes).toEqual(["docs/**"]);
+      expect(policy.additionalExcludes).toEqual(["generated/**"]);
     });
 
     it("resolves fallback policy from .holon.yml when .github/holon.yml is absent", async () => {

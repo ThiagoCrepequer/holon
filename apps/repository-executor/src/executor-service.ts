@@ -230,6 +230,9 @@ export class RepositoryExecutorService {
       const repositoryInventory = await collectStructuralRepositoryInventory(
         sandbox,
         request.canonicalDiff,
+        request.schemaVersion === 3
+          ? request.effectivePolicy.additionalExcludes
+          : [],
       );
       const artifacts = buildReviewArtifacts(
         request,

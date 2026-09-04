@@ -11,7 +11,7 @@ import {
   RepositoryPolicySyntaxError,
 } from "@holon/domain";
 import type { GitHubInstallationSession } from "@holon/github";
-import YAML from "yaml";
+import YAML, { isAlias, isNode, isPair, isScalar, visit } from "yaml";
 
 export async function computeSha256Hex(
   data: Uint8Array | string,
@@ -90,6 +90,36 @@ export async function parseAndValidatePolicy(
   if (doc.warnings.length > 0) {
     throw new RepositoryPolicySyntaxError(
       doc.warnings[0]?.message ?? "YAML warnings encountered",
+    );
+  }
+
+  try {
+    visit(doc, (_key, node) => {
+      if (isAlias(node)) {
+        throw new RepositoryPolicySyntaxError(
+          "YAML aliases are not supported in repository policy",
+        );
+      }
+      if (isNode(node) && node.anchor !== undefined) {
+        throw new RepositoryPolicySyntaxError(
+          "YAML anchors are not supported in repository policy",
+        );
+      }
+      if (isNode(node) && node.tag !== undefined) {
+        throw new RepositoryPolicySyntaxError(
+          "Explicit YAML tags are not supported in repository policy",
+        );
+      }
+      if (isPair(node) && isScalar(node.key) && node.key.value === "<<") {
+        throw new RepositoryPolicySyntaxError(
+          "YAML merge keys are not supported in repository policy",
+        );
+      }
+    });
+  } catch (error) {
+    if (error instanceof RepositoryPolicySyntaxError) throw error;
+    throw new RepositoryPolicySyntaxError(
+      "Repository policy contains an unsupported YAML construct",
     );
   }
 

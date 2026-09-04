@@ -8,6 +8,7 @@ last-reviewed: 2026-09-03
 related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
+  - ../decisions/0028-adopt-declarative-repository-policy.md
 ---
 
 # Segurança e trust boundaries
@@ -22,6 +23,7 @@ modelo a ignorar políticas ou exfiltrar dados.
 | --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Internet -> Worker    | Webhook forjado, replay, payload excessivo        | HMAC do corpo bruto, comparação constante, allowlist de eventos e limite de tamanho     |
 | Queue -> Coordinator  | Redelivery e evento obsoleto                      | Idempotência e validação de schema/version                                              |
+| Política -> escopo    | PR reduz cobertura ou explora YAML                | Ler do base SHA, AST restrita, schema estrito e paths protegidos                        |
 | GitHub -> Analyzer    | Código malicioso, arquivo gigante, path traversal | Workspace isolado, limites e normalização de caminhos                                   |
 | Analyzer -> comandos  | Execução arbitrária e exfiltração                 | Read-only por padrão, allowlist, timeout, CPU/memória/rede limitados                    |
 | Evidência -> modelo   | Prompt injection e dados sensíveis                | Separar instruções de dados, minimizar contexto, redigir segredos e limitar ferramentas |
@@ -62,6 +64,19 @@ SQLite, filesystem ou parâmetros persistidos do Sandbox.
   (`key:[a-f0-9]{8}`).
 
 ## Política de execução
+
+A configuração declarativa é uma fronteira não confiável mesmo quando lida da
+branch base. O control plane consulta `.github/holon.yml` ou `.holon.yml` no
+`baseSha` exato, limita o arquivo a 64 KiB, rejeita aliases, âncoras, tags
+explícitas e merge keys na AST YAML e valida o objeto resultante com schema
+estrito. Configurações inválidas falham sem retry e nunca iniciam o Sandbox.
+
+Exclusões universais e padrões capazes de atingir política, workflows,
+`SECURITY.md` ou `CODEOWNERS` são rejeitados. Além disso, a autorização de
+contexto e tools dá precedência aos paths protegidos, como defesa em
+profundidade. Política customizada exige RPC V3; fallback para V2/V1 só existe
+quando a política efetiva é a default. O par de digests registra os bytes da
+fonte e a política canônica sem persistir o conteúdo do arquivo.
 
 O executor implementado não executa scripts do repositório:
 

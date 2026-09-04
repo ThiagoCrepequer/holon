@@ -97,6 +97,9 @@ function createMockServices(
     telemetry: {
       emit: () => undefined,
     } as unknown as ReviewServices["telemetry"],
+    workflow: {
+      get: () => Promise.reject(new Error("unused")),
+    },
   };
 }
 
@@ -168,12 +171,52 @@ describe("analyzeReview", () => {
 
     const emit = vi.fn();
     const services = createMockServices(v3Context);
+    const modelReview = vi.spyOn(services.model, "review");
     const result = await analyzeReview(job, services, emit);
 
     expect(result.scopeStatus).toBe("partial_by_policy");
     expect(result.verdict).toBe("COMMENT");
     expect(result.policySource).toBe(".github/holon.yml");
     expect(result.waiversCount).toBe(2);
+    expect(modelReview).toHaveBeenCalledOnce();
+    expect(result.effectivePolicyDigest).toBe("c".repeat(64));
+    expect(result.sourceDigest).toBe("d".repeat(64));
+  });
+
+  it("passes the durable policy into context reconstruction", async () => {
+    const v3Context: ReviewContextV3 = {
+      changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+      effectivePolicyDigest: "c".repeat(64),
+      files: [
+        { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
+      ],
+      policySource: ".github/holon.yml",
+      schemaVersion: 3,
+      sourceDigest: "d".repeat(64),
+      truncated: false,
+      verdictStrictness: "default",
+      waiversCount: 0,
+    };
+    const effectivePolicy = {
+      additionalExcludes: ["generated/**"],
+      baseSha: "b".repeat(40),
+      effectivePolicyDigest: "c".repeat(64),
+      source: ".github/holon.yml" as const,
+      sourceDigest: "d".repeat(64),
+      verdictStrictness: "default" as const,
+      version: 1 as const,
+    };
+    const services = createMockServices(v3Context);
+    const ensureContext = vi.fn(() => Promise.resolve());
+
+    await analyzeReview(
+      job,
+      { ...services, ensureContext },
+      vi.fn(),
+      effectivePolicy,
+    );
+
+    expect(ensureContext).toHaveBeenCalledWith(2, effectivePolicy);
   });
 
   it("handles synthesizeReviewSummary failure gracefully when reviewing multiple shards", async () => {

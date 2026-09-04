@@ -322,8 +322,17 @@ describe("RepositoryExecutorService", () => {
       verdictStrictness: "block_all_confident_medium" as const,
       version: 1 as const,
     };
+    const canonicalDiff = [
+      "diff --git a/src/index.ts b/src/index.ts",
+      "--- a/src/index.ts",
+      "+++ b/src/index.ts",
+      "@@ -1 +1 @@",
+      "-export function changed() { return 1; }",
+      "+export function changed() { return 2; }",
+    ].join("\n");
     const requestV3 = executorRequestV3Schema.parse({
       ...request,
+      canonicalDiff,
       effectivePolicy: policy,
       installationId: 99,
       repositoryName: "api",
@@ -340,12 +349,12 @@ describe("RepositoryExecutorService", () => {
       },
     );
     await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
-      changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+      changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         {
           mode: "structural",
-          patch: request.canonicalDiff,
+          patch: canonicalDiff,
           path: "src/index.ts",
         },
       ],
@@ -354,6 +363,9 @@ describe("RepositoryExecutorService", () => {
       verdictStrictness: "block_all_confident_medium",
       waiversCount: 0,
     });
+    expect(sandbox.commands).toContainEqual(
+      expect.arrayContaining(["--glob", "!vendor/**"]),
+    );
   });
 
   it("omits sensitive renames and denies their safe-looking destination for the run", async () => {

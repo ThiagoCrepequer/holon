@@ -10,6 +10,7 @@ related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
+  - ../decisions/0028-adopt-declarative-repository-policy.md
 ---
 
 # Ciclo de vida dos dados
@@ -27,6 +28,7 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
 | Contexto filtrado   | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                                                    |
 | Evidência           | Trechos usados para sustentar finding               | Mínima e com retenção limitada                                                  |
 | IA                  | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita                      |
+| Política efetiva    | Fonte, source digest e effective policy digest      | Metadados da run; conteúdo YAML não é persistido                                |
 | Publicação          | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria                                |
 | Segredo             | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped                          |
 | Avaliação sintética | IDs, prompt derivado do corpus V3 e saída validada  | Workflow com retenção de 1 dia; Agent destruído por callback durável após 1 dia |

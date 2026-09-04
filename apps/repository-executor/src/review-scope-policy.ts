@@ -1,3 +1,5 @@
+import { repositoryPolicyGlobSchema } from "@holon/contracts";
+import { isProtectedPath } from "@holon/domain";
 import {
   classifyReviewPath,
   matchesAnyPathGlob,
@@ -26,11 +28,19 @@ function canonicalDeniedPaths(paths: readonly string[]): readonly string[] {
   return unique;
 }
 
+function canonicalAdditionalExcludes(
+  paths: readonly string[],
+): readonly string[] {
+  return repositoryPolicyGlobSchema.array().max(50).parse(paths).toSorted();
+}
+
 export function createReviewScopePolicy(
   files: readonly PullRequestDiffFile[],
   additionalExcludes: readonly string[] = [],
 ): ReviewScopePolicy {
-  const canonicalExcludes = [...new Set(additionalExcludes)].toSorted();
+  const canonicalExcludes = canonicalAdditionalExcludes([
+    ...new Set(additionalExcludes),
+  ]);
   const deniedPaths = files.flatMap((file) => {
     if (
       (file.changeType !== "renamed" && file.changeType !== "copied") ||
@@ -54,7 +64,9 @@ export function createReviewScopePolicy(
 
 export function serializeReviewScopePolicy(policy: ReviewScopePolicy): string {
   const serialized = JSON.stringify({
-    additionalExcludes: [...new Set(policy.additionalExcludes)].toSorted(),
+    additionalExcludes: canonicalAdditionalExcludes([
+      ...new Set(policy.additionalExcludes),
+    ]),
     deniedPaths: canonicalDeniedPaths(policy.deniedPaths),
     schemaVersion: 2,
   });
@@ -107,9 +119,9 @@ export function parseReviewScopePolicy(serialized: string): ReviewScopePolicy {
   }
 
   const deniedPaths = canonicalDeniedPaths(rawDeniedPaths as readonly string[]);
-  const additionalExcludes = [
+  const additionalExcludes = canonicalAdditionalExcludes([
     ...new Set(rawAdditionalExcludes as readonly string[]),
-  ].toSorted();
+  ]);
 
   return {
     additionalExcludes,
@@ -122,6 +134,7 @@ export function assertReviewScopePathAllowed(
   policy: ReviewScopePolicy,
   path: string,
 ): void {
+  if (isProtectedPath(path)) return;
   if (policy.deniedPaths.includes(path)) {
     throw new TypeError("Repository tool path is excluded by the run policy");
   }

@@ -1,5 +1,5 @@
 ---
-id: ADR-0027
+id: ADR-0028
 kind: decision
 status: accepted
 date: 2026-09-03
@@ -47,13 +47,16 @@ de segurança e confiabilidade:
    commit canônico da branch base (`baseSha`) através da GitHub Contents API (`ref: baseSha`). O
    conteúdo proposto no PR (`headSha`) é estritamente ignorado para fins de política.
 2. **Revalidação Dual Obrigatória (`{ headSha, baseSha }`)**:
-   Antes de publicar qualquer resultado ou Check Run terminal, o Workflow revalida atômica e
+   Antes de publicar qualquer finding, resposta de resolução, resumo ou Check Run terminal com
+   resultado, o Workflow revalida atômica e
    determinística a identidade do PR consultando os refs ao vivo no GitHub. Se `headSha` OU `baseSha`
    tiverem avançado, o workflow aborta imediatamente com status `stale` / cancelamento durável,
-   impedindo a publicação de resultados baseados em políticas ou bases desatualizadas.
+   impedindo a publicação de resultados baseados em políticas ou bases desatualizadas. A única
+   mutação terminal permitida depois dessa detecção é concluir o Check Run já ancorado ao SHA antigo
+   com `conclusion: cancelled`; ela não contém resultado da análise.
 3. **Parser YAML Blindado e Fail-Closed**:
-   - O parser utiliza `YAML.parseDocument` com `maxAliasCount: 0`, desativando referências, âncoras,
-     tags customizadas e merge keys.
+   - O parser utiliza `YAML.parseDocument`, percorre a AST e rejeita aliases, âncoras, tags explícitas
+     e merge keys antes de chamar `toJS({ maxAliasCount: 0 })`.
    - Tamanho máximo do arquivo limitado a 64 KiB e rejeição de caracteres ASCII de controle nulos.
    - Exclusão de ambiguidade: a presença simultânea de `.github/holon.yml` e `.holon.yml` resulta em
      `RepositoryPolicyConflictError`.
@@ -69,12 +72,14 @@ de segurança e confiabilidade:
    Arquivos suprimidos pela política são contabilizados explicitamente como waivers de cobertura
    (`waiversCount`). Se todos os arquivos de um PR forem dispensados por política, o escopo resultante é
    marcado como `partial_by_policy`, com 0 arquivos analisados e N waivers declarados, nunca `unsupported`.
+   Se apenas parte dos arquivos for dispensada, os shards restantes continuam sendo analisados; os
+   caminhos protegidos têm precedência sobre qualquer glob adicional tanto no contexto quanto nas tools.
 6. **Contrato RPC V3 sem Downgrade Silencioso**:
    - Novos schemas versionados: `ExecutorRequestV3`, `ReviewContextV3`, `PreparedRepositoryV3` e
      `ReviewScopePolicyV2`.
    - Se uma política personalizada estiver ativa (`source !== "default"`), o control-plane exige
      estritamente `prepareRepositoryV3` / `loadContextV3`. Qualquer tentativa de downgrade para V2 ou V1
-     é sumariamente bloqueada (_fail-closed_).
+     é sumariamente bloqueada com `NonRetryableError` (_fail-closed_).
 7. **Rastreabilidade por Dois Digests SHA-256**:
    - `sourceDigest`: hash criptográfico dos bytes UTF-8 brutos do arquivo original (ou `null` se default).
    - `effectivePolicyDigest`: hash canônico do JSON normalizado da política aplicada.
@@ -105,3 +110,16 @@ de segurança e confiabilidade:
 O comportamento foi validado através de suítes de testes unitários e de integração em todos os pacotes
 modificados (`contracts`, `domain`, `github`, `repository-analysis`, `repository-executor` e `control-plane`),
 além da execução completa do portão de qualidade `pnpm verify`.
+
+## Evidência externa
+
+Verificada em 2026-09-03:
+
+- [Cloudflare — Rules of Workflows](https://developers.cloudflare.com/workflows/build/rules-of-workflows/):
+  steps concluídos persistem seu resultado, enquanto estado em memória fora de steps não é durável.
+- [Cloudflare — Sleeping and retrying](https://developers.cloudflare.com/workflows/build/sleeping-and-retrying/):
+  `NonRetryableError` encerra imediatamente erros permanentes sem repetir o step.
+- [GitHub — Repository contents](https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28):
+  leitura de conteúdo por API, incluindo conteúdo Base64 e seleção de ref.
+- [GitHub — Check runs](https://docs.github.com/en/rest/checks/runs?apiVersion=2022-11-28):
+  atualização terminal exige `conclusion` e suporta `cancelled`, `failure`, `neutral` e `success`.

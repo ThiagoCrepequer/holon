@@ -1,40 +1,10 @@
+import {
+  isUniversalRepositoryPolicyGlob,
+  repositoryPolicyGlobCanMatchProtectedPath,
+} from "@holon/domain";
 import { z } from "zod";
 
-export const PROTECTED_POLICY_PATHS = [
-  ".github/holon.yml",
-  ".github/holon.yaml",
-  ".holon.yml",
-  ".holon.yaml",
-  ".github/workflows",
-  "security.md",
-  ".github/security.md",
-  "codeowners",
-  ".github/codeowners",
-  "docs/codeowners",
-] as const;
-
-export function isProtectedPath(path: string): boolean {
-  const normalized = path.toLowerCase().replace(/^\/+/u, "");
-  return PROTECTED_POLICY_PATHS.some((protectedPath) => {
-    return (
-      normalized === protectedPath ||
-      normalized.startsWith(`${protectedPath}/`) ||
-      normalized.startsWith(`${protectedPath}.`)
-    );
-  });
-}
-
-const universalWildcards = new Set([
-  "*",
-  "**",
-  "***",
-  "*/*",
-  "**/*",
-  "*.*",
-  "**/*.*",
-  ".*",
-  "**/.*",
-]);
+export { PROTECTED_POLICY_PATHS, isProtectedPath } from "@holon/domain";
 
 export const repositoryPolicyGlobSchema = z
   .string()
@@ -50,13 +20,13 @@ export const repositoryPolicyGlobSchema = z
     "Glob pattern must not contain traversal ('..')",
   )
   .refine(
-    (glob) => !universalWildcards.has(glob.trim()),
+    (glob) => !isUniversalRepositoryPolicyGlob(glob),
     "Universal exclusions (e.g. *, **, **/*) are prohibited as they compromise review coverage",
   )
-  .refine((glob) => {
-    const trimmed = glob.trim().replace(/^\/+/u, "");
-    return !isProtectedPath(trimmed);
-  }, "Exclusion of protected policy, workflow, security, or CODEOWNERS files is prohibited");
+  .refine(
+    (glob) => !repositoryPolicyGlobCanMatchProtectedPath(glob),
+    "Exclusion of protected policy, workflow, security, or CODEOWNERS files is prohibited",
+  );
 
 export const repositoryVerdictStrictnessSchema = z.enum([
   "default",

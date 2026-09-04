@@ -646,6 +646,20 @@ describe("declarative repository policy contracts", () => {
     expect(repositoryPolicyGlobSchema.safeParse("**").success).toBe(false);
     expect(repositoryPolicyGlobSchema.safeParse("**/*").success).toBe(false);
     expect(repositoryPolicyGlobSchema.safeParse("*/*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("****").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("?*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("**/?*").success).toBe(false);
+
+    // Globs that semantically reach protected paths are prohibited
+    for (const glob of [
+      ".github/*.yml",
+      ".github/**",
+      ".github/workflows/*.json",
+      "**/CODEOWNERS",
+      "SECURITY.?d",
+    ]) {
+      expect(repositoryPolicyGlobSchema.safeParse(glob).success).toBe(false);
+    }
 
     // Path traversal prohibited
     expect(repositoryPolicyGlobSchema.safeParse("../secret").success).toBe(
@@ -1512,8 +1526,10 @@ describe("check run contracts", () => {
         },
         createdAt: new Date().toISOString(),
         durationMs: 14500,
+        effectivePolicyDigest: "c".repeat(64),
         headSha: "a".repeat(40),
         isDegraded: false,
+        policySource: ".github/holon.yml" as const,
         prKey: "github:42:pr:10",
         queueWaitMs: 320,
         runId: "run:123",
@@ -1527,6 +1543,7 @@ describe("check run contracts", () => {
             stepName: "step-1",
           },
         ],
+        sourceDigest: "d".repeat(64),
         terminalState: "completed" as const,
         tokens: {
           inputTokens: 2000,

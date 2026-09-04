@@ -17,6 +17,7 @@ related:
   - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
   - ../decisions/0025-bound-structural-analysis-and-promote-verifiable-findings.md
   - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
+  - ../decisions/0028-adopt-declarative-repository-policy.md
 ---
 
 # Fluxo de execução de uma review
@@ -54,6 +55,8 @@ sequenceDiagram
         LE->>LE: persist authority + obsolete prior active runs
         LE-->>CO: pending superseded Workflow IDs
         CO->>CO: terminate prior instances with rollback
+        CO->>GH: read policy at exact base SHA
+        CO->>CO: validate YAML AST + strict policy schema
         CO->>GH: fetch canonical PR diff
         CO->>AN: step prepare-repository
         AN-->>CO: small metadata; context stays in Sandbox
@@ -72,8 +75,8 @@ sequenceDiagram
             AI-->>RE: bounded JSON Schema response
         end
         RE-->>CO: validated structured findings
-        CO->>GH: fetch current head SHA
-        alt head changed
+        CO->>GH: fetch current head and base SHAs
+        alt head or base changed
             CO->>LE: mark obsolete
         else head unchanged
             CO->>PU: one durable step per publication
@@ -95,8 +98,8 @@ sequenceDiagram
    head exato com token de instalação emitido sob demanda.
 5. **Investigate:** ferramentas são read-only por padrão e o loop tem orçamento.
 6. **Validate:** a saída do modelo é validada contra contrato estrutural e diff.
-7. **Reconcile:** o head SHA e a autoridade da run são relidos antes de cada
-   mutação externa.
+7. **Reconcile:** o par `{headSha, baseSha}` e a autoridade da run são relidos
+   antes de cada mutação externa.
 8. **Publish:** inline comments e uma review `COMMENT` têm identidade
    determinística e são registrados.
 9. **Complete:** métricas registram cobertura e limitações, inclusive zero findings.
@@ -105,8 +108,9 @@ sequenceDiagram
 
 Na ordem normal, o Workflow executa `claim-run`, zero ou mais
 `terminate-superseded-workflow-N`, `start-run`,
-`revalidate-initial-head`, `start-check-run`, `prepare-repository`, `analyze-review`,
-`begin-publication`, `revalidate-current-head`, zero ou mais `publish-inline-N`,
+`revalidate-initial-refs`, `start-check-run`, `resolve-repository-policy`,
+`prepare-repository`, `analyze-review`, `begin-publication`,
+`revalidate-current-refs`, zero ou mais `publish-inline-N`,
 `publish-summary`, `save-pr-findings`, `record-review-decision`, `complete-check-run`,
 `complete-run-and-schedule-cleanup` e o
 registro durável de cleanup.
@@ -131,13 +135,17 @@ da etapa.
 
 Se o evento já estiver obsoleto, `mark-obsolete-before-preparation` encerra a
 run antes de iniciar um container faturável. A revalidação final continua
-obrigatória para cobrir force-push durante a análise.
+obrigatória para cobrir force-push ou avanço da base durante a análise. Cada
+finding, resposta de resolução, resumo e Check Run terminal revalida os dois
+refs imediatamente antes da mutação. Após detectar obsolescência, apenas o
+Check Run ancorado ao SHA antigo pode ser concluído como `cancelled`, sem
+resultado da análise.
 
 O control-plane obtém do GitHub o diff canônico bruto e o transporta no request
 do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
 checkpoint: o executor o divide em patches completos, sem executar
 `git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto V2. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+contexto V3. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -157,6 +165,14 @@ mesmos globs de exclusão, no máximo 100 arquivos candidatos, 64 kB por arquivo
 visível; inventário vazio sob truncamento nunca prova ausência de dependentes.
 Essa camada não é AST nem resolve tipos. `ast-grep` continua sendo a ferramenta
 estrutural disponível ao modelo durante a investigação.
+
+Antes da preparação, o control plane lê a política exclusivamente no
+`baseSha`. O resultado validado é output durável de
+`resolve-repository-policy` e acompanha toda reconstrução do Sandbox; não
+depende de estado em memória entre callbacks. Uma política customizada exige
+`prepareRepositoryV3` e `loadContextV3`, sem downgrade. Exclusões adicionais
+produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
+restantes; paths protegidos têm precedência sobre essas exclusões.
 
 O contexto filtrado preserva patches completos por arquivo. Para PRs maiores,
 o algoritmo de sharding (`buildReviewPlan`) agrupa arquivos elegíveis por localidade
@@ -184,7 +200,7 @@ Antes da leitura e de cada tool call, o control-plane verifica a existência do
 artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.
 
-O request V2 leva apenas identidades não secretas ao executor. No outbound
+O request V3 leva apenas identidades não secretas e a política validada ao executor. No outbound
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
@@ -200,7 +216,7 @@ Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
   requisição; o Workflow não reinicia a sessão agentiva completa.
 - Ferramenta se aproxima do orçamento: retirar tools no passo final e exigir a
   resposta estruturada com a evidência já coletada.
-- Head SHA mudou: marcar run obsoleta e aguardar o evento mais novo.
+- Head ou base SHA mudou: marcar run obsoleta e aguardar o evento mais novo.
 - Falha de cancelamento ativo: manter a run antiga sem autoridade, continuar a
   run nova e repetir a obrigação persistida pelo alarm.
 - Linha não pertence mais ao diff: não publicar aquele finding.

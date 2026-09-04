@@ -86,6 +86,12 @@ describe("run-scoped repository review policy", () => {
       assertReviewScopePathAllowed(policy, "vendor/lib/util.js"),
     ).toThrow("excluded by repository policy");
     expect(() =>
+      assertReviewScopePathAllowed(
+        { ...policy, additionalExcludes: [".github/**"] },
+        ".github/workflows/release.yml",
+      ),
+    ).not.toThrow();
+    expect(() =>
       assertReviewScopePathAllowed(policy, "src/index.ts"),
     ).not.toThrow();
   });
@@ -142,6 +148,15 @@ describe("run-scoped repository review policy", () => {
     expect(() =>
       parseReviewScopePolicy(JSON.stringify({ schemaVersion: 99 })),
     ).toThrow("unsupported schemaVersion");
+    expect(() =>
+      parseReviewScopePolicy(
+        JSON.stringify({
+          additionalExcludes: [".github/**"],
+          deniedPaths: [],
+          schemaVersion: 2,
+        }),
+      ),
+    ).toThrow("protected policy");
     expect(() =>
       parseReviewScopePolicy(
         JSON.stringify({

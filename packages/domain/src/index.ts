@@ -8,5 +8,6 @@ export * from "./lifecycle.js";
 export * from "./publication.js";
 export * from "./review-run.js";
 export * from "./repository-policy-errors.js";
+export * from "./repository-policy.js";
 export * from "./slo.js";
 export * from "./verdict.js";

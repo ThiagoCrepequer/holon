@@ -233,9 +233,11 @@ describe("check-run-formatter", () => {
 
   it("formats check run output with repository policy and waivers", () => {
     const outputCustomPolicy = formatCheckRunOutput({
+      effectivePolicyDigest: "c".repeat(64),
       findings: [],
       policySource: ".github/holon.yml",
       scopeStatus: "partial_by_policy",
+      sourceDigest: "d".repeat(64),
       summary: "Review completed.",
       waiversCount: 3,
     });
@@ -244,6 +246,12 @@ describe("check-run-formatter", () => {
     );
     expect(outputCustomPolicy.summary).toContain(
       "- **Scope**: Partial by policy (3 eligible file(s) waived by repository policy)",
+    );
+    expect(outputCustomPolicy.summary).toContain(
+      `- **Effective policy digest**: \`${"c".repeat(64)}\``,
+    );
+    expect(outputCustomPolicy.summary).toContain(
+      `- **Policy source digest**: \`${"d".repeat(64)}\``,
     );
 
     const outputDefaultWithWaivers = formatCheckRunOutput({

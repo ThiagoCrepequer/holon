@@ -428,10 +428,47 @@ describe("executor RPC compatibility fixture", () => {
 
     await expect(
       services.prepareRepository(1, customPolicy),
-    ).rejects.toMatchObject({
-      name: "RepositoryTransientError",
-    });
+    ).rejects.toMatchObject({ name: "NonRetryableError" });
     expect(prepareRepositoryV2).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without loading V2 when custom policy context V3 is unavailable", async () => {
+    const customPolicy = {
+      additionalExcludes: ["vendor/**"],
+      baseSha: "b".repeat(40),
+      effectivePolicyDigest: "c".repeat(64),
+      source: ".github/holon.yml" as const,
+      sourceDigest: "d".repeat(64),
+      verdictStrictness: "default" as const,
+      version: 1 as const,
+    };
+    const loadContextV2 = vi.fn();
+    const services = createReviewServices(
+      env,
+      job,
+      {
+        createSession: () => Promise.resolve(installationSession()),
+        executor: {
+          cleanup: () => Promise.resolve(),
+          hasContext: () => Promise.resolve(true),
+          loadContextV2,
+          loadContextV3: () =>
+            Promise.reject(
+              new TypeError(
+                'The RPC receiver does not implement the method "loadContextV3".',
+              ),
+            ),
+          runTool: () => Promise.resolve({ content: "", truncated: false }),
+        },
+      },
+      { emit: () => undefined },
+      {},
+    );
+
+    await expect(services.loadContext(customPolicy)).rejects.toMatchObject({
+      name: "NonRetryableError",
+    });
+    expect(loadContextV2).not.toHaveBeenCalled();
   });
 
   it("falls back to V2 when default policy is used and prepareRepositoryV3 is unavailable", async () => {

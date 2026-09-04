@@ -3,6 +3,8 @@ import {
   modelReviewOutputSchema,
   type AggregatedReviewResult,
   type ReviewJob,
+  type RepositoryPolicy,
+  type RepositoryPolicySource,
   type ShardReviewResult,
   type StructuralImpactReport,
 } from "@holon/contracts";
@@ -22,8 +24,10 @@ import type { ReviewServices } from "./review-services.js";
 
 export type ReconciledReviewOutput = AggregatedReviewResult & {
   readonly activeFindings: readonly ReconciledFinding[];
-  readonly policySource?: string | undefined;
+  readonly effectivePolicyDigest?: string | undefined;
+  readonly policySource?: RepositoryPolicySource | undefined;
   readonly resolvedFindings: readonly TrackedFinding[];
+  readonly sourceDigest?: string | null | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly updatedTrackedFindings: readonly TrackedFinding[];
   readonly waiversCount?: number | undefined;
@@ -116,11 +120,12 @@ export async function analyzeReview(
   job: ReviewJob,
   services: ReviewServices,
   emit: EmitReviewEvent,
+  effectivePolicy?: RepositoryPolicy,
 ): Promise<ReconciledReviewOutput> {
   try {
     const runId = createReviewRun(job).id;
-    await services.ensureContext(2);
-    const context = await services.loadContext();
+    await services.ensureContext(2, effectivePolicy);
+    const context = await services.loadContext(effectivePolicy);
     const patchBytes = contextBytes(context);
     emit("model.input", {
       changedLineCount: context.changedLines.length,
@@ -153,17 +158,19 @@ export async function analyzeReview(
       })),
       { policyExcludedFilesCount },
     );
-    if (
-      plan.scopeStatus === "unsupported" ||
-      plan.scopeStatus === "partial_by_policy" ||
-      plan.shards.length === 0
-    ) {
+    if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
       return {
         ...aggregateShardReviews(plan, [], { verdictPolicy }),
         activeFindings: [],
+        effectivePolicyDigest:
+          context.schemaVersion === 3
+            ? context.effectivePolicyDigest
+            : undefined,
         policySource:
           context.schemaVersion === 3 ? context.policySource : undefined,
         resolvedFindings: [],
+        sourceDigest:
+          context.schemaVersion === 3 ? context.sourceDigest : undefined,
         structuralImpact: context.structuralImpact,
         updatedTrackedFindings: [],
         waiversCount:
@@ -243,9 +250,13 @@ export async function analyzeReview(
     return {
       ...finalAggregated,
       activeFindings: reconciled.activeFindings,
+      effectivePolicyDigest:
+        context.schemaVersion === 3 ? context.effectivePolicyDigest : undefined,
       policySource:
         context.schemaVersion === 3 ? context.policySource : undefined,
       resolvedFindings: reconciled.resolvedFindings,
+      sourceDigest:
+        context.schemaVersion === 3 ? context.sourceDigest : undefined,
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
       waiversCount:

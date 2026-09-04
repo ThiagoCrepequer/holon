@@ -9,6 +9,7 @@ import {
   reviewJobSchema,
   type CheckRunConclusion,
   type CheckRunOutput,
+  type RepositoryPolicy,
   type ReviewJob,
   type RunTelemetry,
   type StepTiming,
@@ -62,6 +63,27 @@ import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 export type { ReviewRuntime } from "./review-services.js";
 export { parseAppId } from "./credential-broker.js";
 
+const repositoryPolicyFailureMessages: Readonly<Record<string, string>> = {
+  RepositoryPolicyConflictError:
+    "Use somente um arquivo de política: .github/holon.yml ou .holon.yml.",
+  RepositoryPolicySchemaError:
+    "A política não corresponde ao schema estrito da versão 1.",
+  RepositoryPolicyScopeError:
+    "A política contém uma exclusão de escopo proibida.",
+  RepositoryPolicySecurityError:
+    "O arquivo de política falhou nas validações de segurança.",
+  RepositoryPolicySyntaxError:
+    "O YAML da política contém sintaxe ou construções não suportadas.",
+};
+
+function repositoryPolicyFailureMessage(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const kind = error.message.startsWith("HOLON_REPOSITORY_POLICY:")
+    ? error.message.slice("HOLON_REPOSITORY_POLICY:".length)
+    : error.name;
+  return repositoryPolicyFailureMessages[kind];
+}
+
 export class ReviewWorkflow extends WorkflowEntrypoint<
   Cloudflare.Env,
   ReviewJob
@@ -114,6 +136,7 @@ export async function executeReviewWorkflow(
   });
   let repositoryStarted = false;
   let runClaimed = false;
+  let effectivePolicy: RepositoryPolicy | undefined;
 
   const moveTo = async (
     stepName: string,
@@ -150,17 +173,21 @@ export async function executeReviewWorkflow(
       return occurredAt;
     });
 
+  const refsAreCurrent = async (
+    github: GitHubMutationContext,
+  ): Promise<boolean> => {
+    const refs = await github.readCurrentRefs();
+    return !(
+      refs.headSha !== job.envelope.pullRequest.headSha ||
+      refs.baseSha !== job.envelope.pullRequest.baseSha
+    );
+  };
+
   const authorizeMutation = async (
     github: GitHubMutationContext,
     purpose: "failure" | "review",
   ): Promise<boolean> => {
-    const refs = await github.readCurrentRefs();
-    if (
-      refs.headSha !== job.envelope.pullRequest.headSha ||
-      refs.baseSha !== job.envelope.pullRequest.baseSha
-    ) {
-      return false;
-    }
+    if (!(await refsAreCurrent(github))) return false;
     return await services.ledger.authorizeMutation(run.id, purpose);
   };
 
@@ -170,11 +197,16 @@ export async function executeReviewWorkflow(
     cleanup: boolean,
   ) => {
     if (repositoryStarted) {
-      await updateCheckRunCompleted("cancel-check-run", "cancelled", {
-        summary:
-          "A newer commit or updated base was detected on this pull request. This review run was superseded.",
-        title: "Holon Review Superseded",
-      });
+      await updateCheckRunCompleted(
+        "cancel-check-run",
+        "cancelled",
+        {
+          summary:
+            "A newer commit or updated base was detected on this pull request. This review run was superseded.",
+          title: "Holon Review Superseded",
+        },
+        false,
+      );
     }
     const occurredAt = await moveTo(stepName, expected, "obsolete", cleanup);
     const result = { findingsPublished: 0, outcome: "obsolete" } as const;
@@ -263,7 +295,8 @@ export async function executeReviewWorkflow(
     stepName: string,
     conclusion: CheckRunConclusion,
     output: CheckRunOutput,
-  ): Promise<void> => {
+    requireCurrentRefs = true,
+  ): Promise<boolean> =>
     await step
       .do(stepName, publicationStep, async () => {
         let checkRunId = await services.ledger.checkRunId(run.id);
@@ -278,6 +311,9 @@ export async function executeReviewWorkflow(
           checkRunId !== undefined &&
           github.publisher.updateCheckRun !== undefined
         ) {
+          if (requireCurrentRefs && !(await refsAreCurrent(github))) {
+            return false;
+          }
           await github.publisher.updateCheckRun({
             checkRunId,
             completedAt: now(),
@@ -286,14 +322,15 @@ export async function executeReviewWorkflow(
             status: "completed",
           });
         }
+        return true;
       })
       .catch((checkRunError: unknown) => {
         emit("check_run.update_failed", {
           errorKind: errorKind(checkRunError),
           stepName,
         });
+        return true;
       });
-  };
 
   const workflowStartedAt = now();
   const stepTimings: StepTiming[] = [];
@@ -409,7 +446,9 @@ export async function executeReviewWorkflow(
       );
     }
 
-    const effectivePolicy = await step.do(
+    await ensureCheckRunStarted();
+
+    effectivePolicy = await step.do(
       "resolve-repository-policy",
       repositoryStep,
       async () => {
@@ -430,7 +469,7 @@ export async function executeReviewWorkflow(
             policyError instanceof RepositoryPolicySecurityError
           ) {
             throw new NonRetryableError(
-              `HOLON_REPOSITORY_POLICY:${policyError.name}:${policyError.message}`,
+              `HOLON_REPOSITORY_POLICY:${policyError.name}`,
             );
           }
           throw policyError;
@@ -439,7 +478,6 @@ export async function executeReviewWorkflow(
     );
 
     repositoryStarted = true;
-    await ensureCheckRunStarted();
     const prepStart = Date.now();
     await step.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
@@ -457,7 +495,7 @@ export async function executeReviewWorkflow(
     const output = await step.do(
       "analyze-review",
       modelStep,
-      async () => await analyzeReview(job, services, emit),
+      async () => await analyzeReview(job, services, emit, effectivePolicy),
     );
     recordStepTiming("analyze-review", Date.now() - analysisStart, "success");
 
@@ -566,26 +604,36 @@ export async function executeReviewWorkflow(
     for (const [index, resolved] of output.resolvedFindings.entries()) {
       const commentId = resolved.githubCommentId;
       if (commentId === undefined) continue;
-      await step.do(
+      const resolutionAuthorized = await step.do(
         `notify-resolved-${index + 1}`,
         publicationStep,
         async () => {
           const github = await services.createMutationContext();
-          if (github.publisher.replyToComment === undefined) return;
+          if (github.publisher.replyToComment === undefined) return true;
+          if (!(await authorizeMutation(github, "review"))) return false;
           try {
             const shortSha = job.envelope.pullRequest.headSha.slice(0, 7);
             await github.publisher.replyToComment(
               commentId,
               `✅ Defeito resolvido no commit \`${shortSha}\`.`,
             );
+            return true;
           } catch (error) {
             emit("finding.resolution_reply_failed", {
               commentId,
               errorKind: errorKind(error),
             });
+            return true;
           }
         },
       );
+      if (!resolutionAuthorized) {
+        return await completeObsolete(
+          "publishing",
+          "mark-obsolete-before-resolution-reply",
+          true,
+        );
+      }
     }
 
     const summaryResult = await step.do(
@@ -663,6 +711,7 @@ export async function executeReviewWorkflow(
     );
     const checkRunOutput = formatCheckRunOutput({
       durationMs: durationFrom(rawEvent.timestamp, now()),
+      effectivePolicyDigest: output.effectivePolicyDigest,
       findings: output.findings,
       partial: isPartial,
       policySource: output.policySource,
@@ -670,16 +719,24 @@ export async function executeReviewWorkflow(
       scopeStatus: output.scopeStatus,
       shardsAnalyzed: output.shardsAnalyzed,
       structuralImpact: output.structuralImpact,
+      sourceDigest: output.sourceDigest,
       summary: output.summary,
       totalShards: output.totalShards,
       verdict: output.verdict,
       waiversCount: output.waiversCount,
     });
-    await updateCheckRunCompleted(
+    const checkRunAuthorized = await updateCheckRunCompleted(
       "complete-check-run",
       checkRunConclusion,
       checkRunOutput,
     );
+    if (!checkRunAuthorized) {
+      return await completeObsolete(
+        "publishing",
+        "mark-obsolete-before-terminal-check-run",
+        true,
+      );
+    }
 
     recordStepTiming("publication", Date.now() - pubStart, "success");
 
@@ -697,14 +754,23 @@ export async function executeReviewWorkflow(
       cost,
       createdAt: finishedAt,
       durationMs: totalDurationMs,
+      ...(output.effectivePolicyDigest === undefined
+        ? {}
+        : { effectivePolicyDigest: output.effectivePolicyDigest }),
       headSha: job.envelope.pullRequest.headSha,
       isDegraded: output.isDegraded === true,
+      ...(output.policySource === undefined
+        ? {}
+        : { policySource: output.policySource }),
       prKey,
       queueWaitMs,
       runId: run.id,
       scopeStatus: output.scopeStatus,
       shardsCount: output.totalShards,
       stepTimings,
+      ...(output.sourceDigest === undefined
+        ? {}
+        : { sourceDigest: output.sourceDigest }),
       terminalState: "completed",
       tokens: tokenAccounting,
       toolCallsCount: usage.toolCallsCount,
@@ -746,26 +812,17 @@ export async function executeReviewWorkflow(
         (error.message.startsWith("HOLON_REPOSITORY_POLICY:") ||
           error.name.startsWith("RepositoryPolicy")));
 
-    const policyErrorMessage =
-      isPolicyError && error instanceof Error
-        ? error.message.startsWith("HOLON_REPOSITORY_POLICY:")
-          ? error.message.replace(/^HOLON_REPOSITORY_POLICY:[^:]*:/, "")
-          : error.message
-        : undefined;
+    const policyErrorMessage = repositoryPolicyFailureMessage(error);
 
     if (runClaimed) {
-      await updateCheckRunCompleted(
-        "fail-check-run",
-        isPolicyError ? "neutral" : "failure",
-        {
-          summary: isPolicyError
-            ? `A política configurada para o repositório (.github/holon.yml ou .holon.yml) é inválida:\n\n> ${policyErrorMessage ?? "Erro de configuração"}`
-            : "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
-          title: isPolicyError
-            ? "Política de repositório inválida"
-            : "Holon Review Failed",
-        },
-      );
+      await updateCheckRunCompleted("fail-check-run", "failure", {
+        summary: isPolicyError
+          ? `A política configurada para o repositório (.github/holon.yml ou .holon.yml) é inválida:\n\n> ${policyErrorMessage ?? "Erro de configuração"}`
+          : "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
+        title: isPolicyError
+          ? "Política de repositório inválida"
+          : "Holon Review Failed",
+      });
     }
 
     const failedAt = now();
@@ -782,6 +839,15 @@ export async function executeReviewWorkflow(
       cost,
       createdAt: failedAt,
       durationMs: failedDurationMs,
+      ...(effectivePolicy === undefined
+        ? {}
+        : {
+            effectivePolicyDigest: effectivePolicy.effectivePolicyDigest,
+            policySource: effectivePolicy.source,
+            ...(effectivePolicy.sourceDigest === null
+              ? {}
+              : { sourceDigest: effectivePolicy.sourceDigest }),
+          }),
       headSha: job.envelope.pullRequest.headSha,
       isDegraded: true,
       prKey,

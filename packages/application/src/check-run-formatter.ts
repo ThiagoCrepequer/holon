@@ -2,16 +2,18 @@ import type {
   CheckRunConclusion,
   CheckRunOutput,
   ReconciliationSummary,
+  RepositoryPolicySource,
   StructuralImpactReport,
 } from "@holon/contracts";
 import type { Finding, ReviewVerdict } from "@holon/domain";
 
 export interface CheckRunFormattingOptions {
   readonly durationMs?: number | undefined;
+  readonly effectivePolicyDigest?: string | undefined;
   readonly fileCount?: number | undefined;
   readonly findings: readonly Finding[];
   readonly partial?: boolean | undefined;
-  readonly policySource?: string | undefined;
+  readonly policySource?: RepositoryPolicySource | undefined;
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly scopeStatus?:
     | "complete"
@@ -21,6 +23,7 @@ export interface CheckRunFormattingOptions {
     | undefined;
   readonly shardsAnalyzed?: number | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
+  readonly sourceDigest?: string | null | undefined;
   readonly summary: string;
   readonly totalShards?: number | undefined;
   readonly verdict?: ReviewVerdict | undefined;
@@ -109,6 +112,18 @@ export function formatCheckRunOutput(
   } else if (options.waiversCount !== undefined && options.waiversCount > 0) {
     details.push(
       `- **Policy Waivers**: ${options.waiversCount} file(s) waived by repository policy`,
+    );
+  }
+  if (options.effectivePolicyDigest !== undefined) {
+    details.push(
+      `- **Effective policy digest**: \`${options.effectivePolicyDigest}\``,
+    );
+  }
+  if (options.sourceDigest !== undefined) {
+    details.push(
+      options.sourceDigest === null
+        ? "- **Policy source digest**: `default`"
+        : `- **Policy source digest**: \`${options.sourceDigest}\``,
     );
   }
   if (reconciliation !== undefined) {

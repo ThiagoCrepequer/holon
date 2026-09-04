@@ -1,4 +1,5 @@
 import type { ReviewFileMode } from "@holon/contracts";
+import { isProtectedPath } from "@holon/domain";
 
 import type { PullRequestDiffFile } from "./diff.js";
 import { matchesAnyPathGlob } from "./glob-matcher.js";
@@ -331,9 +332,12 @@ export function classifyReviewPath(
   path: string,
   additionalExcludes?: readonly string[],
 ): ReviewFileMode | undefined {
+  if (!isNormalizedRepositoryPath(path)) return undefined;
+  if (isProtectedPath(path)) {
+    return structuralExtension.test(path) ? "structural" : "textual";
+  }
   const basename = path.slice(path.lastIndexOf("/") + 1);
   if (
-    !isNormalizedRepositoryPath(path) ||
     isExcludedDirectory(path) ||
     isGeneratedFile(basename) ||
     isMinifiedFile(basename) ||

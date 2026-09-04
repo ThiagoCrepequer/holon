@@ -173,7 +173,9 @@ export interface ReviewServices {
     maximumPreparationAttempts: number,
     effectivePolicy?: RepositoryPolicy,
   ): Promise<void>;
-  loadContext(): Promise<ReviewContextV3 | ReviewContextV2>;
+  loadContext(
+    effectivePolicy?: RepositoryPolicy,
+  ): Promise<ReviewContextV3 | ReviewContextV2>;
   prepareRepository(
     maximumAttempts: number,
     effectivePolicy?: RepositoryPolicy,
@@ -338,17 +340,13 @@ export function createReviewServices(
     }
   };
 
-  let activePolicy: RepositoryPolicy | undefined;
-
   const prepareOnce = async (
     policy?: RepositoryPolicy,
   ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2> => {
     try {
       const effectivePolicy =
         policy ??
-        activePolicy ??
         (await createDefaultRepositoryPolicy(job.envelope.pullRequest.baseSha));
-      activePolicy = effectivePolicy;
 
       const github = await createSession();
       const canonicalDiff = await executeGitHubOperation(() =>
@@ -398,9 +396,9 @@ export function createReviewServices(
             errorKind: "RepositoryV3RequiredError",
             reason:
               "Custom repository policy requires executor RPC V3, but executor does not support prepareRepositoryV3",
-            retryable: true,
+            retryable: false,
           });
-          throw new RepositoryTransientError("executor", { cause: error });
+          throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
         }
 
         const requestV2 = executorRequestV2Schema.parse({
@@ -469,13 +467,14 @@ export function createReviewServices(
   let inputTokens = 0;
   let outputTokens = 0;
   let toolCallsCount = 0;
+  let currentAnalysisPolicy: RepositoryPolicy | undefined;
 
   const toolRunner = createBoundedRepositoryToolRunner(
     createRedactingRepositoryToolRunner({
       run: async (call) => {
         toolCallsCount += 1;
         if (!(await executor.hasContext(job.runId))) {
-          await prepareRepository(2, activePolicy);
+          await prepareRepository(2, currentAnalysisPolicy);
         }
         return repositoryToolResultSchema.parse(
           await executor.runTool(job.runId, call),
@@ -597,11 +596,15 @@ export function createReviewServices(
     createMutationContext: mutationContext,
     createSession: async () => await createSession(),
     ensureContext: async (maximumPreparationAttempts, effectivePolicy) => {
+      currentAnalysisPolicy = effectivePolicy;
       if (!(await executor.hasContext(job.runId))) {
         await prepareRepository(maximumPreparationAttempts, effectivePolicy);
       }
     },
-    loadContext: async () => {
+    loadContext: async (effectivePolicy) => {
+      currentAnalysisPolicy = effectivePolicy;
+      const customPolicyActive =
+        effectivePolicy !== undefined && effectivePolicy.source !== "default";
       if (executor.loadContextV3 !== undefined) {
         try {
           const loaded = await executor.loadContextV3(job.runId);
@@ -610,7 +613,13 @@ export function createReviewServices(
           if (!isExecutorRpcMethodUnavailable(error, "loadContextV3")) {
             throw error;
           }
+          if (customPolicyActive) {
+            throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
+          }
         }
+      }
+      if (customPolicyActive) {
+        throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
       }
       try {
         if (executor.loadContextV2 === undefined) {
