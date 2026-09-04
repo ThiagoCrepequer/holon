@@ -422,4 +422,171 @@ describe("GitHub installation client", () => {
       },
     ]);
   });
+
+  it("fetches pull request refs (headSha and baseSha)", async () => {
+    const session = await createInstallationSession(
+      { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+      99,
+      42,
+    );
+    sdk.request.mockResolvedValueOnce({
+      data: {
+        base: { sha: "b".repeat(40) },
+        head: { sha: "a".repeat(40) },
+      },
+    });
+
+    const refs = await session.currentPullRequestRefs!("acme", "api", 7);
+    expect(refs).toEqual({
+      baseSha: "b".repeat(40),
+      headSha: "a".repeat(40),
+    });
+  });
+
+  describe("readRepositoryPolicyFile", () => {
+    it("reads and decodes valid base64 policy file", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      const yamlContent =
+        'version: 1\nreview:\n  additional_excludes: ["vendor/**"]\n';
+      const base64 = btoa(yamlContent);
+      sdk.request.mockResolvedValueOnce({
+        data: {
+          content: base64,
+          encoding: "base64",
+          type: "file",
+        },
+      });
+
+      const result = await session.readRepositoryPolicyFile!(
+        "acme",
+        "api",
+        "b".repeat(40),
+        ".github/holon.yml",
+      );
+      expect(result).toBeDefined();
+      expect(result?.content).toBe(yamlContent);
+      expect(result?.rawBytes).toBeInstanceOf(Uint8Array);
+    });
+
+    it("returns undefined when policy file is not found (404)", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      sdk.request.mockRejectedValueOnce({ status: 404 });
+
+      const result = await session.readRepositoryPolicyFile!(
+        "acme",
+        "api",
+        "b".repeat(40),
+        ".github/holon.yml",
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it("rejects directory responses or non-file types", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      sdk.request.mockResolvedValueOnce({ data: [{ name: "item" }] });
+      await expect(
+        session.readRepositoryPolicyFile!(
+          "acme",
+          "api",
+          "b".repeat(40),
+          ".github/holon.yml",
+        ),
+      ).rejects.toThrow("directory");
+
+      sdk.request.mockResolvedValueOnce({ data: { type: "submodule" } });
+      await expect(
+        session.readRepositoryPolicyFile!(
+          "acme",
+          "api",
+          "b".repeat(40),
+          ".github/holon.yml",
+        ),
+      ).rejects.toThrow("submodule");
+    });
+
+    it("rejects unexpected encoding", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      sdk.request.mockResolvedValueOnce({
+        data: {
+          content: "text",
+          encoding: "none",
+          type: "file",
+        },
+      });
+      await expect(
+        session.readRepositoryPolicyFile!(
+          "acme",
+          "api",
+          "b".repeat(40),
+          ".github/holon.yml",
+        ),
+      ).rejects.toThrow("Unexpected encoding");
+    });
+
+    it("rejects policy files exceeding 64 KiB", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      const largeContent = "a".repeat(65_537);
+      const base64 = btoa(largeContent);
+      sdk.request.mockResolvedValueOnce({
+        data: {
+          content: base64,
+          encoding: "base64",
+          type: "file",
+        },
+      });
+      await expect(
+        session.readRepositoryPolicyFile!(
+          "acme",
+          "api",
+          "b".repeat(40),
+          ".github/holon.yml",
+        ),
+      ).rejects.toThrow("exceeds 64 KiB limit");
+    });
+
+    it("rejects policy files containing forbidden control characters", async () => {
+      const session = await createInstallationSession(
+        { appId: 123, appSlug: "holon-reviewer", privateKey: "private-key" },
+        99,
+        42,
+      );
+      const badContent = "version: 1\0";
+      const base64 = btoa(badContent);
+      sdk.request.mockResolvedValueOnce({
+        data: {
+          content: base64,
+          encoding: "base64",
+          type: "file",
+        },
+      });
+      await expect(
+        session.readRepositoryPolicyFile!(
+          "acme",
+          "api",
+          "b".repeat(40),
+          ".github/holon.yml",
+        ),
+      ).rejects.toThrow("forbidden control characters");
+    });
+  });
 });
