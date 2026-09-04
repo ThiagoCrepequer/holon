@@ -18,9 +18,10 @@ import { Link } from "react-router";
 import type { AnalyticsTrendData } from "../../workers/observability/analytics-client.js";
 import type { QueueHealthData } from "../../workers/observability/queue-metrics-client.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../../workers/types.js";
-import { DegradedBanner } from "../components/degraded-banner.js";
 import { LatencyChart } from "../components/latency-chart.js";
 import { Layout } from "../components/layout.js";
+import { OperationalStatusBanner } from "../components/operational-status-banner.js";
+import type { OperationalNotice } from "../operational-status.js";
 
 export interface DashboardViewProps {
   readonly userEmail?: string | undefined;
@@ -29,7 +30,7 @@ export interface DashboardViewProps {
   readonly analyticsTrend: AnalyticsTrendData | null;
   readonly queueHealth: QueueHealthData | null;
   readonly recentRuns: AdminRunRow[];
-  readonly degradedServices: string[];
+  readonly operationalNotices: readonly OperationalNotice[];
   readonly watermark: {
     readonly enabledAt: string | null;
     readonly lastReceivedAt: string | null;
@@ -43,7 +44,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   analyticsTrend,
   queueHealth,
   recentRuns,
-  degradedServices,
+  operationalNotices,
   watermark,
 }) => {
   const successRate =
@@ -62,8 +63,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <Layout userEmail={userEmail} currentPath="/">
-      {/* Degraded Alert */}
-      <DegradedBanner degradedServices={degradedServices} />
+      <OperationalStatusBanner notices={operationalNotices} />
 
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
         Data is available only from the projection cutover
@@ -211,11 +211,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-zinc-500">Pipeline State:</span>
                 <Badge
-                  variant={queueHealth?.isDegraded ? "warning" : "success"}
+                  variant={
+                    queueHealth === null
+                      ? "info"
+                      : queueHealth.isDegraded
+                        ? "warning"
+                        : "success"
+                  }
                   size="sm"
                   dot
                 >
-                  {queueHealth?.isDegraded ? "Degraded" : "Healthy"}
+                  {queueHealth === null
+                    ? "Unavailable"
+                    : queueHealth.isDegraded
+                      ? "Degraded"
+                      : "Healthy"}
                 </Badge>
               </div>
             </CardContent>

@@ -3,16 +3,8 @@ import type { RunTelemetry, StepTiming } from "@holon/contracts";
 
 import { consoleLogger, type StructuredLogger } from "./observability.js";
 
-export interface AnalyticsEngineDatasetLike {
-  writeDataPoint(point: {
-    blobs?: (string | null | undefined)[];
-    doubles?: (number | null | undefined)[];
-    indexes?: (string | null | undefined)[];
-  }): void;
-}
-
 export class AnalyticsEngineTelemetryEmitter implements TelemetryEmitter {
-  public constructor(private readonly dataset?: AnalyticsEngineDatasetLike) {}
+  public constructor(private readonly dataset?: AnalyticsEngineDataset) {}
 
   public emitRunTelemetry(telemetry: RunTelemetry): void {
     if (!this.dataset) return;
@@ -25,9 +17,9 @@ export class AnalyticsEngineTelemetryEmitter implements TelemetryEmitter {
           telemetry.scopeStatus,
           telemetry.verdict ?? "UNKNOWN",
           telemetry.prKey,
-          telemetry.policySource,
-          telemetry.effectivePolicyDigest,
-          telemetry.sourceDigest,
+          telemetry.policySource ?? null,
+          telemetry.effectivePolicyDigest ?? null,
+          telemetry.sourceDigest ?? null,
         ],
         doubles: [
           telemetry.durationMs,

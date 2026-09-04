@@ -670,7 +670,9 @@ Manter `AnalyticsEngineTelemetryEmitter` no control plane como único writer. Do
 | `scopeStatus`                | `blob4`          |
 | `verdict`                    | `blob5`          |
 | `prKey`                      | `blob6`          |
-| `schemaVersion`              | `blob7`          |
+| `policySource`               | `blob7`          |
+| `effectivePolicyDigest`      | `blob8`          |
+| `sourceDigest`               | `blob9`          |
 | `durationMs`                 | `double1`        |
 | `reviewAdmissionQueueWaitMs` | `double2`        |
 | `inputTokens`                | `double3`        |

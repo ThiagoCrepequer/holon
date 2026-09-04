@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { deriveOperationalNotices } from "../app/operational-status.js";
 import type { AdminEnv } from "../workers/app.js";
 import { queryAnalyticsTrend } from "../workers/observability/analytics-client.js";
 import { queryQueueHealth } from "../workers/observability/queue-metrics-client.js";
@@ -7,15 +8,22 @@ import {
   type AdminReadRpcClient,
   checkReadiness,
 } from "../workers/observability/readiness.js";
+import { consoleObservabilityLogger } from "../workers/observability/safe-log.js";
 
 describe("Observability clients and readiness probe", () => {
   describe("queryAnalyticsTrend", () => {
     it("returns unavailable when accountId or apiToken is missing", async () => {
-      const res = await queryAnalyticsTrend("24h", {});
+      const logger = vi.fn();
+      const res = await queryAnalyticsTrend("24h", { logger });
       expect(res.status).toBe("unavailable");
       if (res.status === "unavailable") {
-        expect(res.reason).toBe("missing_credentials");
+        expect(res.reason).toBe("missing_configuration");
       }
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "analytics_engine",
+        reason: "missing_configuration",
+      });
     });
 
     it("validates a sampled, bucketed analytics response", async () => {
@@ -89,29 +97,47 @@ describe("Observability clients and readiness probe", () => {
       const mockFetch = vi
         .fn()
         .mockResolvedValue(new Response("Server Error", { status: 500 }));
+      const logger = vi.fn();
 
       const res = await queryAnalyticsTrend("7d", {
         accountId: "acc-123",
         apiToken: "tok-456",
         fetchFn: mockFetch,
+        logger,
       });
 
       expect(res.status).toBe("unavailable");
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "analytics_engine",
+        reason: "upstream_error",
+        upstreamStatus: 500,
+      });
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("tok-456");
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("Server Error");
     });
 
     it("handles fetch rejection or json parse error", async () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error("network error"));
+      const logger = vi.fn();
 
       const res = await queryAnalyticsTrend("24h", {
         accountId: "acc-123",
         apiToken: "tok-456",
         fetchFn: mockFetch,
+        logger,
       });
 
       expect(res.status).toBe("unavailable");
       if (res.status === "unavailable") {
         expect(res.reason).toBe("request_failed");
       }
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "analytics_engine",
+        reason: "request_failed",
+      });
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("network error");
     });
 
     it("rejects malformed or non-JSON upstream data", async () => {
@@ -147,11 +173,17 @@ describe("Observability clients and readiness probe", () => {
 
   describe("queryQueueHealth", () => {
     it("returns unavailable when config is missing", async () => {
-      const res = await queryQueueHealth({});
+      const logger = vi.fn();
+      const res = await queryQueueHealth({ logger });
       expect(res.status).toBe("unavailable");
       if (res.status === "unavailable") {
         expect(res.reason).toBe("missing_configuration");
       }
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "queue_metrics",
+        reason: "missing_configuration",
+      });
     });
 
     it("parses queue metrics and detects healthy state", async () => {
@@ -284,34 +316,54 @@ describe("Observability clients and readiness probe", () => {
       const mockFetch = vi
         .fn()
         .mockResolvedValue(new Response("Queue not found", { status: 404 }));
+      const logger = vi.fn();
 
       const res = await queryQueueHealth({
         accountId: "acc-1",
         apiToken: "tok-1",
         queueId: "queue-missing",
         fetchFn: mockFetch,
+        logger,
       });
 
       expect(res.status).toBe("unavailable");
       if (res.status === "unavailable") {
-        expect(res.reason).toBe("queue_api_error");
+        expect(res.reason).toBe("upstream_error");
       }
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "queue_metrics",
+        reason: "upstream_error",
+        upstreamStatus: 404,
+      });
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("tok-1");
+      expect(JSON.stringify(logger.mock.calls)).not.toContain(
+        "Queue not found",
+      );
     });
 
     it("handles fetch rejection or network error", async () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error("network error"));
+      const logger = vi.fn();
 
       const res = await queryQueueHealth({
         accountId: "acc-1",
         apiToken: "tok-1",
         queueId: "queue-main",
         fetchFn: mockFetch,
+        logger,
       });
 
       expect(res.status).toBe("unavailable");
       if (res.status === "unavailable") {
         expect(res.reason).toBe("request_failed");
       }
+      expect(logger).toHaveBeenCalledExactlyOnceWith({
+        event: "holon.admin.integration_unavailable",
+        integration: "queue_metrics",
+        reason: "request_failed",
+      });
+      expect(JSON.stringify(logger.mock.calls)).not.toContain("network error");
     });
 
     it("does not report a configured DLQ as empty when its metrics fail", async () => {
@@ -344,6 +396,61 @@ describe("Observability clients and readiness probe", () => {
         }),
       ).resolves.toMatchObject({ status: "unavailable" });
     });
+  });
+
+  describe("deriveOperationalNotices", () => {
+    it("distinguishes unavailable integrations from an actual queue SLO breach", () => {
+      expect(
+        deriveOperationalNotices(
+          { status: "unavailable", reason: "missing_configuration" },
+          { status: "unavailable", reason: "missing_configuration" },
+        ),
+      ).toEqual([
+        { service: "Analytics Engine", state: "unavailable" },
+        { service: "Queue Pipeline", state: "unavailable" },
+      ]);
+
+      expect(
+        deriveOperationalNotices(
+          {
+            status: "ok",
+            data: {
+              p50DurationMs: 0,
+              p95DurationMs: 0,
+              points: [],
+              sampledRunsCount: 0,
+              window: "24h",
+            },
+          },
+          {
+            status: "ok",
+            data: {
+              backlogCount: 1,
+              dlqCount: 0,
+              isDegraded: true,
+              oldestMessageAgeSeconds: 301,
+            },
+          },
+        ),
+      ).toEqual([{ service: "Queue Pipeline", state: "degraded" }]);
+    });
+  });
+
+  it("serializes the allowlisted integration event for Workers Logs", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const entry = {
+      event: "holon.admin.integration_unavailable",
+      integration: "queue_metrics",
+      reason: "upstream_error",
+      upstreamStatus: 503,
+    } as const;
+
+    try {
+      consoleObservabilityLogger(entry);
+      expect(warn).toHaveBeenCalledExactlyOnceWith(JSON.stringify(entry));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   describe("checkReadiness", () => {

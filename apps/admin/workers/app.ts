@@ -6,11 +6,8 @@ import { processRetentionCleanup } from "./retention-handler.js";
 import { handleConsoleRequest } from "./router.js";
 
 export interface AdminEnv extends Env {
-  readonly CF_ACCOUNT_ID?: string;
   readonly CF_ANALYTICS_API_TOKEN?: string;
   readonly CF_QUEUES_READ_TOKEN?: string;
-  readonly PROJECTION_QUEUE_ID?: string;
-  readonly PROJECTION_DLQ_ID?: string;
 }
 
 export async function handleAdminFetch(

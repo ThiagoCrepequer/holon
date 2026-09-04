@@ -159,11 +159,11 @@ function render(element: React.ReactNode, location = "/") {
 }
 
 describe("admin views", () => {
-  it("renders dashboard states and every run badge variant", () => {
-    const healthy = render(
+  it("renders actual queue degradation without conflating unavailable telemetry", () => {
+    const degraded = render(
       <DashboardView
         analyticsTrend={null}
-        degradedServices={["Queue Pipeline"]}
+        operationalNotices={[{ service: "Queue Pipeline", state: "degraded" }]}
         queueHealth={{
           backlogCount: 3,
           dlqCount: 1,
@@ -180,15 +180,19 @@ describe("admin views", () => {
         window="24h"
       />,
     );
-    expect(healthy).toContain("Oldest Message:");
-    expect(healthy).toContain("400s");
-    expect(healthy).toContain("Operational Degradation Detected");
+    expect(degraded).toContain("Oldest Message:");
+    expect(degraded).toContain("400s");
+    expect(degraded).toContain("Operational Degradation Detected");
+    expect(degraded).toContain("Queue Pipeline · Degraded");
 
-    const warning = render(
+    const unavailable = render(
       <DashboardView
         analyticsTrend={null}
-        degradedServices={["Analytics Engine"]}
-        queueHealth={{ backlogCount: 0, dlqCount: 0, isDegraded: false }}
+        operationalNotices={[
+          { service: "Analytics Engine", state: "unavailable" },
+          { service: "Queue Pipeline", state: "unavailable" },
+        ]}
+        queueHealth={null}
         recentRuns={[]}
         summary={{
           ...baseSummary,
@@ -199,14 +203,21 @@ describe("admin views", () => {
         window="7d"
       />,
     );
-    expect(warning).toContain("No review runs recorded");
-    expect(warning).toContain("watermark unavailable");
+    expect(unavailable).toContain("Optional Telemetry Unavailable");
+    expect(unavailable).toContain("Core review processing remains available");
+    expect(unavailable).toContain("Queue Pipeline · Unavailable");
+    expect(unavailable).toContain("Pipeline State:");
+    expect(unavailable).toContain("Unavailable");
+    expect(unavailable).not.toContain("Operational Degradation Detected");
+    expect(unavailable).not.toContain("Healthy");
+    expect(unavailable).toContain("No review runs recorded");
+    expect(unavailable).toContain("watermark unavailable");
 
     const empty = render(
       <DashboardView
         analyticsTrend={null}
-        degradedServices={[]}
-        queueHealth={null}
+        operationalNotices={[]}
+        queueHealth={{ backlogCount: 0, dlqCount: 0, isDegraded: false }}
         recentRuns={[]}
         summary={{ ...baseSummary, completedRuns: 0, totalRuns: 0 }}
         watermark={{ enabledAt: null, lastReceivedAt: null }}
@@ -214,6 +225,8 @@ describe("admin views", () => {
       />,
     );
     expect(empty).toContain("0%");
+    expect(empty).toContain("Healthy");
+    expect(empty).not.toContain("Optional Telemetry Unavailable");
   });
 
   it("renders filtered, empty and paginated run listings", () => {

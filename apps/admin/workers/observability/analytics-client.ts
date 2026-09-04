@@ -7,6 +7,11 @@
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json.js";
+import {
+  consoleObservabilityLogger,
+  type IntegrationUnavailableReason,
+  type ObservabilityLogger,
+} from "./safe-log.js";
 
 export interface AnalyticsTrendPoint {
   readonly bucket: string;
@@ -25,13 +30,17 @@ export interface AnalyticsTrendData {
 
 export type AnalyticsQueryResult =
   | { readonly status: "ok"; readonly data: AnalyticsTrendData }
-  | { readonly status: "unavailable"; readonly reason?: string | undefined };
+  | {
+      readonly status: "unavailable";
+      readonly reason: IntegrationUnavailableReason;
+    };
 
 export interface AnalyticsClientConfig {
   readonly accountId?: string | undefined;
   readonly apiToken?: string | undefined;
   readonly datasetName?: string | undefined;
   readonly fetchFn?: typeof fetch | undefined;
+  readonly logger?: ObservabilityLogger | undefined;
 }
 
 const analyticsResponseSchema = z.object({
@@ -54,10 +63,24 @@ export async function queryAnalyticsTrend(
     apiToken,
     datasetName = "holon_telemetry_events",
     fetchFn = fetch,
+    logger = consoleObservabilityLogger,
   } = config;
 
+  const unavailable = (
+    reason: IntegrationUnavailableReason,
+    upstreamStatus?: number,
+  ): AnalyticsQueryResult => {
+    logger({
+      event: "holon.admin.integration_unavailable",
+      integration: "analytics_engine",
+      reason,
+      ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
+    });
+    return { status: "unavailable", reason };
+  };
+
   if (!accountId || !apiToken) {
-    return { status: "unavailable", reason: "missing_credentials" };
+    return unavailable("missing_configuration");
   }
 
   const hours = window === "24h" ? 24 : window === "7d" ? 168 : 720;
@@ -89,7 +112,7 @@ export async function queryAnalyticsTrend(
     });
 
     if (!response.ok) {
-      return { status: "unavailable", reason: "upstream_error" };
+      return unavailable("upstream_error", response.status);
     }
 
     const payload = analyticsResponseSchema.parse(
@@ -117,6 +140,6 @@ export async function queryAnalyticsTrend(
       },
     };
   } catch {
-    return { status: "unavailable", reason: "request_failed" };
+    return unavailable("request_failed");
   }
 }

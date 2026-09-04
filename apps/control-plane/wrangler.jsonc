@@ -5,8 +5,14 @@
   "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "ADMIN_PROJECTION_ENABLED": "false",
+    "ADMIN_PROJECTION_ENABLED": "true",
   },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS_ENGINE",
+      "dataset": "holon_telemetry_events",
+    },
+  ],
   "durable_objects": {
     "bindings": [
       {

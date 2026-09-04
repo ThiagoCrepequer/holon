@@ -4,6 +4,7 @@ import { D1AdminStorage } from "../../workers/d1-adapter.js";
 import { queryAnalyticsTrend } from "../../workers/observability/analytics-client.js";
 import { queryQueueHealth } from "../../workers/observability/queue-metrics-client.js";
 import { parseCursorKeyring } from "../../workers/security/keyring.js";
+import { deriveOperationalNotices } from "../operational-status.js";
 import { adminRequestContext } from "../server/request-context.js";
 import { DashboardView } from "../views/dashboard-view.js";
 
@@ -33,14 +34,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       storage.getProjectionWatermark(),
     ],
   );
-  const degradedServices: string[] = [];
-  if (analytics.status !== "ok") degradedServices.push("Analytics Engine");
-  if (queues.status !== "ok" || queues.data.isDegraded) {
-    degradedServices.push("Queue Pipeline");
-  }
+  const operationalNotices = deriveOperationalNotices(analytics, queues);
   return {
     analyticsTrend: analytics.status === "ok" ? analytics.data : null,
-    degradedServices,
+    operationalNotices,
     queueHealth: queues.status === "ok" ? queues.data : null,
     recentRuns: recentRuns.runs.slice(0, 10),
     summary,

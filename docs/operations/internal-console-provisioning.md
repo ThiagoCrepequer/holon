@@ -67,7 +67,15 @@ wrangler queues create holon-admin-projections-dlq --message-retention-period-se
 > [!IMPORTANT]
 > A DLQ não possui push consumer configurado no `wrangler.jsonc`. O consumo de reprocessamento é realizado via Pull API pelo CLI de administração (`tooling/admin-cli/replay-dlq.ts`).
 
-### 2.3. Aplicação Cloudflare Access
+### 2.3. Dataset do Analytics Engine
+
+O `apps/control-plane/wrangler.jsonc` declara o binding writer
+`ANALYTICS_ENGINE` para o dataset `holon_telemetry_events`. O binding deve
+permanecer no control plane; o admin consulta o dataset pela SQL API com um
+token separado e somente de leitura. Depois de alterar o binding, regenere os
+tipos com `wrangler types` e valide o deploy com `wrangler deploy --dry-run`.
+
+### 2.4. Aplicação Cloudflare Access
 
 1. No dashboard da Cloudflare Zero Trust:
    - Navegue até **Access** > **Applications** > **Add an application**.
@@ -100,7 +108,7 @@ wrangler secret put ADMIN_CURSOR_HMAC_KEYS
 # Token da API Cloudflare para consulta opcional do Analytics Engine (permissão: Account Analytics Read)
 wrangler secret put CF_ANALYTICS_API_TOKEN
 
-# Token da API Cloudflare para consulta de métricas de filas (permissão: Queue Read)
+# Token da API Cloudflare para consulta de métricas de filas (permissão: Queues Read)
 wrangler secret put CF_QUEUES_READ_TOKEN
 ```
 
@@ -111,9 +119,13 @@ wrangler secret put CF_QUEUES_READ_TOKEN
 - `ACCESS_TEAM_NAME="crepequer"`: nome do time no Cloudflare Access.
 - `ACCESS_AUD="50a52aa572751e54ac02ac6dd61ccba516e042229700067910456ec80419163c"`: Audience tag da aplicação Access que protege `admin-holon.crepequer.dev`.
 - `AUTHORIZED_EMAIL_DOMAIN="hotmail.com"`: segunda camada de validação do domínio do e-mail. O valor não inclui `@`; a política primária do Access deve continuar restrita ao endereço completo do operador.
-- `CF_ACCOUNT_ID`: ID da conta Cloudflare (para endpoints REST da Cloudflare).
-- `PROJECTION_QUEUE_ID`: ID ou nome da fila de projeção.
-- `PROJECTION_DLQ_ID`: ID ou nome da DLQ.
+- `CF_ACCOUNT_ID="4be6ae7d1bb4a3b2a395c6d30e2671a5"`: conta que contém os recursos do Holon.
+- `PROJECTION_QUEUE_ID="3519ca1fd3e8481ba54280be80a1ea85"`: ID da fila `holon-admin-projections` usado pela Metrics API.
+- `PROJECTION_DLQ_ID="1ee489d546aa4789a9439bfe66956987"`: ID da fila `holon-admin-projections-dlq` usado pela Metrics API.
+
+Esses três identificadores não concedem acesso e são variáveis não secretas.
+Somente os tokens `CF_ANALYTICS_API_TOKEN` e `CF_QUEUES_READ_TOKEN` autorizam as
+consultas às APIs.
 
 ### 3.3. Workers Logs
 
@@ -123,11 +135,28 @@ O `wrangler.jsonc` habilita persistência de logs, logs de invocação e amostra
 pnpm --filter @holon/admin exec wrangler tail holon-admin --format pretty
 ```
 
-Os logs não devem incluir JWTs, cookies, tokens, prompts, diffs ou conteúdo de repositórios privados.
+Falhas das integrações opcionais emitem somente o evento allowlisted
+`holon.admin.integration_unavailable`, com `integration`, `reason` e, quando
+existir, o código HTTP numérico `upstreamStatus`. Os logs não incluem URL,
+account ID, corpo da resposta, exception message, JWTs, cookies, tokens,
+prompts, diffs ou conteúdo de repositórios privados.
 
 ### 3.4. Flag de rollout do `apps/control-plane`
 
-Configure `ADMIN_PROJECTION_ENABLED="false"` no primeiro deploy do control plane. Depois que migration, consumer e prontidão do admin estiverem validados, altere para `"true"` e faça novo deploy. O `payloadHash` da projeção é SHA-256 não chaveado e não exige segredo compartilhado; ele serve para identidade/idempotência e detecção de corrupção. A autenticidade do produtor é garantida pelo binding da Queue configurado na conta Cloudflare.
+O rollout inicial manteve `ADMIN_PROJECTION_ENABLED="false"` enquanto D1,
+consumer da Queue e RPC privada eram provisionados. O inventário remoto
+confirmou os bindings/recursos e o dashboard confirmou a leitura do D1. A
+configuração versionada atual usa `"true"`; portanto, novos estados terminais
+criam tarefas no outbox e projeções para o D1. Runs concluídas antes do cutover
+não são retroativamente preenchidas. A prova ponta a ponta permanece obrigatória
+depois do deploy, conforme a seção 4.2.
+
+O `payloadHash` da projeção é SHA-256 não chaveado e não exige segredo
+compartilhado; ele serve para identidade/idempotência e detecção de corrupção.
+A autenticidade do produtor é garantida pelo binding da Queue configurado na
+conta Cloudflare. Para rollback operacional, publique temporariamente uma
+versão com a flag `"false"`; tarefas já persistidas no outbox podem terminar o
+envio, mas nenhuma tarefa nova será criada.
 
 ---
 
@@ -150,21 +179,24 @@ Seguindo a ordem de dependência:
    ```bash
    pnpm --filter @holon/admin d1:migrate:remote
    ```
-2. **Deploy do Control Plane** (disponibiliza a RPC `ADMIN_READ_API` e o outbox de projeção):
-   ```bash
-   pnpm --filter @holon/control-plane deploy
-   ```
-3. **Deploy do Admin Console** (registra o consumer de fila e a interface SSR):
+2. **Deploy do Admin Console** (registra o consumer antes de habilitar novos producers):
    ```bash
    pnpm --filter @holon/admin deploy
    ```
-4. **Validação de prontidão**:
-   Acesse a URL `https://admin-holon.crepequer.dev/readiness` e certifique-se de que todos os subsistemas essenciais (`d1`, `rpc`) reportam estado `healthy`.
-5. **Ativação controlada do producer**:
-   - confirme que a UI exibe o watermark `projection_enabled_at` da migration;
-   - altere `ADMIN_PROJECTION_ENABLED` para `"true"` no ambiente pretendido;
-   - faça novo deploy do control plane e valide a chegada de uma projeção sintética;
-   - em rollback, reverta a flag para `"false"`; tarefas já persistidas no outbox podem terminar o envio, mas nenhuma tarefa nova será criada.
+3. **Validação da prontidão essencial**:
+   Acesse `https://admin-holon.crepequer.dev/readiness` e confirme `d1` e `rpc`
+   como `healthy`. O estado global `partial` é aceitável antes de configurar os
+   dois tokens opcionais; `degraded` não é.
+4. **Deploy do Control Plane** (ativa producer, outbox e writer do Analytics Engine):
+   ```bash
+   pnpm --filter @holon/control-plane deploy
+   ```
+5. **Validação ponta a ponta**:
+   - execute uma nova review real depois do deploy;
+   - confirme a atualização de `lastReceivedAt` e a presença da run no console;
+   - confirme que Analytics Engine e Queue Metrics ficam `healthy` depois de
+     configurar seus tokens, ou `unknown`/`partial` enquanto forem omitidos;
+   - confirme que não existem mensagens antigas acima do SLO nem mensagens na DLQ.
 
 O middleware rejeita requisições quando `ACCESS_TEAM_NAME`, `ACCESS_AUD` ou `AUTHORIZED_EMAIL_DOMAIN` estão ausentes ou vazios. `ADMIN_CURSOR_HMAC_KEYS` também é obrigatório; não existe chave padrão para desenvolvimento no runtime.
 
