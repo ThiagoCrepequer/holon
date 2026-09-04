@@ -1,6 +1,7 @@
 import {
   executorRequestSchema,
   executorRequestV1Schema,
+  executorRequestV3Schema,
   repositoryToolCallSchema,
   reviewContextV1Schema,
   type ReviewContextV1,
@@ -309,6 +310,52 @@ describe("RepositoryExecutorService", () => {
     });
   });
 
+  it("prepares repository and loads context under v3 protocol with policy enforcement", async () => {
+    const sandbox = new FakeSandbox();
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    const policy = {
+      additionalExcludes: ["vendor/**"],
+      baseSha: "b".repeat(40),
+      effectivePolicyDigest: "c".repeat(64),
+      source: ".github/holon.yml" as const,
+      sourceDigest: "d".repeat(64),
+      verdictStrictness: "block_all_confident_medium" as const,
+      version: 1 as const,
+    };
+    const requestV3 = executorRequestV3Schema.parse({
+      ...request,
+      effectivePolicy: policy,
+      installationId: 99,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      schemaVersion: 3,
+    });
+
+    await expect(service.prepareRepositoryV3(requestV3)).resolves.toMatchObject(
+      {
+        effectivePolicyDigest: "c".repeat(64),
+        fileCount: 1,
+        schemaVersion: 3,
+        waiversCount: 0,
+      },
+    );
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+      changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+      effectivePolicyDigest: "c".repeat(64),
+      files: [
+        {
+          mode: "structural",
+          patch: request.canonicalDiff,
+          path: "src/index.ts",
+        },
+      ],
+      policySource: ".github/holon.yml",
+      schemaVersion: 3,
+      verdictStrictness: "block_all_confident_medium",
+      waiversCount: 0,
+    });
+  });
+
   it("omits sensitive renames and denies their safe-looking destination for the run", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
@@ -344,7 +391,9 @@ describe("RepositoryExecutorService", () => {
       /\.env\.production|super-secret|rotated-secret/u,
     );
     const policy = sandbox.files.get("/workspace/holon-review-scope.json");
-    expect(policy).toBe('{"deniedPaths":["config.txt"],"schemaVersion":1}');
+    expect(policy).toBe(
+      '{"additionalExcludes":[],"deniedPaths":["config.txt"],"schemaVersion":2}',
+    );
     expect(policy).not.toMatch(/\.env\.production|secret/u);
 
     await expect(

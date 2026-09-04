@@ -14,13 +14,16 @@ import {
 import type {
   ExecutorRequestV1,
   ExecutorRequestV2,
+  ExecutorRequestV3,
   GitHubCredentialRequest,
   GitHubCredentialResponse,
   PreparedRepositoryV1,
   PreparedRepositoryV2,
+  PreparedRepositoryV3,
   RepositoryToolCall,
   ReviewContextV1,
   ReviewContextV2,
+  ReviewContextV3,
 } from "@holon/contracts";
 import {
   githubCredentialRequestSchema,
@@ -259,6 +262,12 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     return this.service().prepareRepositoryV2(request);
   }
 
+  public prepareRepositoryV3(
+    request: ExecutorRequestV3,
+  ): Promise<PreparedRepositoryV3> {
+    return this.service().prepareRepositoryV3(request);
+  }
+
   public resolveContainerId(runId: string): string {
     return resolveContainerId(this.env.SANDBOXES, runId);
   }
@@ -269,6 +278,10 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
 
   public loadContextV2(runId: string): Promise<ReviewContextV2> {
     return this.service().loadContextV2(runId);
+  }
+
+  public loadContextV3(runId: string): Promise<ReviewContextV3> {
+    return this.service().loadContextV3(runId);
   }
 
   public hasContext(runId: string): Promise<boolean> {

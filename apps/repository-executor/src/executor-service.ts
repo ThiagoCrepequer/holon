@@ -2,23 +2,29 @@ import {
   executorRequestSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
+  executorRequestV3Schema,
   preparedRepositorySchema,
   preparedRepositoryV1Schema,
   preparedRepositoryV2Schema,
+  preparedRepositoryV3Schema,
   reviewContextSchema,
   reviewContextV1Schema,
   reviewContextV2Schema,
+  reviewContextV3Schema,
   runIdSchema,
   type ExecutorRequest,
   type ExecutorRequestV1,
   type ExecutorRequestV2,
+  type ExecutorRequestV3,
   type PreparedRepository,
   type PreparedRepositoryV1,
   type PreparedRepositoryV2,
+  type PreparedRepositoryV3,
   type RepositoryToolCall,
   type ReviewContext,
   type ReviewContextV1,
   type ReviewContextV2,
+  type ReviewContextV3,
 } from "@holon/contracts";
 import { buildCheckoutPlan } from "@holon/repository-analysis";
 
@@ -174,6 +180,15 @@ export class RepositoryExecutorService {
     );
   }
 
+  public async prepareRepositoryV3(
+    rawRequest: ExecutorRequestV3,
+  ): Promise<PreparedRepositoryV3> {
+    const request = executorRequestV3Schema.parse(rawRequest);
+    return preparedRepositoryV3Schema.parse(
+      await this.prepareInternal(request),
+    );
+  }
+
   private async prepareInternal(
     rawRequest: ExecutorRequest,
   ): Promise<PreparedRepository> {
@@ -223,14 +238,28 @@ export class RepositoryExecutorService {
       );
       await sandbox.writeFile(reviewScopePolicyPath, artifacts.policy);
       await sandbox.writeFile(contextPath, artifacts.serializedContext);
-      return preparedRepositorySchema.parse({
-        changedLineCount: artifacts.context.changedLines.length,
-        contextBytes: artifacts.contextBytes,
-        fileCount: artifacts.fileCount,
-        runId: request.runId,
-        schemaVersion: request.schemaVersion,
-        truncated: artifacts.context.truncated ?? false,
-      });
+      return preparedRepositorySchema.parse(
+        request.schemaVersion === 3
+          ? {
+              changedLineCount: artifacts.context.changedLines.length,
+              contextBytes: artifacts.contextBytes,
+              effectivePolicyDigest: (artifacts.context as ReviewContextV3)
+                .effectivePolicyDigest,
+              fileCount: artifacts.fileCount,
+              runId: request.runId,
+              schemaVersion: 3,
+              truncated: artifacts.context.truncated ?? false,
+              waiversCount: (artifacts.context as ReviewContextV3).waiversCount,
+            }
+          : {
+              changedLineCount: artifacts.context.changedLines.length,
+              contextBytes: artifacts.contextBytes,
+              fileCount: artifacts.fileCount,
+              runId: request.runId,
+              schemaVersion: request.schemaVersion,
+              truncated: artifacts.context.truncated ?? false,
+            },
+      );
     } catch (error) {
       await destroyAfterFailure(sandbox);
       throw preparationFailure(error, stage);
@@ -251,6 +280,10 @@ export class RepositoryExecutorService {
 
   public async loadContextV2(runId: string): Promise<ReviewContextV2> {
     return reviewContextV2Schema.parse(await this.loadAnyContext(runId));
+  }
+
+  public async loadContextV3(runId: string): Promise<ReviewContextV3> {
+    return reviewContextV3Schema.parse(await this.loadAnyContext(runId));
   }
 
   public async hasContext(runId: string): Promise<boolean> {

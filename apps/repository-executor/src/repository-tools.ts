@@ -9,6 +9,7 @@ import {
   buildToolExecution,
   classifyPullRequestDiffFile,
   classifyReviewPath,
+  matchesAnyPathGlob,
   splitPullRequestDiff,
 } from "@holon/repository-analysis";
 
@@ -100,10 +101,14 @@ function boundSearchOutput(
     .filter((line) => line.length > 0)
     .filter((line) => {
       const path = searchResultPath(call, line);
-      const mode = path === undefined ? undefined : classifyReviewPath(path);
+      const mode =
+        path === undefined
+          ? undefined
+          : classifyReviewPath(path, policy.additionalExcludes);
       return (
         mode !== undefined &&
         !policy.deniedPaths.includes(path ?? "") &&
+        !matchesAnyPathGlob(path ?? "", policy.additionalExcludes) &&
         (call.name !== "search_structure" || mode === "structural")
       );
     });
