@@ -39,6 +39,23 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 }) => {
   const navigate = useNavigate();
   const hydrated = useHydrated();
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (embedded) setOpen(true);
+  }, [embedded]);
+  const closeFromLink = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      !embedded ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    setOpen(false);
+  };
   const content = (
     <>
       {/* Breadcrumb */}
@@ -48,6 +65,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       >
         <Link
           to="/runs"
+          onClick={closeFromLink}
           className="hover:text-[var(--text-primary)] underline underline-offset-2"
         >
           Runs
@@ -97,6 +115,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
 
           <Link
             to="/runs"
+            onClick={closeFromLink}
             className="px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] bg-[var(--surface-hover)] hover:bg-[var(--surface-subtle)] rounded-md transition-colors shrink-0"
           >
             &larr; Back to list
@@ -292,7 +311,14 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   );
   if (embedded && hydrated) {
     return (
-      <Drawer open onOpenChange={(open) => !open && navigate("/runs")}>
+      <Drawer
+        open={open}
+        swipeDirection="right"
+        onOpenChange={setOpen}
+        onOpenChangeComplete={(isOpen) => {
+          if (!isOpen) void navigate("/runs");
+        }}
+      >
         <DrawerPopup>
           <DrawerHeader>
             <DrawerTitle>Run detail</DrawerTitle>

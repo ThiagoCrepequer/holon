@@ -14,10 +14,7 @@ export const DrawerBackdrop = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseDrawer.Backdrop
     ref={ref}
-    className={cn(
-      "drawer-backdrop fixed inset-0 z-50 bg-black/40 backdrop-blur-xs",
-      className,
-    )}
+    className={cn("drawer-backdrop fixed inset-0 z-50 bg-black/40", className)}
     {...props}
   />
 ));
@@ -29,17 +26,19 @@ export const DrawerPopup = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <BaseDrawer.Portal>
     <DrawerBackdrop />
-    <BaseDrawer.Popup
-      ref={ref}
-      className={cn(
-        "fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-2xl bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl",
-        "drawer-popup",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </BaseDrawer.Popup>
+    <BaseDrawer.Viewport className="fixed inset-0 z-50 pointer-events-none">
+      <BaseDrawer.Popup
+        ref={ref}
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-2xl bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl",
+          "drawer-popup pointer-events-auto",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </BaseDrawer.Popup>
+    </BaseDrawer.Viewport>
   </BaseDrawer.Portal>
 ));
 DrawerPopup.displayName = "DrawerPopup";
