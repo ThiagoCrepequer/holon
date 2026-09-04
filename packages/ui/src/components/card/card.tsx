@@ -7,9 +7,10 @@ export const Card = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
   <div
+    data-slot="card"
     ref={ref}
     className={cn(
-      "rounded-lg border border-zinc-200 bg-white text-zinc-950 shadow-sm",
+      "rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]",
       className,
     )}
     {...props}
@@ -23,7 +24,8 @@ export const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-5", className)}
+    data-slot="card-header"
+    className={cn("flex flex-col space-y-1.5 p-4", className)}
     {...props}
   />
 ));
@@ -33,10 +35,11 @@ export const CardTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
-  <h3
+  <h2
+    data-slot="card-title"
     ref={ref}
     className={cn(
-      "text-sm font-medium tracking-tight text-zinc-700",
+      "text-sm font-semibold tracking-tight text-[var(--text-primary)]",
       className,
     )}
     {...props}
@@ -48,7 +51,11 @@ export const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p ref={ref} className={cn("text-xs text-zinc-500", className)} {...props} />
+  <p
+    ref={ref}
+    className={cn("text-xs text-[var(--text-muted)]", className)}
+    {...props}
+  />
 ));
 CardDescription.displayName = "CardDescription";
 
@@ -56,7 +63,12 @@ export const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-5 pt-0", className)} {...props} />
+  <div
+    ref={ref}
+    data-slot="card-content"
+    className={cn("p-4 pt-0", className)}
+    {...props}
+  />
 ));
 CardContent.displayName = "CardContent";
 
@@ -67,7 +79,7 @@ export const CardFooter = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "flex items-center p-5 pt-0 text-xs text-zinc-500",
+      "flex items-center p-5 pt-0 text-xs text-[var(--text-muted)]",
       className,
     )}
     {...props}

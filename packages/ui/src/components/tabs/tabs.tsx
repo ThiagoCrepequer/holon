@@ -12,7 +12,7 @@ export const TabsList = React.forwardRef<
   <BaseTabs.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-zinc-100 p-1 text-zinc-500",
+      "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--surface-hover)] p-1 text-[var(--text-muted)]",
       className,
     )}
     {...props}
@@ -28,9 +28,9 @@ export const TabsTab = React.forwardRef<
     ref={ref}
     className={cn(
       "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-all select-none",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]",
       "disabled:pointer-events-none disabled:opacity-50",
-      "data-[selected]:bg-white data-[selected]:text-zinc-950 data-[selected]:shadow-sm text-zinc-600 hover:text-zinc-900",
+      "data-[selected]:bg-[var(--surface)] data-[selected]:text-[var(--text-primary)] data-[selected]:shadow-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
       className,
     )}
     {...props}
@@ -45,7 +45,7 @@ export const TabsPanel = React.forwardRef<
   <BaseTabs.Panel
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950",
+      "mt-2 ring-offset-[var(--surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]",
       className,
     )}
     {...props}

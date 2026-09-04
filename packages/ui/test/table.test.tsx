@@ -55,7 +55,7 @@ describe("Table component", () => {
         </TableBody>
       </Table>,
     );
-    expect(defaultHtml).not.toContain("border-zinc-200 rounded-lg");
+    expect(defaultHtml).not.toContain("border-[var(--border)] rounded-lg");
 
     const borderedHtml = renderToStaticMarkup(
       <Table bordered containerClassName="custom-container">
@@ -66,7 +66,7 @@ describe("Table component", () => {
         </TableBody>
       </Table>,
     );
-    expect(borderedHtml).toContain("border-zinc-200 rounded-lg");
+    expect(borderedHtml).toContain("border-[var(--border)] rounded-lg");
     expect(borderedHtml).toContain("custom-container");
   });
 });

@@ -33,7 +33,7 @@ export const DialogPopup = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%]",
-        "gap-4 border border-zinc-200 bg-white p-6 shadow-xl rounded-xl",
+        "gap-4 border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl rounded-xl",
         "transition-all data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
         className,
       )}
@@ -52,7 +52,7 @@ export const DialogTitle = React.forwardRef<
   <BaseDialog.Title
     ref={ref}
     className={cn(
-      "text-base font-semibold leading-none tracking-tight text-zinc-950",
+      "text-base font-semibold leading-none tracking-tight text-[var(--text-primary)]",
       className,
     )}
     {...props}
@@ -66,7 +66,7 @@ export const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseDialog.Description
     ref={ref}
-    className={cn("text-xs text-zinc-500", className)}
+    className={cn("text-xs text-[var(--text-muted)]", className)}
     {...props}
   />
 ));

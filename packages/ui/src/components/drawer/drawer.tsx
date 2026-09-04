@@ -15,7 +15,7 @@ export const DrawerBackdrop = React.forwardRef<
   <BaseDrawer.Backdrop
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/40 backdrop-blur-xs transition-opacity data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "drawer-backdrop fixed inset-0 z-50 bg-black/40 backdrop-blur-xs",
       className,
     )}
     {...props}
@@ -32,8 +32,8 @@ export const DrawerPopup = React.forwardRef<
     <BaseDrawer.Popup
       ref={ref}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-2xl bg-white border-l border-zinc-200 shadow-2xl",
-        "transition-transform data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full",
+        "fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-2xl bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl",
+        "drawer-popup",
         className,
       )}
       {...props}
@@ -50,7 +50,7 @@ export const DrawerHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex items-center justify-between p-5 border-b border-zinc-100",
+      "flex items-center justify-between p-5 border-b border-[var(--border-subtle)]",
       className,
     )}
     {...props}
@@ -64,7 +64,10 @@ export const DrawerTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseDrawer.Title
     ref={ref}
-    className={cn("text-sm font-semibold text-zinc-950", className)}
+    className={cn(
+      "text-sm font-semibold text-[var(--text-primary)]",
+      className,
+    )}
     {...props}
   />
 ));
@@ -76,7 +79,7 @@ export const DrawerDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <BaseDrawer.Description
     ref={ref}
-    className={cn("text-xs text-zinc-500", className)}
+    className={cn("text-xs text-[var(--text-muted)]", className)}
     {...props}
   />
 ));
@@ -99,7 +102,7 @@ export const DrawerFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex items-center justify-end p-4 border-t border-zinc-100 gap-2 bg-zinc-50",
+      "flex items-center justify-end p-4 border-t border-[var(--border-subtle)] gap-2 bg-[var(--surface-muted)]",
       className,
     )}
     {...props}

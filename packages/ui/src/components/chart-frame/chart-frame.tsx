@@ -18,6 +18,7 @@ export interface ChartFrameProps extends React.HTMLAttributes<HTMLDivElement> {
   loading?: boolean;
   empty?: boolean;
   emptyMessage?: string;
+  emptyTitle?: string;
   height?: number | string;
   showTable?: boolean;
   onToggleTable?: () => void;
@@ -32,6 +33,7 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
       accessibleTable,
       loading = false,
       empty = false,
+      emptyTitle = "No data",
       emptyMessage = "No chart data available for the selected period",
       height = 240,
       showTable = false,
@@ -62,7 +64,7 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
               <button
                 type="button"
                 onClick={onToggleTable}
-                className="text-xs font-medium text-zinc-600 hover:text-zinc-900 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 rounded px-1"
+                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded px-1"
                 aria-expanded={showTable}
               >
                 {showTable ? "View chart" : "View data table"}
@@ -70,7 +72,7 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
             )}
           </div>
           {insight && (
-            <div className="mt-2 text-xs font-medium text-zinc-700 bg-zinc-50 border border-zinc-200 rounded px-2.5 py-1.5">
+            <div className="mt-2 text-xs font-medium text-[var(--text-secondary)] bg-[var(--surface-muted)] border border-[var(--border)] rounded px-2.5 py-1.5">
               {insight}
             </div>
           )}
@@ -81,7 +83,7 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
             <div
               style={{ height }}
               aria-hidden="true"
-              className="w-full bg-zinc-100 animate-pulse rounded-md flex items-center justify-center text-xs text-zinc-400"
+              className="w-full bg-[var(--surface-hover)] animate-pulse rounded-md flex items-center justify-center text-xs text-[var(--text-disabled)]"
             >
               Loading chart...
             </div>
@@ -91,7 +93,7 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
               className="flex items-center justify-center"
             >
               <EmptyState
-                title="No data"
+                title={emptyTitle}
                 description={emptyMessage}
                 className="border-0 bg-transparent"
               />

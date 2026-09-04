@@ -13,7 +13,7 @@ export const Skeleton = React.forwardRef<HTMLDivElement, SkeletonProps>(
         ref={ref}
         aria-hidden="true"
         className={cn(
-          "bg-zinc-200/80 animate-pulse",
+          "bg-[var(--surface-subtle)]/80 animate-pulse",
           variant === "default" && "rounded-md",
           variant === "circle" && "rounded-full",
           variant === "text" && "h-4 rounded",

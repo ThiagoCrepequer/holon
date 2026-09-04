@@ -14,7 +14,7 @@ describe("Button and IconButton components", () => {
     const html = renderToStaticMarkup(<Button>Click Me</Button>);
     expect(html).toContain("Click Me");
     expect(html).toContain('type="button"');
-    expect(html).toContain("bg-zinc-900");
+    expect(html).toContain("bg-[var(--accent)]");
     expect(html).toContain("h-9 px-4 text-sm");
   });
 

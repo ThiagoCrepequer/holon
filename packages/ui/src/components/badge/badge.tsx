@@ -17,19 +17,23 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  neutral: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  warning: "bg-amber-50 text-amber-700 border-amber-200",
-  danger: "bg-rose-50 text-rose-700 border-rose-200",
-  info: "bg-blue-50 text-blue-700 border-blue-200",
+  neutral:
+    "bg-[var(--surface-hover)] text-[var(--text-secondary)] border-[var(--border)]",
+  success:
+    "bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success-border)]",
+  warning:
+    "bg-[var(--warning-bg)] text-[var(--warning-text)] border-[var(--warning-border)]",
+  danger:
+    "bg-[var(--danger-bg)] text-[var(--danger-text)] border-[var(--danger-border)]",
+  info: "bg-[var(--info-bg)] text-[var(--info-text)] border-[var(--info-border)]",
 };
 
 const dotStyles: Record<BadgeVariant, string> = {
-  neutral: "bg-zinc-500",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  info: "bg-blue-500",
+  neutral: "bg-[var(--text-muted)]",
+  success: "bg-[var(--success)]",
+  warning: "bg-[var(--warning)]",
+  danger: "bg-[var(--danger)]",
+  info: "bg-[var(--info)]",
 };
 
 const sizeStyles: Record<BadgeSize, string> = {

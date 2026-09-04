@@ -10,7 +10,7 @@
   --border: #e5e7eb;
   --border-subtle: #f0f1f3;
   --border-strong: #d1d5db;
-  --focus-ring: #09090b;
+  --focus-ring: #ad2435;
 
   /* Typography */
   --text-primary: #09090b;
@@ -20,10 +20,11 @@
   --text-inverse: #ffffff;
 
   /* Accent / Primary Actions */
-  --accent: #09090b;
-  --accent-hover: #27272a;
+  --accent: #ad2435;
+  --accent-hover: #902030;
   --accent-contrast: #ffffff;
-  --accent-subtle: #f4f4f5;
+  --accent-subtle: #fbedef;
+  --accent-text: #ad2435;
 
   /* Semantic Feedback - Success */
   --success: #16a34a;
@@ -77,13 +78,91 @@
   --duration-slow: 300ms;
 }
 
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #111214;
+  --surface: #1a1b1f;
+  --surface-muted: #16171a;
+  --surface-hover: #24262b;
+  --surface-subtle: #2d3036;
+  --border: #303239;
+  --border-subtle: #27292f;
+  --border-strong: #525661;
+  --text-primary: #f2f2f4;
+  --text-secondary: #c0c2ca;
+  --text-muted: #a0a3ae;
+  --text-disabled: #8b8f9b;
+  --accent: #b82f43;
+  --accent-hover: #ca3b50;
+  --accent-subtle: #342027;
+  --accent-text: #ff8f9d;
+  --focus-ring: #ff8f9d;
+  --success: #5cdaa1;
+  --success-bg: #182c25;
+  --success-border: #2c5342;
+  --success-text: #80dfaf;
+  --warning: #eabd65;
+  --warning-bg: #302919;
+  --warning-border: #584728;
+  --warning-text: #efd08c;
+  --danger: #f27688;
+  --danger-bg: #2c1c23;
+  --danger-border: #59303b;
+  --danger-text: #ff9caa;
+  --info: #82b4f5;
+  --info-bg: #1c2738;
+  --info-border: #354a67;
+  --info-text: #a0c6fa;
+  --chart-1: #f27688;
+  --chart-2: #f5a9b4;
+  --chart-3: #ab7884;
+  --chart-4: #eabd65;
+  --chart-5: #82b4f5;
+}
+
 /* Tabular Numbers */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
+/* Keyframes also run when a route mounts the drawer already open. */
+.drawer-popup[data-open] {
+  animation-name: drawer-enter;
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.drawer-popup[data-closed] {
+  animation: drawer-enter 180ms ease-in reverse;
+}
+.drawer-backdrop[data-open] {
+  animation: drawer-backdrop-enter 200ms ease-out;
+}
+.drawer-backdrop[data-closed] {
+  animation: drawer-backdrop-enter 180ms ease-in reverse;
+}
+@keyframes drawer-enter {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes drawer-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
+  .drawer-popup,
+  .drawer-backdrop {
+    animation: none !important;
+  }
   *,
   ::before,
   ::after {
@@ -100,4 +179,54 @@
 }
 .base-ui-disable-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Metric anatomy is owned by the component, not positional dashboard selectors. */
+.metric-card {
+  overflow: hidden;
+}
+.metric-card .metric-card-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 6px;
+}
+.metric-card-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+}
+.metric-card-icon {
+  color: var(--text-muted);
+}
+.metric-card [data-slot="card-content"] {
+  padding: 0 18px 16px;
+}
+.metric-card-value {
+  font-family: inherit;
+  font-size: clamp(26px, 2vw, 33px);
+  font-weight: 550;
+  letter-spacing: -1px;
+  line-height: 1.4;
+}
+.metric-card-description {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.metric-card[data-emphasis="primary"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.metric-card[data-emphasis="primary"]
+  :is(
+    .metric-card-label,
+    .metric-card-icon,
+    .metric-card-value,
+    .metric-card-description
+  ) {
+  color: var(--accent-contrast);
 }

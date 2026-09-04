@@ -18,13 +18,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantStyles: Record<ButtonVariant, string> = {
   default:
-    "bg-zinc-900 text-white hover:bg-zinc-800 active:bg-zinc-950 focus-visible:ring-zinc-950 disabled:bg-zinc-300 disabled:text-zinc-500",
+    "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] active:bg-[var(--accent-hover)] focus-visible:ring-[var(--focus-ring)] disabled:bg-[var(--border-strong)] disabled:text-[var(--text-muted)]",
   secondary:
-    "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 active:bg-zinc-300 focus-visible:ring-zinc-950 disabled:bg-zinc-100 disabled:text-zinc-400",
+    "bg-[var(--surface-hover)] text-[var(--text-primary)] hover:bg-[var(--surface-subtle)] active:bg-[var(--border-strong)] focus-visible:ring-[var(--focus-ring)] disabled:bg-[var(--surface-hover)] disabled:text-[var(--text-disabled)]",
   outline:
-    "border border-zinc-300 bg-transparent text-zinc-900 hover:bg-zinc-50 active:bg-zinc-100 focus-visible:ring-zinc-950 disabled:border-zinc-200 disabled:text-zinc-400",
+    "border border-[var(--border-strong)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--surface-muted)] active:bg-[var(--surface-hover)] focus-visible:ring-[var(--focus-ring)] disabled:border-[var(--border)] disabled:text-[var(--text-disabled)]",
   ghost:
-    "bg-transparent text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200 focus-visible:ring-zinc-950 disabled:text-zinc-400",
+    "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] active:bg-[var(--surface-subtle)] focus-visible:ring-[var(--focus-ring)] disabled:text-[var(--text-disabled)]",
   danger:
     "bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 focus-visible:ring-rose-600 disabled:bg-rose-300 disabled:text-rose-100",
 };
@@ -59,7 +59,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading ? "true" : undefined}
         className={cn(
           "inline-flex items-center justify-center font-medium transition-colors select-none",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ring-offset-[var(--surface)]",
           "disabled:cursor-not-allowed disabled:opacity-70",
           variantStyles[variant],
           sizeStyles[size],
