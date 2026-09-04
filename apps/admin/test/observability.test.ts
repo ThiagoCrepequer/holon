@@ -70,6 +70,39 @@ describe("Observability clients and readiness probe", () => {
       expect(init.body).toContain("GROUP BY bucket");
     });
 
+    it.each([
+      ["24h", "INTERVAL '1' HOUR", "INTERVAL '24' HOUR"],
+      ["7d", "INTERVAL '6' HOUR", "INTERVAL '168' HOUR"],
+      ["30d", "INTERVAL '1' DAY", "INTERVAL '720' HOUR"],
+    ] as const)(
+      "uses Cloudflare-supported interval literals for the %s window",
+      async (window, bucketInterval, lookbackInterval) => {
+        const mockFetch = vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+
+        await queryAnalyticsTrend(window, {
+          accountId: "acc-123",
+          apiToken: "tok-456",
+          fetchFn: mockFetch,
+        });
+
+        const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+        if (typeof init.body !== "string") {
+          throw new TypeError("Expected Analytics Engine query body to be SQL");
+        }
+        const sql = init.body;
+        expect(sql).toContain(
+          `toStartOfInterval(timestamp, ${bucketInterval}) AS bucket`,
+        );
+        expect(sql).toContain(`WHERE timestamp >= NOW() - ${lookbackInterval}`);
+        expect(sql).not.toMatch(/INTERVAL '\d+ (?:HOUR|DAY)'/);
+      },
+    );
+
     it("handles response with empty data array or missing quantiles", async () => {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ data: [] }), {
