@@ -3,6 +3,7 @@ export * from "./ci-evidence.js";
 export * from "./executor.js";
 export * from "./feedback.js";
 export * from "./finding-lifecycle.js";
+export * from "./repository-policy.js";
 export * from "./review-output.js";
 export * from "./review-plan.js";
 export * from "./review-verdict.js";
