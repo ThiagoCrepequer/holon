@@ -96,6 +96,7 @@ export async function publishFailureNoticeAuthorized(
   publisher: ReviewPublisher,
   runId: RunId,
   authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
+  customBody?: string,
 ): Promise<boolean> {
   const marker = `<!-- holon:v1;run=${runId};finding=system-failure -->`;
   if ((await publisher.findCommentByMarker(marker, "summary")) !== undefined) {
@@ -103,7 +104,9 @@ export async function publishFailureNoticeAuthorized(
   }
   if (!(await authorizeImmediatelyBeforeMutation())) return false;
   await publisher.publish({
-    body: "Holon could not complete this automated review. The run was stopped and its repository sandbox was scheduled for cleanup. Push a new commit or synchronize the pull request to start a fresh run.",
+    body:
+      customBody ??
+      "Holon could not complete this automated review. The run was stopped and its repository sandbox was scheduled for cleanup. Push a new commit or synchronize the pull request to start a fresh run.",
     marker,
   });
   return true;

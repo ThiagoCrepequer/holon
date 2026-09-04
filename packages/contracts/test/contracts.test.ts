@@ -15,19 +15,26 @@ import {
   testExecutionReportSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
+  executorRequestV3Schema,
   githubCredentialRequestSchema,
+  isProtectedPath,
   modelReviewOutputSchema,
   modelReviewTransportSchema,
   parseModelReviewTransport,
   preparedRepositorySchema,
+  preparedRepositoryV3Schema,
   publicationRecordSchema,
+  rawRepositoryPolicySchema,
   reconciledFindingSchema,
   reconciliationSummarySchema,
+  repositoryPolicyGlobSchema,
+  repositoryPolicySchema,
   repositoryToolCallSchema,
   repositoryToolResultSchema,
   reviewContextSchema,
   reviewContextV1Schema,
   reviewContextV2Schema,
+  reviewContextV3Schema,
   reviewJobSchema,
   reviewPlanSchema,
   runClaimV2ResultSchema,
@@ -222,13 +229,33 @@ describe("review job and executor contracts", () => {
       repositoryOwner: "acme",
       schemaVersion: 2,
     } as const;
+    const policy = {
+      additionalExcludes: ["vendor/**", "dist/**"],
+      baseSha: "b".repeat(40),
+      effectivePolicyDigest: "c".repeat(64),
+      source: ".github/holon.yml" as const,
+      sourceDigest: "d".repeat(64),
+      verdictStrictness: "block_all_confident_medium" as const,
+      version: 1 as const,
+    };
+    const v3 = {
+      ...v2,
+      effectivePolicy: policy,
+      schemaVersion: 3,
+    } as const;
 
     expect(executorRequestV1Schema.parse(v1)).toEqual(v1);
     expect(executorRequestV2Schema.parse(v2)).toEqual(v2);
+    expect(executorRequestV3Schema.parse(v3)).toEqual(v3);
     expect(executorRequestSchema.parse(v1)).toEqual(v1);
     expect(executorRequestSchema.parse(v2)).toEqual(v2);
+    expect(executorRequestSchema.parse(v3)).toEqual(v3);
     expect(
       executorRequestV2Schema.safeParse({ ...v2, repositoryName: "other" })
+        .success,
+    ).toBe(false);
+    expect(
+      executorRequestV3Schema.safeParse({ ...v3, repositoryName: "other" })
         .success,
     ).toBe(false);
     expect(
@@ -241,6 +268,18 @@ describe("review job and executor contracts", () => {
         truncated: false,
       }),
     ).toMatchObject({ schemaVersion: 2 });
+    expect(
+      preparedRepositoryV3Schema.parse({
+        changedLineCount: 1,
+        contextBytes: 100,
+        effectivePolicyDigest: "c".repeat(64),
+        fileCount: 1,
+        runId,
+        schemaVersion: 3,
+        truncated: false,
+        waiversCount: 3,
+      }),
+    ).toMatchObject({ schemaVersion: 3, waiversCount: 3 });
   });
 
   it("enforces the v2 canonical diff budget in UTF-8 bytes", () => {
@@ -257,6 +296,46 @@ describe("review job and executor contracts", () => {
         repositoryOwner: "acme",
         runId,
         schemaVersion: 2,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("enforces the v3 canonical diff budget and clone URL matching", () => {
+    const validV3 = {
+      baseSha: "b".repeat(40),
+      canonicalDiff: canonicalDiff,
+      cloneUrl: "https://github.com/acme/api.git",
+      effectivePolicy: {
+        additionalExcludes: [],
+        baseSha: "b".repeat(40),
+        effectivePolicyDigest: "c".repeat(64),
+        source: "default" as const,
+        sourceDigest: null,
+        verdictStrictness: "default" as const,
+        version: 1 as const,
+      },
+      headSha: sha,
+      installationId: 99,
+      pullRequestNumber: 7,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      runId,
+      schemaVersion: 3 as const,
+    };
+    expect(executorRequestV3Schema.parse(validV3)).toEqual(validV3);
+
+    expect(
+      executorRequestV3Schema.safeParse({
+        ...validV3,
+        canonicalDiff: "😀".repeat(500_001),
+      }).success,
+    ).toBe(false);
+
+    expect(
+      executorRequestV3Schema.safeParse({
+        ...validV3,
+        cloneUrl: "https://github.com/acme/other.git",
       }).success,
     ).toBe(false);
   });
@@ -453,10 +532,234 @@ describe("bounded repository tools", () => {
         ],
       }).success,
     ).toBe(false);
+
+    const v3Context = {
+      ...context,
+      effectivePolicyDigest: "e".repeat(64),
+      policySource: ".github/holon.yml" as const,
+      schemaVersion: 3,
+      sourceDigest: "f".repeat(64),
+      verdictStrictness: "default" as const,
+      waiversCount: 2,
+    } as const;
+    expect(reviewContextV3Schema.parse(v3Context)).toEqual(v3Context);
+    expect(reviewContextSchema.parse(v3Context)).toEqual(v3Context);
+    expect(
+      reviewContextV3Schema.safeParse({
+        ...v3Context,
+        policySource: "unsupported" as never,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      reviewContextV3Schema.safeParse({
+        ...v3Context,
+        files: [
+          ...v3Context.files,
+          { mode: "textual", patch: "+extra\n", path: "src/index.ts" },
+        ],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      reviewContextV3Schema.safeParse({
+        ...v3Context,
+        files: [
+          {
+            ...v3Context.files[0],
+            patch: "x".repeat(120_001),
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      reviewContextV3Schema.safeParse({
+        ...v3Context,
+        changedLines: [{ line: 1, path: "unknown.ts", side: "RIGHT" }],
+      }).success,
+    ).toBe(false);
+
+    expect(
+      reviewContextV3Schema.safeParse({
+        ...v3Context,
+        files: [
+          {
+            mode: "textual",
+            patch: "+content\n",
+            path: "README.md",
+          },
+        ],
+        changedLines: [{ line: 1, path: "README.md", side: "RIGHT" }],
+        surface: [
+          {
+            change: "added",
+            excerpt: "heading",
+            kind: "contract",
+            line: 1,
+            path: "README.md",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
     expect(
       repositoryToolResultSchema.safeParse({
         content: "x".repeat(100_001),
         truncated: false,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("declarative repository policy contracts", () => {
+  it("identifies protected policy, workflow, security, and ownership paths", () => {
+    expect(isProtectedPath(".github/holon.yml")).toBe(true);
+    expect(isProtectedPath(".github/holon.yaml")).toBe(true);
+    expect(isProtectedPath(".holon.yml")).toBe(true);
+    expect(isProtectedPath(".holon.yaml")).toBe(true);
+    expect(isProtectedPath(".github/workflows/ci.yml")).toBe(true);
+    expect(isProtectedPath(".github/workflows")).toBe(true);
+    expect(isProtectedPath("SECURITY.md")).toBe(true);
+    expect(isProtectedPath("security.md")).toBe(true);
+    expect(isProtectedPath(".github/SECURITY.md")).toBe(true);
+    expect(isProtectedPath("CODEOWNERS")).toBe(true);
+    expect(isProtectedPath(".github/CODEOWNERS")).toBe(true);
+    expect(isProtectedPath("docs/CODEOWNERS")).toBe(true);
+
+    expect(isProtectedPath("src/index.ts")).toBe(false);
+    expect(isProtectedPath("README.md")).toBe(false);
+    expect(isProtectedPath("docs/architecture/README.md")).toBe(false);
+  });
+
+  it("validates and restricts policy exclusion glob patterns", () => {
+    expect(repositoryPolicyGlobSchema.parse("vendor/**")).toBe("vendor/**");
+    expect(repositoryPolicyGlobSchema.parse("generated/*.go")).toBe(
+      "generated/*.go",
+    );
+    expect(repositoryPolicyGlobSchema.parse("fixtures/data.json")).toBe(
+      "fixtures/data.json",
+    );
+
+    // Universal wildcards prohibited
+    expect(repositoryPolicyGlobSchema.safeParse("*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("**").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("**/*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("*/*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("****").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("?*").success).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("**/?*").success).toBe(false);
+
+    // Globs that semantically reach protected paths are prohibited
+    for (const glob of [
+      ".github/*.yml",
+      ".github/**",
+      ".github/workflows/*.json",
+      "**/CODEOWNERS",
+      "SECURITY.?d",
+    ]) {
+      expect(repositoryPolicyGlobSchema.safeParse(glob).success).toBe(false);
+    }
+
+    // Path traversal prohibited
+    expect(repositoryPolicyGlobSchema.safeParse("../secret").success).toBe(
+      false,
+    );
+    expect(repositoryPolicyGlobSchema.safeParse("foo/../../bar").success).toBe(
+      false,
+    );
+
+    // Absolute paths prohibited
+    expect(repositoryPolicyGlobSchema.safeParse("/vendor/**").success).toBe(
+      false,
+    );
+
+    // Protected paths prohibited from exclusion
+    expect(
+      repositoryPolicyGlobSchema.safeParse(".github/holon.yml").success,
+    ).toBe(false);
+    expect(
+      repositoryPolicyGlobSchema.safeParse(".github/workflows/**").success,
+    ).toBe(false);
+    expect(repositoryPolicyGlobSchema.safeParse("SECURITY.md").success).toBe(
+      false,
+    );
+    expect(
+      repositoryPolicyGlobSchema.safeParse(".github/CODEOWNERS").success,
+    ).toBe(false);
+  });
+
+  it("validates raw repository policy schemas with strict parsing", () => {
+    const minimal = { version: 1 as const };
+    expect(rawRepositoryPolicySchema.parse(minimal)).toEqual(minimal);
+
+    const full = {
+      review: {
+        additional_excludes: ["fixtures/**", "generated/*.ts"],
+      },
+      verdict: {
+        strictness: "block_all_confident_medium" as const,
+      },
+      version: 1 as const,
+    };
+    expect(rawRepositoryPolicySchema.parse(full)).toEqual(full);
+
+    // Rejects unexpected keys (strictObject)
+    expect(
+      rawRepositoryPolicySchema.safeParse({ ...minimal, extra: true }).success,
+    ).toBe(false);
+    expect(
+      rawRepositoryPolicySchema.safeParse({
+        ...full,
+        review: { ...full.review, rules: [] },
+      }).success,
+    ).toBe(false);
+
+    // Rejects invalid version
+    expect(rawRepositoryPolicySchema.safeParse({ version: 2 }).success).toBe(
+      false,
+    );
+
+    // Rejects invalid strictness
+    expect(
+      rawRepositoryPolicySchema.safeParse({
+        verdict: { strictness: "invalid" },
+        version: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates canonical repository policy schema", () => {
+    const policy = {
+      additionalExcludes: ["vendor/**"],
+      baseSha: "a".repeat(40),
+      effectivePolicyDigest: "b".repeat(64),
+      source: ".github/holon.yml" as const,
+      sourceDigest: "c".repeat(64),
+      verdictStrictness: "block_all_confident_medium" as const,
+      version: 1 as const,
+    };
+    expect(repositoryPolicySchema.parse(policy)).toEqual(policy);
+
+    // Source digest can be null for default policy
+    const defaultPolicy = {
+      ...policy,
+      additionalExcludes: [],
+      source: "default" as const,
+      sourceDigest: null,
+      verdictStrictness: "default" as const,
+    };
+    expect(repositoryPolicySchema.parse(defaultPolicy)).toEqual(defaultPolicy);
+
+    // Invalid SHA formats
+    expect(
+      repositoryPolicySchema.safeParse({ ...policy, baseSha: "invalid" })
+        .success,
+    ).toBe(false);
+    expect(
+      repositoryPolicySchema.safeParse({
+        ...policy,
+        effectivePolicyDigest: "short",
       }).success,
     ).toBe(false);
   });
@@ -1223,8 +1526,10 @@ describe("check run contracts", () => {
         },
         createdAt: new Date().toISOString(),
         durationMs: 14500,
+        effectivePolicyDigest: "c".repeat(64),
         headSha: "a".repeat(40),
         isDegraded: false,
+        policySource: ".github/holon.yml" as const,
         prKey: "github:42:pr:10",
         queueWaitMs: 320,
         runId: "run:123",
@@ -1238,6 +1543,7 @@ describe("check run contracts", () => {
             stepName: "step-1",
           },
         ],
+        sourceDigest: "d".repeat(64),
         terminalState: "completed" as const,
         tokens: {
           inputTokens: 2000,

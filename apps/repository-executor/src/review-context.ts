@@ -128,15 +128,32 @@ export function buildReviewArtifacts(
   repositoryScanTruncated = false,
 ): ReviewArtifacts {
   const diffFiles = splitPullRequestDiff(request.canonicalDiff);
-  const policy = serializeReviewScopePolicy(createReviewScopePolicy(diffFiles));
+  const additionalExcludes =
+    request.schemaVersion === 3
+      ? request.effectivePolicy.additionalExcludes
+      : [];
+  const policy = serializeReviewScopePolicy(
+    createReviewScopePolicy(diffFiles, additionalExcludes),
+  );
+
+  let globallyEligibleCount = 0;
   const supportedFiles = prioritizeReviewFiles(
     diffFiles.flatMap((file) => {
-      const mode = classifyPullRequestDiffFile(file);
+      const globalMode = classifyPullRequestDiffFile(file);
+      if (globalMode !== undefined && isNonBinaryPullRequestPatch(file.patch)) {
+        globallyEligibleCount += 1;
+      }
+      const mode = classifyPullRequestDiffFile(file, additionalExcludes);
       return mode === undefined || !isNonBinaryPullRequestPatch(file.patch)
         ? []
         : [{ mode, patch: file.patch, path: file.path }];
     }),
   );
+  const waiversCount = Math.max(
+    0,
+    globallyEligibleCount - supportedFiles.length,
+  );
+
   let totalBytes = 0;
   let truncated = supportedFiles.length > maximumFiles;
   const reviewFiles: ReviewFileCandidate[] = [];
@@ -186,26 +203,41 @@ export function buildReviewArtifacts(
     repositoryFiles,
     repositoryScanTruncated,
   });
+
   const unboundedContext = reviewContextSchema.parse(
-    request.schemaVersion === 2
+    request.schemaVersion === 3
       ? {
           changedLines,
+          effectivePolicyDigest: request.effectivePolicy.effectivePolicyDigest,
           files: reviewFiles,
-          schemaVersion: 2,
+          policySource: request.effectivePolicy.source,
+          schemaVersion: 3,
+          sourceDigest: request.effectivePolicy.sourceDigest,
           structuralImpact,
           surface,
           truncated,
+          verdictStrictness: request.effectivePolicy.verdictStrictness,
+          waiversCount,
         }
-      : {
-          changedLines,
-          diff: reviewFiles.map((file) => file.patch).join(""),
-          structuralImpact,
-          surface,
-          truncated,
-        },
+      : request.schemaVersion === 2
+        ? {
+            changedLines,
+            files: reviewFiles,
+            schemaVersion: 2,
+            structuralImpact,
+            surface,
+            truncated,
+          }
+        : {
+            changedLines,
+            diff: reviewFiles.map((file) => file.patch).join(""),
+            structuralImpact,
+            surface,
+            truncated,
+          },
   );
   const { context, serialized } = serializeBoundedContext(unboundedContext);
-  const plan = buildReviewPlan(diffFiles);
+  const plan = buildReviewPlan(diffFiles, { additionalExcludes });
   return {
     context,
     contextBytes: new TextEncoder().encode(serialized).byteLength,

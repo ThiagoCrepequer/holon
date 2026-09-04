@@ -18,8 +18,10 @@ function sampleTelemetry(): RunTelemetry {
     },
     createdAt: "2026-09-03T12:00:00.000Z",
     durationMs: 14500,
+    effectivePolicyDigest: "c".repeat(64),
     headSha: "a".repeat(40),
     isDegraded: false,
+    policySource: ".github/holon.yml",
     prKey: "github:42:pr:10",
     queueWaitMs: 250,
     runId: "run:123",
@@ -33,6 +35,7 @@ function sampleTelemetry(): RunTelemetry {
         stepName: "analyze-review",
       },
     ],
+    sourceDigest: "d".repeat(64),
     terminalState: "completed",
     tokens: {
       inputTokens: 1000,
@@ -113,6 +116,8 @@ describe("StructuredLogTelemetryEmitter", () => {
     expect(logs[0]?.event).toBe("holon.run_telemetry");
     expect(logs[0]?.fields.runId).toBe("run:123");
     expect(logs[0]?.fields.costMicroUsd).toBe(12500);
+    expect(logs[0]?.fields.effectivePolicyDigest).toBe("c".repeat(64));
+    expect(logs[0]?.fields.sourceDigest).toBe("d".repeat(64));
 
     emitter.emitStepTiming({
       attempt: 2,

@@ -1035,8 +1035,9 @@ export class ReviewLedgerObject
            input_tokens, output_tokens, reasoning_tokens,
            estimated_cost_usd, estimated_cost_micro_usd, pricing_model,
            tool_calls, shards_count, scope_status, terminal_state,
-           verdict, is_degraded, step_timings_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           verdict, is_degraded, step_timings_json, policy_source,
+           source_digest, effective_policy_digest, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         parsed.runId,
         parsed.prKey,
         parsed.headSha,
@@ -1055,6 +1056,9 @@ export class ReviewLedgerObject
         parsed.verdict ?? null,
         parsed.isDegraded ? 1 : 0,
         JSON.stringify(parsed.stepTimings),
+        parsed.policySource ?? null,
+        parsed.sourceDigest ?? null,
+        parsed.effectivePolicyDigest ?? null,
         parsed.createdAt,
       );
     });
@@ -1079,10 +1083,12 @@ interface RunTelemetryRow extends Record<string, SqlStorageValue> {
   duration_ms: number;
   estimated_cost_micro_usd: number;
   estimated_cost_usd: number;
+  effective_policy_digest: string | null;
   head_sha: string;
   input_tokens: number;
   is_degraded: number;
   output_tokens: number;
+  policy_source: string | null;
   pricing_model: string;
   pr_key: string;
   queue_wait_ms: number;
@@ -1090,6 +1096,7 @@ interface RunTelemetryRow extends Record<string, SqlStorageValue> {
   run_id: string;
   scope_status: string;
   shards_count: number;
+  source_digest: string | null;
   step_timings_json: string;
   terminal_state: string;
   tool_calls: number;
@@ -1107,13 +1114,18 @@ function rowToRunTelemetry(row: RunTelemetryRow): RunTelemetry {
     },
     createdAt: row.created_at,
     durationMs: row.duration_ms,
+    ...(row.effective_policy_digest === null
+      ? {}
+      : { effectivePolicyDigest: row.effective_policy_digest }),
     headSha: row.head_sha,
     isDegraded: Boolean(row.is_degraded),
+    ...(row.policy_source === null ? {} : { policySource: row.policy_source }),
     prKey: row.pr_key,
     queueWaitMs: row.queue_wait_ms,
     runId: row.run_id,
     scopeStatus: row.scope_status,
     shardsCount: row.shards_count,
+    ...(row.source_digest === null ? {} : { sourceDigest: row.source_digest }),
     stepTimings,
     terminalState: row.terminal_state,
     tokens: {

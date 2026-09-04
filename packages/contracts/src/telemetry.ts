@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { repositoryPolicySourceSchema } from "./repository-policy.js";
 import { runStateSchema } from "./review-output.js";
 import { reviewScopeStatusSchema } from "./review-plan.js";
 import { reviewVerdictSchema } from "./review-verdict.js";
@@ -29,13 +30,23 @@ export const runTelemetrySchema = z.strictObject({
   cost: costAccountingSchema,
   createdAt: z.string().datetime(),
   durationMs: z.number().int().nonnegative(),
+  effectivePolicyDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional(),
   headSha: z.string().regex(/^[0-9a-f]{40}$/u),
   isDegraded: z.boolean(),
+  policySource: repositoryPolicySourceSchema.optional(),
   prKey: z.string().min(1).max(200),
   queueWaitMs: z.number().int().nonnegative(),
   runId: z.string().min(1).max(256),
   scopeStatus: reviewScopeStatusSchema,
   shardsCount: z.number().int().nonnegative(),
+  sourceDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .nullable()
+    .optional(),
   stepTimings: z.array(stepTimingSchema),
   terminalState: runStateSchema,
   tokens: tokenAccountingSchema,

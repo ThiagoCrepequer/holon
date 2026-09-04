@@ -2,15 +2,18 @@ import type {
   CheckRunConclusion,
   CheckRunOutput,
   ReconciliationSummary,
+  RepositoryPolicySource,
   StructuralImpactReport,
 } from "@holon/contracts";
 import type { Finding, ReviewVerdict } from "@holon/domain";
 
 export interface CheckRunFormattingOptions {
   readonly durationMs?: number | undefined;
+  readonly effectivePolicyDigest?: string | undefined;
   readonly fileCount?: number | undefined;
   readonly findings: readonly Finding[];
   readonly partial?: boolean | undefined;
+  readonly policySource?: RepositoryPolicySource | undefined;
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly scopeStatus?:
     | "complete"
@@ -20,9 +23,11 @@ export interface CheckRunFormattingOptions {
     | undefined;
   readonly shardsAnalyzed?: number | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
+  readonly sourceDigest?: string | null | undefined;
   readonly summary: string;
   readonly totalShards?: number | undefined;
   readonly verdict?: ReviewVerdict | undefined;
+  readonly waiversCount?: number | undefined;
 }
 
 export function determineCheckRunConclusion(
@@ -97,6 +102,30 @@ export function formatCheckRunOutput(
     details.push(`- **Files analyzed**: ${fileCount}`);
   }
   details.push(`- **Findings identified**: ${findingCount}`);
+  if (
+    options.policySource !== undefined &&
+    options.policySource !== "default"
+  ) {
+    details.push(
+      `- **Repository Policy**: \`${options.policySource}\`${options.waiversCount !== undefined && options.waiversCount > 0 ? ` (${options.waiversCount} file waiver${options.waiversCount === 1 ? "" : "s"} applied)` : ""}`,
+    );
+  } else if (options.waiversCount !== undefined && options.waiversCount > 0) {
+    details.push(
+      `- **Policy Waivers**: ${options.waiversCount} file(s) waived by repository policy`,
+    );
+  }
+  if (options.effectivePolicyDigest !== undefined) {
+    details.push(
+      `- **Effective policy digest**: \`${options.effectivePolicyDigest}\``,
+    );
+  }
+  if (options.sourceDigest !== undefined) {
+    details.push(
+      options.sourceDigest === null
+        ? "- **Policy source digest**: `default`"
+        : `- **Policy source digest**: \`${options.sourceDigest}\``,
+    );
+  }
   if (reconciliation !== undefined) {
     details.push(
       `- **Lifecycle**: ${reconciliation.resolvedCount} resolved, ${reconciliation.persistentCount} persistent, ${reconciliation.newCount} new${reconciliation.reintroducedCount > 0 ? `, ${reconciliation.reintroducedCount} reintroduced` : ""}${reconciliation.dismissedCount > 0 ? `, ${reconciliation.dismissedCount} dismissed` : ""}`,
@@ -106,7 +135,13 @@ export function formatCheckRunOutput(
     details.push(
       "- **Scope**: Partial (some changes could not be analyzed due to an execution failure)",
     );
-  } else if (scopeStatus === "partial_by_policy" || isPartial) {
+  } else if (scopeStatus === "partial_by_policy") {
+    details.push(
+      options.waiversCount !== undefined && options.waiversCount > 0
+        ? `- **Scope**: Partial by policy (${options.waiversCount} eligible file(s) waived by repository policy)`
+        : "- **Scope**: Partial by policy (some files waived by repository policy or limits)",
+    );
+  } else if (isPartial) {
     details.push(
       "- **Scope**: Partial (some files or patches exceeded deterministic limits)",
     );

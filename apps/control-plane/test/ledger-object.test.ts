@@ -257,6 +257,7 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE IF EXISTS pr_findings;
         DROP TABLE IF EXISTS finding_feedbacks;
         DROP TABLE IF EXISTS workflow_supersessions;
+        DROP TABLE IF EXISTS run_telemetry;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -295,6 +296,7 @@ describe("ReviewLedgerObject", () => {
         { version: 7 },
         { version: 8 },
         { version: 9 },
+        { version: 10 },
       ]);
       expect(
         state.storage.sql
@@ -898,8 +900,10 @@ describe("ReviewLedgerObject", () => {
       },
       createdAt: new Date().toISOString(),
       durationMs: 12000,
+      effectivePolicyDigest: "c".repeat(64),
       headSha: "b".repeat(40),
       isDegraded: false,
+      policySource: ".github/holon.yml" as const,
       prKey: testPrKey,
       queueWaitMs: 400,
       runId: telemetryRunId,
@@ -913,6 +917,7 @@ describe("ReviewLedgerObject", () => {
           stepName: "prepare_repository",
         },
       ],
+      sourceDigest: "d".repeat(64),
       terminalState: "completed" as const,
       tokens: {
         inputTokens: 3000,

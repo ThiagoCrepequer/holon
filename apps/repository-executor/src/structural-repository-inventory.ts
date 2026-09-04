@@ -27,9 +27,10 @@ function escapeRegex(value: string): string {
 export async function collectStructuralRepositoryInventory(
   sandbox: SandboxPort,
   canonicalDiff: string,
+  additionalExcludes: readonly string[] = [],
 ): Promise<StructuralRepositoryInventory> {
   const changedFiles = splitPullRequestDiff(canonicalDiff).flatMap((file) => {
-    const mode = classifyPullRequestDiffFile(file);
+    const mode = classifyPullRequestDiffFile(file, additionalExcludes);
     return mode === "structural" && isNonBinaryPullRequestPatch(file.patch)
       ? [{ patch: file.patch, path: file.path }]
       : [];
@@ -49,10 +50,10 @@ export async function collectStructuralRepositoryInventory(
   if (names.length === 0) return { files: [], truncated: false };
 
   const pattern = `\\b(?:${names.map(escapeRegex).join("|")})\\b`;
-  const globArguments = repositorySearchGlobs.flatMap((glob) => [
-    "--glob",
-    glob,
-  ]);
+  const globArguments = [
+    ...repositorySearchGlobs.flatMap((glob) => ["--glob", glob]),
+    ...additionalExcludes.flatMap((glob) => ["--glob", `!${glob}`]),
+  ];
   const search = await sandbox.run(
     [
       "rg",
@@ -82,6 +83,7 @@ export async function collectStructuralRepositoryInventory(
       .map((path) => path.replace(/^\.\//u, "").trim())
       .filter((path) => path.length > 0 && !changedPaths.has(path)),
     maximumCandidateFiles + 1,
+    additionalExcludes,
   );
   let truncated = search.truncated || candidates.length > maximumCandidateFiles;
   let totalBytes = 0;

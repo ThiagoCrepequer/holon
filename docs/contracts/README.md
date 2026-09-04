@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-03
 ---
 
 # Contratos
@@ -15,12 +15,13 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 ## Contratos implementados
 
-| Modulo             | Contratos principais                                                        |
-| ------------------ | --------------------------------------------------------------------------- |
-| `webhook.ts`       | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                      |
-| `executor.ts`      | RPC V1/V2 exact-SHA, contexto por patch, broker, tools e resultados         |
-| `review-output.ts` | Findings estruturados, evidências, resumo e registro de publicação          |
-| `shared.ts`        | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
+| Modulo                 | Contratos principais                                                        |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `webhook.ts`           | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                      |
+| `executor.ts`          | RPC V1/V2/V3 exact-SHA, política de escopo, broker, tools e resultados      |
+| `repository-policy.ts` | YAML v1 normalizado, digests, exclusões e rigor de veredito                 |
+| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação          |
+| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
 
 ## Regras
 
@@ -55,3 +56,11 @@ control plane obtém do executor esse mesmo Durable Object ID opaco por RPC e o
 registra no scope; o nome determinístico passado a `idFromName` não é o
 `containerId`. V1 permanece aceito para rollout N-1, mas seu argumento token é
 ignorado pelo executor dual-stack.
+
+O pedido V3 adiciona a política efetiva e o executor persiste
+`ReviewContextV3` com `ReviewScopePolicyV2`. Quando a fonte é customizada, V3 é
+obrigatório em preparação e leitura: ausência do método encerra a run sem retry
+e não permite fallback. `sourceDigest` identifica os bytes UTF-8 originais;
+`effectivePolicyDigest` identifica o JSON canônico aplicado. Ambos são hashes
+SHA-256 e aparecem na telemetria e no Check Run sem expor o conteúdo da
+configuração.

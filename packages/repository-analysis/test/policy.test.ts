@@ -162,6 +162,25 @@ describe("repository execution policy", () => {
     expect(isReviewablePath(path)).toBe(mode !== undefined);
   });
 
+  it("gives protected governance paths precedence over custom exclusions", () => {
+    expect(classifyReviewPath(".github/holon.yml", [".github/**"])).toBe(
+      "textual",
+    );
+    expect(
+      classifyReviewPath(".github/workflows/helper.ts", [".github/**"]),
+    ).toBe("structural");
+    expect(classifyReviewPath("docs/CODEOWNERS", ["docs/**"])).toBe("textual");
+  });
+
+  it("applies custom exclusions only to non-protected paths", () => {
+    expect(classifyReviewPath("generated-client/api.ts", [])).toBe(
+      "structural",
+    );
+    expect(
+      classifyReviewPath("generated-client/api.ts", ["generated-client/**"]),
+    ).toBeUndefined();
+  });
+
   it("deduplicates, sorts and bounds selected files", () => {
     expect(
       selectReviewableFiles(["z.ts", "README.md", "a.ts", "a.ts"], 3),

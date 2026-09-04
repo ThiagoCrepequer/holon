@@ -281,7 +281,7 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
 
-    expect(headReads).toBe(4);
+    expect(headReads).toBe(5);
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
@@ -325,6 +325,96 @@ describe("ReviewWorkflow", () => {
         String(post.body).includes("could not complete"),
       ),
     ).toBe(false);
+  });
+
+  it("cancels instead of publishing a terminal result when refs change immediately before the Check Run update", async () => {
+    let headReads = 0;
+    const currentHead = () => {
+      headReads += 1;
+      return headReads < 5 ? "a".repeat(40) : "c".repeat(40);
+    };
+    const setup = runtime({ head: currentHead });
+    const checkRunConclusions: unknown[] = [];
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const installation = session(setup.posts, currentHead);
+        const request = installation.api.request;
+        return Promise.resolve({
+          ...installation,
+          api: {
+            ...installation.api,
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.startsWith("PATCH") && route.includes("check-runs")) {
+                checkRunConclusions.push(parameters.conclusion);
+              }
+              return request(route, parameters);
+            },
+          },
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("stale-before-terminal-check-run"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
+    expect(checkRunConclusions).toEqual(["cancelled"]);
+  });
+
+  it("creates and fails a Check Run for an invalid repository policy without persisting raw YAML errors", async () => {
+    const setup = runtime();
+    const checkRunConclusions: unknown[] = [];
+    setup.value = {
+      ...setup.value,
+      createSession: () => {
+        const installation = session(setup.posts);
+        const request = installation.api.request;
+        return Promise.resolve({
+          ...installation,
+          api: {
+            ...installation.api,
+            request: (route: string, parameters: Record<string, unknown>) => {
+              if (route.startsWith("PATCH") && route.includes("check-runs")) {
+                checkRunConclusions.push(parameters.conclusion);
+              }
+              return request(route, parameters);
+            },
+          },
+          readRepositoryPolicyFile: async (
+            _owner: string,
+            _repo: string,
+            _baseSha: string,
+            path: string,
+          ) =>
+            path === ".github/holon.yml"
+              ? {
+                  content: "version: [secret-invalid-value",
+                  rawBytes: new TextEncoder().encode(
+                    "version: [secret-invalid-value",
+                  ),
+                }
+              : undefined,
+        });
+      },
+    };
+
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("invalid-policy-check-run"),
+        immediateStep([]),
+        setup.value,
+      ),
+    ).rejects.toMatchObject({ name: "NonRetryableError" });
+
+    expect(setup.posts[0]?.route).toBe("POST /repos/{owner}/{repo}/check-runs");
+    expect(checkRunConclusions).toEqual(["failure"]);
+    expect(JSON.stringify(setup.posts)).not.toContain("secret-invalid-value");
   });
 
   it("does not persist a credential scope when the initial head is stale", async () => {

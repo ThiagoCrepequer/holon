@@ -3,6 +3,8 @@ import {
   modelReviewOutputSchema,
   type AggregatedReviewResult,
   type ReviewJob,
+  type RepositoryPolicy,
+  type RepositoryPolicySource,
   type ShardReviewResult,
   type StructuralImpactReport,
 } from "@holon/contracts";
@@ -22,9 +24,13 @@ import type { ReviewServices } from "./review-services.js";
 
 export type ReconciledReviewOutput = AggregatedReviewResult & {
   readonly activeFindings: readonly ReconciledFinding[];
+  readonly effectivePolicyDigest?: string | undefined;
+  readonly policySource?: RepositoryPolicySource | undefined;
   readonly resolvedFindings: readonly TrackedFinding[];
+  readonly sourceDigest?: string | null | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly updatedTrackedFindings: readonly TrackedFinding[];
+  readonly waiversCount?: number | undefined;
 };
 
 type EmitReviewEvent = (
@@ -114,11 +120,12 @@ export async function analyzeReview(
   job: ReviewJob,
   services: ReviewServices,
   emit: EmitReviewEvent,
+  effectivePolicy?: RepositoryPolicy,
 ): Promise<ReconciledReviewOutput> {
   try {
     const runId = createReviewRun(job).id;
-    await services.ensureContext(2);
-    const context = await services.loadContext();
+    await services.ensureContext(2, effectivePolicy);
+    const context = await services.loadContext(effectivePolicy);
     const patchBytes = contextBytes(context);
     emit("model.input", {
       changedLineCount: context.changedLines.length,
@@ -133,6 +140,14 @@ export async function analyzeReview(
       truncated: context.truncated,
     });
 
+    const verdictPolicy =
+      context.schemaVersion === 3 &&
+      context.verdictStrictness === "block_all_confident_medium"
+        ? { mediumSeverityThreshold: 1 }
+        : undefined;
+
+    const policyExcludedFilesCount =
+      context.schemaVersion === 3 ? context.waiversCount : 0;
     const plan = buildReviewPlan(
       context.files.map((file) => ({
         changeType: "modified" as const,
@@ -141,14 +156,25 @@ export async function analyzeReview(
         patch: file.patch,
         path: file.path,
       })),
+      { policyExcludedFilesCount },
     );
     if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
       return {
-        ...aggregateShardReviews(plan, []),
+        ...aggregateShardReviews(plan, [], { verdictPolicy }),
         activeFindings: [],
+        effectivePolicyDigest:
+          context.schemaVersion === 3
+            ? context.effectivePolicyDigest
+            : undefined,
+        policySource:
+          context.schemaVersion === 3 ? context.policySource : undefined,
         resolvedFindings: [],
+        sourceDigest:
+          context.schemaVersion === 3 ? context.sourceDigest : undefined,
         structuralImpact: context.structuralImpact,
         updatedTrackedFindings: [],
+        waiversCount:
+          context.schemaVersion === 3 ? context.waiversCount : undefined,
       };
     }
 
@@ -180,6 +206,7 @@ export async function analyzeReview(
     const rawAggregated = aggregateShardReviews(plan, shardResults, {
       additionalFindings: context.structuralImpact?.deterministicFindings ?? [],
       unifiedSummary,
+      verdictPolicy,
     });
     const currentWithFingerprints = await Promise.all(
       rawAggregated.findings.map(async (finding) => ({
@@ -218,13 +245,22 @@ export async function analyzeReview(
       canonicalFindings: reconciled.activeFindings,
       reconciliation: reconciled.summary,
       structuralImpact: context.structuralImpact,
+      verdictPolicy,
     });
     return {
       ...finalAggregated,
       activeFindings: reconciled.activeFindings,
+      effectivePolicyDigest:
+        context.schemaVersion === 3 ? context.effectivePolicyDigest : undefined,
+      policySource:
+        context.schemaVersion === 3 ? context.policySource : undefined,
       resolvedFindings: reconciled.resolvedFindings,
+      sourceDigest:
+        context.schemaVersion === 3 ? context.sourceDigest : undefined,
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
+      waiversCount:
+        context.schemaVersion === 3 ? context.waiversCount : undefined,
     };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);

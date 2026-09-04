@@ -230,6 +230,14 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 9,
   },
+  {
+    statements: `
+      ALTER TABLE run_telemetry ADD COLUMN policy_source TEXT;
+      ALTER TABLE run_telemetry ADD COLUMN source_digest TEXT;
+      ALTER TABLE run_telemetry ADD COLUMN effective_policy_digest TEXT;
+    `,
+    version: 10,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

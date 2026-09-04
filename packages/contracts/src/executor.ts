@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import {
+  repositoryPolicySchema,
+  repositoryPolicySourceSchema,
+  repositoryVerdictStrictnessSchema,
+} from "./repository-policy.js";
+import {
   gitShaSchema,
   positiveIntegerSchema,
   repositoryPathSchema,
@@ -205,7 +210,68 @@ export const reviewContextV2Schema = z
     }
   });
 
+export const reviewContextV3Schema = z
+  .strictObject({
+    changedLines: changedLinesSchema,
+    effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    files: z.array(reviewContextFileSchema).max(50),
+    policySource: repositoryPolicySourceSchema,
+    schemaVersion: z.literal(3),
+    sourceDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .nullable(),
+    structuralImpact: structuralImpactReportSchema.optional(),
+    surface: reviewSurfaceSchema,
+    truncated: z.boolean(),
+    verdictStrictness: repositoryVerdictStrictnessSchema,
+    waiversCount: z.number().int().nonnegative(),
+  })
+  .superRefine((context, refinement) => {
+    const modes = new Map(
+      context.files.map((file) => [file.path, file.mode] as const),
+    );
+    const paths = new Set(modes.keys());
+    if (paths.size !== context.files.length) {
+      refinement.addIssue({
+        code: "custom",
+        message: "reviewed file paths must be unique",
+        path: ["files"],
+      });
+    }
+    const patchBytes = context.files.reduce(
+      (total, file) => total + utf8ByteLength(file.patch),
+      0,
+    );
+    if (patchBytes > 120_000) {
+      refinement.addIssue({
+        code: "custom",
+        message: "review context patches exceed the 120000-byte budget",
+        path: ["files"],
+      });
+    }
+    for (const [index, changedLine] of context.changedLines.entries()) {
+      if (!paths.has(changedLine.path)) {
+        refinement.addIssue({
+          code: "custom",
+          message: "changed line path must identify a reviewed file",
+          path: ["changedLines", index, "path"],
+        });
+      }
+    }
+    for (const [index, signal] of (context.surface ?? []).entries()) {
+      if (modes.get(signal.path) !== "structural") {
+        refinement.addIssue({
+          code: "custom",
+          message: "review surface path must identify a structural file",
+          path: ["surface", index, "path"],
+        });
+      }
+    }
+  });
+
 export const reviewContextSchema = z.union([
+  reviewContextV3Schema,
   reviewContextV2Schema,
   reviewContextV1Schema,
 ]);
@@ -228,7 +294,15 @@ export const preparedRepositoryV2Schema = z.strictObject({
   schemaVersion: z.literal(2),
 });
 
+export const preparedRepositoryV3Schema = z.strictObject({
+  ...preparedRepositoryShape,
+  effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  schemaVersion: z.literal(3),
+  waiversCount: z.number().int().nonnegative(),
+});
+
 export const preparedRepositorySchema = z.union([
+  preparedRepositoryV3Schema,
   preparedRepositoryV2Schema,
   preparedRepositoryV1Schema,
 ]);
@@ -320,7 +394,36 @@ export const executorRequestV2Schema = z
     }
   });
 
+export const executorRequestV3Schema = z
+  .strictObject({
+    ...executorRequestShape,
+    effectivePolicy: repositoryPolicySchema,
+    installationId: positiveIntegerSchema,
+    repositoryName: repositoryNameSchema,
+    repositoryOwner: repositoryOwnerSchema,
+    schemaVersion: z.literal(3),
+  })
+  .superRefine((request, context) => {
+    validateRunCoordinates(request, context);
+    if (utf8ByteLength(request.canonicalDiff) > 2_000_000) {
+      context.addIssue({
+        code: "custom",
+        message: "canonicalDiff exceeds the 2000000-byte budget",
+        path: ["canonicalDiff"],
+      });
+    }
+    const expectedCloneUrl = `https://github.com/${request.repositoryOwner}/${request.repositoryName}.git`;
+    if (request.cloneUrl !== expectedCloneUrl) {
+      context.addIssue({
+        code: "custom",
+        message: "cloneUrl does not match repositoryOwner and repositoryName",
+        path: ["cloneUrl"],
+      });
+    }
+  });
+
 export const executorRequestSchema = z.union([
+  executorRequestV3Schema,
   executorRequestV2Schema,
   executorRequestV1Schema,
 ]);
@@ -362,12 +465,15 @@ export type ReviewSurfaceSignal = NonNullable<
 >[number];
 export type ReviewContextV1 = z.infer<typeof reviewContextV1Schema>;
 export type ReviewContextV2 = z.infer<typeof reviewContextV2Schema>;
+export type ReviewContextV3 = z.infer<typeof reviewContextV3Schema>;
 export type ReviewContext = z.infer<typeof reviewContextSchema>;
 export type PreparedRepositoryV1 = z.infer<typeof preparedRepositoryV1Schema>;
 export type PreparedRepositoryV2 = z.infer<typeof preparedRepositoryV2Schema>;
+export type PreparedRepositoryV3 = z.infer<typeof preparedRepositoryV3Schema>;
 export type PreparedRepository = z.infer<typeof preparedRepositorySchema>;
 export type ExecutorRequestV1 = z.infer<typeof executorRequestV1Schema>;
 export type ExecutorRequestV2 = z.infer<typeof executorRequestV2Schema>;
+export type ExecutorRequestV3 = z.infer<typeof executorRequestV3Schema>;
 export type ExecutorRequest = z.infer<typeof executorRequestSchema>;
 export type GitHubCredentialRequest = z.infer<
   typeof githubCredentialRequestSchema
