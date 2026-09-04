@@ -4,6 +4,7 @@ import { adminRequestContext } from "../app/server/request-context.js";
 import type { AdminEnv } from "./app.js";
 import {
   AccessAuthError,
+  type AccessIdentity,
   type AccessValidationConfig,
   validateAccessJwt,
 } from "./security/access-jwt.js";
@@ -50,7 +51,20 @@ export async function handleConsoleRequest(
     authorizedEmailDomain: env.AUTHORIZED_EMAIL_DOMAIN ?? "",
   };
   try {
-    const identity = await validateAccessJwt(request, authConfig);
+    let identity: AccessIdentity;
+    if (
+      import.meta.env.DEV &&
+      !authConfigOverride &&
+      !request.headers.get("cf-access-jwt-assertion") &&
+      (env.DEV_BYPASS_AUTH === "true" || !env.ACCESS_AUD)
+    ) {
+      identity = {
+        email: env.DEV_USER_EMAIL ?? "operator@holon.internal",
+        sub: "local-dev-operator",
+      };
+    } else {
+      identity = await validateAccessJwt(request, authConfig);
+    }
     const nonce = generateCspNonce();
     const loadContext = new RouterContextProvider();
     loadContext.set(adminRequestContext, {

@@ -15,6 +15,8 @@ export interface AdminEnv extends Env {
   readonly PROJECTION_QUEUE_ID?: string;
   readonly PROJECTION_DLQ_ID?: string;
   readonly AUTHORIZED_EMAIL_DOMAIN?: string;
+  readonly DEV_BYPASS_AUTH?: string;
+  readonly DEV_USER_EMAIL?: string;
 }
 
 export async function handleAdminFetch(

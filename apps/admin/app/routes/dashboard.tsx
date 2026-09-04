@@ -15,7 +15,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   }
   const window: "24h" | "7d" | "30d" = rawWindow;
   const storage = new D1AdminStorage(env.DB);
-  const keyring = parseCursorKeyring(env.ADMIN_CURSOR_HMAC_KEYS);
+  const keyring = parseCursorKeyring(
+    env.ADMIN_CURSOR_HMAC_KEYS ||
+      (import.meta.env.DEV
+        ? '{"primary":{"kid":"dev-key","secretHex":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}'
+        : undefined),
+  );
   const [summary, recentRuns, analytics, queues, watermark] = await Promise.all(
     [
       storage.getSummaryMetrics(window),
