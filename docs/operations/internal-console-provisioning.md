@@ -72,7 +72,7 @@ wrangler queues create holon-admin-projections-dlq --message-retention-period-se
 1. No dashboard da Cloudflare Zero Trust:
    - Navegue até **Access** > **Applications** > **Add an application**.
    - Tipo: **Self-hosted**.
-   - Application Domain: `admin.holon.internal` (ou subdomínio corporativo correspondente).
+   - Application Domain: `admin-holon.crepequer.dev`.
    - Session Duration: 12 a 24 horas.
 2. Defina as políticas de acesso:
    - Nome: `Staff Only`.
@@ -146,7 +146,7 @@ Seguindo a ordem de dependência:
    pnpm --filter @holon/admin deploy
    ```
 4. **Validação de prontidão**:
-   Acesse a URL `https://admin.holon.internal/readiness` e certifique-se de que todos os subsistemas essenciais (`d1`, `rpc`) reportam estado `healthy`.
+   Acesse a URL `https://admin-holon.crepequer.dev/readiness` e certifique-se de que todos os subsistemas essenciais (`d1`, `rpc`) reportam estado `healthy`.
 5. **Ativação controlada do producer**:
    - confirme que a UI exibe o watermark `projection_enabled_at` da migration;
    - altere `ADMIN_PROJECTION_ENABLED` para `"true"` no ambiente pretendido;

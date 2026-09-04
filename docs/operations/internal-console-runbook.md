@@ -30,7 +30,7 @@ Para inspecionar o status exato de cada subsistema:
 ```bash
 curl -H "cf-access-jwt-assertion: <SEU_TOKEN_ACCESS>" \
      -H "Accept: application/json" \
-     https://admin.holon.internal/readiness
+     https://admin-holon.crepequer.dev/readiness
 ```
 
 Exemplo de resposta de diagnóstico:

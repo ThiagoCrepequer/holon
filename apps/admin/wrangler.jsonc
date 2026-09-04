@@ -37,7 +37,7 @@
   ],
   "routes": [
     {
-      "pattern": "admin-staging.holon.internal",
+      "pattern": "admin-holon.crepequer.dev",
       "custom_domain": true,
     },
   ],
