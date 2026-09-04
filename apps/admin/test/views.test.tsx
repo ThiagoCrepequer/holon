@@ -183,6 +183,9 @@ describe("admin views", () => {
     expect(healthy).toContain("Oldest Message:");
     expect(healthy).toContain("400s");
     expect(healthy).toContain("Operational Degradation Detected");
+    expect(healthy).toContain("Operations");
+    expect(healthy).toContain("Strict Access Isolation");
+    expect(healthy).toContain("operator@example.com");
 
     const warning = render(
       <DashboardView
@@ -233,6 +236,9 @@ describe("admin views", () => {
     );
     expect(populated).toContain("Next Page");
     expect(populated).toContain("repositoryId=42");
+    expect(populated).toContain("verdict-select");
+    expect(populated).toContain("state-select");
+    expect(populated).toContain("period-select");
 
     const unfilteredEmpty = render(<RunsView runs={[]} />, "/runs");
     expect(unfilteredEmpty).toContain("No runs in this time window");

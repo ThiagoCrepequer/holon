@@ -45,6 +45,8 @@ export default function LatencyChartClient({
       description="Sample-adjusted p50 and p95 execution latency from Analytics Engine"
       empty={points.length === 0}
       emptyMessage="Analytics Engine latency data is currently unavailable"
+      className="h-full flex flex-col justify-between"
+      height="full"
       onToggleTable={() => setShowTable((current) => !current)}
       showTable={showTable}
       accessibleTable={
@@ -78,7 +80,7 @@ export default function LatencyChartClient({
     >
       {points.length > 0 ? (
         <div
-          className="h-64 w-full"
+          className="h-64 w-full flex-1 min-h-[250px]"
           role="img"
           aria-label="Latency trend chart; use the accessible data table for exact values"
         >

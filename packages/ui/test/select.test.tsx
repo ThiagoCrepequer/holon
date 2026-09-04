@@ -15,6 +15,7 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  SelectField,
 } from "../src/components/select/select.js";
 
 describe("Select component", () => {
@@ -80,5 +81,44 @@ describe("Select component", () => {
       SelectItemIndicator as unknown as { render: Function }
     ).render({ className: "test-ind" }, null);
     expect(indEl.props.className).toContain("test-ind");
+  });
+
+  it("renders SelectField with options, label, custom chevron, and error state", () => {
+    const options = [
+      { value: "opt1", label: "Option 1" },
+      { value: "opt2", label: "Option 2", disabled: true },
+    ];
+
+    const normalHtml = renderToStaticMarkup(
+      <SelectField
+        id="test-select"
+        label="Test Label"
+        name="testName"
+        defaultValue="opt1"
+        options={options}
+      />,
+    );
+
+    expect(normalHtml).toContain("<select");
+    expect(normalHtml).toContain('id="test-select"');
+    expect(normalHtml).toContain('name="testName"');
+    expect(normalHtml).toContain("Test Label");
+    expect(normalHtml).toContain("Option 1");
+    expect(normalHtml).toContain('value="opt1"');
+    expect(normalHtml).toContain("disabled");
+    expect(normalHtml).toContain("<svg");
+    expect(normalHtml).not.toContain("aria-invalid");
+
+    const errorHtml = renderToStaticMarkup(
+      <SelectField
+        id="err-select"
+        options={options}
+        error="Selection is required"
+      />,
+    );
+
+    expect(errorHtml).toContain('aria-invalid="true"');
+    expect(errorHtml).toContain("Selection is required");
+    expect(errorHtml).toContain("border-rose-500");
   });
 });

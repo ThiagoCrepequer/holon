@@ -13,7 +13,7 @@ export function LatencyChart({
   const hydrated = useHydrated();
   const fallback = (
     <div
-      className="h-80 animate-pulse rounded-lg border border-zinc-200 bg-zinc-100"
+      className="h-full min-h-[360px] animate-pulse rounded-lg border border-zinc-200 bg-zinc-100"
       aria-label="Loading latency chart"
     />
   );

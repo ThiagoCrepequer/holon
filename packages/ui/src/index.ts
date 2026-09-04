@@ -114,4 +114,7 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  SelectField,
+  type SelectFieldOption,
+  type SelectFieldProps,
 } from "./components/select/select.js";

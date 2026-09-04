@@ -4,9 +4,12 @@ node_modules/
 coverage/
 junit.xml
 *.junit.xml
+junit*.xml
 dist/
+build/
 artifacts/
 .wrangler/
+.react-router/
 .cache/
 *.tsbuildinfo
 

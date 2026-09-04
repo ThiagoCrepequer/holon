@@ -65,7 +65,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Degraded Alert */}
       <DegradedBanner degradedServices={degradedServices} />
 
-      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+      <div className="mb-6 rounded-lg border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-xs text-blue-900">
         Data is available only from the projection cutover
         {watermark.enabledAt
           ? ` at ${new Date(watermark.enabledAt).toLocaleString()}`
@@ -82,20 +82,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <h1 className="text-xl font-bold tracking-tight text-zinc-950">
             System Overview
           </h1>
-          <p className="text-xs text-zinc-500 mt-0.5">
+          <p className="text-xs text-zinc-500 mt-1">
             Operational status and telemetry for autonomous code reviews
           </p>
         </div>
 
         {/* Time Window Switcher */}
-        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs">
+        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs shadow-2xs">
           {windows.map((w) => (
             <Link
               key={w}
               to={`/?window=${w}`}
               className={`px-3 py-1 font-medium rounded-md transition-colors ${
                 window === w
-                  ? "bg-zinc-900 text-white shadow-xs"
+                  ? "bg-zinc-900 text-white shadow-xs font-semibold"
                   : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
@@ -106,7 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
         <MetricCard
           label="Total Runs"
           value={summary.totalRuns.toLocaleString()}
@@ -140,15 +140,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Latency Trend & Verdict Distribution Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch mb-6">
         {/* Latency Trend (Analytics Engine) */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 flex flex-col">
           <LatencyChart trend={analyticsTrend} />
         </div>
 
-        {/* Verdict Distribution Card */}
-        <div className="space-y-6">
-          <Card>
+        {/* Verdict Distribution & Queue Freshness Stacked Column */}
+        <div className="flex flex-col gap-5 h-full">
+          {/* Verdict Distribution Card */}
+          <Card className="flex-1 flex flex-col justify-between">
             <CardHeader className="pb-3">
               <CardTitle>Verdict Distribution</CardTitle>
             </CardHeader>
@@ -157,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Badge variant="success" size="sm">
                   Approve
                 </Badge>
-                <span className="font-mono text-xs font-medium">
+                <span className="font-mono text-xs font-semibold text-zinc-900">
                   {summary.verdictDistribution.approve.toLocaleString()}
                 </span>
               </div>
@@ -165,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Badge variant="danger" size="sm">
                   Request Changes
                 </Badge>
-                <span className="font-mono text-xs font-medium">
+                <span className="font-mono text-xs font-semibold text-zinc-900">
                   {summary.verdictDistribution.requestChanges.toLocaleString()}
                 </span>
               </div>
@@ -173,7 +174,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Badge variant="info" size="sm">
                   Comment
                 </Badge>
-                <span className="font-mono text-xs font-medium">
+                <span className="font-mono text-xs font-semibold text-zinc-900">
                   {summary.verdictDistribution.comment.toLocaleString()}
                 </span>
               </div>
@@ -181,35 +182,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </Card>
 
           {/* Queue Freshness Card */}
-          <Card>
+          <Card className="flex-1 flex flex-col justify-between">
             <CardHeader className="pb-2">
               <CardTitle>Queue Freshness</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-xs">
+            <CardContent className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500">Backlog Messages:</span>
-                <span className="font-mono font-medium">
+                <span className="text-zinc-500 font-medium">
+                  Backlog Messages:
+                </span>
+                <span className="font-mono font-semibold text-zinc-900">
                   {queueHealth ? queueHealth.backlogCount : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500">Dead Letter Queue:</span>
+                <span className="text-zinc-500 font-medium">
+                  Dead Letter Queue:
+                </span>
                 <span
-                  className={`font-mono font-medium ${queueHealth && queueHealth.dlqCount > 0 ? "text-rose-600 font-bold" : ""}`}
+                  className={`font-mono font-semibold ${queueHealth && queueHealth.dlqCount > 0 ? "text-rose-600 font-bold" : "text-zinc-900"}`}
                 >
                   {queueHealth ? queueHealth.dlqCount : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500">Oldest Message:</span>
-                <span className="font-mono font-medium">
+                <span className="text-zinc-500 font-medium">
+                  Oldest Message:
+                </span>
+                <span className="font-mono font-semibold text-zinc-900">
                   {queueHealth?.oldestMessageAgeSeconds === undefined
                     ? "—"
                     : `${queueHealth.oldestMessageAgeSeconds}s`}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-500">Pipeline State:</span>
+                <span className="text-zinc-500 font-medium">
+                  Pipeline State:
+                </span>
                 <Badge
                   variant={queueHealth?.isDegraded ? "warning" : "success"}
                   size="sm"

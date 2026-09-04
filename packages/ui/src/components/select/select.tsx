@@ -190,3 +190,113 @@ export const SelectSeparator = React.forwardRef<
   />
 ));
 SelectSeparator.displayName = "SelectSeparator";
+
+export interface SelectFieldOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+export interface SelectFieldProps extends Omit<
+  React.SelectHTMLAttributes<HTMLSelectElement>,
+  "size"
+> {
+  label?: string;
+  options: SelectFieldOption[];
+  error?: string;
+  containerClassName?: string;
+}
+
+export const SelectField = React.forwardRef<
+  HTMLSelectElement,
+  SelectFieldProps
+>(
+  (
+    {
+      id,
+      label,
+      options,
+      error,
+      className,
+      containerClassName,
+      disabled,
+      ...props
+    },
+    ref,
+  ) => {
+    const generatedId = React.useId();
+    const selectId = id ?? generatedId;
+    const errorId = `${selectId}-error`;
+
+    return (
+      <div className={cn("relative inline-block w-full", containerClassName)}>
+        {label && (
+          <label
+            htmlFor={selectId}
+            className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1"
+          >
+            {label}
+          </label>
+        )}
+        <div className="relative">
+          <select
+            ref={ref}
+            id={selectId}
+            disabled={disabled}
+            aria-invalid={error ? "true" : undefined}
+            aria-describedby={error ? errorId : undefined}
+            className={cn(
+              "w-full appearance-none -webkit-appearance-none",
+              "h-9 pl-3 pr-8 text-xs font-normal text-zinc-900 bg-white",
+              "border border-zinc-200 rounded-lg shadow-xs",
+              "transition-all duration-150",
+              "hover:border-zinc-300",
+              "focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:border-zinc-950",
+              "disabled:bg-zinc-50 disabled:text-zinc-400 disabled:border-zinc-200 disabled:cursor-not-allowed",
+              error &&
+                "border-rose-500 focus:ring-rose-500 focus:border-rose-500",
+              className,
+            )}
+            {...props}
+          >
+            {options.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+                className="text-zinc-900 bg-white py-1"
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-zinc-400">
+            <svg
+              className="w-4 h-4"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 8l4 4 4-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        {error && (
+          <p
+            id={errorId}
+            className="mt-1 text-[11px] text-rose-600 font-medium"
+          >
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  },
+);
+SelectField.displayName = "SelectField";

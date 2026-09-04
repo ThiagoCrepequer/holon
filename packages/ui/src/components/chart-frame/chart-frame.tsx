@@ -102,11 +102,11 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
             </div>
           ) : (
             <div
-              style={{ height }}
+              style={{ height: height === "full" ? "100%" : height }}
               role="region"
               aria-labelledby={titleId}
               aria-describedby={description ? descId : undefined}
-              className="w-full"
+              className="w-full flex-1 flex flex-col"
             >
               {children}
             </div>

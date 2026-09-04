@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  SelectField,
   Table,
   TableBody,
   TableCell,
@@ -65,35 +66,35 @@ export const RunsView: React.FC<RunsViewProps> = ({
 
       {/* Filter and Search Bar */}
       <Card className="mb-6">
-        <CardContent className="pt-5">
+        <CardContent className="p-5">
           <form
             method="GET"
             action="/runs"
-            className="flex flex-col md:flex-row gap-3"
+            className="flex flex-col md:flex-row gap-3.5 items-end"
           >
             {/* Structured Search */}
-            <div className="flex-1">
+            <div className="flex-1 w-full">
               <label
                 htmlFor="search-input"
-                className="block text-[11px] font-semibold text-zinc-600 mb-1"
+                className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1"
               >
-                SEARCH
+                Search
               </label>
               <input
                 id="search-input"
                 name="q"
                 defaultValue={searchQuery}
-                placeholder="Search owner/repo#123, 40-char SHA, or run_id..."
-                className="w-full h-8 px-3 text-xs bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-950 font-mono"
+                placeholder="Search owner/repo#123, SHA, or run_id..."
+                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-950 font-mono transition-colors"
               />
             </div>
 
             <div className="w-full md:w-36">
               <label
                 htmlFor="repository-id"
-                className="block text-[11px] font-semibold text-zinc-600 mb-1"
+                className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1"
               >
-                REPOSITORY ID
+                Repository ID
               </label>
               <input
                 id="repository-id"
@@ -101,29 +102,25 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 type="number"
                 min="1"
                 defaultValue={repositoryId}
-                className="w-full h-8 px-2.5 text-xs bg-white border border-zinc-300 rounded-md"
+                placeholder="e.g. 42"
+                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-colors"
               />
             </div>
 
             {/* Verdict Filter */}
             <div className="w-full md:w-40">
-              <label
-                htmlFor="verdict-select"
-                className="block text-[11px] font-semibold text-zinc-600 mb-1"
-              >
-                VERDICT
-              </label>
-              <select
+              <SelectField
                 id="verdict-select"
                 name="verdict"
+                label="VERDICT"
                 defaultValue={verdict}
-                className="w-full h-8 px-2.5 text-xs bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-950"
-              >
-                <option value="">All Verdicts</option>
-                <option value="APPROVE">Approve</option>
-                <option value="REQUEST_CHANGES">Request Changes</option>
-                <option value="COMMENT">Comment</option>
-              </select>
+                options={[
+                  { value: "", label: "All Verdicts" },
+                  { value: "APPROVE", label: "Approve" },
+                  { value: "REQUEST_CHANGES", label: "Request Changes" },
+                  { value: "COMMENT", label: "Comment" },
+                ]}
+              />
             </div>
 
             <input type="hidden" name="order" value={order} />
@@ -131,57 +128,47 @@ export const RunsView: React.FC<RunsViewProps> = ({
 
             {/* Terminal State Filter */}
             <div className="w-full md:w-40">
-              <label
-                htmlFor="state-select"
-                className="block text-[11px] font-semibold text-zinc-600 mb-1"
-              >
-                STATE
-              </label>
-              <select
+              <SelectField
                 id="state-select"
                 name="state"
+                label="STATE"
                 defaultValue={terminalState}
-                className="w-full h-8 px-2.5 text-xs bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-950"
-              >
-                <option value="">All States</option>
-                <option value="completed">Completed</option>
-                <option value="failed_terminal">Failed Terminal</option>
-                <option value="obsolete">Obsolete</option>
-              </select>
+                options={[
+                  { value: "", label: "All States" },
+                  { value: "completed", label: "Completed" },
+                  { value: "failed_terminal", label: "Failed Terminal" },
+                  { value: "obsolete", label: "Obsolete" },
+                ]}
+              />
             </div>
 
             {/* Period Filter */}
-            <div className="w-full md:w-32">
-              <label
-                htmlFor="period-select"
-                className="block text-[11px] font-semibold text-zinc-600 mb-1"
-              >
-                PERIOD
-              </label>
-              <select
+            <div className="w-full md:w-36">
+              <SelectField
                 id="period-select"
                 name="period"
+                label="PERIOD"
                 defaultValue={period}
-                className="w-full h-8 px-2.5 text-xs bg-white border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-950"
-              >
-                <option value="24h">Last 24h</option>
-                <option value="7d">Last 7d</option>
-                <option value="30d">Last 30d</option>
-              </select>
+                options={[
+                  { value: "24h", label: "Last 24h" },
+                  { value: "7d", label: "Last 7d" },
+                  { value: "30d", label: "Last 30d" },
+                ]}
+              />
             </div>
 
             {/* Submit & Reset */}
-            <div className="flex items-end gap-2">
+            <div className="flex items-center gap-2 pb-[1px] w-full md:w-auto">
               <button
                 type="submit"
-                className="h-8 px-4 text-xs font-medium bg-zinc-900 text-white rounded-md hover:bg-zinc-800 transition-colors"
+                className="h-9 px-4 text-xs font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors shadow-xs shrink-0"
               >
                 Filter
               </button>
               {hasActiveFilters && (
                 <Link
                   to="/runs"
-                  className="h-8 px-3 inline-flex items-center text-xs font-medium text-zinc-600 hover:text-zinc-950 underline"
+                  className="h-9 px-3 inline-flex items-center text-xs font-medium text-zinc-600 hover:text-zinc-950 underline underline-offset-2 shrink-0"
                 >
                   Clear
                 </Link>
