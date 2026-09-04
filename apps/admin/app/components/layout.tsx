@@ -215,7 +215,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 <NavLink
                   key={item.href}
                   to={item.href}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors shrink-0 ${
+                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-medium rounded-md transition-colors shrink-0 ${
                     isActive
                       ? "bg-zinc-900 text-white font-semibold"
                       : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"

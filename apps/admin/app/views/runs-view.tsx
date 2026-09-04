@@ -189,7 +189,7 @@ export const RunsView: React.FC<RunsViewProps> = ({
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 border-t border-zinc-200 overflow-hidden rounded-b-xl">
           {runs.length === 0 ? (
             <div className="py-12">
               <EmptyState
@@ -237,8 +237,10 @@ export const RunsView: React.FC<RunsViewProps> = ({
                           {run.repository_owner}/{run.repository_name}#
                           {run.pr_number}
                         </div>
-                        <div className="font-mono text-[11px] text-zinc-400">
-                          {run.head_sha.slice(0, 7)}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="font-mono text-[11px] text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200/60">
+                            {run.head_sha.slice(0, 7)}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -285,9 +287,9 @@ export const RunsView: React.FC<RunsViewProps> = ({
                       <TableCell className="text-right">
                         <Link
                           to={`/runs/${encodeURIComponent(run.run_id)}`}
-                          className="text-xs font-semibold text-zinc-900 hover:text-zinc-700 underline underline-offset-2"
+                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-950 rounded-md transition-colors shadow-2xs"
                         >
-                          Inspect &rarr;
+                          Inspect
                         </Link>
                       </TableCell>
                     </TableRow>
@@ -297,7 +299,7 @@ export const RunsView: React.FC<RunsViewProps> = ({
 
               {/* Keyset Pagination Controls */}
               {nextCursor && (
-                <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-end">
+                <div className="p-4 border-t border-zinc-200 flex items-center justify-end bg-zinc-50/50">
                   <Link
                     to={`/runs?period=${encodeURIComponent(period)}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}${verdict ? `&verdict=${encodeURIComponent(verdict)}` : ""}${terminalState ? `&state=${encodeURIComponent(terminalState)}` : ""}${repositoryId ? `&repositoryId=${repositoryId}` : ""}&order=${order}&pageSize=${pageSize}&cursor=${encodeURIComponent(nextCursor)}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-zinc-900 text-white rounded-md hover:bg-zinc-800 transition-colors shadow-xs"

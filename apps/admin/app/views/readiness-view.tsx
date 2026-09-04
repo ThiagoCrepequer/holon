@@ -94,7 +94,7 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
         <CardHeader className="pb-3">
           <CardTitle>Subsystem Dependency Probes</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 border-t border-zinc-200 overflow-hidden rounded-b-xl">
           <Table>
             <TableHeader>
               <TableRow>

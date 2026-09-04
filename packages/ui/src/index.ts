@@ -45,6 +45,7 @@ export {
   TableFooter,
   TableHead,
   TableHeader,
+  type TableProps,
   TableRow,
 } from "./components/table/table.js";
 
