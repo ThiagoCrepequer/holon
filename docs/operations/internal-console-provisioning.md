@@ -77,7 +77,8 @@ wrangler queues create holon-admin-projections-dlq --message-retention-period-se
 2. Defina as políticas de acesso:
    - Nome: `Staff Only`.
    - Ação: `Allow`.
-   - Regra: `Emails ending in @suaempresa.com`.
+   - Regra obrigatória: seletor **Email** com o endereço Hotmail exato do operador autorizado.
+   - Não use `Emails ending in @hotmail.com`: essa regra permitiria que qualquer conta Hotmail autenticada satisfizesse a política do Access.
    - Rejeição obrigatória: Service Tokens (`type: "app"` são rejeitados pelo código da aplicação para acesso interativo).
 3. Obtenha os valores para configuração:
    - **Team Name**: Subdomínio do Access (`<team>.cloudflareaccess.com`).
@@ -103,16 +104,28 @@ wrangler secret put CF_ANALYTICS_API_TOKEN
 wrangler secret put CF_QUEUES_READ_TOKEN
 ```
 
+`ADMIN_CURSOR_HMAC_KEYS` está declarado em `secrets.required` no `wrangler.jsonc`; `wrangler deploy` e `wrangler versions upload` devem falhar antes da publicação quando o segredo obrigatório não estiver configurado. Os tokens de observabilidade são opcionais e habilitam apenas os respectivos painéis.
+
 ### 3.2. Variáveis de ambiente (`apps/admin/wrangler.jsonc`)
 
-- `ACCESS_TEAM_NAME`: Nome do time no Cloudflare Access.
-- `ACCESS_AUD`: Audience tag da aplicação no Access.
-- `AUTHORIZED_EMAIL_DOMAIN`: Domínio de email corporativo permitido (ex: `empresa.com`).
+- `ACCESS_TEAM_NAME="crepequer"`: nome do time no Cloudflare Access.
+- `ACCESS_AUD="50a52aa572751e54ac02ac6dd61ccba516e042229700067910456ec80419163c"`: Audience tag da aplicação Access que protege `admin-holon.crepequer.dev`.
+- `AUTHORIZED_EMAIL_DOMAIN="hotmail.com"`: segunda camada de validação do domínio do e-mail. O valor não inclui `@`; a política primária do Access deve continuar restrita ao endereço completo do operador.
 - `CF_ACCOUNT_ID`: ID da conta Cloudflare (para endpoints REST da Cloudflare).
 - `PROJECTION_QUEUE_ID`: ID ou nome da fila de projeção.
 - `PROJECTION_DLQ_ID`: ID ou nome da DLQ.
 
-### 3.3. Flag de rollout do `apps/control-plane`
+### 3.3. Workers Logs
+
+O `wrangler.jsonc` habilita persistência de logs, logs de invocação e amostragem de 100% enquanto o console possui baixo volume. Consulte-os em **Workers & Pages > holon-admin > Observability > Logs** ou acompanhe eventos em tempo real:
+
+```bash
+pnpm --filter @holon/admin exec wrangler tail holon-admin --format pretty
+```
+
+Os logs não devem incluir JWTs, cookies, tokens, prompts, diffs ou conteúdo de repositórios privados.
+
+### 3.4. Flag de rollout do `apps/control-plane`
 
 Configure `ADMIN_PROJECTION_ENABLED="false"` no primeiro deploy do control plane. Depois que migration, consumer e prontidão do admin estiverem validados, altere para `"true"` e faça novo deploy. O `payloadHash` da projeção é SHA-256 não chaveado e não exige segredo compartilhado; ele serve para identidade/idempotência e detecção de corrupção. A autenticidade do produtor é garantida pelo binding da Queue configurado na conta Cloudflare.
 
