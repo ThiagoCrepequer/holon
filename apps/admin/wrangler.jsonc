@@ -10,6 +10,9 @@
     "ACCESS_TEAM_NAME": "crepequer",
     "ACCESS_AUD": "50a52aa572751e54ac02ac6dd61ccba516e042229700067910456ec80419163c",
     "AUTHORIZED_EMAIL_DOMAIN": "hotmail.com",
+    "CF_ACCOUNT_ID": "4be6ae7d1bb4a3b2a395c6d30e2671a5",
+    "PROJECTION_QUEUE_ID": "3519ca1fd3e8481ba54280be80a1ea85",
+    "PROJECTION_DLQ_ID": "1ee489d546aa4789a9439bfe66956987",
   },
   "secrets": {
     "required": ["ADMIN_CURSOR_HMAC_KEYS"],
