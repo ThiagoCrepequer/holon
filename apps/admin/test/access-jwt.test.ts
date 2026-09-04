@@ -85,11 +85,11 @@ describe("Cloudflare Access JWT validator", () => {
     );
   });
 
-  it("throws 403 when session is an automated service token (type: 'app')", async () => {
+  it("throws 403 for the documented Cloudflare service-token payload", async () => {
     const token = await createSignedToken({
       type: "app",
-      email: "bot@corp.example.com",
-      sub: "bot-sub-123",
+      common_name: "service-token-client-id.access",
+      sub: "",
     });
 
     const request = new Request("https://admin.example.com/", {
@@ -140,9 +140,28 @@ describe("Cloudflare Access JWT validator", () => {
     }
   });
 
-  it("successfully validates human session with authorized email domain", async () => {
+  it("throws 403 when an email assertion has no user subject", async () => {
     const token = await createSignedToken({
       email: "engineer@corp.example.com",
+      sub: "   ",
+    });
+    const request = new Request("https://admin.example.com/", {
+      headers: { "cf-access-jwt-assertion": token },
+    });
+
+    await expect(
+      validateAccessJwt(request, validConfig()),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      userMessage: "Assertion does not contain a valid user subject",
+    });
+  });
+
+  it("successfully validates human session with authorized email domain", async () => {
+    const token = await createSignedToken({
+      type: "app",
+      email: "engineer@corp.example.com",
+      identity_nonce: "identity-cache-key",
       sub: "user-sub-456",
       idp: { type: "google" },
     });

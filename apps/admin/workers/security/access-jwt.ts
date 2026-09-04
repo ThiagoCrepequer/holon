@@ -103,20 +103,29 @@ export async function validateAccessJwt(
   }
 
   const payload = verified.payload;
+  const email =
+    typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+  const subject = typeof payload.sub === "string" ? payload.sub.trim() : "";
+  const serviceTokenCommonName =
+    typeof payload.common_name === "string" ? payload.common_name.trim() : "";
 
-  if (payload.type === "app") {
+  if (serviceTokenCommonName && !email && !subject) {
     throw new AccessAuthError(
       403,
       "Service tokens are not authorized for interactive console",
     );
   }
 
-  const email =
-    typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
   if (!email || !email.includes("@")) {
     throw new AccessAuthError(
       403,
       "Assertion does not contain a valid email address",
+    );
+  }
+  if (!subject) {
+    throw new AccessAuthError(
+      403,
+      "Assertion does not contain a valid user subject",
     );
   }
 
@@ -135,7 +144,7 @@ export async function validateAccessJwt(
 
   return {
     email,
-    sub: typeof payload.sub === "string" ? payload.sub : email,
+    sub: subject,
     identityProvider,
   };
 }
