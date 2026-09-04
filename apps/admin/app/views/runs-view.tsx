@@ -86,7 +86,7 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 name="q"
                 defaultValue={searchQuery}
                 placeholder="Search owner/repo#123, SHA, or run_id..."
-                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-950 font-mono transition-colors"
+                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 outline-none focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 font-mono transition-colors"
               />
             </div>
 
@@ -104,7 +104,7 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 min="1"
                 defaultValue={repositoryId}
                 placeholder="e.g. 42"
-                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-colors"
+                className="w-full h-9 px-3 text-xs bg-white border border-zinc-200 rounded-lg shadow-xs hover:border-zinc-300 outline-none focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/10 transition-colors"
               />
             </div>
 

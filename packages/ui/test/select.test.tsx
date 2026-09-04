@@ -1,3 +1,7 @@
+/** @vitest-environment jsdom */
+
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -99,13 +103,15 @@ describe("Select component", () => {
       />,
     );
 
-    expect(normalHtml).toContain("<select");
+    expect(normalHtml).toContain('role="combobox"');
+    expect(normalHtml).toContain("<button");
+    expect(normalHtml).toContain("<input");
+    expect(normalHtml).not.toContain("<select");
     expect(normalHtml).toContain('id="test-select"');
     expect(normalHtml).toContain('name="testName"');
     expect(normalHtml).toContain("Test Label");
     expect(normalHtml).toContain("Option 1");
     expect(normalHtml).toContain('value="opt1"');
-    expect(normalHtml).toContain("disabled");
     expect(normalHtml).toContain("<svg");
     expect(normalHtml).not.toContain("aria-invalid");
 
@@ -120,5 +126,72 @@ describe("Select component", () => {
     expect(errorHtml).toContain('aria-invalid="true"');
     expect(errorHtml).toContain("Selection is required");
     expect(errorHtml).toContain("border-rose-500");
+  });
+
+  it("supports placeholder without defaultValue and forwards ref to trigger", () => {
+    const options = [
+      { value: "opt1", label: "Option 1" },
+      { value: "opt2", label: "Option 2" },
+    ];
+
+    const ref = React.createRef<HTMLButtonElement>();
+    const html = renderToStaticMarkup(
+      <SelectField
+        ref={ref}
+        id="ph-select"
+        options={options}
+        placeholder="Choose an option"
+      />,
+    );
+
+    expect(html).toContain("Choose an option");
+    expect(html).toContain('id="ph-select"');
+  });
+
+  it("handles onValueChange and autoSubmit with user interaction", async () => {
+    const user = userEvent.setup();
+    const options = [
+      { value: "opt1", label: "Option 1" },
+      { value: "opt2", label: "Option 2" },
+    ];
+
+    let receivedValue = "";
+    let formSubmitted = false;
+
+    const ref = React.createRef<HTMLButtonElement>();
+
+    const { unmount } = render(
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          formSubmitted = true;
+        }}
+      >
+        <SelectField
+          ref={ref}
+          options={options}
+          defaultValue="opt1"
+          autoSubmit
+          onValueChange={(val) => {
+            receivedValue = val ?? "";
+          }}
+        />
+      </form>,
+    );
+
+    expect(ref.current).toBeInstanceOf(HTMLButtonElement);
+    const trigger = screen.getByRole("combobox");
+    expect(trigger).toBeDefined();
+
+    // In JSDOM, clicking the trigger opens the popup
+    await user.click(trigger);
+    const option2 = await screen.findByRole("option", { name: "Option 2" });
+    expect(option2).toBeDefined();
+
+    await user.click(option2);
+    expect(receivedValue).toBe("opt2");
+    expect(formSubmitted).toBe(true);
+
+    unmount();
   });
 });
