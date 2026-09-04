@@ -54,6 +54,15 @@ const analyticsResponseSchema = z.object({
   ),
 });
 
+const analyticsWindowSql = {
+  "24h": { bucketInterval: "INTERVAL '1' HOUR", hours: 24 },
+  "7d": { bucketInterval: "INTERVAL '6' HOUR", hours: 168 },
+  "30d": { bucketInterval: "INTERVAL '1' DAY", hours: 720 },
+} as const satisfies Record<
+  "24h" | "7d" | "30d",
+  { readonly bucketInterval: string; readonly hours: number }
+>;
+
 export async function queryAnalyticsTrend(
   window: "24h" | "7d" | "30d",
   config: AnalyticsClientConfig,
@@ -83,12 +92,10 @@ export async function queryAnalyticsTrend(
     return unavailable("missing_configuration");
   }
 
-  const hours = window === "24h" ? 24 : window === "7d" ? 168 : 720;
-  const bucket =
-    window === "24h" ? "1 HOUR" : window === "7d" ? "6 HOUR" : "1 DAY";
+  const { bucketInterval, hours } = analyticsWindowSql[window];
   const sql = `
     SELECT
-      toStartOfInterval(timestamp, INTERVAL '${bucket}') AS bucket,
+      toStartOfInterval(timestamp, ${bucketInterval}) AS bucket,
       quantileExactWeighted(0.50)(double1, _sample_interval) AS p50_duration_ms,
       quantileExactWeighted(0.95)(double1, _sample_interval) AS p95_duration_ms,
       sum(_sample_interval) AS sampled_count
