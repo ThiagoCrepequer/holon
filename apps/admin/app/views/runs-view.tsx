@@ -18,6 +18,7 @@ import { Link } from "react-router";
 
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
+import { formatTableDateTimeUtc } from "../utils/format.js";
 
 export interface RunsViewProps {
   readonly userEmail?: string | undefined;
@@ -278,13 +279,8 @@ export const RunsView: React.FC<RunsViewProps> = ({
                           ? `${(run.execution_duration_ms / 1000).toFixed(1)}s`
                           : "—"}
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-500">
-                        {new Date(run.terminal_at).toLocaleString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                      <TableCell className="text-xs text-zinc-500 font-mono">
+                        {formatTableDateTimeUtc(run.terminal_at)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link

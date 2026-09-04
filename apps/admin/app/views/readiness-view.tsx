@@ -16,6 +16,7 @@ import * as React from "react";
 
 import type { ReadinessReport } from "../../workers/observability/readiness.js";
 import { Layout } from "../components/layout.js";
+import { formatDateTimeUtc } from "../utils/format.js";
 
 export interface ReadinessViewProps {
   readonly userEmail?: string | undefined;
@@ -70,7 +71,7 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
           <div>
             <CardTitle>Overall Operational Status</CardTitle>
             <CardDescription className="text-xs text-zinc-400 mt-0.5">
-              Probe conducted at {new Date(report.timestamp).toLocaleString()}
+              Probe conducted at {formatDateTimeUtc(report.timestamp)}
             </CardDescription>
           </div>
           <Badge

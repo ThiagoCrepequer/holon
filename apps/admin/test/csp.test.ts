@@ -17,15 +17,31 @@ describe("CSP and security headers", () => {
     expect(/^[0-9a-f]{32}$/.test(nonce1)).toBe(true);
   });
 
-  it("builds correct CSP directive containing nonce", () => {
+  it("builds correct CSP directive containing nonce in production mode", () => {
     const nonce = "1234567890abcdef1234567890abcdef";
-    const csp = buildCspDirective(nonce);
+    const csp = buildCspDirective(nonce, { isDev: false });
 
     expect(csp).toContain(`script-src 'self' 'nonce-${nonce}'`);
     expect(csp).toContain(`style-src-elem 'self' 'nonce-${nonce}'`);
+    expect(csp).not.toContain(
+      `style-src-elem 'self' 'nonce-${nonce}' 'unsafe-inline'`,
+    );
     expect(csp).toContain("style-src-attr 'unsafe-inline'");
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).not.toContain("ws:");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it("relaxes style-src-elem and connect-src for Vite HMR in dev mode", () => {
+    const nonce = "1234567890abcdef1234567890abcdef";
+    const csp = buildCspDirective(nonce, { isDev: true });
+
+    expect(csp).toContain(`script-src 'self' 'nonce-${nonce}'`);
+    expect(csp).toContain(
+      `style-src-elem 'self' 'nonce-${nonce}' 'unsafe-inline'`,
+    );
+    expect(csp).toContain("connect-src 'self' ws: wss:");
   });
 
   it("builds complete security headers", () => {

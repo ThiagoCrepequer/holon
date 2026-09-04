@@ -10,15 +10,19 @@ export function generateCspNonce(): string {
   );
 }
 
-export function buildCspDirective(nonce: string): string {
+export function buildCspDirective(
+  nonce: string,
+  options?: { isDev?: boolean },
+): string {
+  const isDev = options?.isDev ?? import.meta.env.DEV;
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    `style-src-elem 'self' 'nonce-${nonce}'`,
+    `style-src-elem 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-inline'" : ""}`,
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
@@ -26,9 +30,12 @@ export function buildCspDirective(nonce: string): string {
   ].join("; ");
 }
 
-export function buildSecurityHeaders(nonce: string): Headers {
+export function buildSecurityHeaders(
+  nonce: string,
+  options?: { isDev?: boolean },
+): Headers {
   const headers = new Headers();
-  headers.set("Content-Security-Policy", buildCspDirective(nonce));
+  headers.set("Content-Security-Policy", buildCspDirective(nonce, options));
   headers.set("Referrer-Policy", "no-referrer");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "DENY");
@@ -41,9 +48,10 @@ export function buildSecurityHeaders(nonce: string): Headers {
 export function applySecurityHeaders(
   response: Response,
   nonce: string,
+  options?: { isDev?: boolean },
 ): Response {
   const newHeaders = new Headers(response.headers);
-  const secHeaders = buildSecurityHeaders(nonce);
+  const secHeaders = buildSecurityHeaders(nonce, options);
   secHeaders.forEach((value, key) => {
     newHeaders.set(key, value);
   });

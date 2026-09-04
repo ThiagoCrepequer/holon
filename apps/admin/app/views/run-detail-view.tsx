@@ -20,6 +20,7 @@ import { Link, useNavigate } from "react-router";
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
 import { useHydrated } from "../hooks/use-hydrated.js";
+import { formatNumber } from "../utils/format.js";
 
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
@@ -147,12 +148,11 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-zinc-900 tracking-tight">
-              {(
-                (run.input_tokens ?? 0) + (run.output_tokens ?? 0)
-              ).toLocaleString()}
+              {formatNumber((run.input_tokens ?? 0) + (run.output_tokens ?? 0))}
             </div>
             <div className="text-xs text-zinc-400 mt-1">
-              In: {run.input_tokens ?? 0} &bull; Out: {run.output_tokens ?? 0}
+              In: {formatNumber(run.input_tokens)} &bull; Out:{" "}
+              {formatNumber(run.output_tokens)}
             </div>
           </CardContent>
         </Card>

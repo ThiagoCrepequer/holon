@@ -21,6 +21,11 @@ import type { AdminRunRow, AdminSummaryMetrics } from "../../workers/types.js";
 import { DegradedBanner } from "../components/degraded-banner.js";
 import { LatencyChart } from "../components/latency-chart.js";
 import { Layout } from "../components/layout.js";
+import {
+  formatDateTimeUtc,
+  formatNumber,
+  formatTableDateTimeUtc,
+} from "../utils/format.js";
 
 export interface DashboardViewProps {
   readonly userEmail?: string | undefined;
@@ -56,7 +61,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ? (summary.averageExecutionDurationMs / 1000).toFixed(1)
       : "0.0";
 
-  const totalTokensFormatted = summary.totalTokens.toLocaleString();
+  const totalTokensFormatted = formatNumber(summary.totalTokens);
 
   const windows: Array<"24h" | "7d" | "30d"> = ["24h", "7d", "30d"];
 
@@ -68,11 +73,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="mb-6 rounded-lg border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-xs text-blue-900">
         Data is available only from the projection cutover
         {watermark.enabledAt
-          ? ` at ${new Date(watermark.enabledAt).toLocaleString()}`
+          ? ` at ${formatDateTimeUtc(watermark.enabledAt)}`
           : " (watermark unavailable)"}
         .
         {watermark.lastReceivedAt
-          ? ` Last projection received ${new Date(watermark.lastReceivedAt).toLocaleString()}.`
+          ? ` Last projection received ${formatDateTimeUtc(watermark.lastReceivedAt)}.`
           : " No projection has been received yet."}
       </div>
 
@@ -109,14 +114,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
         <MetricCard
           label="Total Runs"
-          value={summary.totalRuns.toLocaleString()}
+          value={formatNumber(summary.totalRuns)}
           subtitle="Exact count from D1"
           tone="neutral"
         />
         <MetricCard
           label="Success Rate"
           value={`${successRate}%`}
-          subtitle={`${summary.completedRuns} completed`}
+          subtitle={`${formatNumber(summary.completedRuns)} completed`}
           tone={
             successRate >= 90
               ? "success"
@@ -159,7 +164,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Approve
                 </Badge>
                 <span className="font-mono text-xs font-semibold text-zinc-900">
-                  {summary.verdictDistribution.approve.toLocaleString()}
+                  {formatNumber(summary.verdictDistribution.approve)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -167,7 +172,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Request Changes
                 </Badge>
                 <span className="font-mono text-xs font-semibold text-zinc-900">
-                  {summary.verdictDistribution.requestChanges.toLocaleString()}
+                  {formatNumber(summary.verdictDistribution.requestChanges)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -175,7 +180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Comment
                 </Badge>
                 <span className="font-mono text-xs font-semibold text-zinc-900">
-                  {summary.verdictDistribution.comment.toLocaleString()}
+                  {formatNumber(summary.verdictDistribution.comment)}
                 </span>
               </div>
             </CardContent>
@@ -307,13 +312,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         ? `${(run.execution_duration_ms / 1000).toFixed(1)}s`
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-xs text-zinc-500">
-                      {new Date(run.terminal_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                    <TableCell className="text-xs text-zinc-500 font-mono">
+                      {formatTableDateTimeUtc(run.terminal_at)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link
