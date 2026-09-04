@@ -52,6 +52,13 @@ CREATE TABLE admin_metadata (
   updated_at_epoch_ms INTEGER NOT NULL
 );
 
+INSERT INTO admin_metadata (key, value, updated_at_epoch_ms)
+VALUES (
+  'projection_enabled_at',
+  strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  unixepoch('now') * 1000
+);
+
 CREATE TABLE admin_projection_quarantine (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   observed_event_id_hash TEXT,

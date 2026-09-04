@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@holon/ui";
 import * as React from "react";
+import { Link } from "react-router";
 
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
@@ -26,6 +27,9 @@ export interface RunsViewProps {
   readonly period?: string | undefined;
   readonly terminalState?: string | undefined;
   readonly verdict?: string | undefined;
+  readonly repositoryId?: number | undefined;
+  readonly order?: "asc" | "desc" | undefined;
+  readonly pageSize?: 20 | 50 | 100 | undefined;
 }
 
 export const RunsView: React.FC<RunsViewProps> = ({
@@ -36,9 +40,15 @@ export const RunsView: React.FC<RunsViewProps> = ({
   period = "24h",
   terminalState = "",
   verdict = "",
+  repositoryId,
+  order = "desc",
+  pageSize = 50,
 }) => {
   const hasActiveFilters =
-    searchQuery !== "" || terminalState !== "" || verdict !== "";
+    searchQuery !== "" ||
+    terminalState !== "" ||
+    verdict !== "" ||
+    repositoryId !== undefined;
 
   return (
     <Layout userEmail={userEmail} currentPath="/runs">
@@ -78,6 +88,23 @@ export const RunsView: React.FC<RunsViewProps> = ({
               />
             </div>
 
+            <div className="w-full md:w-36">
+              <label
+                htmlFor="repository-id"
+                className="block text-[11px] font-semibold text-zinc-600 mb-1"
+              >
+                REPOSITORY ID
+              </label>
+              <input
+                id="repository-id"
+                name="repositoryId"
+                type="number"
+                min="1"
+                defaultValue={repositoryId}
+                className="w-full h-8 px-2.5 text-xs bg-white border border-zinc-300 rounded-md"
+              />
+            </div>
+
             {/* Verdict Filter */}
             <div className="w-full md:w-40">
               <label
@@ -98,6 +125,9 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 <option value="COMMENT">Comment</option>
               </select>
             </div>
+
+            <input type="hidden" name="order" value={order} />
+            <input type="hidden" name="pageSize" value={pageSize} />
 
             {/* Terminal State Filter */}
             <div className="w-full md:w-40">
@@ -149,12 +179,12 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 Filter
               </button>
               {hasActiveFilters && (
-                <a
-                  href="/runs"
+                <Link
+                  to="/runs"
                   className="h-8 px-3 inline-flex items-center text-xs font-medium text-zinc-600 hover:text-zinc-950 underline"
                 >
                   Clear
-                </a>
+                </Link>
               )}
             </div>
           </form>
@@ -187,12 +217,12 @@ export const RunsView: React.FC<RunsViewProps> = ({
                 }
                 action={
                   hasActiveFilters ? (
-                    <a
-                      href="/runs"
+                    <Link
+                      to="/runs"
                       className="px-3 py-1.5 text-xs font-medium bg-zinc-100 text-zinc-900 rounded-md hover:bg-zinc-200 transition-colors"
                     >
                       Reset all filters
-                    </a>
+                    </Link>
                   ) : undefined
                 }
               />
@@ -270,12 +300,12 @@ export const RunsView: React.FC<RunsViewProps> = ({
                         })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <a
-                          href={`/runs/${encodeURIComponent(run.run_id)}`}
+                        <Link
+                          to={`/runs/${encodeURIComponent(run.run_id)}`}
                           className="text-xs font-semibold text-zinc-900 hover:text-zinc-700 underline underline-offset-2"
                         >
                           Inspect &rarr;
-                        </a>
+                        </Link>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -285,12 +315,12 @@ export const RunsView: React.FC<RunsViewProps> = ({
               {/* Keyset Pagination Controls */}
               {nextCursor && (
                 <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-end">
-                  <a
-                    href={`/runs?period=${encodeURIComponent(period)}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}${verdict ? `&verdict=${encodeURIComponent(verdict)}` : ""}${terminalState ? `&state=${encodeURIComponent(terminalState)}` : ""}&cursor=${encodeURIComponent(nextCursor)}`}
+                  <Link
+                    to={`/runs?period=${encodeURIComponent(period)}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}${verdict ? `&verdict=${encodeURIComponent(verdict)}` : ""}${terminalState ? `&state=${encodeURIComponent(terminalState)}` : ""}${repositoryId ? `&repositoryId=${repositoryId}` : ""}&order=${order}&pageSize=${pageSize}&cursor=${encodeURIComponent(nextCursor)}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-zinc-900 text-white rounded-md hover:bg-zinc-800 transition-colors shadow-xs"
                   >
                     Next Page &rarr;
-                  </a>
+                  </Link>
                 </div>
               )}
             </>

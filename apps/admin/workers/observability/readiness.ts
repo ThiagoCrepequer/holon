@@ -1,4 +1,5 @@
 import type { AdminRunDetailV1 } from "@holon/contracts";
+import { z } from "zod";
 
 import type { AdminEnv } from "../app.js";
 import { queryAnalyticsTrend } from "./analytics-client.js";
@@ -21,6 +22,8 @@ export interface ReadinessReport {
     readonly queueMetrics: ComponentHealth;
   };
 }
+
+const rpcPingResponseSchema = z.object({ schemaVersion: z.literal(1) });
 
 export async function checkReadiness(
   env: AdminEnv,
@@ -58,7 +61,9 @@ export async function checkReadiness(
           setTimeout(() => reject(new Error("RPC timeout")), 2000),
         ),
       ]);
-      return res?.schemaVersion === 1 ? "healthy" : "degraded";
+      return rpcPingResponseSchema.safeParse(res).success
+        ? "healthy"
+        : "degraded";
     } catch {
       return "degraded";
     }
@@ -93,7 +98,8 @@ export async function checkReadiness(
       dlqId: env.PROJECTION_DLQ_ID,
       fetchFn,
     });
-    return res.status === "ok" ? "healthy" : "unknown";
+    if (res.status !== "ok") return "unknown";
+    return res.data.isDegraded ? "degraded" : "healthy";
   };
 
   const [d1Result, rpcResult, analyticsResult, queueResult] = await Promise.all(
@@ -108,7 +114,11 @@ export async function checkReadiness(
   };
 
   let status: "healthy" | "degraded" | "partial" = "healthy";
-  if (checks.d1 === "degraded" || checks.rpc === "degraded") {
+  if (
+    checks.d1 === "degraded" ||
+    checks.rpc === "degraded" ||
+    checks.queueMetrics === "degraded"
+  ) {
     status = "degraded";
   } else if (
     checks.analyticsEngine === "unknown" ||

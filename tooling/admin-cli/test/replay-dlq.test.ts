@@ -1,3 +1,4 @@
+import { buildAdminProjectionEventV1 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,6 +7,58 @@ import {
   replayDlq,
   runCli,
 } from "../replay-dlq.js";
+
+async function createProjectionEvent(runNumber: number) {
+  const headSha = runNumber.toString(16).padStart(40, "0");
+  const terminalAt = "2026-09-04T12:00:00.000Z";
+  return buildAdminProjectionEventV1({
+    headSha,
+    prKey: `github:101:pr:${runNumber}`,
+    projectedFrom: "workflow",
+    projectionRequestedAt: "2026-09-04T12:00:01.000Z",
+    pullRequestNumber: runNumber,
+    recordVersion: 1,
+    repository: { id: 101, name: "holon", owner: "example" },
+    reviewPhaseReached: "analyzed",
+    runId: `github:101:pr:${runNumber}:head:${headSha}`,
+    schemaVersion: 1,
+    scopeStatus: "complete",
+    telemetry: {
+      estimatedCostMicroUsd: 1,
+      executionDurationMs: 1000,
+      inputTokens: 10,
+      isDegraded: false,
+      outputTokens: 5,
+      pricingModel: "test-model",
+      reasoningTokens: null,
+      reviewAdmissionQueueWaitMs: 0,
+      shardsCount: 1,
+      toolCallsCount: 0,
+    },
+    terminalState: "completed",
+    timestamps: {
+      analysisStartedAt: "2026-09-04T11:59:59.000Z",
+      terminalAt,
+      webhookReceivedAt: "2026-09-04T11:59:57.000Z",
+      workflowStartedAt: "2026-09-04T11:59:58.000Z",
+    },
+    verdict: "APPROVE",
+  });
+}
+
+const EXECUTE_FLAGS = [
+  "--execute",
+  "--limit",
+  "10",
+  "--env",
+  "staging",
+  "--main-queue",
+  "q-main",
+  "--dlq",
+  "q-dlq",
+  "--confirm",
+  "staging:q-main:q-dlq",
+];
 
 describe("replay-dlq tool", () => {
   describe("parseReplayDlqArgs", () => {
@@ -35,7 +88,7 @@ describe("replay-dlq tool", () => {
         parseReplayDlqArgs(["--execute", "--limit", "invalid"]),
       ).toThrow("between 1 and 1000");
 
-      const valid = parseReplayDlqArgs(["--execute", "--limit", "50"]);
+      const valid = parseReplayDlqArgs([...EXECUTE_FLAGS, "--limit", "50"]);
       expect(valid.execute).toBe(true);
       expect(valid.dryRun).toBe(false);
       expect(valid.limit).toBe(50);
@@ -82,6 +135,8 @@ describe("replay-dlq tool", () => {
         "q-dlq",
         "--env",
         "production",
+        "--confirm",
+        "production:q-main:q-dlq",
       ]);
 
       expect(config.execute).toBe(true);
@@ -92,11 +147,13 @@ describe("replay-dlq tool", () => {
       expect(config.mainQueueId).toBe("q-main");
       expect(config.dlqId).toBe("q-dlq");
       expect(config.environment).toBe("production");
+      expect(config.confirmation).toBe("production:q-main:q-dlq");
     });
   });
 
   describe("QueuesHttpClient", () => {
     it("pullMessages parses messages and throws on HTTP or API failure", async () => {
+      const pulledBody = { runId: "r1" };
       const mockFetchSuccess = vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
@@ -106,7 +163,10 @@ describe("replay-dlq tool", () => {
                 {
                   id: "msg-1",
                   lease_id: "lease-1",
-                  body: { runId: "r1" },
+                  body: Buffer.from(JSON.stringify(pulledBody)).toString(
+                    "base64",
+                  ),
+                  metadata: { "CF-Content-Type": "json" },
                 },
               ],
             },
@@ -125,6 +185,16 @@ describe("replay-dlq tool", () => {
       );
       expect(messages.length).toBe(1);
       expect(messages[0]?.id).toBe("msg-1");
+      expect(messages[0]?.body).toEqual(pulledBody);
+      const firstCall = mockFetchSuccess.mock.calls.at(0);
+      if (!firstCall) throw new Error("Expected Queue pull request");
+      const requestBody = (firstCall[1] as RequestInit).body;
+      if (typeof requestBody !== "string") {
+        throw new TypeError("Expected a serialized Queue pull body");
+      }
+      const pullBody = JSON.parse(requestBody) as Record<string, unknown>;
+      expect(pullBody.visibility_timeout_ms).toBe(300_000);
+      expect(pullBody).not.toHaveProperty("visibility_timeout");
 
       // HTTP Error
       const mockFetchFail = vi
@@ -156,7 +226,7 @@ describe("replay-dlq tool", () => {
         new Response(
           JSON.stringify({
             success: true,
-            result: { id: "new-msg-1" },
+            result: { metadata: { metrics: { backlog_count: 1 } } },
           }),
           { status: 200 },
         ),
@@ -166,7 +236,16 @@ describe("replay-dlq tool", () => {
         runId: "r1",
       });
       expect(res.success).toBe(true);
-      expect(res.id).toBe("new-msg-1");
+      const sendCall = mockFetch.mock.calls.at(0);
+      if (!sendCall) throw new Error("Expected Queue push request");
+      const sendBody = (sendCall[1] as RequestInit).body;
+      if (typeof sendBody !== "string") {
+        throw new TypeError("Expected a serialized Queue push body");
+      }
+      expect(JSON.parse(sendBody)).toEqual({
+        body: { runId: "r1" },
+        content_type: "json",
+      });
 
       // Failure
       const mockFail = vi
@@ -180,6 +259,46 @@ describe("replay-dlq tool", () => {
         {},
       );
       expect(resFail.success).toBe(false);
+    });
+
+    it("marks unsupported or malformed pull bodies as invalid", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: true,
+            result: {
+              messages: [
+                {
+                  id: "malformed-json",
+                  lease_id: "lease-1",
+                  body: Buffer.from("not-json").toString("base64"),
+                  metadata: { "CF-Content-Type": "json" },
+                },
+                {
+                  id: "unsupported-bytes",
+                  lease_id: "lease-2",
+                  body: "AA==",
+                  metadata: { "CF-Content-Type": "bytes" },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const messages = await new QueuesHttpClient(mockFetch).pullMessages(
+        "acc-1",
+        "dlq-1",
+        "tok-1",
+        2,
+        300,
+      );
+
+      expect(messages.map((message) => message.body)).toEqual([
+        undefined,
+        undefined,
+      ]);
     });
 
     it("ackMessages acknowledges messages or handles errors", async () => {
@@ -251,12 +370,14 @@ describe("replay-dlq tool", () => {
     });
 
     it("runs in dry-run mode without sending or acking", async () => {
+      const validEvent = await createProjectionEvent(1);
+      const secondValidEvent = await createProjectionEvent(2);
       const sendMessageSpy = vi.fn();
       const ackMessagesSpy = vi.fn();
       const mockClient = {
         pullMessages: vi.fn().mockResolvedValue([
-          { id: "m1", lease_id: "l1", body: {} },
-          { id: "m2", lease_id: "l2", body: {} },
+          { id: "m1", lease_id: "l1", body: validEvent },
+          { id: "m2", lease_id: "l2", body: secondValidEvent },
         ]),
         sendMessage: sendMessageSpy,
         ackMessages: ackMessagesSpy,
@@ -273,6 +394,8 @@ describe("replay-dlq tool", () => {
         {
           CF_ACCOUNT_ID: "acc-1",
           CF_QUEUES_REPLAY_TOKEN: "tok-1",
+          PROJECTION_QUEUE_ID: "q-main",
+          PROJECTION_DLQ_ID: "q-dlq",
         },
       );
 
@@ -286,6 +409,8 @@ describe("replay-dlq tool", () => {
     });
 
     it("executes replay, requeuing and acking on DLQ", async () => {
+      const event1 = await createProjectionEvent(1);
+      const event2 = await createProjectionEvent(2);
       const sendMessageSpy = vi
         .fn()
         .mockResolvedValue({ success: true, id: "new-id" });
@@ -296,8 +421,8 @@ describe("replay-dlq tool", () => {
         pullMessages: vi
           .fn()
           .mockResolvedValueOnce([
-            { id: "m1", lease_id: "l1", body: { run: 1 } },
-            { id: "m2", lease_id: "l2", body: { run: 2 } },
+            { id: "m1", lease_id: "l1", body: event1 },
+            { id: "m2", lease_id: "l2", body: event2 },
           ])
           .mockResolvedValueOnce([]), // 2nd batch empty
         sendMessage: sendMessageSpy,
@@ -311,6 +436,10 @@ describe("replay-dlq tool", () => {
           limit: 10,
           batchSize: 5,
           visibilityTimeout: 300,
+          environment: "staging",
+          mainQueueId: "q-main",
+          dlqId: "q-dlq",
+          confirmation: "staging:q-main:q-dlq",
         },
         mockClient,
         {
@@ -329,10 +458,12 @@ describe("replay-dlq tool", () => {
     });
 
     it("handles partial failure during send or ack", async () => {
+      const event1 = await createProjectionEvent(1);
+      const event2 = await createProjectionEvent(2);
       const mockClient = {
         pullMessages: vi.fn().mockResolvedValue([
-          { id: "m1", lease_id: "l1", body: {} }, // Send will fail
-          { id: "m2", lease_id: "l2", body: {} }, // Ack will fail
+          { id: "m1", lease_id: "l1", body: event1 }, // Send will fail
+          { id: "m2", lease_id: "l2", body: event2 }, // Ack will fail
         ]),
         sendMessage: vi
           .fn()
@@ -350,6 +481,10 @@ describe("replay-dlq tool", () => {
           limit: 2,
           batchSize: 2,
           visibilityTimeout: 300,
+          environment: "staging",
+          mainQueueId: "q-main",
+          dlqId: "q-dlq",
+          confirmation: "staging:q-main:q-dlq",
         },
         mockClient,
         {
@@ -363,6 +498,44 @@ describe("replay-dlq tool", () => {
       expect(summary.acked).toBe(0);
       expect(summary.failed).toBe(2); // m1 failed send, m2 failed ack
     });
+
+    it("leaves malformed or hash-mismatched messages unacked", async () => {
+      const validEvent = await createProjectionEvent(1);
+      const tampered = {
+        ...validEvent,
+        payload: { ...validEvent.payload, terminalState: "obsolete" },
+      };
+      const sendMessage = vi.fn();
+      const ackMessages = vi.fn();
+      const mockClient = {
+        pullMessages: vi.fn().mockResolvedValue([
+          { id: "m1", lease_id: "l1", body: { invalid: true } },
+          { id: "m2", lease_id: "l2", body: tampered },
+        ]),
+        sendMessage,
+        ackMessages,
+      } as unknown as QueuesHttpClient;
+
+      const summary = await replayDlq(
+        {
+          execute: true,
+          dryRun: false,
+          limit: 2,
+          batchSize: 2,
+          visibilityTimeout: 300,
+          environment: "staging",
+          mainQueueId: "q-main",
+          dlqId: "q-dlq",
+          confirmation: "staging:q-main:q-dlq",
+        },
+        mockClient,
+        { CF_ACCOUNT_ID: "acc-1", CF_QUEUES_REPLAY_TOKEN: "tok-1" },
+      );
+
+      expect(summary.failed).toBe(2);
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(ackMessages).not.toHaveBeenCalled();
+    });
   });
 
   describe("runCli", () => {
@@ -375,23 +548,29 @@ describe("replay-dlq tool", () => {
 
       const code = await runCli(
         ["--dry-run"],
-        { CF_ACCOUNT_ID: "acc-1", CF_QUEUES_REPLAY_TOKEN: "tok-1" },
+        {
+          CF_ACCOUNT_ID: "acc-1",
+          CF_QUEUES_REPLAY_TOKEN: "tok-1",
+          PROJECTION_QUEUE_ID: "q-main",
+          PROJECTION_DLQ_ID: "q-dlq",
+        },
         mockClient,
       );
       expect(code).toBe(0);
     });
 
     it("returns 1 when failures occur or exceptions are thrown", async () => {
+      const validEvent = await createProjectionEvent(1);
       const mockClientFail = {
         pullMessages: vi
           .fn()
-          .mockResolvedValue([{ id: "m1", lease_id: "l1", body: {} }]),
+          .mockResolvedValue([{ id: "m1", lease_id: "l1", body: validEvent }]),
         sendMessage: vi.fn().mockResolvedValue({ success: false }),
         ackMessages: vi.fn(),
       } as unknown as QueuesHttpClient;
 
       const codeFail = await runCli(
-        ["--execute", "--limit", "1"],
+        [...EXECUTE_FLAGS, "--limit", "1"],
         { CF_ACCOUNT_ID: "acc-1", CF_QUEUES_REPLAY_TOKEN: "tok-1" },
         mockClientFail,
       );

@@ -43,25 +43,30 @@ describe("Cloudflare Access JWT validator", () => {
       .setProtectedHeader({ alg: "RS256", kid: options?.kid ?? "test-key-1" })
       .setIssuedAt();
 
-    if (options?.issuer) {
-      jwt.setIssuer(options.issuer);
-    }
-    if (options?.audience) {
-      jwt.setAudience(options.audience);
-    }
+    jwt.setIssuer(options?.issuer ?? "https://test-team.cloudflareaccess.com");
+    jwt.setAudience(options?.audience ?? "test-audience");
     jwt.setExpirationTime(options?.expiresIn ?? "1h");
 
     return jwt.sign(privateKey);
   }
 
+  function validConfig() {
+    return {
+      teamName: "test-team",
+      expectedAudience: "test-audience",
+      authorizedEmailDomain: "corp.example.com",
+      customJwkSet: localJwkSet,
+    };
+  }
+
   it("throws 401 when cf-access-jwt-assertion header is missing", async () => {
     const request = new Request("https://admin.example.com/");
-    await expect(
-      validateAccessJwt(request, { customJwkSet: localJwkSet }),
-    ).rejects.toThrow(AccessAuthError);
+    await expect(validateAccessJwt(request, validConfig())).rejects.toThrow(
+      AccessAuthError,
+    );
 
     try {
-      await validateAccessJwt(request, { customJwkSet: localJwkSet });
+      await validateAccessJwt(request, validConfig());
     } catch (err) {
       expect(err instanceof AccessAuthError).toBe(true);
       expect((err as AccessAuthError).statusCode).toBe(401);
@@ -75,9 +80,9 @@ describe("Cloudflare Access JWT validator", () => {
     const request = new Request("https://admin.example.com/", {
       headers: { "cf-access-jwt-assertion": "invalid.jwt.token" },
     });
-    await expect(
-      validateAccessJwt(request, { customJwkSet: localJwkSet }),
-    ).rejects.toThrow(AccessAuthError);
+    await expect(validateAccessJwt(request, validConfig())).rejects.toThrow(
+      AccessAuthError,
+    );
   });
 
   it("throws 403 when session is an automated service token (type: 'app')", async () => {
@@ -92,7 +97,7 @@ describe("Cloudflare Access JWT validator", () => {
     });
 
     try {
-      await validateAccessJwt(request, { customJwkSet: localJwkSet });
+      await validateAccessJwt(request, validConfig());
       expect.fail("Should have thrown");
     } catch (err) {
       expect((err as AccessAuthError).statusCode).toBe(403);
@@ -111,9 +116,9 @@ describe("Cloudflare Access JWT validator", () => {
       headers: { "cf-access-jwt-assertion": tokenNoEmail },
     });
 
-    await expect(
-      validateAccessJwt(req1, { customJwkSet: localJwkSet }),
-    ).rejects.toThrow(AccessAuthError);
+    await expect(validateAccessJwt(req1, validConfig())).rejects.toThrow(
+      AccessAuthError,
+    );
 
     const tokenWrongDomain = await createSignedToken({
       email: "intruder@gmail.com",
@@ -125,10 +130,7 @@ describe("Cloudflare Access JWT validator", () => {
     });
 
     try {
-      await validateAccessJwt(req2, {
-        customJwkSet: localJwkSet,
-        authorizedEmailDomain: "corp.example.com",
-      });
+      await validateAccessJwt(req2, validConfig());
       expect.fail("Should have thrown");
     } catch (err) {
       expect((err as AccessAuthError).statusCode).toBe(403);
@@ -149,10 +151,7 @@ describe("Cloudflare Access JWT validator", () => {
       headers: { "cf-access-jwt-assertion": token },
     });
 
-    const identity = await validateAccessJwt(request, {
-      customJwkSet: localJwkSet,
-      authorizedEmailDomain: "corp.example.com",
-    });
+    const identity = await validateAccessJwt(request, validConfig());
 
     expect(identity.email).toBe("engineer@corp.example.com");
     expect(identity.sub).toBe("user-sub-456");
@@ -167,7 +166,7 @@ describe("Cloudflare Access JWT validator", () => {
     clearJwkSetCache();
   });
 
-  it("throws 403 when teamName is missing and customJwkSet is not provided", async () => {
+  it("fails closed when any required Access policy is missing", async () => {
     const token = await createSignedToken({
       email: "user@example.com",
       sub: "sub-1",
@@ -175,9 +174,16 @@ describe("Cloudflare Access JWT validator", () => {
     const request = new Request("https://admin.example.com/", {
       headers: { "cf-access-jwt-assertion": token },
     });
-    await expect(validateAccessJwt(request, {})).rejects.toThrow(
-      AccessAuthError,
-    );
+    for (const config of [
+      { ...validConfig(), teamName: "" },
+      { ...validConfig(), expectedAudience: "" },
+      { ...validConfig(), authorizedEmailDomain: "" },
+    ]) {
+      await expect(validateAccessJwt(request, config)).rejects.toMatchObject({
+        statusCode: 403,
+        userMessage: "Access configuration incomplete",
+      });
+    }
   });
 
   it("validates issuer and audience when expectedAudience and teamName are provided", async () => {
@@ -195,6 +201,7 @@ describe("Cloudflare Access JWT validator", () => {
       customJwkSet: localJwkSet,
       teamName: "my-team",
       expectedAudience: "my-aud-123",
+      authorizedEmailDomain: "corp.example.com",
     });
     expect(identity.email).toBe("engineer@corp.example.com");
   });

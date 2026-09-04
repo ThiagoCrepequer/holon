@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_DEV_KEYRING,
-  parseCursorKeyring,
-} from "../workers/security/keyring.js";
+import { parseCursorKeyring } from "../workers/security/keyring.js";
 
 describe("parseCursorKeyring", () => {
-  it("returns DEFAULT_DEV_KEYRING when config is missing or empty", () => {
-    expect(parseCursorKeyring(undefined)).toEqual(DEFAULT_DEV_KEYRING);
-    expect(parseCursorKeyring("")).toEqual(DEFAULT_DEV_KEYRING);
-    expect(parseCursorKeyring("   ")).toEqual(DEFAULT_DEV_KEYRING);
+  it("fails closed when config is missing or empty", () => {
+    expect(() => parseCursorKeyring(undefined)).toThrow(
+      "ADMIN_CURSOR_HMAC_KEYS is required",
+    );
+    expect(() => parseCursorKeyring("")).toThrow(
+      "ADMIN_CURSOR_HMAC_KEYS is required",
+    );
+    expect(() => parseCursorKeyring("   ")).toThrow(
+      "ADMIN_CURSOR_HMAC_KEYS is required",
+    );
   });
 
   it("parses valid JSON keyring", () => {

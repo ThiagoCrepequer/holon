@@ -232,10 +232,7 @@ export class D1AdminStorage {
   }
 
   async listRuns(
-    params: Partial<AdminRunsFilterParams> & {
-      searchQuery?: string | undefined;
-      cursor?: string | undefined;
-    },
+    params: Partial<AdminRunsFilterParams> & { cursor?: string | undefined },
     keyring: CursorKeyring,
     nowEpochMs?: number,
   ): Promise<{ runs: AdminRunRow[]; nextCursor: string | null }> {
@@ -252,6 +249,9 @@ export class D1AdminStorage {
     }
     if (params.verdict !== undefined) {
       filterParams.verdict = params.verdict;
+    }
+    if (params.searchQuery?.trim()) {
+      filterParams.searchQuery = params.searchQuery.trim();
     }
     const currentFilterHash = await computeFilterHash(filterParams);
     let seekPayload: { terminalAtEpochMs: number; runId: string } | null = null;
@@ -320,8 +320,9 @@ export class D1AdminStorage {
     }
 
     if (seekPayload) {
+      const comparison = filterParams.order === "asc" ? ">" : "<";
       conditions.push(
-        "(terminal_at_epoch_ms < ? OR (terminal_at_epoch_ms = ? AND run_id < ?))",
+        `(terminal_at_epoch_ms ${comparison} ? OR (terminal_at_epoch_ms = ? AND run_id ${comparison} ?))`,
       );
       bindings.push(
         seekPayload.terminalAtEpochMs,
@@ -334,11 +335,12 @@ export class D1AdminStorage {
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const pageSize = filterParams.pageSize ?? 50;
     const limitPlusOne = pageSize + 1;
+    const sortDirection = filterParams.order === "asc" ? "ASC" : "DESC";
 
     const sql = `
       SELECT * FROM admin_runs
       ${whereClause}
-      ORDER BY terminal_at_epoch_ms DESC, run_id DESC
+      ORDER BY terminal_at_epoch_ms ${sortDirection}, run_id ${sortDirection}
       LIMIT ?;
     `;
     bindings.push(limitPlusOne);
@@ -380,6 +382,26 @@ export class D1AdminStorage {
       .bind(runId)
       .first<AdminRunRow>();
     return result ?? null;
+  }
+
+  async getProjectionWatermark(): Promise<{
+    enabledAt: string | null;
+    lastReceivedAt: string | null;
+  }> {
+    const result = await this.db
+      .prepare(
+        `SELECT key, value
+         FROM admin_metadata
+         WHERE key IN ('projection_enabled_at', 'last_projection_received_at');`,
+      )
+      .all<{ key: string; value: string }>();
+    let enabledAt: string | null = null;
+    let lastReceivedAt: string | null = null;
+    for (const row of result.results ?? []) {
+      if (row.key === "projection_enabled_at") enabledAt = row.value;
+      if (row.key === "last_projection_received_at") lastReceivedAt = row.value;
+    }
+    return { enabledAt, lastReceivedAt };
   }
 
   async getSummaryMetrics(

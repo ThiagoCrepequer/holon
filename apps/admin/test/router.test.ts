@@ -9,6 +9,7 @@ import {
 } from "jose";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { parseRpcRunDetail } from "../app/routes/run-detail.js";
 import type { AdminEnv } from "../workers/app.js";
 import { D1AdminStorage } from "../workers/d1-adapter.js";
 import type { AdminReadRpcClient } from "../workers/observability/readiness.js";
@@ -43,10 +44,21 @@ describe("apps/admin router and server-side rendered views", () => {
     })
       .setProtectedHeader({ alg: "RS256", kid: "test-key-router" })
       .setIssuedAt()
+      .setIssuer("https://test-team.cloudflareaccess.com")
+      .setAudience("test-audience")
       .setExpirationTime("1h")
       .sign(privateKey);
 
     return { "cf-access-jwt-assertion": jwt };
+  }
+
+  function authConfig() {
+    return {
+      teamName: "test-team",
+      expectedAudience: "test-audience",
+      authorizedEmailDomain: "example.com",
+      customJwkSet: localJwkSet,
+    };
   }
 
   const mockCtx = {
@@ -66,14 +78,12 @@ describe("apps/admin router and server-side rendered views", () => {
     const req = new Request("https://admin.example.com/", { method: "POST" });
     const resp = await handleConsoleRequest(req, env, mockCtx);
     expect(resp.status).toBe(405);
-    expect(resp.headers.get("allow")).toBe("GET");
+    expect(resp.headers.get("allow")).toBe("GET, HEAD");
   });
 
   it("rejects unauthenticated requests to protected routes with 401", async () => {
     const req = new Request("https://admin.example.com/");
-    const resp = await handleConsoleRequest(req, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const resp = await handleConsoleRequest(req, env, mockCtx, authConfig());
     expect(resp.status).toBe(401);
     expect(resp.headers.get("cache-control")).toBe("private, no-store");
   });
@@ -90,9 +100,7 @@ describe("apps/admin router and server-side rendered views", () => {
       headers,
     });
 
-    const resp = await handleConsoleRequest(req, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const resp = await handleConsoleRequest(req, env, mockCtx, authConfig());
 
     expect(resp.status).toBe(200);
     expect(resp.headers.get("content-type")).toContain("text/html");
@@ -116,15 +124,23 @@ describe("apps/admin router and server-side rendered views", () => {
       headers,
     });
 
-    const resp = await handleConsoleRequest(req, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const resp = await handleConsoleRequest(req, env, mockCtx, authConfig());
 
     expect(resp.status).toBe(200);
     const html = await resp.text();
     expect(html).toContain("Review Runs");
     expect(html).toContain("Runs Listing");
     expect(html).toContain(event.payload.repository.owner);
+
+    const invalid = await handleConsoleRequest(
+      new Request("https://admin.example.com/runs?repositoryId=not-a-number", {
+        headers,
+      }),
+      env,
+      mockCtx,
+      authConfig(),
+    );
+    expect(invalid.status).toBe(400);
   });
 
   it("handles run detail route (GET /runs/:runId)", async () => {
@@ -140,9 +156,12 @@ describe("apps/admin router and server-side rendered views", () => {
       "https://admin.example.com/runs/not-valid-id",
       { headers },
     );
-    const respInvalid = await handleConsoleRequest(reqInvalid, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const respInvalid = await handleConsoleRequest(
+      reqInvalid,
+      env,
+      mockCtx,
+      authConfig(),
+    );
     expect(respInvalid.status).toBe(400);
 
     // Non-existent runId returns 404
@@ -152,9 +171,12 @@ describe("apps/admin router and server-side rendered views", () => {
       `https://admin.example.com/runs/${encodeURIComponent(validMissingId)}`,
       { headers },
     );
-    const respMissing = await handleConsoleRequest(reqMissing, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const respMissing = await handleConsoleRequest(
+      reqMissing,
+      env,
+      mockCtx,
+      authConfig(),
+    );
     expect(respMissing.status).toBe(404);
 
     // Existing run returns 200 with RunDetailView
@@ -162,9 +184,12 @@ describe("apps/admin router and server-side rendered views", () => {
       `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
       { headers },
     );
-    const respExisting = await handleConsoleRequest(reqExisting, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const respExisting = await handleConsoleRequest(
+      reqExisting,
+      env,
+      mockCtx,
+      authConfig(),
+    );
     expect(respExisting.status).toBe(200);
     const html = await respExisting.text();
     expect(html).toContain("Commit SHA");
@@ -178,24 +203,16 @@ describe("apps/admin router and server-side rendered views", () => {
     const reqHtml = new Request("https://admin.example.com/readiness", {
       headers,
     });
-    const respHtml = await handleConsoleRequest(reqHtml, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const respHtml = await handleConsoleRequest(
+      reqHtml,
+      env,
+      mockCtx,
+      authConfig(),
+    );
     expect(respHtml.headers.get("content-type")).toContain("text/html");
     const html = await respHtml.text();
     expect(html).toContain("System Readiness");
     expect(html).toContain("D1 Database Ledger");
-
-    // JSON response via Accept header
-    const reqJson = new Request("https://admin.example.com/readiness", {
-      headers: { ...headers, accept: "application/json" },
-    });
-    const respJson = await handleConsoleRequest(reqJson, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
-    expect(respJson.headers.get("content-type")).toContain("application/json");
-    const json = (await respJson.json()) as { status: string; checks: unknown };
-    expect(json.status).toBeDefined();
   });
 
   it("renders 404 for unknown routes", async () => {
@@ -203,9 +220,7 @@ describe("apps/admin router and server-side rendered views", () => {
     const req = new Request("https://admin.example.com/nonexistent-route", {
       headers,
     });
-    const resp = await handleConsoleRequest(req, env, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const resp = await handleConsoleRequest(req, env, mockCtx, authConfig());
     expect(resp.status).toBe(404);
     const html = await resp.text();
     expect(html).toContain("404");
@@ -233,32 +248,28 @@ describe("apps/admin router and server-side rendered views", () => {
       ADMIN_READ_API: mockRpcFail as unknown as Fetcher,
     } as unknown as AdminEnv;
 
-    const resp = await handleConsoleRequest(req, envWithRpc, mockCtx, {
-      customJwkSet: localJwkSet,
-    });
+    const resp = await handleConsoleRequest(
+      req,
+      envWithRpc,
+      mockCtx,
+      authConfig(),
+    );
     expect(resp.status).toBe(200);
     const html = await resp.text();
     expect(html).toContain("RPC drill-down unavailable");
   });
 
-  it("handles run detail when RPC client returns successful detail", async () => {
+  it("validates a successful RPC detail response at runtime", async () => {
     const event = await createSampleProjectionEvent({
       terminalAtEpochMs: Date.now() - 5000,
     });
     await storage.insertProjection(event);
 
-    const headers = await createValidAuthHeader();
-    const req = new Request(
-      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
-      { headers },
-    );
-
     const mockRpcSuccess: AdminReadRpcClient = {
       pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
       getRunDetailV1: vi.fn().mockResolvedValue({
-        runId: event.payload.runId,
         schemaVersion: 1,
-        retrievedAt: new Date().toISOString(),
+        findingsPerspective: "current_pr_state",
         currentFindings: [
           {
             fingerprint:
@@ -268,23 +279,52 @@ describe("apps/admin router and server-side rendered views", () => {
             severity: "critical",
             diagnostic: "Critical vulnerability",
             status: "new",
+            updatedAt: "2026-09-04T12:00:00.000Z",
           },
         ],
-        structuredCi: { status: "available", checkCount: 1 },
+        run: {
+          cost: {
+            currency: "USD",
+            estimatedCostMicroUsd: 1500,
+            estimatedCostUsd: 0.0015,
+            pricingModel: "test-model",
+          },
+          headSha: event.payload.headSha,
+          isDegraded: false,
+          prKey: event.payload.prKey,
+          runId: event.payload.runId,
+          scopeStatus: "complete",
+          shardsCount: 1,
+          stepTimings: [],
+          terminalState: "completed",
+          tokens: {
+            inputTokens: 10,
+            outputTokens: 5,
+            reasoningTokens: 0,
+            totalTokens: 15,
+          },
+          toolCallsCount: 1,
+          verdict: "APPROVE",
+        },
+        structuredCi: {
+          durationMs: 1000,
+          failed: 0,
+          passed: 1,
+          skipped: 0,
+          status: "available",
+          total: 1,
+          workflowName: "CI",
+        },
       }),
     };
 
-    const envWithRpc = {
-      ...env,
-      ADMIN_READ_API: mockRpcSuccess as unknown as Fetcher,
-    } as unknown as AdminEnv;
-
-    const resp = await handleConsoleRequest(req, envWithRpc, mockCtx, {
-      customJwkSet: localJwkSet,
+    const candidate = await mockRpcSuccess.getRunDetailV1({
+      runId: event.payload.runId,
     });
-    expect(resp.status).toBe(200);
-    const html = await resp.text();
-    expect(html).toContain("src/auth.ts");
-    expect(html).toContain("Critical vulnerability");
+    const parsed = parseRpcRunDetail(candidate);
+    expect(parsed?.currentFindings[0]?.filePath).toBe("src/auth.ts");
+    expect(() => parseRpcRunDetail({ schemaVersion: 1 })).toThrow(
+      "Invalid RPC run detail response",
+    );
   });
 });

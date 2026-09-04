@@ -4,7 +4,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  ChartFrame,
   MetricCard,
   Table,
   TableBody,
@@ -14,11 +13,13 @@ import {
   TableRow,
 } from "@holon/ui";
 import * as React from "react";
+import { Link } from "react-router";
 
 import type { AnalyticsTrendData } from "../../workers/observability/analytics-client.js";
 import type { QueueHealthData } from "../../workers/observability/queue-metrics-client.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../../workers/types.js";
 import { DegradedBanner } from "../components/degraded-banner.js";
+import { LatencyChart } from "../components/latency-chart.js";
 import { Layout } from "../components/layout.js";
 
 export interface DashboardViewProps {
@@ -29,6 +30,10 @@ export interface DashboardViewProps {
   readonly queueHealth: QueueHealthData | null;
   readonly recentRuns: AdminRunRow[];
   readonly degradedServices: string[];
+  readonly watermark: {
+    readonly enabledAt: string | null;
+    readonly lastReceivedAt: string | null;
+  };
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -39,6 +44,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   queueHealth,
   recentRuns,
   degradedServices,
+  watermark,
 }) => {
   const successRate =
     summary.totalRuns > 0
@@ -59,6 +65,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Degraded Alert */}
       <DegradedBanner degradedServices={degradedServices} />
 
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+        Data is available only from the projection cutover
+        {watermark.enabledAt
+          ? ` at ${new Date(watermark.enabledAt).toLocaleString()}`
+          : " (watermark unavailable)"}
+        .
+        {watermark.lastReceivedAt
+          ? ` Last projection received ${new Date(watermark.lastReceivedAt).toLocaleString()}.`
+          : " No projection has been received yet."}
+      </div>
+
       {/* Header & Window Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -73,9 +90,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Time Window Switcher */}
         <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-xs">
           {windows.map((w) => (
-            <a
+            <Link
               key={w}
-              href={`/?window=${w}`}
+              to={`/?window=${w}`}
               className={`px-3 py-1 font-medium rounded-md transition-colors ${
                 window === w
                   ? "bg-zinc-900 text-white shadow-xs"
@@ -83,7 +100,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               {w.toUpperCase()}
-            </a>
+            </Link>
           ))}
         </div>
       </div>
@@ -126,85 +143,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Latency Trend (Analytics Engine) */}
         <div className="lg:col-span-2">
-          <ChartFrame
-            title="Latency Trend (Percentiles)"
-            description="p50 and p95 review execution latency via Analytics Engine"
-            insight={
-              analyticsTrend ? (
-                <div className="flex items-center gap-4">
-                  <span>
-                    Median (p50):{" "}
-                    <strong>
-                      {(analyticsTrend.p50DurationMs / 1000).toFixed(1)}s
-                    </strong>
-                  </span>
-                  <span>
-                    95th percentile (p95):{" "}
-                    <strong>
-                      {(analyticsTrend.p95DurationMs / 1000).toFixed(1)}s
-                    </strong>
-                  </span>
-                </div>
-              ) : undefined
-            }
-            empty={!analyticsTrend}
-            emptyMessage="Analytics Engine latency data is currently unavailable"
-            accessibleTable={
-              analyticsTrend ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Metric</TableHead>
-                      <TableHead>Value</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>p50 Latency</TableCell>
-                      <TableCell>
-                        {(analyticsTrend.p50DurationMs / 1000).toFixed(2)}{" "}
-                        seconds
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>p95 Latency</TableCell>
-                      <TableCell>
-                        {(analyticsTrend.p95DurationMs / 1000).toFixed(2)}{" "}
-                        seconds
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Sampled Invocations</TableCell>
-                      <TableCell>
-                        {analyticsTrend.sampledRunsCount.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              ) : undefined
-            }
-          >
-            {analyticsTrend && (
-              <div className="h-full flex flex-col justify-center items-center p-6 bg-zinc-50/50 rounded-md border border-dashed border-zinc-200 text-center">
-                <div className="text-3xl font-bold font-mono tracking-tight text-zinc-900">
-                  {(analyticsTrend.p50DurationMs / 1000).toFixed(1)}s
-                  <span className="text-xs font-normal text-zinc-500 ml-2">
-                    p50
-                  </span>
-                  <span className="mx-3 text-zinc-300">/</span>
-                  {(analyticsTrend.p95DurationMs / 1000).toFixed(1)}s
-                  <span className="text-xs font-normal text-zinc-500 ml-2">
-                    p95
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 mt-2">
-                  Sampled over{" "}
-                  {analyticsTrend.sampledRunsCount.toLocaleString()} invocations
-                  in the last {window}
-                </p>
-              </div>
-            )}
-          </ChartFrame>
+          <LatencyChart trend={analyticsTrend} />
         </div>
 
         {/* Verdict Distribution Card */}
@@ -262,6 +201,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Oldest Message:</span>
+                <span className="font-mono font-medium">
+                  {queueHealth?.oldestMessageAgeSeconds === undefined
+                    ? "—"
+                    : `${queueHealth.oldestMessageAgeSeconds}s`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-zinc-500">Pipeline State:</span>
                 <Badge
                   variant={queueHealth?.isDegraded ? "warning" : "success"}
@@ -280,12 +227,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle>Recent Projections</CardTitle>
-          <a
-            href="/runs"
+          <Link
+            to="/runs"
             className="text-xs font-medium text-zinc-600 hover:text-zinc-950 underline underline-offset-4"
           >
             View all runs &rarr;
-          </a>
+          </Link>
         </CardHeader>
         <CardContent>
           {recentRuns.length === 0 ? (
@@ -360,12 +307,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       })}
                     </TableCell>
                     <TableCell className="text-right">
-                      <a
-                        href={`/runs/${encodeURIComponent(run.run_id)}`}
+                      <Link
+                        to={`/runs/${encodeURIComponent(run.run_id)}`}
                         className="text-xs font-medium text-zinc-700 hover:text-zinc-950 underline underline-offset-2"
                       >
                         Inspect
-                      </a>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -12,9 +12,9 @@ export interface AccessIdentity {
 }
 
 export interface AccessValidationConfig {
-  readonly teamName?: string | undefined;
-  readonly expectedAudience?: string | undefined;
-  readonly authorizedEmailDomain?: string | undefined;
+  readonly teamName: string;
+  readonly expectedAudience: string;
+  readonly authorizedEmailDomain: string;
   readonly customJwkSet?: JWTVerifyGetKey | undefined;
 }
 
@@ -67,6 +67,15 @@ export async function validateAccessJwt(
   request: Request,
   config: AccessValidationConfig,
 ): Promise<AccessIdentity> {
+  const teamName = config.teamName.trim();
+  const expectedAudience = config.expectedAudience.trim();
+  const authorizedEmailDomain = config.authorizedEmailDomain
+    .trim()
+    .toLowerCase();
+  if (!teamName || !expectedAudience || !authorizedEmailDomain) {
+    throw new AccessAuthError(403, "Access configuration incomplete");
+  }
+
   const token = request.headers.get("cf-access-jwt-assertion");
   if (!token || token.trim() === "") {
     throw new AccessAuthError(
@@ -75,31 +84,16 @@ export async function validateAccessJwt(
     );
   }
 
-  const teamName = config.teamName;
   let keySet = config.customJwkSet;
   if (!keySet) {
-    if (!teamName) {
-      throw new AccessAuthError(
-        403,
-        "Access configuration incomplete: team name missing",
-      );
-    }
     keySet = getOrCreateRemoteJWKSet(teamName);
   }
 
-  const expectedIssuer = teamName
-    ? `https://${teamName}.cloudflareaccess.com`
-    : undefined;
-
   const verifyOptions: JWTVerifyOptions = {
     algorithms: ["RS256"],
+    issuer: `https://${teamName}.cloudflareaccess.com`,
+    audience: expectedAudience,
   };
-  if (expectedIssuer) {
-    verifyOptions.issuer = expectedIssuer;
-  }
-  if (config.expectedAudience) {
-    verifyOptions.audience = config.expectedAudience;
-  }
 
   let verified;
   try {
@@ -126,14 +120,12 @@ export async function validateAccessJwt(
     );
   }
 
-  if (config.authorizedEmailDomain) {
-    const requiredDomain = `@${config.authorizedEmailDomain.trim().toLowerCase()}`;
-    if (!email.endsWith(requiredDomain)) {
-      throw new AccessAuthError(
-        403,
-        "Email domain is not authorized to access internal console",
-      );
-    }
+  const requiredDomain = `@${authorizedEmailDomain}`;
+  if (!email.endsWith(requiredDomain)) {
+    throw new AccessAuthError(
+      403,
+      "Email domain is not authorized to access internal console",
+    );
   }
 
   const identityProvider =

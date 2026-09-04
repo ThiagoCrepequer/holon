@@ -7,17 +7,26 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  Drawer,
+  DrawerBody,
+  DrawerClose,
+  DrawerHeader,
+  DrawerPopup,
+  DrawerTitle,
 } from "@holon/ui";
 import * as React from "react";
+import { Link, useNavigate } from "react-router";
 
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
+import { useHydrated } from "../hooks/use-hydrated.js";
 
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
   readonly run: AdminRunRow;
   readonly rpcDetail: AdminRunDetailV1 | null;
   readonly rpcError?: string | null | undefined;
+  readonly embedded?: boolean | undefined;
 }
 
 export const RunDetailView: React.FC<RunDetailViewProps> = ({
@@ -25,23 +34,23 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   run,
   rpcDetail,
   rpcError,
+  embedded = false,
 }) => {
-  return (
-    <Layout
-      userEmail={userEmail}
-      currentPath={`/runs/${encodeURIComponent(run.run_id)}`}
-    >
+  const navigate = useNavigate();
+  const hydrated = useHydrated();
+  const content = (
+    <>
       {/* Breadcrumb */}
       <nav
         className="mb-4 text-xs text-zinc-500 flex items-center gap-1.5"
         aria-label="Breadcrumb"
       >
-        <a
-          href="/runs"
+        <Link
+          to="/runs"
           className="hover:text-zinc-950 underline underline-offset-2"
         >
           Runs
-        </a>
+        </Link>
         <span>/</span>
         <span className="font-mono text-zinc-700 truncate max-w-sm">
           {run.run_id}
@@ -85,12 +94,12 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
             </CardDescription>
           </div>
 
-          <a
-            href="/runs"
+          <Link
+            to="/runs"
             className="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-md transition-colors shrink-0"
           >
             &larr; Back to list
-          </a>
+          </Link>
         </CardHeader>
       </Card>
 
@@ -279,6 +288,30 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           </CardContent>
         </Card>
       )}
+    </>
+  );
+  if (embedded && hydrated) {
+    return (
+      <Drawer open onOpenChange={(open) => !open && navigate("/runs")}>
+        <DrawerPopup>
+          <DrawerHeader>
+            <DrawerTitle>Run detail</DrawerTitle>
+            <DrawerClose className="rounded-md px-2 py-1 text-xs hover:bg-zinc-100">
+              Close
+            </DrawerClose>
+          </DrawerHeader>
+          <DrawerBody>{content}</DrawerBody>
+        </DrawerPopup>
+      </Drawer>
+    );
+  }
+  if (embedded) return <section className="mt-6">{content}</section>;
+  return (
+    <Layout
+      userEmail={userEmail}
+      currentPath={`/runs/${encodeURIComponent(run.run_id)}`}
+    >
+      {content}
     </Layout>
   );
 };

@@ -151,6 +151,58 @@ describe("D1AdminStorage", () => {
       expect(page2.nextCursor).toBeNull();
     });
 
+    it("honors ascending keyset order", async () => {
+      const now = 1772582400000;
+      for (let i = 1; i <= 21; i++) {
+        const sha = i.toString(16).padStart(40, "0");
+        await storage.insertProjection(
+          await createSampleProjectionEvent({
+            headSha: sha,
+            prNumber: i,
+            terminalAtEpochMs: now - i * 1000,
+          }),
+          now,
+        );
+      }
+      const first = await storage.listRuns(
+        { order: "asc", pageSize: 20 },
+        TEST_KEYRING,
+        now,
+      );
+      expect(first.runs[0]?.pr_number).toBe(21);
+      const second = await storage.listRuns(
+        { order: "asc", pageSize: 20, cursor: first.nextCursor! },
+        TEST_KEYRING,
+        now,
+      );
+      expect(second.runs[0]?.pr_number).toBe(1);
+    });
+
+    it("binds pagination cursors to the structured search query", async () => {
+      const now = 1772582400000;
+      for (let i = 1; i <= 21; i++) {
+        await storage.insertProjection(
+          await createSampleProjectionEvent({
+            headSha: i.toString(16).padStart(40, "0"),
+            prNumber: i,
+          }),
+          now,
+        );
+      }
+      const page = await storage.listRuns({ pageSize: 20 }, TEST_KEYRING, now);
+      await expect(
+        storage.listRuns(
+          {
+            cursor: page.nextCursor!,
+            pageSize: 20,
+            searchQuery: "test-owner/test-repo#1",
+          },
+          TEST_KEYRING,
+          now,
+        ),
+      ).rejects.toThrow("Cursor filter mismatch");
+    });
+
     it("filters runs by structured search query: repo#pr, head_sha, run_id", async () => {
       const now = 1772582400000;
       const sha = "abcdef1234567890abcdef1234567890abcdef12";
@@ -244,6 +296,23 @@ describe("D1AdminStorage", () => {
         now,
       );
       expect(noMatch.runs.length).toBe(0);
+    });
+  });
+
+  describe("projection watermark", () => {
+    it("returns cutover and latest projection timestamps", async () => {
+      await env.DB.prepare(
+        `INSERT INTO admin_metadata (key, value, updated_at_epoch_ms)
+         VALUES ('projection_enabled_at', '2026-09-04T00:00:00.000Z', 1772668800000)`,
+      ).run();
+      await storage.insertProjection(
+        await createSampleProjectionEvent(),
+        1772582450000,
+      );
+      await expect(storage.getProjectionWatermark()).resolves.toEqual({
+        enabledAt: "2026-09-04T00:00:00.000Z",
+        lastReceivedAt: new Date(1772582450000).toISOString(),
+      });
     });
   });
 

@@ -4,11 +4,23 @@
  * Fails gracefully to { status: "unavailable" } on any network or API issue.
  */
 
+import { z } from "zod";
+
+import { readBoundedJson } from "./bounded-json.js";
+
+export interface AnalyticsTrendPoint {
+  readonly bucket: string;
+  readonly p50DurationMs: number;
+  readonly p95DurationMs: number;
+  readonly sampledRunsCount: number;
+}
+
 export interface AnalyticsTrendData {
   readonly p50DurationMs: number;
   readonly p95DurationMs: number;
   readonly sampledRunsCount: number;
   readonly window: "24h" | "7d" | "30d";
+  readonly points: readonly AnalyticsTrendPoint[];
 }
 
 export type AnalyticsQueryResult =
@@ -21,6 +33,17 @@ export interface AnalyticsClientConfig {
   readonly datasetName?: string | undefined;
   readonly fetchFn?: typeof fetch | undefined;
 }
+
+const analyticsResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      bucket: z.string().min(1),
+      p50_duration_ms: z.coerce.number().finite().nonnegative(),
+      p95_duration_ms: z.coerce.number().finite().nonnegative(),
+      sampled_count: z.coerce.number().int().nonnegative(),
+    }),
+  ),
+});
 
 export async function queryAnalyticsTrend(
   window: "24h" | "7d" | "30d",
@@ -38,12 +61,18 @@ export async function queryAnalyticsTrend(
   }
 
   const hours = window === "24h" ? 24 : window === "7d" ? 168 : 720;
+  const bucket =
+    window === "24h" ? "1 HOUR" : window === "7d" ? "6 HOUR" : "1 DAY";
   const sql = `
     SELECT
-      quantiles(0.50, 0.95)(double1) AS latency_quantiles,
-      count() AS sampled_count
+      toStartOfInterval(timestamp, INTERVAL '${bucket}') AS bucket,
+      quantileExactWeighted(0.50)(double1, _sample_interval) AS p50_duration_ms,
+      quantileExactWeighted(0.95)(double1, _sample_interval) AS p95_duration_ms,
+      sum(_sample_interval) AS sampled_count
     FROM ${datasetName}
     WHERE timestamp >= NOW() - INTERVAL '${hours}' HOUR
+    GROUP BY bucket
+    ORDER BY bucket ASC
   `.trim();
 
   const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`;
@@ -63,29 +92,28 @@ export async function queryAnalyticsTrend(
       return { status: "unavailable", reason: "upstream_error" };
     }
 
-    const payload = (await response.json()) as {
-      data?: Array<{
-        latency_quantiles?: [number, number];
-        sampled_count?: number;
-      }>;
-    };
-
-    const row = payload.data?.[0];
-    const quantiles = row?.latency_quantiles;
-    const p50 =
-      typeof quantiles?.[0] === "number" ? Math.round(quantiles[0]) : 0;
-    const p95 =
-      typeof quantiles?.[1] === "number" ? Math.round(quantiles[1]) : 0;
-    const count =
-      typeof row?.sampled_count === "number" ? row.sampled_count : 0;
+    const payload = analyticsResponseSchema.parse(
+      await readBoundedJson(response),
+    );
+    const points = payload.data.map((row) => ({
+      bucket: row.bucket,
+      p50DurationMs: Math.round(row.p50_duration_ms),
+      p95DurationMs: Math.round(row.p95_duration_ms),
+      sampledRunsCount: row.sampled_count,
+    }));
+    const latest = points.at(-1);
 
     return {
       status: "ok",
       data: {
-        p50DurationMs: p50,
-        p95DurationMs: p95,
-        sampledRunsCount: count,
+        p50DurationMs: latest?.p50DurationMs ?? 0,
+        p95DurationMs: latest?.p95DurationMs ?? 0,
+        sampledRunsCount: points.reduce(
+          (total, point) => total + point.sampledRunsCount,
+          0,
+        ),
         window,
+        points,
       },
     };
   } catch {

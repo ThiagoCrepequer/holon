@@ -43,6 +43,12 @@ describe("admin cursor contracts and keyring", () => {
       pageSize: 20,
     });
     expect(hashDifferent).not.toBe(hash1);
+
+    const searchHash = await computeFilterHash({
+      ...filterParams,
+      searchQuery: "owner/repo#7",
+    });
+    expect(searchHash).not.toBe(hash1);
   });
 
   it("encodes and decodes cursor successfully with primary key", async () => {

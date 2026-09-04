@@ -25,6 +25,9 @@
       },
     ],
   },
+  "triggers": {
+    "crons": ["0 3 * * *"],
+  },
   "services": [
     {
       "binding": "ADMIN_READ_API",

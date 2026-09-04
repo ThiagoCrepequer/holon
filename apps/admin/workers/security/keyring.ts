@@ -1,21 +1,8 @@
 import { type CursorKeyring, cursorKeyringSchema } from "@holon/contracts";
 
-export const DEFAULT_DEV_KEYRING: CursorKeyring = {
-  primary: {
-    kid: "cursor-key-primary",
-    secretHex:
-      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  },
-  secondary: {
-    kid: "cursor-key-secondary",
-    secretHex:
-      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-  },
-};
-
 export function parseCursorKeyring(keysConfig?: string): CursorKeyring {
   if (!keysConfig || keysConfig.trim() === "") {
-    return DEFAULT_DEV_KEYRING;
+    throw new Error("ADMIN_CURSOR_HMAC_KEYS is required");
   }
 
   try {

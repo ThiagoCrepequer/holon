@@ -18,13 +18,15 @@ describe("Observability clients and readiness probe", () => {
       }
     });
 
-    it("parses successful analytics response and returns quantiles", async () => {
+    it("validates a sampled, bucketed analytics response", async () => {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
             data: [
               {
-                latency_quantiles: [1200, 3500],
+                bucket: "2026-09-04 12:00:00",
+                p50_duration_ms: 1200,
+                p95_duration_ms: 3500,
                 sampled_count: 42,
               },
             ],
@@ -45,7 +47,19 @@ describe("Observability clients and readiness probe", () => {
         expect(res.data.p95DurationMs).toBe(3500);
         expect(res.data.sampledRunsCount).toBe(42);
         expect(res.data.window).toBe("24h");
+        expect(res.data.points).toEqual([
+          {
+            bucket: "2026-09-04 12:00:00",
+            p50DurationMs: 1200,
+            p95DurationMs: 3500,
+            sampledRunsCount: 42,
+          },
+        ]);
       }
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.body).toContain("quantileExactWeighted");
+      expect(init.body).toContain("_sample_interval");
+      expect(init.body).toContain("GROUP BY bucket");
     });
 
     it("handles response with empty data array or missing quantiles", async () => {
@@ -67,6 +81,7 @@ describe("Observability clients and readiness probe", () => {
         expect(res.data.p50DurationMs).toBe(0);
         expect(res.data.p95DurationMs).toBe(0);
         expect(res.data.sampledRunsCount).toBe(0);
+        expect(res.data.points).toEqual([]);
       }
     });
 
@@ -98,6 +113,36 @@ describe("Observability clients and readiness probe", () => {
         expect(res.reason).toBe("request_failed");
       }
     });
+
+    it("rejects malformed or non-JSON upstream data", async () => {
+      const malformed = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ sampled_count: "many" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      await expect(
+        queryAnalyticsTrend("24h", {
+          accountId: "acc-123",
+          apiToken: "tok-456",
+          fetchFn: malformed,
+        }),
+      ).resolves.toMatchObject({ status: "unavailable" });
+
+      const html = vi.fn().mockResolvedValue(
+        new Response("<html>oops</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+      );
+      await expect(
+        queryAnalyticsTrend("24h", {
+          accountId: "acc-123",
+          apiToken: "tok-456",
+          fetchFn: html,
+        }),
+      ).resolves.toMatchObject({ status: "unavailable" });
+    });
   });
 
   describe("queryQueueHealth", () => {
@@ -115,18 +160,26 @@ describe("Observability clients and readiness probe", () => {
           return Promise.resolve(
             new Response(
               JSON.stringify({
-                result: { messages: 5, delayed_messages: 0 },
+                success: true,
+                result: {
+                  backlog_count: 5,
+                  oldest_message_timestamp_ms: 1_999_990_000,
+                },
               }),
-              { status: 200 },
+              { status: 200, headers: { "content-type": "application/json" } },
             ),
           );
         }
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              result: { messages: 0 },
+              success: true,
+              result: {
+                backlog_count: 0,
+                oldest_message_timestamp_ms: 0,
+              },
             }),
-            { status: 200 },
+            { status: 200, headers: { "content-type": "application/json" } },
           ),
         );
       });
@@ -137,6 +190,7 @@ describe("Observability clients and readiness probe", () => {
         queueId: "queue-main",
         dlqId: "queue-dlq",
         fetchFn: mockFetch,
+        nowEpochMs: () => 2_000_000_000,
       });
 
       expect(res.status).toBe("ok");
@@ -144,16 +198,23 @@ describe("Observability clients and readiness probe", () => {
         expect(res.data.backlogCount).toBe(5);
         expect(res.data.dlqCount).toBe(0);
         expect(res.data.isDegraded).toBe(false);
+        expect(res.data.oldestMessageAgeSeconds).toBe(10);
       }
+      expect(mockFetch.mock.calls[0]?.[0]).toContain("queue-main/metrics");
+      expect(mockFetch.mock.calls[1]?.[0]).toContain("queue-dlq/metrics");
     });
 
     it("works without dlqId configured", async () => {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            result: { messages: 2, delayed_messages: 1 },
+            success: true,
+            result: {
+              backlog_count: 3,
+              oldest_message_timestamp_ms: 0,
+            },
           }),
-          { status: 200 },
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
       );
 
@@ -172,24 +233,32 @@ describe("Observability clients and readiness probe", () => {
       }
     });
 
-    it("detects degraded state when DLQ has messages or backlog > 100", async () => {
+    it("detects degraded state from oldest-message age", async () => {
       const mockFetch = vi.fn().mockImplementation((url: string) => {
         if (url.includes("queue-main")) {
           return Promise.resolve(
             new Response(
               JSON.stringify({
-                result: { messages: 0, delayed_messages: 0 },
+                success: true,
+                result: {
+                  backlog_count: 1,
+                  oldest_message_timestamp_ms: 1_999_000_000,
+                },
               }),
-              { status: 200 },
+              { status: 200, headers: { "content-type": "application/json" } },
             ),
           );
         }
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              result: { messages: 3 },
+              success: true,
+              result: {
+                backlog_count: 3,
+                oldest_message_timestamp_ms: 1_999_999_000,
+              },
             }),
-            { status: 200 },
+            { status: 200, headers: { "content-type": "application/json" } },
           ),
         );
       });
@@ -200,12 +269,14 @@ describe("Observability clients and readiness probe", () => {
         queueId: "queue-main",
         dlqId: "queue-dlq",
         fetchFn: mockFetch,
+        nowEpochMs: () => 2_000_000_000,
       });
 
       expect(res.status).toBe("ok");
       if (res.status === "ok") {
         expect(res.data.dlqCount).toBe(3);
         expect(res.data.isDegraded).toBe(true);
+        expect(res.data.oldestMessageAgeSeconds).toBe(1000);
       }
     });
 
@@ -242,6 +313,37 @@ describe("Observability clients and readiness probe", () => {
         expect(res.reason).toBe("request_failed");
       }
     });
+
+    it("does not report a configured DLQ as empty when its metrics fail", async () => {
+      const mockFetch = vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes("queue-dlq")
+            ? new Response("unavailable", { status: 503 })
+            : new Response(
+                JSON.stringify({
+                  success: true,
+                  result: {
+                    backlog_count: 0,
+                    oldest_message_timestamp_ms: 0,
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              ),
+        ),
+      );
+      await expect(
+        queryQueueHealth({
+          accountId: "acc-1",
+          apiToken: "tok-1",
+          queueId: "queue-main",
+          dlqId: "queue-dlq",
+          fetchFn: mockFetch,
+        }),
+      ).resolves.toMatchObject({ status: "unavailable" });
+    });
   });
 
   describe("checkReadiness", () => {
@@ -260,13 +362,22 @@ describe("Observability clients and readiness probe", () => {
       const mockFetch = vi.fn().mockImplementation((url: string) => {
         if (url.includes("analytics_engine")) {
           return Promise.resolve(
-            new Response(JSON.stringify({ data: [] }), { status: 200 }),
+            new Response(JSON.stringify({ data: [] }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
           );
         }
         return Promise.resolve(
           new Response(
-            JSON.stringify({ result: { messages: 0, delayed_messages: 0 } }),
-            { status: 200 },
+            JSON.stringify({
+              success: true,
+              result: {
+                backlog_count: 0,
+                oldest_message_timestamp_ms: 0,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
           ),
         );
       });
@@ -374,6 +485,57 @@ describe("Observability clients and readiness probe", () => {
 
       const reportWrong = await checkReadiness(envWrong);
       expect(reportWrong.checks.rpc).toBe("degraded");
+    });
+
+    it("reports degraded when queue freshness breaches the SLO", async () => {
+      const mockDb = {
+        prepare: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue({ alive: 1 }),
+        }),
+      } as unknown as D1Database;
+      const mockRpc: AdminReadRpcClient = {
+        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
+        getRunDetailV1: vi.fn().mockResolvedValue(null),
+      };
+      const oldTimestamp = Date.now() - 10 * 60 * 1000;
+      const mockFetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("analytics_engine")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [] }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              result: {
+                backlog_count: url.includes("queue-main") ? 1 : 0,
+                oldest_message_timestamp_ms: url.includes("queue-main")
+                  ? oldTimestamp
+                  : 0,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      });
+      const report = await checkReadiness(
+        {
+          DB: mockDb,
+          ADMIN_READ_API: mockRpc,
+          CF_ACCOUNT_ID: "acc-1",
+          CF_ANALYTICS_API_TOKEN: "tok-1",
+          CF_QUEUES_READ_TOKEN: "tok-2",
+          PROJECTION_QUEUE_ID: "queue-main",
+          PROJECTION_DLQ_ID: "queue-dlq",
+        } as unknown as AdminEnv,
+        mockFetch,
+      );
+      expect(report.checks.queueMetrics).toBe("degraded");
+      expect(report.status).toBe("degraded");
     });
   });
 });

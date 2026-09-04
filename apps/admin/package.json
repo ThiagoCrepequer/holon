@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "test": "vitest run --config vitest.config.ts",
-    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "build": "vite build",
+    "d1:migrate:local": "wrangler d1 migrations apply holon-admin-d1 --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply holon-admin-d1 --remote",
+    "deploy": "vite build && wrangler deploy",
+    "dev": "vite dev",
+    "preview": "vite build && vite preview",
+    "test": "vitest run --config vitest.config.ts && vitest run --config vitest.client.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage && vitest run --config vitest.client.config.ts --coverage",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -19,6 +22,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
+    "recharts": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -27,8 +31,10 @@
     "@cloudflare/workers-types": "catalog:",
     "@react-router/dev": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "jsdom": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",

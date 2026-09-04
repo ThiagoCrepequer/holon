@@ -13,6 +13,14 @@
  * - Non-zero exit code if any message fails to requeue or ack.
  */
 
+import {
+  adminRunProjectionEventV1Schema,
+  canonicalizeJson,
+  computeSha256Hex,
+  type AdminRunProjectionEventV1,
+} from "@holon/contracts";
+import { z } from "zod";
+
 export interface ReplayDlqConfig {
   readonly execute: boolean;
   readonly dryRun: boolean;
@@ -24,6 +32,7 @@ export interface ReplayDlqConfig {
   readonly dlqId?: string | undefined;
   readonly apiToken?: string | undefined;
   readonly environment?: string | undefined;
+  readonly confirmation?: string | undefined;
 }
 
 export interface QueuePullMessage {
@@ -50,6 +59,7 @@ export function parseReplayDlqArgs(argv: string[]): ReplayDlqConfig {
   let mainQueueId: string | undefined = undefined;
   let dlqId: string | undefined = undefined;
   let environment: string | undefined = undefined;
+  let confirmation: string | undefined = undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -92,12 +102,24 @@ export function parseReplayDlqArgs(argv: string[]): ReplayDlqConfig {
       dlqId = argv[++i];
     } else if (arg === "--env") {
       environment = argv[++i];
+    } else if (arg === "--confirm") {
+      confirmation = argv[++i];
     }
   }
 
   if (execute && (limit === undefined || limit < 1)) {
     throw new Error(
       "Flag --limit <1..1000> is mandatory when executing with --execute",
+    );
+  }
+  if (execute && (!environment || !mainQueueId || !dlqId || !confirmation)) {
+    throw new Error(
+      "Flags --env, --main-queue, --dlq and --confirm are mandatory with --execute",
+    );
+  }
+  if (execute && confirmation !== `${environment}:${mainQueueId}:${dlqId}`) {
+    throw new Error(
+      "Flag --confirm must exactly match <environment>:<main-queue>:<dlq>",
     );
   }
 
@@ -111,7 +133,46 @@ export function parseReplayDlqArgs(argv: string[]): ReplayDlqConfig {
     mainQueueId,
     dlqId,
     environment,
+    confirmation,
   };
+}
+
+const pullResponseSchema = z.object({
+  success: z.literal(true),
+  result: z.object({
+    messages: z.array(
+      z.object({
+        id: z.string().min(1),
+        lease_id: z.string().min(1),
+        body: z.string(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+        timestamp_ms: z.number().int().nonnegative().optional(),
+      }),
+    ),
+  }),
+});
+
+const sendResponseSchema = z.object({ success: z.literal(true) });
+
+const ackResponseSchema = z.object({ success: z.literal(true) });
+
+function decodePulledBody(
+  encodedBody: string,
+  metadata: Record<string, unknown> | undefined,
+): unknown {
+  const contentType = metadata?.["CF-Content-Type"];
+  try {
+    if (contentType === "json") {
+      const decoded = Buffer.from(encodedBody, "base64").toString("utf8");
+      return JSON.parse(decoded) as unknown;
+    }
+    if (contentType === "text") {
+      return JSON.parse(encodedBody) as unknown;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export class QueuesHttpClient {
@@ -133,7 +194,7 @@ export class QueuesHttpClient {
       },
       body: JSON.stringify({
         batch_size: batchSize,
-        visibility_timeout: visibilityTimeout,
+        visibility_timeout_ms: visibilityTimeout * 1000,
       }),
     });
 
@@ -141,18 +202,16 @@ export class QueuesHttpClient {
       throw new Error(`Queue pull failed with HTTP status ${res.status}`);
     }
 
-    const data = (await res.json()) as {
-      success?: boolean;
-      result?: {
-        messages?: QueuePullMessage[];
-      };
-    };
-
-    if (!data.success && data.success !== undefined) {
-      throw new Error("Queue pull returned unsuccessful response");
+    const parsed = pullResponseSchema.safeParse(await res.json());
+    if (!parsed.success) {
+      throw new Error("Queue pull returned malformed or unsuccessful response");
     }
-
-    return data.result?.messages ?? [];
+    return parsed.data.result.messages.map((message) => ({
+      body: decodePulledBody(message.body, message.metadata),
+      id: message.id,
+      lease_id: message.lease_id,
+      timestamp_ms: message.timestamp_ms,
+    }));
   }
 
   async sendMessage(
@@ -160,7 +219,7 @@ export class QueuesHttpClient {
     queueId: string,
     token: string,
     body: unknown,
-  ): Promise<{ success: boolean; id?: string | undefined }> {
+  ): Promise<{ success: boolean }> {
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/queues/${queueId}/messages`;
     const res = await this.fetchFn(url, {
       method: "POST",
@@ -169,7 +228,7 @@ export class QueuesHttpClient {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        body: typeof body === "string" ? body : JSON.stringify(body),
+        body,
         content_type: "json",
       }),
     });
@@ -178,15 +237,8 @@ export class QueuesHttpClient {
       return { success: false };
     }
 
-    const data = (await res.json()) as {
-      success?: boolean;
-      result?: { id?: string };
-    };
-
-    return {
-      success: data.success ?? true,
-      id: data.result?.id,
-    };
+    const parsed = sendResponseSchema.safeParse(await res.json());
+    return { success: parsed.success };
   }
 
   async ackMessages(
@@ -215,12 +267,23 @@ export class QueuesHttpClient {
       return { success: false, ackedCount: 0 };
     }
 
-    const data = (await res.json()) as { success?: boolean };
+    const parsed = ackResponseSchema.safeParse(await res.json());
     return {
-      success: data.success ?? true,
-      ackedCount: data.success !== false ? leaseIds.length : 0,
+      success: parsed.success,
+      ackedCount: parsed.success ? leaseIds.length : 0,
     };
   }
+}
+
+async function validateProjectionMessage(
+  body: unknown,
+): Promise<AdminRunProjectionEventV1 | null> {
+  const parsed = adminRunProjectionEventV1Schema.safeParse(body);
+  if (!parsed.success) return null;
+  const expectedHash = await computeSha256Hex(
+    canonicalizeJson(parsed.data.payload),
+  );
+  return expectedHash === parsed.data.payloadHash ? parsed.data : null;
 }
 
 export async function replayDlq(
@@ -230,18 +293,17 @@ export async function replayDlq(
 ): Promise<ReplaySummary> {
   const accountId = config.accountId ?? envVars.CF_ACCOUNT_ID;
   const token = config.apiToken ?? envVars.CF_QUEUES_REPLAY_TOKEN;
-  const mainQueueId =
-    config.mainQueueId ??
-    envVars.PROJECTION_QUEUE_ID ??
-    "holon-admin-projections";
-  const dlqId =
-    config.dlqId ?? envVars.PROJECTION_DLQ_ID ?? "holon-admin-projections-dlq";
+  const mainQueueId = config.mainQueueId ?? envVars.PROJECTION_QUEUE_ID;
+  const dlqId = config.dlqId ?? envVars.PROJECTION_DLQ_ID;
 
   if (!accountId || accountId.trim() === "") {
     throw new Error("Missing CF_ACCOUNT_ID environment variable or flag");
   }
   if (!token || token.trim() === "") {
     throw new Error("Missing CF_QUEUES_REPLAY_TOKEN environment variable");
+  }
+  if (!mainQueueId || !dlqId) {
+    throw new Error("Missing explicit main queue or DLQ identifier");
   }
 
   if (config.dryRun) {
@@ -254,11 +316,14 @@ export async function replayDlq(
       config.visibilityTimeout,
     );
 
+    const validity = await Promise.all(
+      messages.map((message) => validateProjectionMessage(message.body)),
+    );
     return {
       pulled: messages.length,
       requeued: 0,
       acked: 0,
-      failed: 0,
+      failed: validity.filter((event) => event === null).length,
       dryRun: true,
     };
   }
@@ -289,11 +354,16 @@ export async function replayDlq(
     totalPulled += messages.length;
 
     for (const msg of messages) {
+      const event = await validateProjectionMessage(msg.body);
+      if (!event) {
+        totalFailed++;
+        continue;
+      }
       const sendResult = await client.sendMessage(
         accountId,
         mainQueueId,
         token,
-        msg.body,
+        event,
       );
 
       if (!sendResult.success) {

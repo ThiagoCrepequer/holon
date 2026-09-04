@@ -1,5 +1,6 @@
 import { Badge } from "@holon/ui";
 import * as React from "react";
+import { Link, NavLink } from "react-router";
 
 export interface LayoutProps {
   userEmail?: string | undefined;
@@ -24,8 +25,8 @@ export const Layout: React.FC<LayoutProps> = ({
       <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/95 backdrop-blur-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <a
-              href="/"
+            <Link
+              to="/"
               className="flex items-center gap-2 font-semibold tracking-tight text-zinc-950"
             >
               <span className="w-5 h-5 rounded-md bg-zinc-950 flex items-center justify-center text-[11px] text-white font-mono">
@@ -39,7 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({
               >
                 INTERNAL
               </Badge>
-            </a>
+            </Link>
 
             <nav
               className="hidden md:flex items-center gap-1"
@@ -51,9 +52,9 @@ export const Layout: React.FC<LayoutProps> = ({
                     ? currentPath === "/"
                     : currentPath.startsWith(item.href);
                 return (
-                  <a
+                  <NavLink
                     key={item.href}
-                    href={item.href}
+                    to={item.href}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                       isActive
                         ? "bg-zinc-100 text-zinc-950 font-semibold"
@@ -62,7 +63,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     aria-current={isActive ? "page" : undefined}
                   >
                     {item.label}
-                  </a>
+                  </NavLink>
                 );
               })}
             </nav>

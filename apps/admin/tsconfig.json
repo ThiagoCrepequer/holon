@@ -3,7 +3,11 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2024"],
-    "types": ["@cloudflare/vitest-plugin/types", "@cloudflare/workers-types"]
+    "types": [
+      "@cloudflare/vitest-plugin/types",
+      "@cloudflare/workers-types",
+      "vite/client"
+    ]
   },
   "include": [
     "app/**/*.ts",
@@ -11,6 +15,7 @@
     "workers/**/*.ts",
     "test/**/*.ts",
     "test/**/*.tsx",
-    "worker-configuration.d.ts"
+    "worker-configuration.d.ts",
+    "virtual.d.ts"
   ]
 }

@@ -32,6 +32,7 @@ export const adminRunsFilterParamsSchema = z.strictObject({
   pageSize: z.union([z.literal(20), z.literal(50), z.literal(100)]).default(50),
   period: z.enum(["24h", "7d", "30d"]).default("24h"),
   repositoryId: z.number().int().positive().optional(),
+  searchQuery: z.string().trim().min(1).max(200).optional(),
   terminalState: z
     .enum(["completed", "failed_terminal", "obsolete"])
     .optional(),
