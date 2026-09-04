@@ -4,11 +4,12 @@ kind: architecture
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-03
 related:
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
+  - ../decisions/0027-actively-supersede-obsolete-review-workflows.md
 ---
 
 # Ciclo de vida dos dados
@@ -41,6 +42,9 @@ que devem orientar a decisão antes de qualquer ambiente com repositório privad
 - Tornar deleção por instalação e repositório possível.
 - Persistir obrigação de cleanup até o executor confirmar destruição; remover
   credential scope no mesmo encerramento durável.
+- Persistir a obrigação de terminar Workflow obsoleto até confirmação do
+  cancelamento ou reconciliação de estado terminal; ela contém somente run ID,
+  Workflow instance ID, tentativas e timestamps, nunca código ou segredo.
 - Definir residência, retenção e uso por provedor antes do piloto privado.
 - Desabilitar ou redigir logs de prompts que contenham código sensível.
 - Limitar o harness experimental a corpus sintético versionado. O runner

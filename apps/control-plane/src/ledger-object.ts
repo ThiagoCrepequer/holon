@@ -12,6 +12,7 @@ import {
   publicationIdSchema,
   publicationRecordSchema,
   runClaimSchema,
+  runClaimV2ResultSchema,
   runIdSchema,
   runStateSchema,
   runTelemetrySchema,
@@ -20,6 +21,8 @@ import {
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type RunTelemetry,
+  type RunClaimV2Result,
+  type SupersededWorkflow,
   type TrackedFinding,
 } from "@holon/contracts";
 import type {
@@ -37,6 +40,7 @@ import { DurableObject } from "cloudflare:workers";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
+import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 interface PublicationRow extends Record<string, SqlStorageValue> {
   finding_id: string;
@@ -50,8 +54,17 @@ interface PublicationRow extends Record<string, SqlStorageValue> {
 
 interface CleanupRow extends Record<string, SqlStorageValue> {
   attempts: number;
+  next_attempt_at: string;
   run_id: string;
   state: string;
+}
+
+interface WorkflowSupersessionRow extends Record<string, SqlStorageValue> {
+  attempts: number;
+  next_attempt_at: string;
+  state: string;
+  superseded_run_id: string;
+  workflow_instance_id: string;
 }
 
 interface CredentialScopeRow extends Record<string, SqlStorageValue> {
@@ -90,6 +103,12 @@ function normalizedTimestamp(raw: string): string {
   return new Date(timestampSchema.parse(raw)).toISOString();
 }
 
+function maintenanceBackoff(attempt: number): number {
+  return Math.min(60 * 60_000, 5_000 * 2 ** Math.min(attempt - 1, 9));
+}
+
+const immediateTerminationGraceMilliseconds = 30_000;
+
 function shouldPromoteRun(
   candidateId: string,
   candidateReceivedAt: string,
@@ -124,20 +143,45 @@ export class ReviewLedgerObject
     applyLedgerMigrations(this.ctx.storage);
     this.findingStore = new FindingLedgerStore(this.ctx.storage);
     void this.ctx.blockConcurrencyWhile(async () => {
-      if (
-        this.pendingCleanup() !== undefined &&
-        (await this.ctx.storage.getAlarm()) === null
-      ) {
-        await this.ctx.storage.setAlarm(Date.now());
-      }
+      await this.ensureMaintenanceAlarm();
     });
   }
 
-  public claimRun(
+  public async claimRun(
     rawRun: ReviewRun,
     rawWorkflowInstanceId: string,
     rawCausalVersion?: string,
   ): Promise<"claimed" | "duplicate" | "resume"> {
+    const result = this.claimRunInternal(
+      rawRun,
+      rawWorkflowInstanceId,
+      rawCausalVersion,
+    );
+    if (result.supersededWorkflows.length > 0) {
+      await this.ensureMaintenanceAlarm();
+    }
+    return result.outcome;
+  }
+
+  public async claimRunV2(
+    rawRun: ReviewRun,
+    rawWorkflowInstanceId: string,
+    rawCausalVersion?: string,
+  ): Promise<RunClaimV2Result> {
+    const result = runClaimV2ResultSchema.parse(
+      this.claimRunInternal(rawRun, rawWorkflowInstanceId, rawCausalVersion),
+    );
+    if (result.supersededWorkflows.length > 0) {
+      await this.ensureMaintenanceAlarm();
+    }
+    return result;
+  }
+
+  private claimRunInternal(
+    rawRun: ReviewRun,
+    rawWorkflowInstanceId: string,
+    rawCausalVersion?: string,
+  ): RunClaimV2Result {
     const { run, workflowInstanceId } = runClaimSchema.parse({
       run: rawRun,
       workflowInstanceId: rawWorkflowInstanceId,
@@ -157,11 +201,15 @@ export class ReviewLedgerObject
       const isOwnedActiveRun =
         existing.workflow_instance_id === workflowInstanceId &&
         !["completed", "obsolete", "failed_terminal"].includes(existing.state);
-      return Promise.resolve(
+      const outcome =
         isOwnedActiveRun && this.latestRunId() === run.id
           ? "resume"
-          : "duplicate",
-      );
+          : "duplicate";
+      return {
+        outcome,
+        supersededWorkflows:
+          outcome === "resume" ? this.pendingWorkflowSupersessions() : [],
+      };
     }
     let outcome: "claimed" | "duplicate" = "claimed";
     this.ctx.storage.transactionSync(() => {
@@ -205,6 +253,42 @@ export class ReviewLedgerObject
         run.updatedAt ?? null,
       );
       if (promote) {
+        const activeRuns = sql
+          .exec<{
+            id: string;
+            state: RunState;
+            workflow_instance_id: string;
+          }>(
+            "SELECT id, state, workflow_instance_id FROM runs WHERE id <> ? AND state IN ('queued', 'running', 'publishing', 'failed_retryable') ORDER BY created_at, id",
+            run.id,
+          )
+          .toArray();
+        for (const activeRun of activeRuns) {
+          const terminationFallbackAt = new Date(
+            Date.now() + immediateTerminationGraceMilliseconds,
+          ).toISOString();
+          this.applyTransition({
+            expected: runStateSchema.parse(activeRun.state),
+            next: "obsolete",
+            occurredAt: receivedAt,
+            operationId: `supersede:${activeRun.workflow_instance_id}`,
+            runId: activeRun.id,
+          });
+          if (this.credentialScope(activeRun.id) !== undefined) {
+            this.insertCleanup(
+              activeRun.id as RunId,
+              receivedAt,
+              terminationFallbackAt,
+            );
+          }
+          this.insertWorkflowSupersession(
+            activeRun.id as RunId,
+            activeRun.workflow_instance_id,
+            run.id as RunId,
+            receivedAt,
+            terminationFallbackAt,
+          );
+        }
         sql.exec(
           "INSERT INTO metadata (key, value) VALUES ('latest_run_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
           run.id,
@@ -221,7 +305,11 @@ export class ReviewLedgerObject
         outcome = "duplicate";
       }
     });
-    return Promise.resolve(outcome);
+    return {
+      outcome,
+      supersededWorkflows:
+        outcome === "claimed" ? this.pendingWorkflowSupersessions() : [],
+    };
   }
 
   public isLatestRun(runId: RunId): Promise<boolean> {
@@ -298,7 +386,7 @@ export class ReviewLedgerObject
       this.applyTransition(transition);
       this.insertCleanup(runId, occurredAt);
     });
-    await this.ensureCleanupAlarm();
+    await this.ensureMaintenanceAlarm();
   }
 
   public async markTerminalAndRequestCleanup(
@@ -320,7 +408,7 @@ export class ReviewLedgerObject
         this.insertCleanup(parsedRunId as RunId, parsedOccurredAt);
       }
     });
-    if (requiresCleanup) await this.ensureCleanupAlarm();
+    if (requiresCleanup) await this.ensureMaintenanceAlarm();
     return changed;
   }
 
@@ -520,46 +608,74 @@ export class ReviewLedgerObject
     );
   }
 
-  public override async alarm(): Promise<void> {
-    const task = this.pendingCleanup();
-    if (task === undefined) return;
-    try {
-      await this.cleanupRepository(task.run_id);
-      this.ctx.storage.transactionSync(() => {
-        this.ctx.storage.sql.exec(
-          "UPDATE cleanup_tasks SET state = 'completed', attempts = attempts + 1, completed_at = ? WHERE run_id = ? AND state = 'pending'",
-          new Date().toISOString(),
-          task.run_id,
-        );
-        this.ctx.storage.sql.exec(
-          "DELETE FROM credential_scopes WHERE run_id = ?",
-          task.run_id,
-        );
-      });
-      consoleLogger.emit("repository.cleanup_completed", {
-        eventId: `cleanup:${task.run_id}:${task.attempts + 1}`,
-        runId: task.run_id,
-      });
-      await this.ensureCleanupAlarm();
-    } catch (error) {
-      const attempts = task.attempts + 1;
+  public async completeWorkflowSupersession(
+    runId: RunId,
+    completedAt: string,
+  ): Promise<void> {
+    const parsedRunId = runIdSchema.parse(runId);
+    const parsedCompletedAt = normalizedTimestamp(completedAt);
+    this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec(
-        "UPDATE cleanup_tasks SET attempts = ? WHERE run_id = ? AND state = 'pending'",
-        attempts,
-        task.run_id,
+        "UPDATE workflow_supersessions SET state = 'completed', completed_at = ? WHERE superseded_run_id = ? AND state = 'pending'",
+        parsedCompletedAt,
+        parsedRunId,
       );
-      consoleLogger.emit("repository.cleanup_retry", {
-        attempt: attempts,
-        errorKind: errorKind(error),
-        eventId: `cleanup:${task.run_id}:${attempts}`,
-        runId: task.run_id,
-      });
-      const delay = Math.min(
-        60 * 60_000,
-        5_000 * 2 ** Math.min(attempts - 1, 9),
+      this.ctx.storage.sql.exec(
+        "UPDATE cleanup_tasks SET next_attempt_at = ? WHERE run_id = ? AND state = 'pending' AND next_attempt_at > ?",
+        parsedCompletedAt,
+        parsedRunId,
+        parsedCompletedAt,
       );
-      await this.ctx.storage.setAlarm(Date.now() + delay);
+    });
+    await this.ensureMaintenanceAlarm();
+  }
+
+  public override async alarm(): Promise<void> {
+    const startedAt = new Date();
+    const cleanup = this.dueCleanup(startedAt.toISOString());
+
+    if (cleanup !== undefined) {
+      const attempt = cleanup.attempts + 1;
+      try {
+        await this.cleanupRepository(cleanup.run_id);
+        this.ctx.storage.transactionSync(() => {
+          this.ctx.storage.sql.exec(
+            "UPDATE cleanup_tasks SET state = 'completed', attempts = ?, completed_at = ? WHERE run_id = ? AND state = 'pending'",
+            attempt,
+            new Date().toISOString(),
+            cleanup.run_id,
+          );
+          this.ctx.storage.sql.exec(
+            "DELETE FROM credential_scopes WHERE run_id = ?",
+            cleanup.run_id,
+          );
+        });
+        consoleLogger.emit("repository.cleanup_completed", {
+          eventId: `cleanup:${cleanup.run_id}:${attempt}`,
+          runId: cleanup.run_id,
+        });
+      } catch (error) {
+        const nextAttemptAt = new Date(
+          Date.now() + maintenanceBackoff(attempt),
+        ).toISOString();
+        this.ctx.storage.sql.exec(
+          "UPDATE cleanup_tasks SET attempts = ?, next_attempt_at = ? WHERE run_id = ? AND state = 'pending'",
+          attempt,
+          nextAttemptAt,
+          cleanup.run_id,
+        );
+        consoleLogger.emit("repository.cleanup_retry", {
+          attempt,
+          errorKind: errorKind(error),
+          eventId: `cleanup:${cleanup.run_id}:${attempt}`,
+          runId: cleanup.run_id,
+        });
+      }
     }
+
+    await this.processDueWorkflowSupersession(startedAt.toISOString());
+
+    await this.ensureMaintenanceAlarm();
   }
 
   private latestRunId(): string | undefined {
@@ -619,11 +735,37 @@ export class ReviewLedgerObject
     );
   }
 
-  private insertCleanup(runId: RunId, requestedAt: string): void {
+  private insertCleanup(
+    runId: RunId,
+    requestedAt: string,
+    nextAttemptAt = requestedAt,
+  ): void {
     this.ctx.storage.sql.exec(
-      "INSERT INTO cleanup_tasks (run_id, state, requested_at) VALUES (?, 'pending', ?) ON CONFLICT(run_id) DO NOTHING",
+      "INSERT INTO cleanup_tasks (run_id, state, requested_at, next_attempt_at) VALUES (?, 'pending', ?, ?) ON CONFLICT(run_id) DO NOTHING",
       runId,
       requestedAt,
+      nextAttemptAt,
+    );
+  }
+
+  private insertWorkflowSupersession(
+    supersededRunId: RunId,
+    workflowInstanceId: string,
+    supersededByRunId: RunId,
+    requestedAt: string,
+    nextAttemptAt: string,
+  ): void {
+    this.ctx.storage.sql.exec(
+      `INSERT INTO workflow_supersessions (
+         superseded_run_id, workflow_instance_id, superseded_by_run_id,
+         state, requested_at, next_attempt_at
+       ) VALUES (?, ?, ?, 'pending', ?, ?)
+       ON CONFLICT(superseded_run_id) DO NOTHING`,
+      supersededRunId,
+      workflowInstanceId,
+      supersededByRunId,
+      requestedAt,
+      nextAttemptAt,
     );
   }
 
@@ -661,25 +803,115 @@ export class ReviewLedgerObject
     return true;
   }
 
-  private pendingCleanup(): CleanupRow | undefined {
+  private dueCleanup(now: string): CleanupRow | undefined {
     return this.ctx.storage.sql
       .exec<CleanupRow>(
-        "SELECT run_id, state, attempts FROM cleanup_tasks WHERE state = 'pending' ORDER BY requested_at, run_id LIMIT 1",
+        "SELECT run_id, state, attempts, next_attempt_at FROM cleanup_tasks WHERE state = 'pending' AND next_attempt_at <= ? ORDER BY next_attempt_at, requested_at, run_id LIMIT 1",
+        now,
       )
       .toArray()[0];
   }
 
-  private async ensureCleanupAlarm(): Promise<void> {
-    if (
-      this.pendingCleanup() !== undefined &&
-      (await this.ctx.storage.getAlarm()) === null
-    ) {
-      await this.ctx.storage.setAlarm(Date.now());
+  private dueWorkflowSupersession(
+    now: string,
+  ): WorkflowSupersessionRow | undefined {
+    return this.ctx.storage.sql
+      .exec<WorkflowSupersessionRow>(
+        "SELECT superseded_run_id, workflow_instance_id, state, attempts, next_attempt_at FROM workflow_supersessions WHERE state = 'pending' AND next_attempt_at <= ? ORDER BY next_attempt_at, requested_at, superseded_run_id LIMIT 1",
+        now,
+      )
+      .toArray()[0];
+  }
+
+  private pendingWorkflowSupersessions(): SupersededWorkflow[] {
+    return this.ctx.storage.sql
+      .exec<{
+        superseded_run_id: string;
+        workflow_instance_id: string;
+      }>(
+        "SELECT superseded_run_id, workflow_instance_id FROM workflow_supersessions WHERE state = 'pending' ORDER BY requested_at, superseded_run_id LIMIT 100",
+      )
+      .toArray()
+      .map((row) => ({
+        runId: runIdSchema.parse(row.superseded_run_id),
+        workflowInstanceId: row.workflow_instance_id,
+      }));
+  }
+
+  private nextMaintenanceAt(): number | undefined {
+    const row = this.ctx.storage.sql
+      .exec<{ next_attempt_at: string }>(
+        `SELECT MIN(next_attempt_at) AS next_attempt_at
+         FROM (
+           SELECT next_attempt_at FROM cleanup_tasks WHERE state = 'pending'
+           UNION ALL
+           SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
+         )`,
+      )
+      .toArray()[0];
+    if (row?.next_attempt_at === undefined || row.next_attempt_at === null) {
+      return undefined;
+    }
+    return Math.max(Date.now(), Date.parse(row.next_attempt_at));
+  }
+
+  private async ensureMaintenanceAlarm(): Promise<void> {
+    const next = this.nextMaintenanceAt();
+    if (next === undefined) return;
+    const scheduled = await this.ctx.storage.getAlarm();
+    if (scheduled === null || scheduled > next) {
+      await this.ctx.storage.setAlarm(next);
     }
   }
 
   private async cleanupRepository(runId: string): Promise<void> {
     await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
+  }
+
+  private async terminateSupersededWorkflow(
+    workflowInstanceId: string,
+  ): Promise<void> {
+    await terminateWorkflowIfActive(
+      this.env.REVIEW_WORKFLOW,
+      workflowInstanceId,
+    );
+  }
+
+  private async processDueWorkflowSupersession(now: string): Promise<void> {
+    const supersession = this.dueWorkflowSupersession(now);
+    if (supersession === undefined) return;
+
+    const attempt = supersession.attempts + 1;
+    try {
+      await this.terminateSupersededWorkflow(supersession.workflow_instance_id);
+      this.ctx.storage.sql.exec(
+        "UPDATE workflow_supersessions SET state = 'completed', attempts = ?, completed_at = ? WHERE superseded_run_id = ? AND state = 'pending'",
+        attempt,
+        new Date().toISOString(),
+        supersession.superseded_run_id,
+      );
+      consoleLogger.emit("workflow.supersession_completed", {
+        attempt,
+        eventId: `supersession:${supersession.superseded_run_id}:${attempt}`,
+        runId: supersession.superseded_run_id,
+      });
+    } catch (error) {
+      const nextAttemptAt = new Date(
+        Date.now() + maintenanceBackoff(attempt),
+      ).toISOString();
+      this.ctx.storage.sql.exec(
+        "UPDATE workflow_supersessions SET attempts = ?, next_attempt_at = ? WHERE superseded_run_id = ? AND state = 'pending'",
+        attempt,
+        nextAttemptAt,
+        supersession.superseded_run_id,
+      );
+      consoleLogger.emit("workflow.supersession_retry", {
+        attempt,
+        errorKind: errorKind(error),
+        eventId: `supersession:${supersession.superseded_run_id}:${attempt}`,
+        runId: supersession.superseded_run_id,
+      });
+    }
   }
 
   public loadPrFindings(prKey: PrKey): Promise<readonly TrackedFinding[]> {

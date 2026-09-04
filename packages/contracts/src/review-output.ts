@@ -250,9 +250,21 @@ export const reviewRunSchema = z
     path: ["id"],
   });
 
+export const workflowInstanceIdSchema = z.string().trim().min(1).max(512);
+
 export const runClaimSchema = z.strictObject({
   run: reviewRunSchema,
-  workflowInstanceId: z.string().trim().min(1).max(512),
+  workflowInstanceId: workflowInstanceIdSchema,
+});
+
+export const supersededWorkflowSchema = z.strictObject({
+  runId: runIdSchema,
+  workflowInstanceId: workflowInstanceIdSchema,
+});
+
+export const runClaimV2ResultSchema = z.strictObject({
+  outcome: z.enum(["claimed", "duplicate", "resume"]),
+  supersededWorkflows: z.array(supersededWorkflowSchema).max(100),
 });
 
 export const runTransitionSchema = z.strictObject({
@@ -305,4 +317,6 @@ export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
 export type ModelReviewOutput = z.infer<typeof modelReviewOutputSchema>;
 export type PublicationRecord = z.infer<typeof publicationRecordSchema>;
 export type ReviewRun = z.infer<typeof reviewRunSchema>;
+export type RunClaimV2Result = z.infer<typeof runClaimV2ResultSchema>;
+export type SupersededWorkflow = z.infer<typeof supersededWorkflowSchema>;
 export type RunTransition = z.infer<typeof runTransitionSchema>;

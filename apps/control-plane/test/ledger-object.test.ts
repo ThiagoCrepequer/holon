@@ -53,6 +53,139 @@ describe("ReviewLedgerObject", () => {
     await expect(ledger.isLatestRun(newerId)).resolves.toBe(true);
   });
 
+  it("atomically supersedes active runs before exposing termination work", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await ledger.claimRun(run, "workflow-old");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      "2026-08-29T12:00:01.000Z",
+      "workflow-old:start",
+    );
+    await ledger.registerCredentialScope({
+      containerId: "f".repeat(64),
+      installationId: 99,
+      repositoryId: 42,
+      repositoryName: "api",
+      repositoryOwner: "acme",
+      runId,
+    });
+
+    const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
+    const claim = await ledger.claimRunV2(
+      {
+        ...run,
+        createdAt: "2026-08-29T12:01:01.000Z",
+        id: newerId,
+      },
+      "workflow-new",
+      "2026-08-29T12:01:00.000Z",
+    );
+
+    expect(claim).toEqual({
+      outcome: "claimed",
+      supersededWorkflows: [{ runId, workflowInstanceId: "workflow-old" }],
+    });
+    await expect(ledger.runState(runId)).resolves.toBe("obsolete");
+    await expect(ledger.isLatestRun(newerId)).resolves.toBe(true);
+    await expect(ledger.cleanupState(runId)).resolves.toBeDefined();
+    await runInDurableObject(ledger, (_object, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ state: string }>(
+            "SELECT state FROM workflow_supersessions WHERE superseded_run_id = ?",
+            runId,
+          )
+          .one().state,
+      ).toBe("pending");
+    });
+  });
+
+  it("hands every still-pending older cancellation to the causally latest run", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await ledger.claimRun(run, "workflow-a");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      "2026-08-29T12:00:01.000Z",
+      "workflow-a:start",
+    );
+
+    const middleId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
+    await ledger.claimRunV2(
+      {
+        ...run,
+        createdAt: "2026-08-29T12:01:01.000Z",
+        id: middleId,
+      },
+      "workflow-b",
+      "2026-08-29T12:01:00.000Z",
+    );
+    await ledger.transition(
+      middleId,
+      "queued",
+      "running",
+      "2026-08-29T12:01:02.000Z",
+      "workflow-b:start",
+    );
+
+    const newestId = `github:42:pr:7:head:${"c".repeat(40)}` as RunId;
+    const claim = await ledger.claimRunV2(
+      {
+        ...run,
+        createdAt: "2026-08-29T12:02:01.000Z",
+        id: newestId,
+      },
+      "workflow-c",
+      "2026-08-29T12:02:00.000Z",
+    );
+
+    expect(claim).toEqual({
+      outcome: "claimed",
+      supersededWorkflows: [
+        { runId, workflowInstanceId: "workflow-a" },
+        { runId: middleId, workflowInstanceId: "workflow-b" },
+      ],
+    });
+    await expect(ledger.runState(middleId)).resolves.toBe("obsolete");
+    await expect(ledger.isLatestRun(newestId)).resolves.toBe(true);
+  });
+
+  it("supersedes a retryable failed run without blocking the latest head", async () => {
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await ledger.claimRun(run, "workflow-retryable");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      "2026-08-29T12:00:01.000Z",
+      "workflow-retryable:start",
+    );
+    await ledger.transition(
+      runId,
+      "running",
+      "failed_retryable",
+      "2026-08-29T12:00:02.000Z",
+      "workflow-retryable:fail",
+    );
+
+    const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
+    await expect(
+      ledger.claimRunV2(
+        {
+          ...run,
+          createdAt: "2026-08-29T12:01:01.000Z",
+          id: newerId,
+        },
+        "workflow-new-after-retry",
+        "2026-08-29T12:01:00.000Z",
+      ),
+    ).resolves.toMatchObject({ outcome: "claimed" });
+    await expect(ledger.runState(runId)).resolves.toBe("obsolete");
+  });
+
   it("does not let a delayed older delivery supersede the causally newer head", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
@@ -61,8 +194,16 @@ describe("ReviewLedgerObject", () => {
       "workflow-newer",
       "2026-08-29T12:02:00.000Z",
     );
-    await ledger.claimRun(run, "workflow-delayed", "2026-08-29T12:00:00.000Z");
+    const delayed = await ledger.claimRunV2(
+      run,
+      "workflow-delayed",
+      "2026-08-29T12:00:00.000Z",
+    );
 
+    expect(delayed).toEqual({
+      outcome: "duplicate",
+      supersededWorkflows: [],
+    });
     await expect(ledger.isLatestRun(newerId)).resolves.toBe(true);
     await expect(ledger.isLatestRun(runId)).resolves.toBe(false);
   });
@@ -115,6 +256,7 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE credential_scopes;
         DROP TABLE IF EXISTS pr_findings;
         DROP TABLE IF EXISTS finding_feedbacks;
+        DROP TABLE IF EXISTS workflow_supersessions;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -152,6 +294,7 @@ describe("ReviewLedgerObject", () => {
         { version: 6 },
         { version: 7 },
         { version: 8 },
+        { version: 9 },
       ]);
       expect(
         state.storage.sql

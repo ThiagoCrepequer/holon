@@ -30,6 +30,7 @@ import {
   reviewContextV2Schema,
   reviewJobSchema,
   reviewPlanSchema,
+  runClaimV2ResultSchema,
   reviewShardSchema,
   reviewVerdictDetailsSchema,
   reviewVerdictPolicyOptionsSchema,
@@ -55,6 +56,39 @@ const sha = "a".repeat(40);
 const runId = `github:42:pr:7:head:${sha}`;
 const canonicalDiff =
   "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+describe("run claim V2", () => {
+  const claim = {
+    outcome: "claimed",
+    supersededWorkflows: [
+      {
+        runId,
+        workflowInstanceId: "review-previous",
+      },
+    ],
+  } as const;
+
+  it("accepts a bounded list of superseded workflow identities", () => {
+    expect(runClaimV2ResultSchema.parse(claim)).toEqual(claim);
+  });
+
+  it.each([
+    { ...claim, extra: true },
+    {
+      ...claim,
+      supersededWorkflows: Array.from({ length: 101 }, (_, index) => ({
+        runId,
+        workflowInstanceId: `review-${index}`,
+      })),
+    },
+    {
+      ...claim,
+      supersededWorkflows: [{ runId: "invalid", workflowInstanceId: "" }],
+    },
+  ])("rejects an invalid supersession boundary", (invalid) => {
+    expect(runClaimV2ResultSchema.safeParse(invalid).success).toBe(false);
+  });
+});
 
 describe("webhook envelope v1", () => {
   const envelope = {

@@ -206,6 +206,30 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 8,
   },
+  {
+    statements: `
+      ALTER TABLE cleanup_tasks ADD COLUMN next_attempt_at TEXT;
+      UPDATE cleanup_tasks
+        SET next_attempt_at = requested_at
+        WHERE next_attempt_at IS NULL;
+      CREATE INDEX IF NOT EXISTS cleanup_tasks_due
+        ON cleanup_tasks(state, next_attempt_at, requested_at);
+
+      CREATE TABLE IF NOT EXISTS workflow_supersessions (
+        superseded_run_id TEXT PRIMARY KEY,
+        workflow_instance_id TEXT NOT NULL,
+        superseded_by_run_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        requested_at TEXT NOT NULL,
+        next_attempt_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS workflow_supersessions_due
+        ON workflow_supersessions(state, next_attempt_at, requested_at);
+    `,
+    version: 9,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

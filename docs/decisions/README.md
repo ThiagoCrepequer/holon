@@ -42,6 +42,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0024](0024-persist-canonical-review-decision-for-feedback.md)                    | Persistir a decisão canônica da review para feedback                  | `accepted`   | 2026-09-03 |
 | [ADR-0025](0025-bound-structural-analysis-and-promote-verifiable-findings.md)         | Limitar análise estrutural e promover findings verificáveis           | `accepted`   | 2026-09-03 |
 | [ADR-0026](0026-centralize-github-app-keyring-and-enable-zero-downtime-rotation.md)   | Centralizar keyring do GitHub App e habilitar rotação de chave        | `accepted`   | 2026-09-03 |
+| [ADR-0027](0027-actively-supersede-obsolete-review-workflows.md)                      | Cancelar ativamente Workflows de review causalmente obsoletos         | `accepted`   | 2026-09-03 |
 
 ## Regras
 

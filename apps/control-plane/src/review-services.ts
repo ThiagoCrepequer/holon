@@ -23,6 +23,7 @@ import {
   type RepositoryToolResult,
   type ReviewContextV2,
   type ReviewJob,
+  type RunClaimV2Result,
 } from "@holon/contracts";
 import { createPrKey, type RunId, type RunState } from "@holon/domain";
 import {
@@ -60,6 +61,7 @@ import {
   StructuredLogTelemetryEmitter,
   type AnalyticsEngineDatasetLike,
 } from "./telemetry-emitter.js";
+import type { WorkflowController } from "./workflow-superseding.js";
 
 export interface RepositoryExecutorBinding {
   cleanup(runId: string): Promise<void>;
@@ -87,6 +89,15 @@ export interface WorkflowLedger
     CiEvidenceLedger,
     FindingLifecycleLedger,
     RunTelemetryLedger {
+  claimRunV2(
+    run: Parameters<PublicationLedger["claimRun"]>[0],
+    workflowInstanceId: string,
+    causalVersion?: string,
+  ): Promise<RunClaimV2Result>;
+  completeWorkflowSupersession(
+    runId: RunId,
+    completedAt: string,
+  ): Promise<void>;
   claimRun(
     run: Parameters<PublicationLedger["claimRun"]>[0],
     workflowInstanceId: string,
@@ -121,6 +132,7 @@ export interface ReviewRuntime {
   readonly now?: () => string;
   readonly telemetry?: TelemetryEmitter;
   readonly wait?: (delayMilliseconds: number) => Promise<void>;
+  readonly workflow?: WorkflowController;
 }
 
 export interface GitHubMutationContext {
@@ -133,6 +145,7 @@ export interface ReviewServices {
   readonly ledger: WorkflowLedger;
   readonly model: ModelReviewer;
   readonly telemetry: TelemetryEmitter;
+  readonly workflow: WorkflowController;
   getAccumulatedUsage(): {
     readonly inputTokens: number;
     readonly outputTokens: number;
@@ -478,6 +491,7 @@ export function createReviewServices(
     ledger,
     model,
     telemetry,
+    workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     getAccumulatedUsage: () => ({
       inputTokens,
       outputTokens,

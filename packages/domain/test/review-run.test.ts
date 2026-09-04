@@ -54,6 +54,7 @@ describe("review run state machine", () => {
 
     expect(retried.attempt).toBe(2);
     expect(canTransitionRun("failed_retryable", "failed_terminal")).toBe(true);
+    expect(canTransitionRun("failed_retryable", "obsolete")).toBe(true);
   });
 
   it.each([
