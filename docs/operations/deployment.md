@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-09-04
 ---
 
 # Provisionamento e deploy
@@ -19,15 +19,23 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    `pr-review`. Confirme no editor que todos os modelos ativos selecionam
    OpenRouter e suportam tool calling e structured outputs. Modelos sem esses
    dois contratos não devem permanecer nem como último fallback.
-2. Crie a DLQ e a Queue principal:
+2. Crie as filas de revisão e as filas de projeção analítica com DLQs:
 
    ```bash
    pnpm exec wrangler queues create holon-review-jobs-dlq
    pnpm exec wrangler queues create holon-review-jobs
+   pnpm exec wrangler queues create holon-admin-projections-dlq --delivery-delay-secs 0 --message-retention-period-secs 345600
+   pnpm exec wrangler queues create holon-admin-projections --delivery-delay-secs 0 --message-retention-period-secs 345600
    ```
 
-3. Configure o GitHub App conforme [github-app.md](github-app.md).
-4. Configure no control plane os nomes externos listados em
+3. Crie o banco de dados Cloudflare D1 para o read model administrativo:
+
+   ```bash
+   pnpm exec wrangler d1 create holon-admin-d1
+   ```
+
+4. Configure o GitHub App conforme [github-app.md](github-app.md).
+5. Configure no control plane os nomes externos listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
    `wrangler secret put` para credenciais (`GITHUB_APP_PRIVATE_KEY_CURRENT`,
    `GITHUB_APP_PRIVATE_KEY_PREVIOUS` ou legado `GITHUB_APP_PRIVATE_KEY`, seguindo o
@@ -35,31 +43,38 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    variáveis por ambiente. Configure o binding existente como
    `AI_MODEL_ID=dynamic/pr-review`; o token Cloudflare precisa de
    `AI Gateway Run`. A chave OpenRouter permanece exclusivamente no BYOK.
-5. Somente em uma conta vazia, crie o alvo do binding com o executor bootstrap.
+6. Somente em uma conta vazia, crie o alvo do binding com o executor bootstrap.
    Ele não possui broker e não deve receber tráfego de review:
 
    ```bash
    pnpm --filter @holon/repository-executor deploy:bootstrap
    ```
 
-6. Faça deploy do control plane dual-stack. Em ambiente já provisionado, este é
-   o primeiro deploy da atualização: ele oferece o broker e continua operando
-   com executor V1 por fallback estrito de método ausente.
+7. Faça deploy do control plane dual-stack. Em ambiente já provisionado, este é
+   o primeiro deploy da atualização: ele oferece o broker e o `AdminReadEntrypoint`,
+   mantendo producer desativado por flag até o consumidor estar ativo:
 
    ```bash
    pnpm --filter @holon/control-plane deploy
    ```
 
-7. Faça deploy do executor final com o binding para o entrypoint nomeado do
+8. Execute as migrations D1 do read model e faça deploy do `apps/admin`:
+
+   ```bash
+   pnpm --filter @holon/admin d1:migrate:remote
+   pnpm --filter @holon/admin deploy
+   ```
+
+9. Faça deploy do executor final com o binding para o entrypoint nomeado do
    broker:
 
    ```bash
    pnpm --filter @holon/repository-executor deploy
    ```
 
-O Wrangler aplica a migration v1 do Durable Object SQLite e registra Workflow,
-Queue bindings e os dois service bindings definidos nos `wrangler.jsonc`. Não
-abra tráfego no bootstrap; confirme os dois deploys finais antes do smoke.
+O Wrangler aplica as migrations do Durable Object SQLite e do D1, registrando Workflows,
+Queue bindings e os service bindings definidos nos `wrangler.jsonc`. Não
+abra tráfego no bootstrap; confirme os deploys finais antes do smoke.
 
 ## Deploy automático com Workers Builds
 

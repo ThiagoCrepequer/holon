@@ -4,13 +4,14 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-04
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
   - ../decisions/0006-use-granular-workflow-checkpoints.md
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
+  - ../decisions/0029-adopt-internal-operational-console-and-d1-read-model.md
 ---
 
 # Visão de containers
@@ -28,6 +29,9 @@ flowchart TD
     C06[C06 Review Engine<br/>bounded tool loop]
     C07[C07 Model Gateway<br/>Cloudflare AI Gateway]
     C08[C08 GitHub Publisher<br/>REST adapter]
+    C09[C09 Operational Console<br/>apps/admin & D1]
+    C10[C10 Projection Queue<br/>Cloudflare Queues & DLQ]
+    OP[Engenheiro Operador<br/>Cloudflare Access]
     MODEL[LLM provider]
 
     GH -->|signed webhook| C01
@@ -42,6 +46,11 @@ flowchart TD
     C06 -->|structured findings| C03
     C03 --> C08
     C08 -->|revalidate head and publish| GH
+    C03 -->|terminal snapshot| C10
+    C04 -.->|outbox recovery| C10
+    C10 -->|async projection| C09
+    OP -->|authenticated Access| C09
+    C09 -.->|RPC ADMIN_READ_API| C04
 ```
 
 ## Catálogo
@@ -56,6 +65,8 @@ flowchart TD
 | C06 | Executar investigação em duas fases e gate de evidência    | Application/domain + Two-Phase Review     | Implementada         |
 | C07 | Aplicar modelo, telemetria e políticas de custo/rate limit | Cloudflare AI Gateway                     | Adapter implementado |
 | C08 | Reler head e publicar comentários/review GitHub            | GitHub REST API                           | Implementada         |
+| C09 | Console operacional interno, read model exato e retenção   | Cloudflare Worker (React Router v8) + D1  | Implementada         |
+| C10 | Transporte desacoplado e durável da projeção analítica     | Cloudflare Queues + DLQ                   | Implementada         |
 
 ## Alocação inicial em deployables
 
@@ -64,6 +75,13 @@ C01 e os handlers de C02 e C03 são hospedados pelo mesmo
 porque possuem responsabilidades e gatilhos distintos. A Queue de C02 é um
 recurso gerenciado externo ao processo; o mesmo deployable apenas contém seu
 producer e consumer.
+
+C09 é o terceiro deployable `apps/admin`, conforme ADR-0029. Ele hospeda os
+handlers de SSR Web (React Router v8), o consumidor assíncrono de projeção da
+Queue C10 para o Cloudflare D1 e o handler `scheduled` de retenção analítica.
+O acesso de operadores humanos é restrito via Cloudflare Access. Detalhes
+específicos de runs são obtidos via RPC Service Binding interno direcionado ao
+ledger C04.
 
 C05 é o deployable separado `apps/repository-executor`. Essa fronteira
 preserva isolamento e política de recursos próprios para código de repositórios

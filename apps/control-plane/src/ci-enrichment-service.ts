@@ -1,5 +1,6 @@
 import type { CiEvidenceLedger, ReviewPublisher } from "@holon/application";
 import { ingestCiArtifactZips } from "@holon/application";
+import { truncateUtf8Bytes, type AdminCiSummaryV1 } from "@holon/contracts";
 import {
   appendCiEvidenceToSummary,
   buildPublicationMarker,
@@ -199,10 +200,24 @@ export async function enrichReviewWithCiEvidence(
   const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
+  const rawWorkflowName = input.workflowName ?? evidence.workflowName;
+  const structuredCi: AdminCiSummaryV1 = {
+    durationMs: evidence.tests?.durationMs ?? null,
+    failed: evidence.tests?.failed ?? 0,
+    passed: evidence.tests?.passed ?? 0,
+    skipped: evidence.tests?.skipped ?? 0,
+    status: evidence.status,
+    total: evidence.tests?.total ?? 0,
+    workflowName:
+      rawWorkflowName && rawWorkflowName.trim().length > 0
+        ? truncateUtf8Bytes(rawWorkflowName.trim(), 100)
+        : null,
+  };
   const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
   if (ledger !== undefined) {
     await ledger.saveCiEvidence(prKey, input.headSha, {
       markdown: evidenceMarkdown,
+      structuredCi,
       workflowRunId: input.workflowRunId,
     });
   }

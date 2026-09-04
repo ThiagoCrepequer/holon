@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-09-04
 ---
 
 # Desenvolvimento local
@@ -43,8 +43,11 @@ pnpm --filter @holon/evaluation test:coverage
 pnpm --filter @holon/evaluation evaluate:recorded
 pnpm --filter @holon/control-plane test
 pnpm --filter @holon/repository-executor test:coverage
+pnpm --filter @holon/ui test:coverage
+pnpm --filter @holon/admin test:coverage
 pnpm --filter @holon/control-plane build
 pnpm --filter @holon/repository-executor build
+pnpm --filter @holon/admin build
 ```
 
 `evaluate:recorded` executa o corpus V3 contra outputs sintéticos versionados,

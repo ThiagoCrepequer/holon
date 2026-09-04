@@ -1,0 +1,20 @@
+{
+  "name": "@holon/admin-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "replay:dlq": "tsx replay-dlq.ts",
+    "test": "vitest run --config ../../vitest.config.ts --root .",
+    "test:coverage": "vitest run --config ../../vitest.config.ts --root . --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@holon/contracts": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
+  }
+}

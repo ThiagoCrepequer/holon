@@ -5,12 +5,15 @@ import {
   renderFinding,
 } from "@holon/application";
 import {
+  buildAdminProjectionEventV1,
   runClaimV2ResultSchema,
   reviewJobSchema,
+  type AdminRunProjectionPayloadV1,
   type CheckRunConclusion,
   type CheckRunOutput,
   type RepositoryPolicy,
   type ReviewJob,
+  type ReviewPhaseReached,
   type RunTelemetry,
   type StepTiming,
 } from "@holon/contracts";
@@ -48,6 +51,7 @@ import {
   createReviewServices,
   type GitHubMutationContext,
   type ReviewRuntime,
+  type ReviewServices,
 } from "./review-services.js";
 import {
   causalVersionForJob,
@@ -82,6 +86,89 @@ function repositoryPolicyFailureMessage(error: unknown): string | undefined {
     ? error.message.slice("HOLON_REPOSITORY_POLICY:".length)
     : error.name;
   return repositoryPolicyFailureMessages[kind];
+}
+
+function buildProjectionTimestamps(
+  rawEventTimestamp: Date,
+  workflowStartedAt: string,
+  terminalAt: string,
+  analysisStartedAt: string | null,
+) {
+  const webhookReceivedMs = rawEventTimestamp.getTime();
+  let workflowStartedMs = Date.parse(workflowStartedAt);
+  if (workflowStartedMs < webhookReceivedMs) {
+    workflowStartedMs = webhookReceivedMs;
+  }
+  let terminalMs = Date.parse(terminalAt);
+  if (terminalMs < workflowStartedMs) {
+    terminalMs = workflowStartedMs;
+  }
+  let analysisStartedAtIso: string | null = null;
+  if (analysisStartedAt !== null) {
+    let analysisMs = Date.parse(analysisStartedAt);
+    if (analysisMs < workflowStartedMs) analysisMs = workflowStartedMs;
+    if (analysisMs > terminalMs) analysisMs = terminalMs;
+    analysisStartedAtIso = new Date(analysisMs).toISOString();
+  }
+
+  return {
+    analysisStartedAt: analysisStartedAtIso,
+    terminalAt: new Date(terminalMs).toISOString(),
+    webhookReceivedAt: new Date(webhookReceivedMs).toISOString(),
+    workflowStartedAt: new Date(workflowStartedMs).toISOString(),
+  };
+}
+
+async function emitAndRecordProjection(
+  step: WorkflowStep,
+  services: ReviewServices,
+  payloadInput: AdminRunProjectionPayloadV1,
+  emit: (
+    event: string,
+    fields?: Readonly<Record<string, boolean | number | string | undefined>>,
+    suffix?: number | string,
+  ) => void,
+  prefix: string,
+): Promise<void> {
+  const projectionQueue = services.adminProjectionQueue;
+  if (projectionQueue === undefined) {
+    return;
+  }
+
+  try {
+    const event = await step.do(
+      `${prefix}-build-admin-projection`,
+      stateStep,
+      async () => {
+        return await buildAdminProjectionEventV1(payloadInput);
+      },
+    );
+
+    await step.do(
+      `${prefix}-record-admin-projection-task`,
+      stateStep,
+      async () => {
+        await services.ledger.recordProjectionTask(event);
+      },
+    );
+
+    await step.do(`${prefix}-publish-admin-projection`, stateStep, async () => {
+      try {
+        await projectionQueue.send(event);
+        await services.ledger.markProjectionTaskCompleted(payloadInput.runId);
+      } catch (sendError) {
+        await services.ledger.scheduleProjectionRetry(
+          payloadInput.runId,
+          errorKind(sendError),
+        );
+        throw sendError;
+      }
+    });
+  } catch (projectionError) {
+    emit("admin.projection_failed", {
+      errorKind: errorKind(projectionError),
+    });
+  }
 }
 
 export class ReviewWorkflow extends WorkflowEntrypoint<
@@ -137,6 +224,25 @@ export async function executeReviewWorkflow(
   let repositoryStarted = false;
   let runClaimed = false;
   let effectivePolicy: RepositoryPolicy | undefined;
+  let reviewPhaseReached: ReviewPhaseReached = "admitted";
+  let analysisStartedAtIso: string | null = null;
+
+  const workflowStartedAt = now();
+  const stepTimings: StepTiming[] = [];
+  const recordStepTiming = (
+    stepName: string,
+    durationMs: number,
+    status: "success" | "failure",
+    attempt = 1,
+  ) => {
+    const timing: StepTiming = { attempt, durationMs, status, stepName };
+    stepTimings.push(timing);
+    try {
+      void services.telemetry?.emitStepTiming(timing);
+    } catch {
+      // ignore
+    }
+  };
 
   const moveTo = async (
     stepName: string,
@@ -209,6 +315,82 @@ export async function executeReviewWorkflow(
       );
     }
     const occurredAt = await moveTo(stepName, expected, "obsolete", cleanup);
+    const obsoleteAt = occurredAt;
+    const obsoleteDurationMs = durationFrom(rawEvent.timestamp, obsoleteAt);
+    const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
+    const usage = services.getAccumulatedUsage();
+    const tokenAccounting = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.inputTokens + usage.outputTokens,
+    };
+    const cost = calculateInferenceCost("unknown", tokenAccounting);
+    const obsoleteTelemetry: RunTelemetry = {
+      cost,
+      createdAt: obsoleteAt,
+      durationMs: obsoleteDurationMs,
+      headSha: job.envelope.pullRequest.headSha,
+      isDegraded: false,
+      prKey,
+      queueWaitMs,
+      runId: run.id,
+      scopeStatus: null,
+      shardsCount: 0,
+      stepTimings,
+      terminalState: "obsolete",
+      tokens: tokenAccounting,
+      toolCallsCount: usage.toolCallsCount,
+    };
+    await services.ledger.saveRunTelemetry(obsoleteTelemetry).catch(() => {});
+    void services.telemetry?.emitRunTelemetry(obsoleteTelemetry);
+
+    const timestamps = buildProjectionTimestamps(
+      rawEvent.timestamp,
+      workflowStartedAt,
+      occurredAt,
+      analysisStartedAtIso,
+    );
+    const projectionPayload: AdminRunProjectionPayloadV1 = {
+      headSha: job.envelope.pullRequest.headSha,
+      prKey,
+      projectedFrom: "workflow",
+      projectionRequestedAt: now(),
+      pullRequestNumber: job.envelope.pullRequest.number,
+      recordVersion: 1,
+      repository: {
+        id: job.envelope.repository.id,
+        name: job.envelope.repository.name,
+        owner: job.envelope.repository.owner,
+      },
+      reviewPhaseReached,
+      runId: run.id,
+      schemaVersion: 1,
+      scopeStatus: null,
+      telemetry: {
+        estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
+        executionDurationMs: obsoleteDurationMs,
+        inputTokens: tokenAccounting.inputTokens,
+        isDegraded: false,
+        outputTokens: tokenAccounting.outputTokens,
+        pricingModel: cost.pricingModel,
+        reasoningTokens: null,
+        reviewAdmissionQueueWaitMs: queueWaitMs,
+        shardsCount: 0,
+        toolCallsCount: usage.toolCallsCount,
+      },
+      terminalState: "obsolete",
+      timestamps,
+      verdict: null,
+    };
+
+    await emitAndRecordProjection(
+      step,
+      services,
+      projectionPayload,
+      emit,
+      "obsolete",
+    );
+
     const result = { findingsPublished: 0, outcome: "obsolete" } as const;
     emit("review.completed", {
       durationMs: durationFrom(rawEvent.timestamp, occurredAt),
@@ -332,23 +514,6 @@ export async function executeReviewWorkflow(
         return true;
       });
 
-  const workflowStartedAt = now();
-  const stepTimings: StepTiming[] = [];
-  const recordStepTiming = (
-    stepName: string,
-    durationMs: number,
-    status: "success" | "failure",
-    attempt = 1,
-  ) => {
-    const timing: StepTiming = { attempt, durationMs, status, stepName };
-    stepTimings.push(timing);
-    try {
-      void services.telemetry?.emitStepTiming(timing);
-    } catch {
-      // ignore
-    }
-  };
-
   try {
     const claim = await step.do("claim-run", stateStep, async () => {
       const result = runClaimV2ResultSchema.parse(
@@ -367,6 +532,7 @@ export async function executeReviewWorkflow(
       return { findingsPublished: 0, outcome: "duplicate" } as const;
     }
     runClaimed = true;
+    reviewPhaseReached = "admitted";
 
     for (const [index, superseded] of claim.supersededWorkflows.entries()) {
       await step
@@ -489,18 +655,23 @@ export async function executeReviewWorkflow(
         truncated: prepared.truncated,
       });
     });
+    reviewPhaseReached = "repository_prepared";
     recordStepTiming("prepare-repository", Date.now() - prepStart, "success");
 
     const analysisStart = Date.now();
+    analysisStartedAtIso = now();
+    reviewPhaseReached = "analysis_started";
     const output = await step.do(
       "analyze-review",
       modelStep,
       async () => await analyzeReview(job, services, emit, effectivePolicy),
     );
+    reviewPhaseReached = "analyzed";
     recordStepTiming("analyze-review", Date.now() - analysisStart, "success");
 
     const pubStart = Date.now();
     await moveTo("begin-publication", "running", "publishing", false);
+    reviewPhaseReached = "publishing";
     const currentBeforePublication = await step.do(
       "revalidate-current-refs",
       publicationStep,
@@ -795,6 +966,53 @@ export async function executeReviewWorkflow(
       true,
     );
 
+    const timestamps = buildProjectionTimestamps(
+      rawEvent.timestamp,
+      workflowStartedAt,
+      completedAt,
+      analysisStartedAtIso,
+    );
+    const completedProjectionPayload: AdminRunProjectionPayloadV1 = {
+      headSha: job.envelope.pullRequest.headSha,
+      prKey,
+      projectedFrom: "workflow",
+      projectionRequestedAt: now(),
+      pullRequestNumber: job.envelope.pullRequest.number,
+      recordVersion: 1,
+      repository: {
+        id: job.envelope.repository.id,
+        name: job.envelope.repository.name,
+        owner: job.envelope.repository.owner,
+      },
+      reviewPhaseReached: "publishing",
+      runId: run.id,
+      schemaVersion: 1,
+      scopeStatus: output.scopeStatus,
+      telemetry: {
+        estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
+        executionDurationMs: totalDurationMs,
+        inputTokens: tokenAccounting.inputTokens,
+        isDegraded: output.isDegraded === true,
+        outputTokens: tokenAccounting.outputTokens,
+        pricingModel: cost.pricingModel,
+        reasoningTokens: null,
+        reviewAdmissionQueueWaitMs: queueWaitMs,
+        shardsCount: output.totalShards,
+        toolCallsCount: usage.toolCallsCount,
+      },
+      terminalState: "completed",
+      timestamps,
+      verdict: output.verdict ?? null,
+    };
+
+    await emitAndRecordProjection(
+      step,
+      services,
+      completedProjectionPayload,
+      emit,
+      "completed",
+    );
+
     const result = { findingsPublished, outcome: "completed" } as const;
     emit("review.completed", {
       durationMs: durationFrom(rawEvent.timestamp, completedAt),
@@ -907,6 +1125,56 @@ export async function executeReviewWorkflow(
           });
         });
     }
+
+    if (terminal?.changed === true) {
+      const timestamps = buildProjectionTimestamps(
+        rawEvent.timestamp,
+        workflowStartedAt,
+        terminal.occurredAt,
+        analysisStartedAtIso,
+      );
+      const failedProjectionPayload: AdminRunProjectionPayloadV1 = {
+        headSha: job.envelope.pullRequest.headSha,
+        prKey,
+        projectedFrom: "workflow",
+        projectionRequestedAt: now(),
+        pullRequestNumber: job.envelope.pullRequest.number,
+        recordVersion: 1,
+        repository: {
+          id: job.envelope.repository.id,
+          name: job.envelope.repository.name,
+          owner: job.envelope.repository.owner,
+        },
+        reviewPhaseReached,
+        runId: run.id,
+        schemaVersion: 1,
+        scopeStatus: "partial_by_failure",
+        telemetry: {
+          estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
+          executionDurationMs: failedDurationMs,
+          inputTokens: tokenAccounting.inputTokens,
+          isDegraded: true,
+          outputTokens: tokenAccounting.outputTokens,
+          pricingModel: cost.pricingModel,
+          reasoningTokens: null,
+          reviewAdmissionQueueWaitMs: queueWaitMs,
+          shardsCount: 1,
+          toolCallsCount: usage.toolCallsCount,
+        },
+        terminalState: "failed_terminal",
+        timestamps,
+        verdict: null,
+      };
+
+      await emitAndRecordProjection(
+        step,
+        services,
+        failedProjectionPayload,
+        emit,
+        "failed",
+      );
+    }
+
     throw error;
   }
 }

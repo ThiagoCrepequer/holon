@@ -4,11 +4,12 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-04
 related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
   - ../decisions/0028-adopt-declarative-repository-policy.md
+  - ../decisions/0029-adopt-internal-operational-console-and-d1-read-model.md
 ---
 
 # Segurança e trust boundaries
@@ -19,17 +20,21 @@ modelo a ignorar políticas ou exfiltrar dados.
 
 ## Fronteiras
 
-| Fronteira             | Risco principal                                   | Controle obrigatório                                                                    |
-| --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Internet -> Worker    | Webhook forjado, replay, payload excessivo        | HMAC do corpo bruto, comparação constante, allowlist de eventos e limite de tamanho     |
-| Queue -> Coordinator  | Redelivery e evento obsoleto                      | Idempotência e validação de schema/version                                              |
-| Política -> escopo    | PR reduz cobertura ou explora YAML                | Ler do base SHA, AST restrita, schema estrito e paths protegidos                        |
-| GitHub -> Analyzer    | Código malicioso, arquivo gigante, path traversal | Workspace isolado, limites e normalização de caminhos                                   |
-| Analyzer -> comandos  | Execução arbitrária e exfiltração                 | Read-only por padrão, allowlist, timeout, CPU/memória/rede limitados                    |
-| Evidência -> modelo   | Prompt injection e dados sensíveis                | Separar instruções de dados, minimizar contexto, redigir segredos e limitar ferramentas |
-| Modelo -> ferramentas | Tool call destrutiva ou fora de escopo            | Schemas estritos, autorização no host e ferramentas mínimas                             |
-| Modelo -> GitHub      | Finding inventado ou coordenada inválida          | Validação determinística e releitura do head SHA                                        |
-| Holon -> provedores   | Retenção e exposição de código privado            | Contrato de dados, configuração de logs e política por organização                      |
+| Fronteira              | Risco principal                                   | Controle obrigatório                                                                    |
+| ---------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Internet -> Worker     | Webhook forjado, replay, payload excessivo        | HMAC do corpo bruto, comparação constante, allowlist de eventos e limite de tamanho     |
+| Queue -> Coordinator   | Redelivery e evento obsoleto                      | Idempotência e validação de schema/version                                              |
+| Política -> escopo     | PR reduz cobertura ou explora YAML                | Ler do base SHA, AST restrita, schema estrito e paths protegidos                        |
+| GitHub -> Analyzer     | Código malicioso, arquivo gigante, path traversal | Workspace isolado, limites e normalização de caminhos                                   |
+| Analyzer -> comandos   | Execução arbitrária e exfiltração                 | Read-only por padrão, allowlist, timeout, CPU/memória/rede limitados                    |
+| Evidência -> modelo    | Prompt injection e dados sensíveis                | Separar instruções de dados, minimizar contexto, redigir segredos e limitar ferramentas |
+| Modelo -> ferramentas  | Tool call destrutiva ou fora de escopo            | Schemas estritos, autorização no host e ferramentas mínimas                             |
+| Modelo -> GitHub       | Finding inventado ou coordenada inválida          | Validação determinística e releitura do head SHA                                        |
+| Holon -> provedores    | Retenção e exposição de código privado            | Contrato de dados, configuração de logs e política por organização                      |
+| Operador -> Console    | Acesso não autorizado / personificação humana     | Cloudflare Access JWT (RS256), audience estrita, e-mail corporativo e tipo não-app      |
+| Console -> Browser     | XSS, injeção de script ou estilos maliciosos      | CSP estrito com nonce dinâmico por SSR, sem diffs/código no DOM ou bundle               |
+| Console -> Control Pl. | Inspeção indevida ou mutação não autorizada       | Service binding RPC restrito, read-only, validação bidirecional e sem HTTP público      |
+| Queue -> D1 Read Mod.  | Mensagens maliciosas, conflitos e DoS analítico   | Quarentena segura sem payload bruto, idempotência por hash e limites de transação       |
 
 ## GitHub App
 

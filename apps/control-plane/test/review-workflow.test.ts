@@ -295,7 +295,9 @@ describe("ReviewWorkflow", () => {
       env.REVIEW_LEDGERS.getByName("github:42:pr:7").cleanupState(
         job.runId as RunId,
       ),
-    ).resolves.toMatchObject({ state: "pending" });
+    ).resolves.toMatchObject({
+      state: expect.stringMatching(/^(pending|completed)$/),
+    });
   });
 
   it("stops between GitHub mutations when the head becomes stale", async () => {
@@ -1657,13 +1659,17 @@ describe("ReviewWorkflow", () => {
         "Ledger storage error",
       ),
     };
+    const sendProjection = vi.fn(() => Promise.resolve());
+    const projectionQueue = {
+      send: sendProjection,
+    } as unknown as Queue<unknown>;
 
     await expect(
       executeReviewWorkflow(
         env,
         event("terminal-failure-workflow"),
         immediateStep([], undefined, stepErrors),
-        setup.value,
+        { ...setup.value, adminProjectionQueue: projectionQueue },
       ),
     ).rejects.toThrow("HOLON_GITHUB_TRANSIENT:transport");
 
@@ -1671,6 +1677,7 @@ describe("ReviewWorkflow", () => {
       events.some((e) => e.event === "review.terminalization_failed"),
     ).toBe(true);
     expect(events.some((e) => e.event === "review.failed")).toBe(true);
+    expect(sendProjection).not.toHaveBeenCalled();
   });
 
   it("emits structured repository.preparation_failed diagnostics when prepareRepository fails", async () => {
@@ -1757,5 +1764,86 @@ describe("ReviewWorkflow", () => {
 
     expect(result.outcome).toBe("completed");
     expect(synthesizeCalled).toBe(true);
+  });
+
+  it("isolates admin projection queue failures and does not fail the review", async () => {
+    let projectionFailedEmitted = false;
+    const sendMock = vi.fn(() =>
+      Promise.reject(new Error("Queue unavailable")),
+    );
+    const failingQueue = {
+      send: sendMock,
+    } as unknown as Queue<unknown>;
+
+    const setup = runtime({
+      head: () => "a".repeat(40),
+      logger: {
+        emit: (eventName) => {
+          if (eventName === "admin.projection_failed") {
+            projectionFailedEmitted = true;
+          }
+        },
+      },
+    });
+
+    const runtimeWithFailingQueue: ReviewRuntime = {
+      ...setup.value,
+      adminProjectionQueue: failingQueue,
+    };
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("failing-queue-run"),
+      immediateStep([]),
+      runtimeWithFailingQueue,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(projectionFailedEmitted).toBe(true);
+    expect(sendMock).toHaveBeenCalled();
+  });
+
+  it("does not project when the rollout flag is disabled", async () => {
+    const setup = runtime();
+    const send = vi.fn();
+    const stepNames: string[] = [];
+    const envWithoutQueue = {
+      ...env,
+      ADMIN_PROJECTION_ENABLED: "false",
+      ADMIN_PROJECTION_QUEUE: { send },
+    } as unknown as Cloudflare.Env;
+
+    const result = await executeReviewWorkflow(
+      envWithoutQueue,
+      event("no-queue-run"),
+      immediateStep(stepNames),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(send).not.toHaveBeenCalled();
+    expect(
+      stepNames.some((stepName) => stepName.includes("admin-projection")),
+    ).toBe(false);
+  });
+
+  it("projects when the rollout flag is enabled", async () => {
+    const setup = runtime();
+    const send = vi.fn(() => Promise.resolve());
+    const envWithQueue = {
+      ...env,
+      ADMIN_PROJECTION_ENABLED: "true",
+      ADMIN_PROJECTION_QUEUE: { send },
+    } as unknown as Cloudflare.Env;
+
+    const result = await executeReviewWorkflow(
+      envWithQueue,
+      event("enabled-queue-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(send).toHaveBeenCalledOnce();
   });
 });

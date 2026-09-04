@@ -4,6 +4,7 @@ import { createWebhookApp } from "./webhook-handler.js";
 export { ReviewLedgerObject } from "./ledger-object.js";
 export { ReviewWorkflow } from "./review-workflow.js";
 export { GitHubCredentialBrokerEntrypoint } from "./credential-broker.js";
+export { AdminReadEntrypoint } from "./admin-read-entrypoint.js";
 
 const app = createWebhookApp();
 

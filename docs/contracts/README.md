@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-04
 ---
 
 # Contratos
@@ -21,6 +21,9 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 | `executor.ts`          | RPC V1/V2/V3 exact-SHA, política de escopo, broker, tools e resultados      |
 | `repository-policy.ts` | YAML v1 normalizado, digests, exclusões e rigor de veredito                 |
 | `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação          |
+| `admin-projection.ts`  | Envelopes V1 de projeção assíncrona, hash RFC 8785 e validação temporal     |
+| `admin-run-detail.ts`  | DTOs V1 de detalhe read-only para o console operacional via RPC             |
+| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1      |
 | `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
 
 ## Regras

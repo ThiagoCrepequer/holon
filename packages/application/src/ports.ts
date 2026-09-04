@@ -1,4 +1,5 @@
 import type {
+  AdminCiSummaryV1,
   CreateCheckRunInput,
   ModelReviewOutput,
   ReviewContextV2,
@@ -72,7 +73,11 @@ export interface CiEvidenceLedger {
     prKey: PrKey,
     headSha: string,
   ): Promise<
-    | { readonly markdown: string; readonly workflowRunId?: number | undefined }
+    | {
+        readonly markdown: string;
+        readonly workflowRunId?: number | undefined;
+        readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+      }
     | undefined
   >;
   saveCiEvidence(
@@ -81,6 +86,7 @@ export interface CiEvidenceLedger {
     evidence: {
       readonly markdown: string;
       readonly workflowRunId?: number | undefined;
+      readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
     },
   ): Promise<void>;
 }

@@ -6,6 +6,7 @@ import {
   createPrKey,
   createPublicationId,
   createRunId,
+  derivePrKeyFromRunId,
 } from "../src/index.js";
 
 describe("review identities", () => {
@@ -71,5 +72,29 @@ describe("review identities", () => {
       ),
   ])("rejects an invalid identity component", (createInvalidIdentity) => {
     expect(createInvalidIdentity).toThrow();
+  });
+
+  it("derives prKey from valid runId", () => {
+    const prKey = createPrKey({
+      provider: "github",
+      repositoryId: 123,
+      pullRequestNumber: 456,
+    });
+    const runId = createRunId(
+      prKey,
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+    expect(derivePrKeyFromRunId(runId)).toBe("github:123:pr:456");
+  });
+
+  it("rejects runId without valid :head: or malformed prKey", () => {
+    expect(() => derivePrKeyFromRunId("invalid-run-id")).toThrow(
+      "runId must contain :head: separator",
+    );
+    expect(() =>
+      derivePrKeyFromRunId(
+        "invalid:prefix:head:0123456789abcdef0123456789abcdef01234567",
+      ),
+    ).toThrow("runId does not contain a valid prKey");
   });
 });

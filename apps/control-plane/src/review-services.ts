@@ -18,6 +18,7 @@ import {
   reviewContextV1Schema,
   reviewContextV2Schema,
   reviewContextV3Schema,
+  type AdminRunProjectionEventV1,
   type ExecutorRequestV1,
   type ExecutorRequestV2,
   type ExecutorRequestV3,
@@ -120,6 +121,9 @@ export interface WorkflowLedger
     occurredAt: string,
     requiresCleanup: boolean,
   ): Promise<boolean>;
+  recordProjectionTask(event: AdminRunProjectionEventV1): Promise<void>;
+  markProjectionTaskCompleted(runId: RunId): Promise<void>;
+  scheduleProjectionRetry(runId: RunId, errorKind: string): Promise<void>;
   registerCredentialScope(request: GitHubCredentialRequest): Promise<void>;
   runState(runId: RunId): Promise<RunState | undefined> | RunState | undefined;
   transitionAndRequestCleanup(
@@ -132,6 +136,7 @@ export interface WorkflowLedger
 }
 
 export interface ReviewRuntime {
+  readonly adminProjectionQueue?: Queue<unknown>;
   readonly createModel?: (
     toolRunner: ReturnType<typeof createBoundedRepositoryToolRunner>,
   ) => ModelReviewer;
@@ -156,7 +161,17 @@ export interface GitHubMutationContext {
   }>;
 }
 
+function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
+  // Wrangler narrows local `vars` to the configured literal, while deployed
+  // environments intentionally override this rollout flag to "true".
+  return (
+    (env as unknown as { readonly ADMIN_PROJECTION_ENABLED?: string })
+      .ADMIN_PROJECTION_ENABLED === "true"
+  );
+}
+
 export interface ReviewServices {
+  readonly adminProjectionQueue?: Queue<unknown> | undefined;
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
   readonly model: ModelReviewer;
@@ -583,6 +598,9 @@ export function createReviewServices(
   };
 
   return {
+    adminProjectionQueue:
+      runtime.adminProjectionQueue ??
+      (isAdminProjectionEnabled(env) ? env.ADMIN_PROJECTION_QUEUE : undefined),
     executor,
     ledger,
     model,

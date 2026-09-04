@@ -103,16 +103,17 @@ para fixtures de teste.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR      |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                    |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                             |
-| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                 |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                    |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura    |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                   |
+| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR       |
+| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                     |
+| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                              |
+| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI  |
+| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                  |
+| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                     |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura     |
+| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                    |
+| `@holon/ui`                  | Design system: tokens semânticos Tailwind, componentes acessíveis e primitivas Base UI             | `@base-ui/react`, Tailwind CSS; sem domínio/apps |
 
 O adapter live usa ferramentas sintéticas indisponíveis por contrato: ele mede
 prompt e modelo somente com o contexto autocontido do caso. O smoke remoto
@@ -131,14 +132,21 @@ subpasta interna.
 - `queue`: consome o envelope normalizado e inicia ou reconcilia uma run;
 - classe `ReviewWorkflow` com checkpoints granulares, retries e terminalização
   após esgotamento;
+- classe `AdminReadEntrypoint`: RPC versionado `pingV1` e `getRunDetailV1` para consulta administrativa;
 - composicao dos adapters reais por bindings e secrets gerados pelo Wrangler.
+
+`apps/admin` exporta um único módulo Workers (`workers/app.ts`) compondo:
+
+- `fetch`: SSR com React Router v8, endpoints e CSP com nonces dinâmicos;
+- `queue`: consumidor at-least-once de projeções analíticas para o D1 com quarentena;
+- `scheduled`: retenção temporal de registros analíticos e quarentena;
+- consumo via Service Binding `ADMIN_READ_API` para RPC de detalhes do run.
 
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
-O runtime de review continua com dois deployables. O terceiro app só existe no
-fluxo manual protegido por `live-evaluation`; não recebe binding do control
-plane, token da GitHub App, Sandbox ou autoridade de publicação.
+O runtime operacional adiciona `apps/admin` como terceiro deployable de produção
+(ADR-0029), estritamente read-only e protegido por Cloudflare Access.
 
 `apps/repository-executor` recebe pedidos tipados, cria workspace isolado,
 classifica patches e aplica a mesma elegibilidade a tools, persiste contexto
@@ -220,19 +228,24 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 
 ## Politica de bibliotecas
 
-| Biblioteca/capacidade        | Estado                    | Limite                                         |
-| ---------------------------- | ------------------------- | ---------------------------------------------- |
-| Hono                         | Selecionada               | Somente adapter HTTP                           |
-| Zod 4                        | Selecionada               | Fronteiras; nao substituir tipos de dominio    |
-| Octokit modular              | Selecionada               | Somente `@holon/github`                        |
-| AI SDK + AI Gateway provider | Selecionada               | Somente `@holon/model`, atras de porta         |
-| `diff`                       | Selecionada               | Adapter proprio e fixtures obrigatorias        |
-| Cloudflare Workflows         | Selecionada               | Coordenação durável com retries delimitados    |
-| Cloudflare Sandbox SDK       | Selecionada `@next`       | Versão exata e imagem correspondente fixadas   |
-| Dependency Cruiser           | Adiada                    | Introduzir se regras de pacote nao bastarem    |
-| Knip                         | Adiada                    | Introduzir quando houver massa de exports/deps |
-| Agents SDK e Think           | Rejeitados / Não adotados | Descomissionados após ADR-0017 / ADR-0018      |
-| MCP e RAG                    | Adiados                   | Fora do MVP one-shot                           |
+| Biblioteca/capacidade        | Estado                    | Limite                                          |
+| ---------------------------- | ------------------------- | ----------------------------------------------- |
+| Hono                         | Selecionada               | Somente adapter HTTP                            |
+| Zod 4                        | Selecionada               | Fronteiras; nao substituir tipos de dominio     |
+| Octokit modular              | Selecionada               | Somente `@holon/github`                         |
+| AI SDK + AI Gateway provider | Selecionada               | Somente `@holon/model`, atras de porta          |
+| `diff`                       | Selecionada               | Adapter proprio e fixtures obrigatorias         |
+| Cloudflare Workflows         | Selecionada               | Coordenação durável com retries delimitados     |
+| Cloudflare Sandbox SDK       | Selecionada `@next`       | Versão exata e imagem correspondente fixadas    |
+| React Router v8              | Selecionada               | Framework full-stack SSR no Worker `apps/admin` |
+| `@base-ui/react`             | Selecionada               | Primitivas headless acessíveis em `@holon/ui`   |
+| Tailwind CSS v4              | Selecionada               | Estilização semântica e tokens via `@holon/ui`  |
+| Recharts                     | Selecionada               | Gráficos de tendências com equivalente tabular  |
+| `jose`                       | Selecionada               | Validação estrita de Access JWT e JWKS          |
+| Dependency Cruiser           | Adiada                    | Introduzir se regras de pacote nao bastarem     |
+| Knip                         | Adiada                    | Introduzir quando houver massa de exports/deps  |
+| Agents SDK e Think           | Rejeitados / Não adotados | Descomissionados após ADR-0017 / ADR-0018       |
+| MCP e RAG                    | Adiados                   | Fora do MVP one-shot                            |
 
 ## Regras para agentes de codigo
 
