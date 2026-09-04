@@ -40,7 +40,7 @@ export const runTelemetrySchema = z.strictObject({
   prKey: z.string().min(1).max(200),
   queueWaitMs: z.number().int().nonnegative(),
   runId: z.string().min(1).max(256),
-  scopeStatus: reviewScopeStatusSchema,
+  scopeStatus: reviewScopeStatusSchema.nullable(),
   shardsCount: z.number().int().nonnegative(),
   sourceDigest: z
     .string()

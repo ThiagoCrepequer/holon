@@ -81,7 +81,7 @@ export class StructuredLogTelemetryEmitter implements TelemetryEmitter {
       prKey: telemetry.prKey,
       queueWaitMs: telemetry.queueWaitMs,
       runId: telemetry.runId,
-      scopeStatus: telemetry.scopeStatus,
+      scopeStatus: telemetry.scopeStatus ?? undefined,
       ...(telemetry.sourceDigest == null
         ? {}
         : { sourceDigest: telemetry.sourceDigest }),
@@ -89,7 +89,7 @@ export class StructuredLogTelemetryEmitter implements TelemetryEmitter {
       terminalState: telemetry.terminalState,
       toolCallsCount: telemetry.toolCallsCount,
       totalTokens: telemetry.tokens.totalTokens,
-      verdict: telemetry.verdict,
+      verdict: telemetry.verdict ?? undefined,
     });
   }
 

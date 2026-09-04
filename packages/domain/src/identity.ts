@@ -58,6 +58,18 @@ export function createRunId(prKey: PrKey, headSha: string): RunId {
   return `${prKey}:head:${headSha.toLowerCase()}`;
 }
 
+export function derivePrKeyFromRunId(runId: string): PrKey {
+  const index = runId.lastIndexOf(":head:");
+  if (index === -1) {
+    throw new TypeError("runId must contain :head: separator");
+  }
+  const prKey = runId.slice(0, index);
+  if (!/^github:[1-9]\d*:pr:[1-9]\d*$/u.test(prKey)) {
+    throw new TypeError("runId does not contain a valid prKey");
+  }
+  return prKey as PrKey;
+}
+
 export interface FindingIdentityInput {
   readonly diagnostic: string;
   readonly endLine: number;

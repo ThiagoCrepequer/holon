@@ -1,4 +1,7 @@
+import type { PrKey, RunId } from "@holon/domain";
 import { z } from "zod";
+
+export type { PrKey, RunId };
 
 export const gitShaSchema = z
   .string()

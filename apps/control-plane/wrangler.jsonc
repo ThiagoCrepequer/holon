@@ -24,6 +24,10 @@
         "binding": "REVIEW_QUEUE",
         "queue": "holon-review-jobs",
       },
+      {
+        "binding": "ADMIN_PROJECTION_QUEUE",
+        "queue": "holon-admin-projections",
+      },
     ],
     "consumers": [
       {

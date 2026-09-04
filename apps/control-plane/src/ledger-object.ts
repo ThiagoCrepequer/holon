@@ -7,6 +7,10 @@ import type {
   ReviewLedger,
 } from "@holon/application";
 import {
+  adminCiSummaryV1Schema,
+  adminFindingSummaryV1Schema,
+  adminRunDetailV1Schema,
+  adminRunProjectionEventV1Schema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
   publicationIdSchema,
@@ -18,6 +22,10 @@ import {
   runTelemetrySchema,
   runTransitionSchema,
   timestampSchema,
+  truncateUtf8Bytes,
+  type AdminCiSummaryV1,
+  type AdminRunDetailV1,
+  type AdminRunProjectionEventV1,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type RunTelemetry,
@@ -34,13 +42,42 @@ import type {
   RunId,
   RunState,
 } from "@holon/domain";
-import { canTransitionRun } from "@holon/domain";
+import { canTransitionRun, derivePrKeyFromRunId } from "@holon/domain";
+import { redactSecrets } from "@holon/model";
 import { DurableObject } from "cloudflare:workers";
 
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
+
+/* eslint-disable no-control-regex */
+function sanitizeDiagnostic(raw: string): string {
+  const bounded = raw.slice(0, 4096);
+  const noAnsi = bounded.replaceAll(/\u001B\[[0-9;]*[a-zA-Z]/gu, "");
+  const noControls = noAnsi.replaceAll(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/gu,
+    " ",
+  );
+  const redacted = redactSecrets(noControls);
+  const trimmed = redacted.trim();
+  return truncateUtf8Bytes(trimmed || "Diagnostic details unavailable", 512);
+}
+/* eslint-enable no-control-regex */
+
+export interface ProjectionTaskRow extends Record<string, SqlStorageValue> {
+  attempts: number;
+  completed_at: string | null;
+  event_id: string;
+  last_error_kind: string | null;
+  lease_expires_at: string | null;
+  next_attempt_at: string;
+  payload_hash: string;
+  payload_json: string;
+  requested_at: string;
+  run_id: string;
+  state: string;
+}
 
 interface PublicationRow extends Record<string, SqlStorageValue> {
   finding_id: string;
@@ -675,6 +712,8 @@ export class ReviewLedgerObject
 
     await this.processDueWorkflowSupersession(startedAt.toISOString());
 
+    await this.processDueProjection(startedAt.toISOString());
+
     await this.ensureMaintenanceAlarm();
   }
 
@@ -823,6 +862,20 @@ export class ReviewLedgerObject
       .toArray()[0];
   }
 
+  private dueProjectionTask(now: string): ProjectionTaskRow | undefined {
+    return this.ctx.storage.sql
+      .exec<ProjectionTaskRow>(
+        `SELECT run_id, event_id, payload_json, payload_hash, state, attempts, requested_at, next_attempt_at, lease_expires_at, completed_at, last_error_kind
+         FROM projection_tasks
+         WHERE (state = 'pending' AND next_attempt_at <= ?)
+            OR (state = 'processing' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+         ORDER BY next_attempt_at, requested_at, run_id LIMIT 1`,
+        now,
+        now,
+      )
+      .toArray()[0];
+  }
+
   private pendingWorkflowSupersessions(): SupersededWorkflow[] {
     return this.ctx.storage.sql
       .exec<{
@@ -846,6 +899,8 @@ export class ReviewLedgerObject
            SELECT next_attempt_at FROM cleanup_tasks WHERE state = 'pending'
            UNION ALL
            SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
+           UNION ALL
+           SELECT next_attempt_at FROM projection_tasks WHERE state = 'pending'
          )`,
       )
       .toArray()[0];
@@ -911,6 +966,82 @@ export class ReviewLedgerObject
         eventId: `supersession:${supersession.superseded_run_id}:${attempt}`,
         runId: supersession.superseded_run_id,
       });
+    }
+  }
+
+  private async processDueProjection(now: string): Promise<void> {
+    const task = this.dueProjectionTask(now);
+    if (task === undefined) return;
+
+    const leaseExpiresAt = new Date(Date.now() + 120_000).toISOString();
+    const cursor = this.ctx.storage.sql.exec(
+      `UPDATE projection_tasks
+       SET state = 'processing',
+           attempts = attempts + 1,
+           lease_expires_at = ?
+       WHERE run_id = ?
+         AND ((state = 'pending' AND next_attempt_at <= ?)
+              OR (state = 'processing' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?))`,
+      leaseExpiresAt,
+      task.run_id,
+      now,
+      now,
+    );
+
+    if (cursor.rowsWritten === 0) {
+      return;
+    }
+
+    const currentAttempts = task.attempts + 1;
+
+    try {
+      const queue = (this.env as { ADMIN_PROJECTION_QUEUE?: Queue<unknown> })
+        .ADMIN_PROJECTION_QUEUE;
+      if (queue === undefined) {
+        throw new Error("ADMIN_PROJECTION_QUEUE binding not configured");
+      }
+      const messageBody = JSON.parse(task.payload_json);
+      await queue.send(messageBody);
+
+      this.ctx.storage.sql.exec(
+        "UPDATE projection_tasks SET state = 'completed', completed_at = ?, lease_expires_at = NULL WHERE run_id = ?",
+        new Date().toISOString(),
+        task.run_id,
+      );
+      consoleLogger.emit("admin.projection_dispatched", {
+        eventId: task.event_id,
+        runId: task.run_id,
+      });
+    } catch (error) {
+      const kind = errorKind(error).slice(0, 100);
+      if (currentAttempts >= 20) {
+        this.ctx.storage.sql.exec(
+          "UPDATE projection_tasks SET state = 'exhausted', lease_expires_at = NULL, last_error_kind = ? WHERE run_id = ?",
+          kind,
+          task.run_id,
+        );
+        consoleLogger.emit("admin.projection_exhausted", {
+          attempts: currentAttempts,
+          errorKind: kind,
+          runId: task.run_id,
+        });
+      } else {
+        const nextAttemptAt = new Date(
+          Date.now() + maintenanceBackoff(currentAttempts),
+        ).toISOString();
+        this.ctx.storage.sql.exec(
+          "UPDATE projection_tasks SET state = 'pending', next_attempt_at = ?, lease_expires_at = NULL, last_error_kind = ? WHERE run_id = ?",
+          nextAttemptAt,
+          kind,
+          task.run_id,
+        );
+        consoleLogger.emit("admin.projection_retry", {
+          attempts: currentAttempts,
+          errorKind: kind,
+          nextAttemptAt,
+          runId: task.run_id,
+        });
+      }
     }
   }
 
@@ -983,17 +1114,26 @@ export class ReviewLedgerObject
   public saveCiEvidence(
     prKey: PrKey,
     headSha: string,
-    evidence: { readonly markdown: string; readonly workflowRunId?: number },
+    evidence: {
+      readonly markdown: string;
+      readonly workflowRunId?: number;
+      readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+    },
   ): Promise<void> {
+    const structuredCiJson =
+      evidence.structuredCi !== undefined && evidence.structuredCi !== null
+        ? JSON.stringify(evidence.structuredCi)
+        : null;
     this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec(
         `INSERT OR REPLACE INTO ci_evidences (
-           pr_key, head_sha, markdown_content, workflow_run_id, created_at
-         ) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+           pr_key, head_sha, markdown_content, workflow_run_id, structured_ci_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
         prKey,
         headSha,
         evidence.markdown,
         evidence.workflowRunId ?? null,
+        structuredCiJson,
       );
     });
     return Promise.resolve();
@@ -1003,26 +1143,42 @@ export class ReviewLedgerObject
     prKey: PrKey,
     headSha: string,
   ): Promise<
-    | { readonly markdown: string; readonly workflowRunId?: number | undefined }
+    | {
+        readonly markdown: string;
+        readonly workflowRunId?: number | undefined;
+        readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+      }
     | undefined
   > {
     const rows = this.ctx.storage.sql
       .exec<{
         markdown_content: string;
         workflow_run_id: number | null;
+        structured_ci_json: string | null;
       }>(
-        `SELECT markdown_content, workflow_run_id FROM ci_evidences WHERE pr_key = ? AND head_sha = ?`,
+        `SELECT markdown_content, workflow_run_id, structured_ci_json FROM ci_evidences WHERE pr_key = ? AND head_sha = ?`,
         prKey,
         headSha,
       )
       .toArray();
     const first = rows[0];
     if (!first) return Promise.resolve(undefined);
+    let structuredCi: AdminCiSummaryV1 | null = null;
+    if (first.structured_ci_json) {
+      try {
+        structuredCi = adminCiSummaryV1Schema.parse(
+          JSON.parse(first.structured_ci_json),
+        );
+      } catch {
+        structuredCi = null;
+      }
+    }
     return Promise.resolve({
       markdown: first.markdown_content,
       ...(first.workflow_run_id !== null
         ? { workflowRunId: first.workflow_run_id }
         : {}),
+      structuredCi,
     });
   }
 
@@ -1051,7 +1207,7 @@ export class ReviewLedgerObject
         parsed.cost.pricingModel,
         parsed.toolCallsCount,
         parsed.shardsCount,
-        parsed.scopeStatus,
+        parsed.scopeStatus ?? null,
         parsed.terminalState,
         parsed.verdict ?? null,
         parsed.isDegraded ? 1 : 0,
@@ -1076,6 +1232,178 @@ export class ReviewLedgerObject
     if (!first) return Promise.resolve(undefined);
     return Promise.resolve(rowToRunTelemetry(first));
   }
+
+  public async recordProjectionTask(
+    rawEvent: AdminRunProjectionEventV1,
+  ): Promise<void> {
+    const event = adminRunProjectionEventV1Schema.parse(rawEvent);
+    const requestedAt = event.payload.projectionRequestedAt;
+
+    this.ctx.storage.sql.exec(
+      `INSERT INTO projection_tasks (
+         run_id, event_id, payload_json, payload_hash, state, attempts, requested_at, next_attempt_at
+       ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?)
+       ON CONFLICT(run_id) DO NOTHING`,
+      event.payload.runId,
+      event.eventId,
+      JSON.stringify(event),
+      event.payloadHash,
+      requestedAt,
+      requestedAt,
+    );
+
+    await this.ensureMaintenanceAlarm();
+  }
+
+  public async markProjectionTaskCompleted(runId: string): Promise<void> {
+    const parsedRunId = runIdSchema.parse(runId);
+    this.ctx.storage.sql.exec(
+      `UPDATE projection_tasks
+       SET state = 'completed',
+           completed_at = ?,
+           lease_expires_at = NULL
+       WHERE run_id = ?`,
+      new Date().toISOString(),
+      parsedRunId,
+    );
+  }
+
+  public async scheduleProjectionRetry(
+    runId: string,
+    rawErrorKind: string,
+  ): Promise<void> {
+    const parsedRunId = runIdSchema.parse(runId);
+    const kind = rawErrorKind.slice(0, 100);
+
+    const task = this.ctx.storage.sql
+      .exec<ProjectionTaskRow>(
+        "SELECT attempts FROM projection_tasks WHERE run_id = ?",
+        parsedRunId,
+      )
+      .toArray()[0];
+
+    const attempts = (task?.attempts ?? 0) + 1;
+    if (attempts >= 20) {
+      this.ctx.storage.sql.exec(
+        `UPDATE projection_tasks
+         SET state = 'exhausted',
+             attempts = ?,
+             lease_expires_at = NULL,
+             last_error_kind = ?
+         WHERE run_id = ?`,
+        attempts,
+        kind,
+        parsedRunId,
+      );
+      consoleLogger.emit("admin.projection_exhausted", {
+        attempts,
+        errorKind: kind,
+        runId: parsedRunId,
+      });
+    } else {
+      const nextAttemptAt = new Date(
+        Date.now() + maintenanceBackoff(attempts),
+      ).toISOString();
+      this.ctx.storage.sql.exec(
+        `UPDATE projection_tasks
+         SET state = 'pending',
+             attempts = ?,
+             lease_expires_at = NULL,
+             next_attempt_at = ?,
+             last_error_kind = ?
+         WHERE run_id = ?`,
+        attempts,
+        nextAttemptAt,
+        kind,
+        parsedRunId,
+      );
+    }
+
+    await this.ensureMaintenanceAlarm();
+  }
+
+  public getProjectionTask(
+    runId: string,
+  ): Promise<ProjectionTaskRow | undefined> {
+    const parsedRunId = runIdSchema.parse(runId);
+    const row = this.ctx.storage.sql
+      .exec<ProjectionTaskRow>(
+        "SELECT * FROM projection_tasks WHERE run_id = ?",
+        parsedRunId,
+      )
+      .toArray()[0];
+    return Promise.resolve(row);
+  }
+
+  public async getSanitizedAdminRunDetailV1(
+    rawRunId: string,
+  ): Promise<AdminRunDetailV1 | null> {
+    const runId = runIdSchema.parse(rawRunId);
+    const telemetry = await this.loadRunTelemetry(runId);
+    if (telemetry === undefined) return null;
+
+    const prKey = derivePrKeyFromRunId(runId);
+    const findingRows = this.ctx.storage.sql
+      .exec<{
+        diagnostic: string;
+        file_path: string;
+        fingerprint: string;
+        line: number;
+        severity: "critical" | "high" | "medium" | "low";
+        status:
+          | "new"
+          | "persistent"
+          | "resolved"
+          | "obsolete"
+          | "reintroduced"
+          | "dismissed";
+        updated_at: string;
+      }>(
+        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
+         FROM pr_findings
+         WHERE pr_key = ?
+         ORDER BY updated_at DESC, fingerprint ASC
+         LIMIT 100`,
+        prKey,
+      )
+      .toArray();
+
+    const currentFindings = findingRows.map((row) =>
+      adminFindingSummaryV1Schema.parse({
+        diagnostic: sanitizeDiagnostic(row.diagnostic),
+        filePath: row.file_path,
+        fingerprint: row.fingerprint,
+        line: row.line,
+        severity: row.severity,
+        status: row.status,
+        updatedAt: row.updated_at,
+      }),
+    );
+
+    const ciEvidence = await this.loadCiEvidence(prKey, telemetry.headSha);
+    const structuredCi = ciEvidence?.structuredCi ?? null;
+
+    return adminRunDetailV1Schema.parse({
+      currentFindings,
+      findingsPerspective: "current_pr_state",
+      run: {
+        cost: telemetry.cost,
+        headSha: telemetry.headSha,
+        isDegraded: telemetry.isDegraded,
+        prKey: telemetry.prKey,
+        runId: telemetry.runId,
+        scopeStatus: telemetry.scopeStatus,
+        shardsCount: telemetry.shardsCount,
+        stepTimings: telemetry.stepTimings,
+        terminalState: telemetry.terminalState,
+        tokens: telemetry.tokens,
+        toolCallsCount: telemetry.toolCallsCount,
+        verdict: telemetry.verdict ?? null,
+      },
+      schemaVersion: 1,
+      structuredCi,
+    });
+  }
 }
 
 interface RunTelemetryRow extends Record<string, SqlStorageValue> {
@@ -1094,7 +1422,7 @@ interface RunTelemetryRow extends Record<string, SqlStorageValue> {
   queue_wait_ms: number;
   reasoning_tokens: number | null;
   run_id: string;
-  scope_status: string;
+  scope_status: string | null;
   shards_count: number;
   source_digest: string | null;
   step_timings_json: string;
@@ -1123,7 +1451,7 @@ function rowToRunTelemetry(row: RunTelemetryRow): RunTelemetry {
     prKey: row.pr_key,
     queueWaitMs: row.queue_wait_ms,
     runId: row.run_id,
-    scopeStatus: row.scope_status,
+    scopeStatus: row.scope_status ?? null,
     shardsCount: row.shards_count,
     ...(row.source_digest === null ? {} : { sourceDigest: row.source_digest }),
     stepTimings,

@@ -1,3 +1,4 @@
+import { buildAdminProjectionEventV1 } from "@holon/contracts";
 import {
   buildPublicationMarker,
   createPublicationId,
@@ -17,6 +18,12 @@ import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
 
 import worker from "../src/index.js";
+
+interface LedgerTestInternal {
+  readonly ctx: { readonly storage: { readonly sql: SqlStorage } };
+  env: Cloudflare.Env;
+  processDueProjection(now: string): Promise<void>;
+}
 
 afterEach(() => reset());
 
@@ -255,9 +262,11 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE cleanup_tasks;
         DROP TABLE credential_scopes;
         DROP TABLE IF EXISTS pr_findings;
+        DROP TABLE IF EXISTS ci_evidences;
         DROP TABLE IF EXISTS finding_feedbacks;
         DROP TABLE IF EXISTS workflow_supersessions;
         DROP TABLE IF EXISTS run_telemetry;
+        DROP TABLE IF EXISTS projection_tasks;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -297,6 +306,7 @@ describe("ReviewLedgerObject", () => {
         { version: 8 },
         { version: 9 },
         { version: 10 },
+        { version: 11 },
       ]);
       expect(
         state.storage.sql
@@ -846,7 +856,7 @@ describe("ReviewLedgerObject", () => {
     const executor = env.REPOSITORY_EXECUTOR as {
       cleanup: (id: string) => Promise<void>;
     };
-    const originalCleanup = (id: string) => executor.cleanup(id);
+    const originalCleanup = executor.cleanup;
     executor.cleanup = () => Promise.reject(new Error("Container stuck"));
     try {
       await runDurableObjectAlarm(ledger);
@@ -933,5 +943,391 @@ describe("ReviewLedgerObject", () => {
 
     const loaded = await ledger.loadRunTelemetry(telemetryRunId);
     expect(loaded).toEqual(telemetry);
+  });
+
+  it("records projection tasks idempotently and transitions them", async () => {
+    const testPrKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const testRunId = `github:42:pr:7:head:${"c".repeat(40)}` as RunId;
+
+    const event = await buildAdminProjectionEventV1({
+      headSha: "c".repeat(40),
+      prKey: testPrKey,
+      projectedFrom: "workflow",
+      projectionRequestedAt: "2026-08-29T12:00:15.000Z",
+      pullRequestNumber: 7,
+      recordVersion: 1,
+      repository: { id: 42, name: "api", owner: "acme" },
+      reviewPhaseReached: "publishing",
+      runId: testRunId,
+      schemaVersion: 1,
+      scopeStatus: "complete",
+      telemetry: {
+        estimatedCostMicroUsd: 1500,
+        executionDurationMs: 12000,
+        inputTokens: 3000,
+        isDegraded: false,
+        outputTokens: 600,
+        pricingModel: "deepseek-chat",
+        reasoningTokens: 100,
+        reviewAdmissionQueueWaitMs: 400,
+        shardsCount: 1,
+        toolCallsCount: 2,
+      },
+      terminalState: "completed",
+      timestamps: {
+        analysisStartedAt: "2026-08-29T12:00:02.000Z",
+        terminalAt: "2026-08-29T12:00:12.000Z",
+        webhookReceivedAt: "2026-08-29T12:00:00.000Z",
+        workflowStartedAt: "2026-08-29T12:00:01.000Z",
+      },
+      verdict: "APPROVE",
+    });
+
+    await ledger.recordProjectionTask(event);
+    await ledger.recordProjectionTask(event);
+
+    const task = await ledger.getProjectionTask(testRunId);
+    expect(task).toBeDefined();
+    expect(["pending", "processing", "completed"]).toContain(task?.state);
+
+    await ledger.scheduleProjectionRetry(testRunId, "NetworkTimeout");
+    const retriedTask = await ledger.getProjectionTask(testRunId);
+    expect(retriedTask?.attempts).toBeGreaterThanOrEqual(1);
+    expect(retriedTask?.last_error_kind).toBe("NetworkTimeout");
+
+    await ledger.markProjectionTaskCompleted(testRunId);
+    const completedTask = await ledger.getProjectionTask(testRunId);
+    expect(completedTask?.state).toBe("completed");
+    expect(completedTask?.completed_at).toBeDefined();
+  });
+
+  it("marks projection task as exhausted after 20 attempts", async () => {
+    const testPrKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const testRunId = `github:42:pr:7:head:${"d".repeat(40)}` as RunId;
+
+    const event = await buildAdminProjectionEventV1({
+      headSha: "d".repeat(40),
+      prKey: testPrKey,
+      projectedFrom: "workflow",
+      projectionRequestedAt: "2026-08-29T12:00:15.000Z",
+      pullRequestNumber: 7,
+      recordVersion: 1,
+      repository: { id: 42, name: "api", owner: "acme" },
+      reviewPhaseReached: "publishing",
+      runId: testRunId,
+      schemaVersion: 1,
+      scopeStatus: "complete",
+      telemetry: {
+        estimatedCostMicroUsd: 1500,
+        executionDurationMs: 12000,
+        inputTokens: 3000,
+        isDegraded: false,
+        outputTokens: 600,
+        pricingModel: "deepseek-chat",
+        reasoningTokens: 100,
+        reviewAdmissionQueueWaitMs: 400,
+        shardsCount: 1,
+        toolCallsCount: 2,
+      },
+      terminalState: "completed",
+      timestamps: {
+        analysisStartedAt: "2026-08-29T12:00:02.000Z",
+        terminalAt: "2026-08-29T12:00:12.000Z",
+        webhookReceivedAt: "2026-08-29T12:00:00.000Z",
+        workflowStartedAt: "2026-08-29T12:00:01.000Z",
+      },
+      verdict: "APPROVE",
+    });
+
+    await ledger.recordProjectionTask(event);
+
+    for (let i = 0; i < 20; i++) {
+      await ledger.scheduleProjectionRetry(testRunId, "Failure");
+    }
+
+    const task = await ledger.getProjectionTask(testRunId);
+    expect(task?.state).toBe("exhausted");
+    expect(task?.attempts).toBe(20);
+  });
+
+  it("prioritizes cleanup over projection in alarm", async () => {
+    const testPrKey = "github:42:pr:701" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const testRunId = `github:42:pr:701:head:${"e".repeat(40)}` as RunId;
+
+    const event = await buildAdminProjectionEventV1({
+      headSha: "e".repeat(40),
+      prKey: testPrKey,
+      projectedFrom: "workflow",
+      projectionRequestedAt: "2026-08-29T12:00:15.000Z",
+      pullRequestNumber: 701,
+      recordVersion: 1,
+      repository: { id: 42, name: "api", owner: "acme" },
+      reviewPhaseReached: "publishing",
+      runId: testRunId,
+      schemaVersion: 1,
+      scopeStatus: "complete",
+      telemetry: {
+        estimatedCostMicroUsd: 1500,
+        executionDurationMs: 12000,
+        inputTokens: 3000,
+        isDegraded: false,
+        outputTokens: 600,
+        pricingModel: "deepseek-chat",
+        reasoningTokens: 100,
+        reviewAdmissionQueueWaitMs: 400,
+        shardsCount: 1,
+        toolCallsCount: 2,
+      },
+      terminalState: "completed",
+      timestamps: {
+        analysisStartedAt: "2026-08-29T12:00:02.000Z",
+        terminalAt: "2026-08-29T12:00:12.000Z",
+        webhookReceivedAt: "2026-08-29T12:00:00.000Z",
+        workflowStartedAt: "2026-08-29T12:00:01.000Z",
+      },
+      verdict: "APPROVE",
+    });
+
+    await ledger.recordProjectionTask(event);
+    await ledger.markTerminalAndRequestCleanup(
+      testRunId,
+      "2026-08-29T12:00:10.000Z",
+      true,
+    );
+
+    await runDurableObjectAlarm(ledger);
+    const cleanup = await ledger.cleanupState(testRunId);
+    expect(cleanup?.state).toBe("completed");
+
+    await runDurableObjectAlarm(ledger);
+    const proj = await ledger.getProjectionTask(testRunId);
+    expect(proj?.state).toMatch(/^(completed|pending|processing)$/);
+  });
+
+  it("sanitizes diagnostic in getSanitizedAdminRunDetailV1", async () => {
+    const testPrKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const testRunId = `github:42:pr:7:head:${"f".repeat(40)}` as RunId;
+
+    const telemetry = {
+      cost: {
+        currency: "USD" as const,
+        estimatedCostMicroUsd: 1500,
+        estimatedCostUsd: 0.0015,
+        pricingModel: "deepseek-chat",
+      },
+      createdAt: new Date().toISOString(),
+      durationMs: 10000,
+      headSha: "f".repeat(40),
+      isDegraded: false,
+      prKey: testPrKey,
+      queueWaitMs: 200,
+      runId: testRunId,
+      scopeStatus: "complete" as const,
+      shardsCount: 1,
+      stepTimings: [],
+      terminalState: "completed" as const,
+      tokens: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+      toolCallsCount: 1,
+      verdict: "COMMENT" as const,
+    };
+    await ledger.saveRunTelemetry(telemetry);
+
+    await ledger.savePrFindings(testPrKey, [
+      {
+        diagnostic:
+          "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890",
+        filePath: "src/api.ts",
+        fingerprint:
+          "fp:1111111111111111111111111111111111111111111111111111111111111111",
+        firstSeenHeadSha: "f".repeat(40),
+        firstSeenRunId: testRunId,
+        lastSeenHeadSha: "f".repeat(40),
+        lastSeenRunId: testRunId,
+        line: 42,
+        prKey: testPrKey,
+        severity: "high" as const,
+        status: "new" as const,
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+
+    const detail = await ledger.getSanitizedAdminRunDetailV1(testRunId);
+    expect(detail).not.toBeNull();
+    expect(detail?.run.runId).toBe(testRunId);
+    expect(detail?.currentFindings).toHaveLength(1);
+    const firstFinding = detail?.currentFindings[0];
+    expect(firstFinding?.diagnostic).not.toContain("\u001b");
+    expect(firstFinding?.diagnostic).not.toContain("ghp_secret");
+  });
+
+  it("returns null in getSanitizedAdminRunDetailV1 when run telemetry does not exist", async () => {
+    const testPrKey = "github:42:pr:7" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const missingRunId = `github:42:pr:7:head:${"0".repeat(40)}` as RunId;
+
+    const detail = await ledger.getSanitizedAdminRunDetailV1(missingRunId);
+    expect(detail).toBeNull();
+  });
+
+  it("loads and exposes structuredCi in getSanitizedAdminRunDetailV1 and handles corrupted JSON safely", async () => {
+    const testPrKey = "github:42:pr:101" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const headSha1 = "1".repeat(40);
+    const runId1 = `github:42:pr:101:head:${headSha1}` as RunId;
+
+    await ledger.saveCiEvidence(testPrKey, headSha1, {
+      markdown: "CI run completed",
+      workflowRunId: 1001,
+      structuredCi: {
+        durationMs: 12000,
+        failed: 1,
+        passed: 10,
+        skipped: 0,
+        status: "available",
+        total: 11,
+        workflowName: "CI Workflow",
+      },
+    });
+
+    await ledger.saveRunTelemetry({
+      cost: {
+        currency: "USD",
+        estimatedCostMicroUsd: 100,
+        estimatedCostUsd: 0.0001,
+        pricingModel: "deepseek-chat",
+      },
+      createdAt: new Date().toISOString(),
+      durationMs: 3000,
+      headSha: headSha1,
+      isDegraded: false,
+      prKey: testPrKey,
+      queueWaitMs: 50,
+      runId: runId1,
+      scopeStatus: "complete",
+      shardsCount: 1,
+      stepTimings: [],
+      terminalState: "completed",
+      tokens: { inputTokens: 400, outputTokens: 50, totalTokens: 450 },
+      toolCallsCount: 0,
+      verdict: "APPROVE",
+    });
+
+    const detail = await ledger.getSanitizedAdminRunDetailV1(runId1);
+    expect(detail?.structuredCi?.status).toBe("available");
+    expect(detail?.structuredCi?.failed).toBe(1);
+
+    await runInDurableObject(ledger, async (instance) => {
+      const internal = instance as unknown as LedgerTestInternal;
+      internal.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO ci_evidences (
+           pr_key, head_sha, markdown_content, workflow_run_id, structured_ci_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+        testPrKey,
+        "2".repeat(40),
+        "corrupted evidence",
+        1002,
+        "{invalid-json",
+      );
+      const loaded = await instance.loadCiEvidence(testPrKey, "2".repeat(40));
+      expect(loaded?.structuredCi).toBeNull();
+    });
+  });
+
+  it("handles retry and exhaustion in processProjection when queue fails", async () => {
+    const testPrKey = "github:42:pr:102" as const;
+    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
+    const headSha3 = "3".repeat(40);
+    const runId3 = `github:42:pr:102:head:${headSha3}` as RunId;
+
+    await runInDurableObject(ledger, async (instance) => {
+      const internal = instance as unknown as LedgerTestInternal;
+      const failingQueue = {
+        send: () => Promise.reject(new Error("Simulated queue down")),
+      } as unknown as Queue<unknown>;
+      internal.env = {
+        ...internal.env,
+        ADMIN_PROJECTION_QUEUE: failingQueue,
+      };
+
+      const event = await buildAdminProjectionEventV1({
+        headSha: headSha3,
+        prKey: testPrKey,
+        projectedFrom: "workflow",
+        projectionRequestedAt: new Date().toISOString(),
+        pullRequestNumber: 102,
+        recordVersion: 1,
+        repository: { id: 42, name: "api", owner: "acme" },
+        reviewPhaseReached: "publishing",
+        runId: runId3,
+        schemaVersion: 1,
+        scopeStatus: "complete",
+        telemetry: {
+          estimatedCostMicroUsd: 100,
+          executionDurationMs: 1000,
+          inputTokens: 100,
+          isDegraded: false,
+          outputTokens: 10,
+          pricingModel: "deepseek-chat",
+          reasoningTokens: null,
+          reviewAdmissionQueueWaitMs: 50,
+          shardsCount: 1,
+          toolCallsCount: 0,
+        },
+        terminalState: "completed",
+        timestamps: {
+          analysisStartedAt: null,
+          terminalAt: "2026-08-29T12:00:10.000Z",
+          webhookReceivedAt: "2026-08-29T12:00:00.000Z",
+          workflowStartedAt: "2026-08-29T12:00:02.000Z",
+        },
+        verdict: "APPROVE",
+      });
+
+      internal.ctx.storage.sql.exec(
+        `INSERT INTO projection_tasks (
+           run_id, event_id, payload_json, payload_hash, state, attempts, requested_at, next_attempt_at
+         ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?)`,
+        event.payload.runId,
+        event.eventId,
+        JSON.stringify(event),
+        event.payloadHash,
+        event.payload.projectionRequestedAt,
+        new Date(0).toISOString(),
+      );
+
+      const task = await instance.getProjectionTask(runId3);
+      expect(task).toBeDefined();
+
+      if (task) {
+        await internal.processDueProjection(new Date().toISOString());
+      }
+
+      const taskAfterOneFailure = await instance.getProjectionTask(runId3);
+      expect(taskAfterOneFailure?.state).toBe("pending");
+      expect(taskAfterOneFailure?.attempts).toBe(1);
+      expect(taskAfterOneFailure?.last_error_kind).toContain("Error");
+      expect(Date.parse(taskAfterOneFailure!.next_attempt_at)).toBeGreaterThan(
+        Date.now() - 1000,
+      );
+
+      // Set attempts to 19 and reset next_attempt to 0 to simulate 20th failure reaching exhaustion
+      internal.ctx.storage.sql.exec(
+        "UPDATE projection_tasks SET attempts = 19, next_attempt_at = ? WHERE run_id = ?",
+        new Date(0).toISOString(),
+        runId3,
+      );
+      const taskFor20th = await instance.getProjectionTask(runId3);
+      if (taskFor20th) {
+        await internal.processDueProjection(new Date().toISOString());
+      }
+
+      const exhaustedTask = await instance.getProjectionTask(runId3);
+      expect(exhaustedTask?.state).toBe("exhausted");
+      expect(exhaustedTask?.attempts).toBe(20);
+    });
   });
 });

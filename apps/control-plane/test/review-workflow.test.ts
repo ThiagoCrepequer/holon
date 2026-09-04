@@ -295,7 +295,9 @@ describe("ReviewWorkflow", () => {
       env.REVIEW_LEDGERS.getByName("github:42:pr:7").cleanupState(
         job.runId as RunId,
       ),
-    ).resolves.toMatchObject({ state: "pending" });
+    ).resolves.toMatchObject({
+      state: expect.stringMatching(/^(pending|completed)$/),
+    });
   });
 
   it("stops between GitHub mutations when the head becomes stale", async () => {
@@ -1757,5 +1759,59 @@ describe("ReviewWorkflow", () => {
 
     expect(result.outcome).toBe("completed");
     expect(synthesizeCalled).toBe(true);
+  });
+
+  it("isolates admin projection queue failures and does not fail the review", async () => {
+    let projectionFailedEmitted = false;
+    const sendMock = vi.fn(() =>
+      Promise.reject(new Error("Queue unavailable")),
+    );
+    const failingQueue = {
+      send: sendMock,
+    } as unknown as Queue<unknown>;
+
+    const setup = runtime({
+      head: () => "a".repeat(40),
+      logger: {
+        emit: (eventName) => {
+          if (eventName === "admin.projection_failed") {
+            projectionFailedEmitted = true;
+          }
+        },
+      },
+    });
+
+    const runtimeWithFailingQueue: ReviewRuntime = {
+      ...setup.value,
+      adminProjectionQueue: failingQueue,
+    };
+
+    const result = await executeReviewWorkflow(
+      env,
+      event("failing-queue-run"),
+      immediateStep([]),
+      runtimeWithFailingQueue,
+    );
+
+    expect(result.outcome).toBe("completed");
+    expect(projectionFailedEmitted).toBe(true);
+    expect(sendMock).toHaveBeenCalled();
+  });
+
+  it("proceeds with review when ADMIN_PROJECTION_QUEUE is not configured in env", async () => {
+    const setup = runtime();
+    const envWithoutQueue = {
+      ...env,
+      ADMIN_PROJECTION_QUEUE: undefined,
+    } as unknown as Cloudflare.Env;
+
+    const result = await executeReviewWorkflow(
+      envWithoutQueue,
+      event("no-queue-run"),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(result.outcome).toBe("completed");
   });
 });

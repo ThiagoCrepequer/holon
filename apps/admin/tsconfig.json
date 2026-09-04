@@ -1,0 +1,16 @@
+{
+  "extends": "../../tooling/typescript/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
+    "types": ["@cloudflare/vitest-plugin/types", "@cloudflare/workers-types"]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "workers/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "worker-configuration.d.ts"
+  ]
+}

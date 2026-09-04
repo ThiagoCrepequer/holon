@@ -176,7 +176,7 @@ const ledgerMigrations: readonly LedgerMigration[] = [
         pricing_model TEXT NOT NULL,
         tool_calls INTEGER NOT NULL,
         shards_count INTEGER NOT NULL,
-        scope_status TEXT NOT NULL,
+        scope_status TEXT,
         terminal_state TEXT NOT NULL,
         verdict TEXT,
         is_degraded INTEGER NOT NULL,
@@ -237,6 +237,27 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       ALTER TABLE run_telemetry ADD COLUMN effective_policy_digest TEXT;
     `,
     version: 10,
+  },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS projection_tasks (
+        run_id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL UNIQUE,
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'processing', 'completed', 'exhausted')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        requested_at TEXT NOT NULL,
+        next_attempt_at TEXT NOT NULL,
+        lease_expires_at TEXT,
+        completed_at TEXT,
+        last_error_kind TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_projection_tasks_due
+        ON projection_tasks(state, next_attempt_at, run_id);
+      ALTER TABLE ci_evidences ADD COLUMN structured_ci_json TEXT;
+    `,
+    version: 11,
   },
 ] as const;
 

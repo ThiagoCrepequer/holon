@@ -1,3 +1,6 @@
+export * from "./admin-cursor.js";
+export * from "./admin-projection.js";
+export * from "./admin-run-detail.js";
 export * from "./check-run.js";
 export * from "./ci-evidence.js";
 export * from "./executor.js";
