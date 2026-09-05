@@ -19,13 +19,15 @@
     "evaluate:recorded": "tsx src/cli.ts recorded",
     "test": "vitest run --config ../../vitest.config.ts --root .",
     "test:coverage": "vitest run --config ../../vitest.config.ts --root . --coverage",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "evaluate:identification": "tsx src/identification-cli.ts"
   },
   "dependencies": {
     "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
     "@holon/model": "workspace:*",
+    "@holon/project-identification": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

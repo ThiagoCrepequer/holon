@@ -1,4 +1,4 @@
-import type { AdminRunDetailV1 } from "@holon/contracts";
+import type { AdminRunDetailV1, AdminRunDetailV2 } from "@holon/contracts";
 import { z } from "zod";
 
 import type { AdminEnv } from "../app.js";
@@ -8,6 +8,7 @@ import { queryQueueHealth } from "./queue-metrics-client.js";
 export type ComponentHealth = "healthy" | "degraded" | "unknown";
 
 export interface AdminReadRpcClient {
+  getRunDetailV2?(request: { runId: string }): Promise<AdminRunDetailV2 | null>;
   pingV1(): Promise<{ readonly schemaVersion: 1 }>;
   getRunDetailV1(request: { runId: string }): Promise<AdminRunDetailV1 | null>;
 }

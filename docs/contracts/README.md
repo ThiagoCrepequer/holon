@@ -67,3 +67,7 @@ e não permite fallback. `sourceDigest` identifica os bytes UTF-8 originais;
 `effectivePolicyDigest` identifica o JSON canônico aplicado. Ambos são hashes
 SHA-256 e aparecem na telemetria e no Check Run sem expor o conteúdo da
 configuração.
+
+## Identificação de versões — 2026-09-05
+
+`packages/contracts/src/project-identification.ts` define requests por SHA, evidências, resultados, cache e output restrito do modelo. Declarações exigem IDs existentes com valor/nome/tipo coincidentes. `AdminRunDetailV2` adiciona o snapshot ao drill-down; `getRunDetailV1` mantém o DTO público anterior. Consulte a [arquitetura](../architecture/project-version-identification.md) e a [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md).

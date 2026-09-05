@@ -658,6 +658,122 @@ export async function executeReviewWorkflow(
     reviewPhaseReached = "repository_prepared";
     recordStepTiming("prepare-repository", Date.now() - prepStart, "success");
 
+    if (services.identifyProjects && effectivePolicy) {
+      const identificationPolicy = effectivePolicy;
+      const identificationStarted = await step.do(
+        "start-project-identification-v1",
+        stateStep,
+        async () => Date.now(),
+      );
+      const discovered = await step.do(
+        "discover-project-metadata-v1",
+        repositoryStep,
+        async () =>
+          services.identifyProjects!(
+            identificationPolicy,
+            undefined,
+            true,
+            identificationStarted + 120000,
+          ),
+      );
+      if (discovered) {
+        const identification = {
+          ...discovered,
+          projects: [] as typeof discovered.projects,
+          usage: { inputTokens: 0, outputTokens: 0, modelCalls: 0 },
+        };
+        for (const [index, project] of discovered.projects.entries()) {
+          if (Date.now() - identificationStarted >= 120000) {
+            identification.projects.push({
+              ...project,
+              status: "partial",
+              limitations: [...project.limitations, "identification-deadline"],
+            });
+            continue;
+          }
+          let result = await step.do(
+            `identify-project-v1-${index}`,
+            modelStep,
+            async () =>
+              services.identifyProjects!(
+                identificationPolicy,
+                {
+                  ...discovered,
+                  projects: [project],
+                },
+                false,
+                identificationStarted + 120000,
+              ),
+          );
+          for (
+            let waiting = 0;
+            waiting < 3 &&
+            Date.now() - identificationStarted < 90000 &&
+            result?.projects.some((p) =>
+              p.limitations.includes("identification-pending"),
+            );
+            waiting++
+          ) {
+            await step.sleep(
+              `wait-project-identification-v1-${index}-${waiting}`,
+              "30 seconds",
+            );
+            result = await step.do(
+              `retry-project-identification-v1-${index}-${waiting}`,
+              modelStep,
+              async () =>
+                services.identifyProjects!(
+                  identificationPolicy,
+                  {
+                    ...discovered,
+                    projects: [project],
+                  },
+                  false,
+                  identificationStarted + 120000,
+                ),
+            );
+          }
+          identification.projects.push(
+            ...(result?.projects ?? [
+              {
+                ...project,
+                status: "partial" as const,
+                limitations: [
+                  ...project.limitations,
+                  "identification-unavailable",
+                ],
+              },
+            ]),
+          );
+          identification.usage.inputTokens += result?.usage?.inputTokens ?? 0;
+          identification.usage.outputTokens += result?.usage?.outputTokens ?? 0;
+          identification.usage.modelCalls += result?.usage?.modelCalls ?? 0;
+        }
+        if (
+          identification.projects.some(
+            (project) => project.status !== "complete",
+          )
+        )
+          identification.status = "partial";
+        recordStepTiming(
+          "identify-projects",
+          Date.now() - identificationStarted,
+          "success",
+        );
+        services.useProjectIdentification?.(identification);
+        if (services.ledger.saveProjectIdentification)
+          await step.do(
+            "record-project-identification-v1",
+            stateStep,
+            async () =>
+              services.ledger.saveProjectIdentification!(
+                job.runId,
+                identification,
+              ),
+          );
+      }
+    }
+
     const analysisStart = Date.now();
     analysisStartedAtIso = now();
     reviewPhaseReached = "analysis_started";

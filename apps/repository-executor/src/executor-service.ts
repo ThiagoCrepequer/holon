@@ -1,4 +1,5 @@
 import {
+  projectMetadataRequestV1Schema,
   executorRequestSchema,
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -26,10 +27,18 @@ import {
   type ReviewContextV2,
   type ReviewContextV3,
 } from "@holon/contracts";
-import { buildCheckoutPlan } from "@holon/repository-analysis";
+import { isMetadataPath } from "@holon/project-identification";
+import {
+  buildCheckoutPlan,
+  splitPullRequestDiff,
+} from "@holon/repository-analysis";
 
 import { createGitHubEgressUrl } from "./egress-policy.js";
 import type { GitHubEgressAuthorization } from "./egress-policy.js";
+import {
+  collectProjectMetadata,
+  metadataAuthorityPath,
+} from "./project-metadata.js";
 import {
   contextPath,
   executeRepositoryTool,
@@ -215,6 +224,28 @@ export class RepositoryExecutorService {
         });
         assertPreparationSuccessful(result, stage);
       }
+      if (
+        request.schemaVersion === 3 &&
+        splitPullRequestDiff(request.canonicalDiff).some((file) =>
+          [file.oldPath, file.newPath].some(
+            (path) => path !== undefined && isMetadataPath(path),
+          ),
+        )
+      ) {
+        stage = "fetch";
+        // Base metadata is optional; an unavailable object remains an explicit gap.
+        await sandbox.run(
+          [
+            "git",
+            "fetch",
+            "--no-tags",
+            "--depth=1",
+            createGitHubEgressUrl(request.cloneUrl),
+            request.baseSha,
+          ],
+          { cwd: repositoryPath, maxOutputBytes: 20000, timeoutMs: 60000 },
+        );
+      }
       stage = "block-egress";
       await sandbox.blockGitHubEgress();
       stage = "prepare-context";
@@ -241,6 +272,25 @@ export class RepositoryExecutorService {
       );
       await sandbox.writeFile(reviewScopePolicyPath, artifacts.policy);
       await sandbox.writeFile(contextPath, artifacts.serializedContext);
+      if (request.schemaVersion === 3)
+        await sandbox.writeFile(
+          metadataAuthorityPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            runId: request.runId,
+            installationId: request.installationId,
+            repositoryId: request.repositoryId,
+            headSha: request.headSha,
+            baseSha: request.baseSha,
+            policyDigest: request.effectivePolicy.effectivePolicyDigest,
+            changedPaths: splitPullRequestDiff(request.canonicalDiff).flatMap(
+              (f) =>
+                [f.oldPath, f.newPath].filter(
+                  (p): p is string => p !== undefined,
+                ),
+            ),
+          }),
+        );
       return preparedRepositorySchema.parse(
         request.schemaVersion === 3
           ? {
@@ -267,6 +317,11 @@ export class RepositoryExecutorService {
       await destroyAfterFailure(sandbox);
       throw preparationFailure(error, stage);
     }
+  }
+
+  public async discoverProjectMetadataV1(raw: unknown) {
+    const request = projectMetadataRequestV1Schema.parse(raw);
+    return collectProjectMetadata(this.sandboxes.get(request.runId), request);
   }
 
   private async loadAnyContext(runId: string): Promise<ReviewContext> {

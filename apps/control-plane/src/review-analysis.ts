@@ -71,8 +71,28 @@ async function reviewShards(
   structuralImpact: StructuralImpactReport | undefined,
 ): Promise<readonly ShardReviewResult[]> {
   const results: ShardReviewResult[] = [];
+  const identification = services.getProjectIdentification?.();
   for (const shard of plan.shards) {
     const shardContext = {
+      projectIdentification: identification
+        ? {
+            ...identification,
+            projects: identification.projects.filter((project) =>
+              shard.files.some(
+                (file) =>
+                  (project.root === "." ||
+                    file.path.startsWith(project.root + "/")) &&
+                  !identification.projects.some(
+                    (other) =>
+                      other.root !== project.root &&
+                      (project.root === "." ||
+                        other.root.startsWith(project.root + "/")) &&
+                      file.path.startsWith(other.root + "/"),
+                  ),
+              ),
+            ),
+          }
+        : undefined,
       changedLines: shard.changedLines,
       files: shard.files,
       schemaVersion: 2 as const,

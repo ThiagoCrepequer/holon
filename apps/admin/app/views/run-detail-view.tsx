@@ -19,6 +19,7 @@ import { Link, useNavigate } from "react-router";
 
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
+import { ProjectVersions } from "../components/project-versions.js";
 import { useHydrated } from "../hooks/use-hydrated.js";
 import { formatNumber } from "../utils/format.js";
 
@@ -208,6 +209,8 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           </CardContent>
         </Card>
       </div>
+
+      <ProjectVersions result={rpcDetail?.projectIdentification} />
 
       {/* Findings Section */}
       <Card className="section-gap">

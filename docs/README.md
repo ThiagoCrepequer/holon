@@ -30,6 +30,8 @@ normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 | Entender payloads estáveis                   | [Contratos](contracts/README.md)                                                                                                | `packages/contracts/src`                                                                                                                                           |
 | Operar o console operacional                 | [Interface do console](architecture/internal-console-ui.md) e [Plano do console](planning/internal-operational-console-plan.md) | [ADR-0029](decisions/0029-adopt-internal-operational-console-and-d1-read-model.md) e [Progresso](planning/internal-operational-console-implementation-progress.md) |
 
+Plano de funcionalidade proposto: [Identificação de tecnologias e versões por projeto](planning/project-version-identification-plan.md), com monorepos, inferência assistida, cache e integração ao workflow.
+
 ## Semantica dos documentos
 
 | Tipo           | Autoridade                                    | Politica de alteracao                                    |
@@ -60,3 +62,6 @@ normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 - Diagramas Mermaid sempre sao acompanhados por descricao textual.
 - Fontes externas usam links diretos e registram a data de verificacao.
 - `docs/glossary.md` e a fonte canonica para nomes e definicoes do dominio.
+
+- [Identificação de versões: arquitetura](architecture/project-version-identification.md)
+- [Identificação de versões: operação](operations/project-version-identification.md)

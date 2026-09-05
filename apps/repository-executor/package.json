@@ -18,6 +18,7 @@
     "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
+    "@holon/project-identification": "workspace:*",
     "@holon/repository-analysis": "workspace:*"
   },
   "devDependencies": {

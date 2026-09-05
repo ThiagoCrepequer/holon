@@ -80,3 +80,7 @@ definir:
 - Configuração de logging e retenção no AI Gateway.
 - Requisitos contratuais para provedores de modelo em repositórios privados.
 - Processo verificável de deleção após desinstalação.
+
+## Identificação de versões (2026-09-05)
+
+A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.

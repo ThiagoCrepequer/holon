@@ -14,3 +14,4 @@ export * from "./shared.js";
 export * from "./structural-analysis.js";
 export * from "./telemetry.js";
 export * from "./webhook.js";
+export * from "./project-identification.js";

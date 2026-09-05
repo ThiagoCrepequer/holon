@@ -1,4 +1,5 @@
 import type { HealthCheckReport } from "@holon/contracts";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -58,6 +59,7 @@ async function request(
       method: "POST",
     },
     {
+      PROJECT_IDENTIFICATION_REGISTRY: env.PROJECT_IDENTIFICATION_REGISTRY,
       GITHUB_APP_ID: "123",
       GITHUB_APP_PRIVATE_KEY: "fake-key",
       GITHUB_APP_SLUG: "holon-reviewer",
@@ -373,4 +375,55 @@ describe("GitHub webhook HTTP boundary", () => {
       executor: true,
     });
   });
+});
+
+it.each(["deleted", "suspend"])(
+  "purges documentation metadata on signed installation %s",
+  async (action) => {
+    const id = action === "deleted" ? 801 : 802;
+    const result = await request(
+      JSON.stringify({ action, installation: { id } }),
+      { "x-github-event": "installation" },
+    );
+    expect(result.response.status).toBe(202);
+    expect(
+      await env.PROJECT_IDENTIFICATION_REGISTRY.getByName(String(id)).register(
+        id,
+        1,
+      ),
+    ).toBeNull();
+  },
+);
+it("revokes only removed repositories and validates signed revocation payloads", async () => {
+  const id = 803;
+  expect(
+    (
+      await request(
+        JSON.stringify({
+          action: "removed",
+          installation: { id },
+          repositories_removed: [{ id: 1 }],
+        }),
+        { "x-github-event": "installation_repositories" },
+      )
+    ).response.status,
+  ).toBe(202);
+  const registry = env.PROJECT_IDENTIFICATION_REGISTRY.getByName(String(id));
+  expect(await registry.register(id, 1)).toBeNull();
+  expect(await registry.register(id, 2)).not.toBeNull();
+  expect(
+    (await request("invalid", { "x-github-event": "installation" })).response
+      .status,
+  ).toBe(400);
+  expect(
+    (await request("{}", { "x-github-event": "installation" })).response.status,
+  ).toBe(400);
+  expect(
+    (
+      await request(
+        JSON.stringify({ action: "created", installation: { id: 804 } }),
+        { "x-github-event": "installation" },
+      )
+    ).response.status,
+  ).toBe(202);
 });

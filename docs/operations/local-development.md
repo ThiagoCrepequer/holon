@@ -173,3 +173,7 @@ sem declarar essas variáveis locais como secrets obrigatórios de produção.
 Opcionalmente, `pnpm --filter @holon/admin d1:seed:local` insere dados de exemplo.
 Esse seed **apaga as execuções existentes no D1 local** antes de inserir os dados.
 Não atua sobre o banco remoto.
+
+## Identificação de versões (2026-09-05)
+
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.

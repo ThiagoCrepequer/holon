@@ -1,4 +1,5 @@
 import type { RunId } from "@holon/domain";
+import { identifySnapshot } from "@holon/project-identification";
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
@@ -27,6 +28,7 @@ describe("AdminReadEntrypoint", () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
     const detail = await entrypoint.getRunDetailV1({ runId: validRunId });
     expect(detail).toBeNull();
+    expect(await entrypoint.getRunDetailV2({ runId: validRunId })).toBeNull();
   });
 
   it("returns sanitized DTO when the run exists in the ledger", async () => {
@@ -69,6 +71,28 @@ describe("AdminReadEntrypoint", () => {
     };
 
     await ledger.saveRunTelemetry(telemetry);
+    await ledger.claimRun(
+      {
+        id: validRunId,
+        prKey: "github:42:pr:7",
+        state: "queued",
+        attempt: 0,
+        createdAt: telemetry.createdAt,
+      },
+      "admin-versions",
+    );
+    const versions = await identifySnapshot({
+      snapshotSha: validSha,
+      policyDigest: "p",
+      modelRevision: "m",
+      files: [
+        {
+          path: "package.json",
+          content: '{"dependencies":{"react":"19.0.0"}}',
+        },
+      ],
+    });
+    await ledger.saveProjectIdentification(validRunId, versions);
 
     const detail = await entrypoint.getRunDetailV1({ runId: validRunId });
     expect(detail).not.toBeNull();
@@ -78,5 +102,14 @@ describe("AdminReadEntrypoint", () => {
     expect(detail?.run.verdict).toBe("APPROVE");
     expect(detail?.currentFindings).toEqual([]);
     expect(detail?.structuredCi).toBeNull();
+    expect(detail).not.toHaveProperty("projectIdentification");
+    expect(
+      await entrypoint.getRunDetailV2({ runId: validRunId }),
+    ).toMatchObject({
+      schemaVersion: 2,
+      projectIdentification: {
+        projects: [{ technologies: [{ name: "react" }] }],
+      },
+    });
   });
 });

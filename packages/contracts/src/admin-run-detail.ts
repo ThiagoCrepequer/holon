@@ -6,6 +6,7 @@ import {
   findingFingerprintSchema,
   findingStatusSchema,
 } from "./finding-lifecycle.js";
+import { projectIdentificationResultV1Schema } from "./project-identification.js";
 import { reviewScopeStatusSchema } from "./review-plan.js";
 import { reviewVerdictSchema } from "./review-verdict.js";
 import {
@@ -45,6 +46,9 @@ export const adminCiSummaryV1Schema = z.strictObject({
 });
 
 export const adminRunDetailV1Schema = z.strictObject({
+  projectIdentification: projectIdentificationResultV1Schema
+    .nullable()
+    .optional(),
   currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
   findingsPerspective: z.literal("current_pr_state"),
   run: z.strictObject({
@@ -64,6 +68,12 @@ export const adminRunDetailV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   structuredCi: adminCiSummaryV1Schema.nullable(),
 });
+
+export const adminRunDetailV2Schema = adminRunDetailV1Schema.extend({
+  schemaVersion: z.literal(2),
+  projectIdentification: projectIdentificationResultV1Schema.nullable(),
+});
+export type AdminRunDetailV2 = z.infer<typeof adminRunDetailV2Schema>;
 
 export const adminReadRequestV1Schema = z.strictObject({
   runId: runIdSchema as z.ZodType<RunId>,

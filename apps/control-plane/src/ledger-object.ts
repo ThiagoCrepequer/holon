@@ -7,6 +7,10 @@ import type {
   ReviewLedger,
 } from "@holon/application";
 import {
+  projectIdentificationResultV1Schema,
+  type ProjectIdentificationResultV1,
+} from "@holon/contracts";
+import {
   adminCiSummaryV1Schema,
   adminFindingSummaryV1Schema,
   adminRunDetailV1Schema,
@@ -1388,6 +1392,25 @@ export class ReviewLedgerObject
     return Promise.resolve(row);
   }
 
+  public async saveProjectIdentification(
+    runId: string,
+    raw: ProjectIdentificationResultV1,
+  ): Promise<void> {
+    const result = projectIdentificationResultV1Schema.parse(raw);
+    if (!runIdSchema.parse(runId).endsWith(":head:" + result.snapshotSha))
+      throw new Error("Identification snapshot mismatch");
+    const exists = this.ctx.storage.sql
+      .exec<{ id: string }>("SELECT id FROM runs WHERE id=?", runId)
+      .toArray()[0];
+    if (!exists) throw new Error("Identification run unavailable");
+    const key = "project-identification:" + runId;
+    const existing =
+      await this.ctx.storage.get<ProjectIdentificationResultV1>(key);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(result))
+      throw new Error("Identification snapshot already recorded");
+    await this.ctx.storage.put(key, result);
+  }
+
   public async getSanitizedAdminRunDetailV1(
     rawRunId: string,
   ): Promise<AdminRunDetailV1 | null> {
@@ -1439,6 +1462,8 @@ export class ReviewLedgerObject
     return adminRunDetailV1Schema.parse({
       currentFindings,
       findingsPerspective: "current_pr_state",
+      projectIdentification:
+        (await this.ctx.storage.get("project-identification:" + runId)) ?? null,
       run: {
         cost: telemetry.cost,
         headSha: telemetry.headSha,

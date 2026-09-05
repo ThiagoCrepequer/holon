@@ -256,3 +256,7 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 - Nao introduzir dependencia adiada sem evidencia e atualizacao da documentacao.
 - Usar os scripts versionados no manifesto raiz; não inventar comandos
   equivalentes por conta própria.
+
+## Identificação de versões (2026-09-05)
+
+A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.

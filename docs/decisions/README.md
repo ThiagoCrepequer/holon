@@ -46,6 +46,8 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0028](0028-adopt-declarative-repository-policy.md)                               | Adotar configuração declarativa por repositório com ancoragem na base      | `accepted`   | 2026-09-03 |
 | [ADR-0029](0029-adopt-internal-operational-console-and-d1-read-model.md)              | Adotar console operacional interno com read model D1 e projeção assíncrona | `accepted`   | 2026-09-04 |
 
+| [ADR-0030](0030-identify-project-versions-from-snapshot-evidence.md) | Identificar versões por projeto com evidências do snapshot | `accepted` | 2026-09-05 |
+
 ## Regras
 
 - Use o próximo número sequencial e um nome em kebab-case.

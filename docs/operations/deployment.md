@@ -180,3 +180,7 @@ expõe código do repositório nos logs do Gateway.
 Uma versão anterior pode ser reimplantada, mas migrations de Durable Objects não
 devem ser removidas ou reutilizadas. O executor é efêmero; runs em andamento
 podem ser repetidas e serão reconciliadas pelo ledger e pelos marcadores GitHub.
+
+## Identificação de versões (2026-09-05)
+
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
