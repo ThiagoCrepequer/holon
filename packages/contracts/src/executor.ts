@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { projectIdentificationResultV1Schema } from "./project-identification.js";
 import {
   repositoryPolicySchema,
   repositoryPolicySourceSchema,
@@ -160,6 +161,7 @@ export const reviewContextFileSchema = z.strictObject({
  */
 export const reviewContextV2Schema = z
   .strictObject({
+    projectIdentification: projectIdentificationResultV1Schema.optional(),
     changedLines: changedLinesSchema,
     files: z.array(reviewContextFileSchema).max(50),
     schemaVersion: z.literal(2),
@@ -212,6 +214,7 @@ export const reviewContextV2Schema = z
 
 export const reviewContextV3Schema = z
   .strictObject({
+    projectIdentification: projectIdentificationResultV1Schema.optional(),
     changedLines: changedLinesSchema,
     effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     files: z.array(reviewContextFileSchema).max(50),

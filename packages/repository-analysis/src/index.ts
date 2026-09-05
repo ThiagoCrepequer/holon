@@ -10,3 +10,5 @@ export * from "./structural-findings.js";
 export * from "./surface.js";
 export * from "./symbol-extractor.js";
 export * from "./test-gap-detector.js";
+
+export { isProjectMetadataPathAllowed } from "./review-path-policy.js";

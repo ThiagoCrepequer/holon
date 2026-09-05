@@ -1,4 +1,8 @@
-import { adminRunDetailV1Schema, runIdSchema } from "@holon/contracts";
+import {
+  adminRunDetailV1Schema,
+  adminRunDetailV2Schema,
+  runIdSchema,
+} from "@holon/contracts";
 import { data, type LoaderFunctionArgs, useLoaderData } from "react-router";
 
 import { D1AdminStorage } from "../../workers/d1-adapter.js";
@@ -8,7 +12,10 @@ import { RunDetailView } from "../views/run-detail-view.js";
 
 export function parseRpcRunDetail(value: unknown) {
   if (value === null) return null;
-  const parsed = adminRunDetailV1Schema.safeParse(value);
+  const v2 = adminRunDetailV2Schema.safeParse(value);
+  const parsed = adminRunDetailV1Schema.safeParse(
+    v2.success ? { ...v2.data, schemaVersion: 1 } : value,
+  );
   if (!parsed.success) throw new Error("Invalid RPC run detail response");
   return parsed.data;
 }
@@ -28,7 +35,22 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
   } else {
     try {
       const candidate = await Promise.race([
-        rpc.getRunDetailV1({ runId: parsedRunId.data }),
+        (async () => {
+          if (rpc.getRunDetailV2) {
+            try {
+              return await rpc.getRunDetailV2({ runId: parsedRunId.data });
+            } catch (error) {
+              if (
+                !(error instanceof TypeError) ||
+                !error.message.includes(
+                  'does not implement the method "getRunDetailV2"',
+                )
+              )
+                throw error;
+            }
+          }
+          return await rpc.getRunDetailV1({ runId: parsedRunId.data });
+        })(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), 5_000),
         ),

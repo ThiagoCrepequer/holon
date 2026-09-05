@@ -17,6 +17,7 @@
     "@holon/domain": "workspace:*",
     "@holon/github": "workspace:*",
     "@holon/model": "workspace:*",
+    "@holon/project-identification": "workspace:*",
     "@holon/repository-analysis": "workspace:*",
     "fflate": "0.8.3",
     "hono": "catalog:",

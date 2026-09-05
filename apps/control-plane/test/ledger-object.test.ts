@@ -7,6 +7,7 @@ import {
   type ReviewRun,
   type RunId,
 } from "@holon/domain";
+import { identifySnapshot } from "@holon/project-identification";
 import {
   createExecutionContext,
   evictDurableObject,
@@ -1423,5 +1424,37 @@ describe("ReviewLedgerObject", () => {
       expect(exhaustedTask?.state).toBe("exhausted");
       expect(exhaustedTask?.attempts).toBe(20);
     });
+  });
+});
+
+it("keeps the identification snapshot immutable and bound to an existing run", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  const result = await identifySnapshot({
+    snapshotSha: "a".repeat(40),
+    policyDigest: "p",
+    modelRevision: "m",
+    files: [],
+  });
+  await runInDurableObject(ledger, async (instance) => {
+    await expect(
+      instance.saveProjectIdentification(runId, result),
+    ).rejects.toThrow("unavailable");
+  });
+  await ledger.claimRun(run, "identification-immutable");
+  await ledger.saveProjectIdentification(runId, result);
+  await ledger.saveProjectIdentification(runId, result);
+  await runInDurableObject(ledger, async (instance) => {
+    await expect(
+      instance.saveProjectIdentification(runId, {
+        ...result,
+        snapshotSha: "b".repeat(40),
+      }),
+    ).rejects.toThrow("mismatch");
+    await expect(
+      instance.saveProjectIdentification(runId, {
+        ...result,
+        detectorRevision: "changed",
+      }),
+    ).rejects.toThrow("already recorded");
   });
 });

@@ -6,6 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ADMIN_PROJECTION_ENABLED": "true",
+    "PROJECT_IDENTIFICATION_ENABLED": "false",
+    "PROJECT_IDENTIFICATION_MODE": "observe",
+    "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
   },
   "analytics_engine_datasets": [
     {
@@ -16,6 +19,14 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "PROJECT_IDENTIFICATION_REGISTRY",
+        "class_name": "ProjectIdentificationRegistryObject",
+      },
+      {
+        "name": "PROJECT_IDENTIFICATION_CACHE",
+        "class_name": "ProjectIdentificationCacheObject",
+      },
+      {
         "name": "REVIEW_LEDGERS",
         "class_name": "ReviewLedgerObject",
       },
@@ -25,6 +36,13 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["ReviewLedgerObject"],
+    },
+    {
+      "tag": "project-identification-v1",
+      "new_sqlite_classes": [
+        "ProjectIdentificationCacheObject",
+        "ProjectIdentificationRegistryObject",
+      ],
     },
   ],
   "queues": {

@@ -288,6 +288,10 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     return this.service().hasContext(runId);
   }
 
+  public discoverProjectMetadataV1(request: unknown) {
+    return this.service().discoverProjectMetadataV1(request);
+  }
+
   public runTool(runId: string, call: RepositoryToolCall) {
     return this.service().runTool(runId, call);
   }

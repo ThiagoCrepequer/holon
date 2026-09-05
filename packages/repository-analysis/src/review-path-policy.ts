@@ -328,6 +328,23 @@ function isNormalizedRepositoryPath(path: string): boolean {
     .every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 
+/** Metadata callers must also enforce their own source-name allowlist. */
+export function isProjectMetadataPathAllowed(
+  path: string,
+  additionalExcludes: readonly string[],
+): boolean {
+  if (!isNormalizedRepositoryPath(path)) return false;
+  const basename = path.slice(path.lastIndexOf("/") + 1);
+  return (
+    !isExcludedDirectory(path) &&
+    !isGeneratedFile(basename) &&
+    !isMinifiedFile(basename) &&
+    !binaryExtensionNames.has(extension(basename) ?? "") &&
+    !isSecretFile(basename) &&
+    !matchesAnyPathGlob(path, additionalExcludes)
+  );
+}
+
 export function classifyReviewPath(
   path: string,
   additionalExcludes?: readonly string[],

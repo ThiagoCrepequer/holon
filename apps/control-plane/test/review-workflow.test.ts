@@ -5,6 +5,7 @@ import {
   type ReviewJob,
 } from "@holon/contracts";
 import type { RunId } from "@holon/domain";
+import { identifySnapshot } from "@holon/project-identification";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
@@ -80,6 +81,10 @@ function immediateStep(
   stepErrors?: Record<string, Error>,
 ): WorkflowStep {
   return {
+    sleep: async (name: string) => {
+      stepNames.push(name);
+      await afterStep?.(name);
+    },
     do: async <T>(
       name: string,
       configOrCallback: unknown,
@@ -1846,4 +1851,103 @@ describe("ReviewWorkflow", () => {
     expect(result.outcome).toBe("completed");
     expect(send).toHaveBeenCalledOnce();
   });
+});
+
+it("records identified versions and supplies them to the review only in enrich mode", async () => {
+  const result = await identifySnapshot({
+    snapshotSha: job.envelope.pullRequest.headSha,
+    policyDigest: "p",
+    modelRevision: "m",
+    files: [
+      { path: "package.json", content: '{"dependencies":{"react":"19.0.0"}}' },
+    ],
+  });
+  const review = vi.fn(async (_job: ReviewJob, _context: ReviewContextV2) => ({
+    output: { findings: [], summary: "No issues." },
+    promptTruncated: false,
+  }));
+  const setup = runtime({ model: () => ({ review }) });
+  const settings: Record<string, string> = {
+    PROJECT_IDENTIFICATION_ENABLED: "true",
+    PROJECT_IDENTIFICATION_MODE: "enrich",
+  };
+  const configured = { ...env, ...settings } as Cloudflare.Env;
+  const names: string[] = [];
+  await executeReviewWorkflow(
+    configured,
+    event("identification-workflow"),
+    immediateStep(names),
+    {
+      ...setup.value,
+      identificationModel: {
+        identify: async () => ({ selectedFactIds: ["fact-0"] }),
+      },
+      executor: {
+        ...setup.value.executor!,
+        discoverProjectMetadataV1: async () => result,
+      },
+    },
+  );
+  expect(names).toContain("discover-project-metadata-v1");
+  expect(names).toContain("identify-project-v1-0");
+  expect(names).toContain("record-project-identification-v1");
+  expect(review.mock.calls[0]?.[1]).toMatchObject({
+    projectIdentification: {
+      projects: [{ root: ".", technologies: [{ name: "react" }] }],
+    },
+  });
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await runInDurableObject(ledger, async (_object, state) => {
+    expect(
+      await state.storage.get("project-identification:" + job.runId),
+    ).toMatchObject({
+      snapshotSha: job.envelope.pullRequest.headSha,
+      projects: [{ interpretation: "model-verified" }],
+    });
+  });
+});
+
+it("waits durably for an existing cache owner then reuses its result", async () => {
+  const result = await identifySnapshot({
+    snapshotSha: job.envelope.pullRequest.headSha,
+    policyDigest: "p",
+    modelRevision: "m",
+    files: [
+      { path: "package.json", content: '{"dependencies":{"react":"19.0.0"}}' },
+    ],
+  });
+  const project = result.projects[0]!;
+  const cacheName = await env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+    "99",
+  ).register(99, 42);
+  const cache = env.PROJECT_IDENTIFICATION_CACHE.getByName(cacheName!);
+  const claim = await cache.claim(project.fingerprint, "other-run");
+  if (claim.status !== "claimed") throw new Error("claim");
+  const identify = vi.fn(async () => ({ selectedFactIds: [] }));
+  const setup = runtime();
+  const names: string[] = [];
+  const overrides: Record<string, string> = {
+    PROJECT_IDENTIFICATION_ENABLED: "true",
+  };
+  await executeReviewWorkflow(
+    { ...env, ...overrides },
+    event("identification-pending"),
+    immediateStep(names, async (name) => {
+      if (name.startsWith("wait-project-identification"))
+        await cache.complete(project.fingerprint, "other-run", claim.token, {
+          ...project,
+          interpretation: "model-verified",
+        });
+    }),
+    {
+      ...setup.value,
+      identificationModel: { identify },
+      executor: {
+        ...setup.value.executor!,
+        discoverProjectMetadataV1: async () => result,
+      },
+    },
+  );
+  expect(names).toContain("wait-project-identification-v1-0-0");
+  expect(identify).not.toHaveBeenCalled();
 });

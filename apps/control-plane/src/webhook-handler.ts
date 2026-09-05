@@ -1,3 +1,4 @@
+import { identificationRevocationSchema } from "@holon/contracts";
 import { type HealthCheckReport, pullRequestActions } from "@holon/contracts";
 import {
   mapPullRequestWebhook,
@@ -120,6 +121,44 @@ export function createWebhookApp() {
       ))
     ) {
       return context.json({ error: "invalid_signature" }, 401);
+    }
+    if (event === "installation" || event === "installation_repositories") {
+      let eventPayload: unknown;
+      try {
+        eventPayload = JSON.parse(new TextDecoder().decode(rawBytes));
+      } catch {
+        return context.json({ error: "invalid_json" }, 400);
+      }
+      const decoded = identificationRevocationSchema.safeParse(eventPayload);
+      if (!decoded.success)
+        return context.json({ error: "invalid_installation_event" }, 400);
+      const payload = decoded.data;
+      if (
+        (event === "installation" &&
+          (payload.action === "deleted" || payload.action === "suspend")) ||
+        (event === "installation_repositories" && payload.action === "removed")
+      ) {
+        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+          String(payload.installation.id),
+        ).revoke(
+          payload.installation.id,
+          event === "installation"
+            ? null
+            : (payload.repositories_removed ?? []).map((repo) => repo.id),
+        );
+      }
+      if (event === "installation" && payload.action === "unsuspend")
+        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+          String(payload.installation.id),
+        ).restore(payload.installation.id, null);
+      if (event === "installation_repositories" && payload.action === "added")
+        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+          String(payload.installation.id),
+        ).restore(
+          payload.installation.id,
+          (payload.repositories_added ?? []).map((repo) => repo.id),
+        );
+      return context.json({ accepted: true }, 202);
     }
     if (
       event !== "pull_request" &&

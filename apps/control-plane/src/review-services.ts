@@ -1,3 +1,9 @@
+function isProjectIdentificationEnabled(value: string): boolean {
+  return value === "true";
+}
+function shouldEnrichProjects(value: string): boolean {
+  return value === "enrich";
+}
 import type {
   CiEvidenceLedger,
   FindingLifecycleLedger,
@@ -7,6 +13,11 @@ import type {
   RunTelemetryLedger,
   TelemetryEmitter,
 } from "@holon/application";
+import {
+  projectIdentificationResultV1Schema,
+  type ProjectIdentificationResultV1,
+  type ProjectMetadataRequestV1,
+} from "@holon/contracts";
 import {
   executorRequestV1Schema,
   executorRequestV2Schema,
@@ -39,12 +50,17 @@ import {
   GitHubReviewPublisher,
   type GitHubInstallationSession,
 } from "@holon/github";
+import { GatewayProjectIdentificationModel } from "@holon/model";
 import {
   AiSdkReviewGenerator,
   GatewayModelReviewer,
   createBoundedRepositoryToolRunner,
   createRedactingRepositoryToolRunner,
 } from "@holon/model";
+import {
+  interpretProjects,
+  detectorRevision,
+} from "@holon/project-identification";
 import {
   classifyPullRequestDiffFile,
   isNonBinaryPullRequestPatch,
@@ -72,6 +88,9 @@ import {
 import type { WorkflowController } from "./workflow-superseding.js";
 
 export interface RepositoryExecutorBinding {
+  discoverProjectMetadataV1?(
+    request: ProjectMetadataRequestV1,
+  ): Promise<ProjectIdentificationResultV1>;
   cleanup(runId: string): Promise<void>;
   hasContext(runId: string): Promise<boolean>;
   loadContext?(runId: string): Promise<unknown>;
@@ -101,6 +120,10 @@ export interface WorkflowLedger
     CiEvidenceLedger,
     FindingLifecycleLedger,
     RunTelemetryLedger {
+  saveProjectIdentification?(
+    runId: string,
+    result: ProjectIdentificationResultV1,
+  ): Promise<void>;
   claimRunV2(
     run: Parameters<PublicationLedger["claimRun"]>[0],
     workflowInstanceId: string,
@@ -135,6 +158,7 @@ export interface WorkflowLedger
 }
 
 export interface ReviewRuntime {
+  readonly identificationModel?: import("@holon/application").ProjectIdentificationModel;
   readonly adminProjectionQueue?: Queue<unknown>;
   readonly createModel?: (
     toolRunner: ReturnType<typeof createBoundedRepositoryToolRunner>,
@@ -165,6 +189,14 @@ function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
 }
 
 export interface ReviewServices {
+  useProjectIdentification?(result: ProjectIdentificationResultV1): void;
+  getProjectIdentification?(): ProjectIdentificationResultV1 | undefined;
+  identifyProjects?(
+    policy: RepositoryPolicy,
+    input?: ProjectIdentificationResultV1,
+    discoveryOnly?: boolean,
+    deadlineAt?: number,
+  ): Promise<ProjectIdentificationResultV1 | null>;
   readonly adminProjectionQueue?: Queue<unknown> | undefined;
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
@@ -305,6 +337,9 @@ export function createReviewServices(
   logger: StructuredLogger,
   logContext: Readonly<Record<string, number | string>>,
 ): ReviewServices {
+  let projectIdentification: ProjectIdentificationResultV1 | undefined;
+  let identificationInputTokens = 0,
+    identificationOutputTokens = 0;
   const executor: RepositoryExecutorBinding =
     runtime.executor ?? env.REPOSITORY_EXECUTOR;
   const ledger: WorkflowLedger = env.REVIEW_LEDGERS.getByName(prKeyFor(job));
@@ -595,8 +630,8 @@ export function createReviewServices(
     telemetry,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     getAccumulatedUsage: () => ({
-      inputTokens,
-      outputTokens,
+      inputTokens: inputTokens + identificationInputTokens,
+      outputTokens: outputTokens + identificationOutputTokens,
       toolCallsCount,
     }),
     createMutationContext: mutationContext,
@@ -644,6 +679,143 @@ export function createReviewServices(
         }
         return legacyContextAsV2(await executor.loadContext(job.runId));
       }
+    },
+    useProjectIdentification: (result) => {
+      identificationInputTokens = result.usage?.inputTokens ?? 0;
+      identificationOutputTokens = result.usage?.outputTokens ?? 0;
+      if (shouldEnrichProjects(env.PROJECT_IDENTIFICATION_MODE))
+        projectIdentification = result;
+    },
+    getProjectIdentification: () => projectIdentification,
+    identifyProjects: async (
+      policy,
+      input,
+      discoveryOnly = false,
+      deadlineAt = Date.now() + 120000,
+    ) => {
+      if (!isProjectIdentificationEnabled(env.PROJECT_IDENTIFICATION_ENABLED))
+        return null;
+      const unavailable = (reason: string): ProjectIdentificationResultV1 => ({
+        schemaVersion: 1,
+        snapshotSha: job.envelope.pullRequest.headSha,
+        inventoryDigest: "0".repeat(64),
+        detectorRevision,
+        projects: [],
+        status: "unavailable",
+        limitations: [reason],
+      });
+      if (!executor.discoverProjectMetadataV1)
+        return unavailable("executor-capability-unavailable");
+      const cacheName = await env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+        String(job.envelope.installationId),
+      ).register(job.envelope.installationId, job.envelope.repository.id);
+      if (!cacheName) return unavailable("access-revoked");
+      if (!input && !(await executor.hasContext(job.runId)))
+        await prepareRepository(1, policy);
+      const request: ProjectMetadataRequestV1 = {
+        schemaVersion: 1,
+        runId: job.runId,
+        installationId: job.envelope.installationId,
+        repositoryId: job.envelope.repository.id,
+        snapshotSha: job.envelope.pullRequest.headSha,
+        policyDigest: policy.effectivePolicyDigest,
+        modelRevision:
+          env.AI_MODEL_ID +
+          ":" +
+          detectorRevision +
+          ":" +
+          env.PROJECT_IDENTIFICATION_PROFILE,
+        mode: "affected",
+        deadlineAt,
+      };
+      let result: ProjectIdentificationResultV1;
+      try {
+        result =
+          input ??
+          projectIdentificationResultV1Schema.parse(
+            await executor.discoverProjectMetadataV1(request),
+          );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("PROJECT_METADATA_AUTHORITY")
+        )
+          throw error;
+        return unavailable("metadata-unavailable");
+      }
+      if (!input && result.metadataChanged) {
+        try {
+          const base = projectIdentificationResultV1Schema.parse(
+            await executor.discoverProjectMetadataV1({
+              ...request,
+              snapshotSha: job.envelope.pullRequest.baseSha,
+            }),
+          );
+          result = {
+            ...result,
+            baseline: {
+              snapshotSha: base.snapshotSha,
+              projects: base.projects,
+              status: base.status === "complete" ? "complete" : "partial",
+              limitations: base.limitations,
+            },
+          };
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message.includes("PROJECT_METADATA_AUTHORITY")
+          )
+            throw error;
+          result = {
+            ...result,
+            baseline: {
+              snapshotSha: job.envelope.pullRequest.baseSha,
+              projects: [],
+              status: "unavailable",
+              limitations: ["base-metadata-unavailable"],
+            },
+          };
+        }
+      }
+      if (discoveryOnly) return result;
+      const usage = { inputTokens: 0, outputTokens: 0, modelCalls: 0 };
+      const cache = env.PROJECT_IDENTIFICATION_CACHE.getByName(cacheName);
+      const identificationModel =
+        runtime.identificationModel ??
+        new GatewayProjectIdentificationModel(
+          {
+            accountId: env.AI_GATEWAY_ACCOUNT_ID,
+            apiToken: env.AI_GATEWAY_API_TOKEN,
+            gatewayId: env.AI_GATEWAY_ID,
+            model: env.AI_MODEL_ID,
+          },
+          (consumedInput, output) => {
+            usage.inputTokens += consumedInput;
+            usage.outputTokens += output;
+          },
+        );
+      let interpreted: ProjectIdentificationResultV1;
+      try {
+        interpreted = await interpretProjects(result, {
+          cache,
+          owner: job.runId,
+          model: identificationModel,
+          deadlineAt,
+          onAttempt: () => {
+            usage.modelCalls++;
+          },
+        });
+      } catch {
+        interpreted = {
+          ...result,
+          status: "partial",
+          limitations: [
+            ...result.limitations,
+            "identification-cache-unavailable",
+          ],
+        };
+      }
+      return { ...interpreted, usage };
     },
     prepareRepository,
     readCurrentHead: async () => {

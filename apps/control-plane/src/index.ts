@@ -20,3 +20,7 @@ export default {
     await dispatchReviewMessages(batch.messages, env.REVIEW_WORKFLOW);
   },
 } satisfies ExportedHandler<Env>;
+
+export { ProjectIdentificationCacheObject } from "./project-identification-cache.js";
+
+export { ProjectIdentificationRegistryObject } from "./project-identification-registry.js";
