@@ -274,24 +274,20 @@ describe("current executor RPC contract", () => {
           cleanup: async () => {},
           hasContext: async () => true,
           runTool: async () => ({ content: "", truncated: false }),
-          prepareRepositoryV3: vi
-            .fn()
-            .mockResolvedValue({
-              schemaVersion: 2,
-              changedLineCount: 0,
-              contextBytes: 1,
-              fileCount: 0,
-              runId: job.runId,
-              truncated: false,
-            }),
-          loadContextV3: vi
-            .fn()
-            .mockResolvedValue({
-              schemaVersion: 2,
-              changedLines: [],
-              files: [],
-              truncated: false,
-            }),
+          prepareRepositoryV3: vi.fn().mockResolvedValue({
+            schemaVersion: 2,
+            changedLineCount: 0,
+            contextBytes: 1,
+            fileCount: 0,
+            runId: job.runId,
+            truncated: false,
+          }),
+          loadContextV3: vi.fn().mockResolvedValue({
+            schemaVersion: 2,
+            changedLines: [],
+            files: [],
+            truncated: false,
+          }),
         },
       },
       { emit: () => {} },
