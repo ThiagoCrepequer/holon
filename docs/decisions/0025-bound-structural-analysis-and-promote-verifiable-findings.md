@@ -1,7 +1,7 @@
 ---
 id: ADR-0025
 kind: decision
-status: accepted
+status: superseded
 date: 2026-09-03
 owners:
   - core-team
@@ -16,6 +16,9 @@ related:
 ---
 
 # Limitar a análise estrutural e promover somente findings verificáveis
+
+Substituído pelo [ADR-0033](0033-investigate-structural-leads-and-preserve-review-output.md).
+O texto abaixo preserva a decisão histórica.
 
 ## Contexto e problema
 

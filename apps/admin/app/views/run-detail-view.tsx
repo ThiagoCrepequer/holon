@@ -1,4 +1,4 @@
-import type { AdminRunDetailV1 } from "@holon/contracts";
+import type { AdminRunDetailV2 } from "@holon/contracts";
 import {
   Badge,
   Card,
@@ -26,7 +26,7 @@ import { formatNumber } from "../utils/format.js";
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
   readonly run: AdminRunRow;
-  readonly rpcDetail: AdminRunDetailV1 | null;
+  readonly rpcDetail: AdminRunDetailV2 | null;
   readonly rpcError?: string | null | undefined;
   readonly embedded?: boolean | undefined;
 }

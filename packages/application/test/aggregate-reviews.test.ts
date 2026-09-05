@@ -192,6 +192,31 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.summary).toContain("Verdict: Informational Comment");
   });
 
+  it("preserves failure coverage regardless of shard order when context is also omitted", () => {
+    const results = [
+      {
+        findings: [],
+        summary: "",
+        status: "failure" as const,
+        shardId: "shard-0",
+        shardIndex: 0,
+      },
+      {
+        findings: [],
+        summary: "Partial context",
+        status: "success" as const,
+        shardId: "shard-1",
+        shardIndex: 1,
+        outputLimitations: ["input_context_omitted" as const],
+      },
+    ];
+    for (const shards of [results, results.toReversed()]) {
+      expect(aggregateShardReviews(plan, shards).scopeStatus).toBe(
+        "partial_by_failure",
+      );
+    }
+  });
+
   it("handles partial_by_policy, low severity observations, sorting by line, and empty summary", () => {
     const fileWithTwoLines = {
       mode: "structural" as const,
@@ -278,7 +303,7 @@ describe("aggregateShardReviews", () => {
   });
 
   it("truncates summary exceeding character limit", () => {
-    const longSummary = "x".repeat(5000);
+    const longSummary = "x".repeat(20_000);
     const shardResults = [
       {
         findings: [],
@@ -290,8 +315,8 @@ describe("aggregateShardReviews", () => {
     ];
 
     const aggregated = aggregateShardReviews(plan, shardResults);
-    expect(aggregated.summary.length).toBeLessThanOrEqual(4000);
-    expect(aggregated.summary.endsWith("…")).toBe(true);
+    expect(aggregated.summary.length).toBeLessThanOrEqual(16_000);
+    expect(aggregated.summary).toContain("publication budget");
   });
 
   it("formats check run output for various scopeStatus configurations", () => {
@@ -484,7 +509,7 @@ describe("aggregateShardReviews", () => {
 
       const formatted = formatStructuralImpactSection(report);
       expect(formatted).toContain("### 🏛️ Structural Impact Analysis");
-      expect(formatted).toContain("Potential Contract Breaks");
+      expect(formatted).toContain("Contract Investigation Leads");
       expect(formatted).toContain("deleteUser");
       expect(formatted).toContain("Symbols Modified");
       expect(formatted).toContain("Downstream Impact Radius");

@@ -158,7 +158,9 @@ export function formatCheckRunOutput(
       );
     }
     if (si.contractBreaks.length > 0) {
-      parts.push(`⚠️ ${si.contractBreaks.length} contract break(s)`);
+      parts.push(
+        `⚠️ ${si.contractBreaks.length} contract investigation lead(s)`,
+      );
     }
     if (si.testGaps.length > 0) {
       parts.push(`${si.testGaps.length} test gap(s)`);

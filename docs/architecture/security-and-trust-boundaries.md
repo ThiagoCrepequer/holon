@@ -79,8 +79,7 @@ estrito. Configurações inválidas falham sem retry e nunca iniciam o Sandbox.
 Exclusões universais e padrões capazes de atingir política, workflows,
 `SECURITY.md` ou `CODEOWNERS` são rejeitados. Além disso, a autorização de
 contexto e tools dá precedência aos paths protegidos, como defesa em
-profundidade. Política customizada exige RPC V3; fallback para V2/V1 só existe
-quando a política efetiva é a default. O par de digests registra os bytes da
+profundidade. Toda política exige RPC V3; não existe fallback para V2/V1. O par de digests registra os bytes da
 fonte e a política canônica sem persistir o conteúdo do arquivo.
 
 O executor implementado não executa scripts do repositório:

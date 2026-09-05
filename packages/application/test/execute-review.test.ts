@@ -175,8 +175,9 @@ describe("review application policies", () => {
   });
 
   it("limits summaries by Unicode code points", () => {
-    const summary = composeReviewSummary("😀".repeat(4_500), [], false);
-    expect(Array.from(summary)).toHaveLength(4_000);
-    expect(summary.endsWith("…")).toBe(true);
+    const summary = composeReviewSummary("😀".repeat(12_000), [], false);
+    expect(summary.length).toBeLessThanOrEqual(16_000);
+    expect(summary.isWellFormed()).toBe(true);
+    expect(summary).toContain("publication budget");
   });
 });

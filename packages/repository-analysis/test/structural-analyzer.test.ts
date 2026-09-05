@@ -504,7 +504,7 @@ describe("analyzeStructuralImpact", () => {
     expect(report.repositoryScanTruncated).toBe(false);
   });
 
-  it("promotes a deterministic destructive SQL signal into a host-verifiable finding", () => {
+  it("keeps destructive SQL as an investigation signal rather than a proven defect", () => {
     const patch = [
       "diff --git a/migrations/002.sql b/migrations/002.sql",
       "--- a/migrations/002.sql",
@@ -518,19 +518,7 @@ describe("analyzeStructuralImpact", () => {
       repositoryFiles: [],
     });
 
-    expect(report.deterministicFindings).toEqual([
-      expect.objectContaining({
-        confidence: 1,
-        evidence: [
-          expect.objectContaining({ excerpt: "DROP TABLE accounts;" }),
-        ],
-        location: {
-          line: 1,
-          path: "migrations/002.sql",
-          side: "RIGHT",
-        },
-        severity: "critical",
-      }),
-    ]);
+    expect(report.contractBreaks).toHaveLength(1);
+    expect(report).not.toHaveProperty("deterministicFindings");
   });
 });

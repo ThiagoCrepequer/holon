@@ -1,30 +1,12 @@
 import {
   projectMetadataRequestV1Schema,
-  executorRequestSchema,
-  executorRequestV1Schema,
-  executorRequestV2Schema,
   executorRequestV3Schema,
-  preparedRepositorySchema,
-  preparedRepositoryV1Schema,
-  preparedRepositoryV2Schema,
   preparedRepositoryV3Schema,
-  reviewContextSchema,
-  reviewContextV1Schema,
-  reviewContextV2Schema,
   reviewContextV3Schema,
   runIdSchema,
-  type ExecutorRequest,
-  type ExecutorRequestV1,
-  type ExecutorRequestV2,
   type ExecutorRequestV3,
-  type PreparedRepository,
-  type PreparedRepositoryV1,
-  type PreparedRepositoryV2,
   type PreparedRepositoryV3,
   type RepositoryToolCall,
-  type ReviewContext,
-  type ReviewContextV1,
-  type ReviewContextV2,
   type ReviewContextV3,
 } from "@holon/contracts";
 import { isMetadataPath } from "@holon/project-identification";
@@ -110,84 +92,20 @@ function assertPreparationSuccessful(
 }
 
 function githubEgressAuthorization(
-  request: ExecutorRequest,
+  request: ExecutorRequestV3,
 ): GitHubEgressAuthorization {
-  const installationId =
-    "installationId" in request ? request.installationId : undefined;
-  if (
-    installationId !== undefined &&
-    (!Number.isSafeInteger(installationId) || installationId <= 0)
-  ) {
-    throw new TypeError("installationId must be a positive safe integer");
-  }
-  const repositoryUrl = new URL(request.cloneUrl);
-  const match = /^\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\.git$/u.exec(
-    repositoryUrl.pathname,
-  );
-  if (match === null) {
-    throw new TypeError("cloneUrl must identify one GitHub repository");
-  }
-  const matchedOwner = match[1];
-  const matchedName = match[2];
-  if (matchedOwner === undefined || matchedName === undefined) {
-    throw new TypeError("cloneUrl must identify one GitHub repository");
-  }
-  const repositoryOwner =
-    "repositoryOwner" in request ? request.repositoryOwner : matchedOwner;
-  const repositoryName =
-    "repositoryName" in request ? request.repositoryName : matchedName;
-  if (repositoryOwner !== matchedOwner || repositoryName !== matchedName) {
-    throw new TypeError("Repository identity does not match cloneUrl");
-  }
   return {
-    ...(installationId === undefined ? {} : { installationId }),
+    installationId: request.installationId,
     repositoryId: request.repositoryId,
-    repositoryName,
-    repositoryOwner,
-    repositoryPath: repositoryUrl.pathname,
+    repositoryName: request.repositoryName,
+    repositoryOwner: request.repositoryOwner,
+    repositoryPath: new URL(request.cloneUrl).pathname,
     runId: request.runId,
   };
 }
 
-function containsControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if (codePoint <= 31 || codePoint === 127) return true;
-  }
-  return false;
-}
-
 export class RepositoryExecutorService {
   public constructor(private readonly sandboxes: SandboxProvider) {}
-
-  public async prepare(
-    rawRequest: ExecutorRequestV1,
-    installationToken: string,
-  ): Promise<PreparedRepositoryV1> {
-    if (
-      installationToken.length < 20 ||
-      installationToken.length > 1_000 ||
-      containsControlCharacter(installationToken)
-    ) {
-      throw new TypeError("installationToken has an invalid format");
-    }
-    // N-1 callers still send this argument. It is intentionally never passed
-    // to the sandbox, persisted, written, or logged; the egress handler asks
-    // the trusted broker for a fresh installation credential just in time.
-    const request = executorRequestV1Schema.parse(rawRequest);
-    return preparedRepositoryV1Schema.parse(
-      await this.prepareInternal(request),
-    );
-  }
-
-  public async prepareRepositoryV2(
-    rawRequest: ExecutorRequestV2,
-  ): Promise<PreparedRepositoryV2> {
-    const request = executorRequestV2Schema.parse(rawRequest);
-    return preparedRepositoryV2Schema.parse(
-      await this.prepareInternal(request),
-    );
-  }
 
   public async prepareRepositoryV3(
     rawRequest: ExecutorRequestV3,
@@ -199,9 +117,9 @@ export class RepositoryExecutorService {
   }
 
   private async prepareInternal(
-    rawRequest: ExecutorRequest,
-  ): Promise<PreparedRepository> {
-    const request = executorRequestSchema.parse(rawRequest);
+    rawRequest: ExecutorRequestV3,
+  ): Promise<PreparedRepositoryV3> {
+    const request = executorRequestV3Schema.parse(rawRequest);
     const authorization = githubEgressAuthorization(request);
     const sandbox = this.sandboxes.get(request.runId);
     let stage: RepositoryPreparationStage = "configure-egress";
@@ -225,7 +143,6 @@ export class RepositoryExecutorService {
         assertPreparationSuccessful(result, stage);
       }
       if (
-        request.schemaVersion === 3 &&
         splitPullRequestDiff(request.canonicalDiff).some((file) =>
           [file.oldPath, file.newPath].some(
             (path) => path !== undefined && isMetadataPath(path),
@@ -261,9 +178,7 @@ export class RepositoryExecutorService {
       const repositoryInventory = await collectStructuralRepositoryInventory(
         sandbox,
         request.canonicalDiff,
-        request.schemaVersion === 3
-          ? request.effectivePolicy.additionalExcludes
-          : [],
+        request.effectivePolicy.additionalExcludes,
       );
       const artifacts = buildReviewArtifacts(
         request,
@@ -272,47 +187,34 @@ export class RepositoryExecutorService {
       );
       await sandbox.writeFile(reviewScopePolicyPath, artifacts.policy);
       await sandbox.writeFile(contextPath, artifacts.serializedContext);
-      if (request.schemaVersion === 3)
-        await sandbox.writeFile(
-          metadataAuthorityPath,
-          JSON.stringify({
-            schemaVersion: 1,
-            runId: request.runId,
-            installationId: request.installationId,
-            repositoryId: request.repositoryId,
-            headSha: request.headSha,
-            baseSha: request.baseSha,
-            policyDigest: request.effectivePolicy.effectivePolicyDigest,
-            changedPaths: splitPullRequestDiff(request.canonicalDiff).flatMap(
-              (f) =>
-                [f.oldPath, f.newPath].filter(
-                  (p): p is string => p !== undefined,
-                ),
-            ),
-          }),
-        );
-      return preparedRepositorySchema.parse(
-        request.schemaVersion === 3
-          ? {
-              changedLineCount: artifacts.context.changedLines.length,
-              contextBytes: artifacts.contextBytes,
-              effectivePolicyDigest: (artifacts.context as ReviewContextV3)
-                .effectivePolicyDigest,
-              fileCount: artifacts.fileCount,
-              runId: request.runId,
-              schemaVersion: 3,
-              truncated: artifacts.context.truncated ?? false,
-              waiversCount: (artifacts.context as ReviewContextV3).waiversCount,
-            }
-          : {
-              changedLineCount: artifacts.context.changedLines.length,
-              contextBytes: artifacts.contextBytes,
-              fileCount: artifacts.fileCount,
-              runId: request.runId,
-              schemaVersion: request.schemaVersion,
-              truncated: artifacts.context.truncated ?? false,
-            },
+      await sandbox.writeFile(
+        metadataAuthorityPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          runId: request.runId,
+          installationId: request.installationId,
+          repositoryId: request.repositoryId,
+          headSha: request.headSha,
+          baseSha: request.baseSha,
+          policyDigest: request.effectivePolicy.effectivePolicyDigest,
+          changedPaths: splitPullRequestDiff(request.canonicalDiff).flatMap(
+            (f) =>
+              [f.oldPath, f.newPath].filter(
+                (p): p is string => p !== undefined,
+              ),
+          ),
+        }),
       );
+      return preparedRepositoryV3Schema.parse({
+        changedLineCount: artifacts.context.changedLines.length,
+        contextBytes: artifacts.contextBytes,
+        effectivePolicyDigest: artifacts.context.effectivePolicyDigest,
+        fileCount: artifacts.fileCount,
+        runId: request.runId,
+        schemaVersion: 3,
+        truncated: artifacts.context.truncated,
+        waiversCount: artifacts.context.waiversCount,
+      });
     } catch (error) {
       await destroyAfterFailure(sandbox);
       throw preparationFailure(error, stage);
@@ -324,20 +226,12 @@ export class RepositoryExecutorService {
     return collectProjectMetadata(this.sandboxes.get(request.runId), request);
   }
 
-  private async loadAnyContext(runId: string): Promise<ReviewContext> {
+  private async loadAnyContext(runId: string): Promise<ReviewContextV3> {
     const requestRunId = runIdSchema.parse(runId);
     const serialized = await this.sandboxes
       .get(requestRunId)
       .readFile(contextPath);
-    return reviewContextSchema.parse(JSON.parse(serialized) as unknown);
-  }
-
-  public async loadContext(runId: string): Promise<ReviewContextV1> {
-    return reviewContextV1Schema.parse(await this.loadAnyContext(runId));
-  }
-
-  public async loadContextV2(runId: string): Promise<ReviewContextV2> {
-    return reviewContextV2Schema.parse(await this.loadAnyContext(runId));
+    return reviewContextV3Schema.parse(JSON.parse(serialized) as unknown);
   }
 
   public async loadContextV3(runId: string): Promise<ReviewContextV3> {

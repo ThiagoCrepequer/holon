@@ -9,6 +9,7 @@ import type {
 } from "@holon/domain";
 import { z } from "zod";
 
+import { reviewTextLimits } from "./review-limits.js";
 import { reviewFindingSchema } from "./review-output.js";
 import {
   gitShaSchema,
@@ -45,7 +46,7 @@ export type {
 
 export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
   confidence: z.number().min(0).max(1).optional(),
-  diagnostic: z.string().trim().min(30).max(600),
+  diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
   firstSeenHeadSha: gitShaSchema,

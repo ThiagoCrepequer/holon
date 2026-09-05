@@ -496,7 +496,7 @@ describe("Observability clients and readiness probe", () => {
 
       const mockRpc: AdminReadRpcClient = {
         pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
 
       const mockFetch = vi.fn().mockImplementation((url: string) => {
@@ -549,7 +549,7 @@ describe("Observability clients and readiness probe", () => {
 
       const mockRpc: AdminReadRpcClient = {
         pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -574,7 +574,7 @@ describe("Observability clients and readiness probe", () => {
 
       const mockRpc: AdminReadRpcClient = {
         pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -602,7 +602,7 @@ describe("Observability clients and readiness probe", () => {
 
       const mockRpcFail = {
         pingV1: vi.fn().mockRejectedValue(new Error("RPC failed")),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -616,7 +616,7 @@ describe("Observability clients and readiness probe", () => {
 
       const mockRpcWrongVersion = {
         pingV1: vi.fn().mockResolvedValue({ schemaVersion: 99 }),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
       const envWrong = {
         DB: mockDb,
@@ -635,7 +635,7 @@ describe("Observability clients and readiness probe", () => {
       } as unknown as D1Database;
       const mockRpc: AdminReadRpcClient = {
         pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV1: vi.fn().mockResolvedValue(null),
+        getRunDetailV2: vi.fn().mockResolvedValue(null),
       };
       const oldTimestamp = Date.now() - 10 * 60 * 1000;
       const mockFetch = vi.fn().mockImplementation((url: string) => {

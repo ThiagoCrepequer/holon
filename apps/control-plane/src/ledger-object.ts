@@ -13,7 +13,7 @@ import {
 import {
   adminCiSummaryV1Schema,
   adminFindingSummaryV1Schema,
-  adminRunDetailV1Schema,
+  adminRunDetailV2Schema,
   adminRunProjectionEventV1Schema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
@@ -26,9 +26,10 @@ import {
   runTelemetrySchema,
   runTransitionSchema,
   timestampSchema,
-  truncateUtf8Bytes,
+  limitReviewText,
+  reviewTextLimits,
   type AdminCiSummaryV1,
-  type AdminRunDetailV1,
+  type AdminRunDetailV2,
   type AdminRunProjectionEventV1,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
@@ -65,7 +66,10 @@ function sanitizeDiagnostic(raw: string): string {
   );
   const redacted = redactSecrets(noControls);
   const trimmed = redacted.trim();
-  return truncateUtf8Bytes(trimmed || "Diagnostic details unavailable", 512);
+  return limitReviewText(
+    trimmed || "Diagnostic details unavailable",
+    reviewTextLimits.diagnostic,
+  );
 }
 /* eslint-enable no-control-regex */
 
@@ -1411,9 +1415,9 @@ export class ReviewLedgerObject
     await this.ctx.storage.put(key, result);
   }
 
-  public async getSanitizedAdminRunDetailV1(
+  public async getSanitizedAdminRunDetailV2(
     rawRunId: string,
-  ): Promise<AdminRunDetailV1 | null> {
+  ): Promise<AdminRunDetailV2 | null> {
     const runId = runIdSchema.parse(rawRunId);
     const telemetry = await this.loadRunTelemetry(runId);
     if (telemetry === undefined) return null;
@@ -1459,7 +1463,7 @@ export class ReviewLedgerObject
     const ciEvidence = await this.loadCiEvidence(prKey, telemetry.headSha);
     const structuredCi = ciEvidence?.structuredCi ?? null;
 
-    return adminRunDetailV1Schema.parse({
+    return adminRunDetailV2Schema.parse({
       currentFindings,
       findingsPerspective: "current_pr_state",
       projectIdentification:
@@ -1478,7 +1482,7 @@ export class ReviewLedgerObject
         toolCallsCount: telemetry.toolCallsCount,
         verdict: telemetry.verdict ?? null,
       },
-      schemaVersion: 1,
+      schemaVersion: 2,
       structuredCi,
     });
   }

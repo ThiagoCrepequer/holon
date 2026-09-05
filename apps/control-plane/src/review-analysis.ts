@@ -69,6 +69,8 @@ async function reviewShards(
   services: ReviewServices,
   plan: ReturnType<typeof buildReviewPlan>,
   structuralImpact: StructuralImpactReport | undefined,
+  inputTruncated = false,
+  emit?: EmitReviewEvent,
 ): Promise<readonly ShardReviewResult[]> {
   const results: ShardReviewResult[] = [];
   const identification = services.getProjectIdentification?.();
@@ -96,16 +98,50 @@ async function reviewShards(
       changedLines: shard.changedLines,
       files: shard.files,
       schemaVersion: 2 as const,
-      structuralImpact,
+      structuralImpact: structuralImpact
+        ? {
+            ...structuralImpact,
+            changedSymbols: structuralImpact.changedSymbols.filter((signal) =>
+              shard.files.some((file) => file.path === signal.path),
+            ),
+            contractBreaks: structuralImpact.contractBreaks.filter((signal) =>
+              shard.files.some((file) => file.path === signal.path),
+            ),
+            downstreamReferences: structuralImpact.downstreamReferences.filter(
+              (signal) =>
+                shard.files.some((file) => file.path === signal.targetPath),
+            ),
+            testGaps: structuralImpact.testGaps.filter((signal) =>
+              shard.files.some((file) => file.path === signal.sourcePath),
+            ),
+            securitySurfaces: structuralImpact.securitySurfaces.filter(
+              (signal) => shard.files.some((file) => file.path === signal.path),
+            ),
+          }
+        : undefined,
       surface: shard.surface,
-      truncated: shard.totalShards > 1,
+      truncated: inputTruncated,
     };
     try {
       const reviewResult = await services.model.review(job, shardContext);
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
+      if (modelOutput.outputLimitations?.length || reviewResult.promptTruncated)
+        emit?.("model.output_limits", {
+          shardIndex: shard.index,
+          limitationCodes: (modelOutput.outputLimitations ?? []).join(","),
+          inputContextOmitted: reviewResult.promptTruncated,
+        });
       results.push({
         findings: modelOutput.findings,
-        isDegraded: modelOutput.isDegraded,
+        isDegraded: modelOutput.isDegraded || reviewResult.promptTruncated,
+        outputLimitations: [
+          ...new Set([
+            ...(modelOutput.outputLimitations ?? []),
+            ...(reviewResult.promptTruncated
+              ? ["input_context_omitted" as const]
+              : []),
+          ]),
+        ],
         shardId: shard.id,
         shardIndex: shard.index,
         status: "success",
@@ -161,13 +197,11 @@ export async function analyzeReview(
     });
 
     const verdictPolicy =
-      context.schemaVersion === 3 &&
       context.verdictStrictness === "block_all_confident_medium"
         ? { mediumSeverityThreshold: 1 }
         : undefined;
 
-    const policyExcludedFilesCount =
-      context.schemaVersion === 3 ? context.waiversCount : 0;
+    const policyExcludedFilesCount = context.waiversCount;
     const plan = buildReviewPlan(
       context.files.map((file) => ({
         changeType: "modified" as const,
@@ -186,15 +220,12 @@ export async function analyzeReview(
           context.schemaVersion === 3
             ? context.effectivePolicyDigest
             : undefined,
-        policySource:
-          context.schemaVersion === 3 ? context.policySource : undefined,
+        policySource: context.policySource,
         resolvedFindings: [],
-        sourceDigest:
-          context.schemaVersion === 3 ? context.sourceDigest : undefined,
+        sourceDigest: context.sourceDigest,
         structuralImpact: context.structuralImpact,
         updatedTrackedFindings: [],
-        waiversCount:
-          context.schemaVersion === 3 ? context.waiversCount : undefined,
+        waiversCount: context.waiversCount,
       };
     }
 
@@ -203,29 +234,15 @@ export async function analyzeReview(
       services,
       plan,
       context.structuralImpact,
+      context.truncated || plan.scopeStatus === "partial_by_policy",
+      emit,
     );
 
     const successfulSummaries = shardResults
       .filter((r) => r.status === "success" && r.summary.trim().length > 0)
       .map((r) => r.summary.trim());
 
-    let unifiedSummary: string | undefined;
-    if (
-      successfulSummaries.length > 1 &&
-      typeof services.model.synthesizeReviewSummary === "function"
-    ) {
-      try {
-        unifiedSummary = await services.model.synthesizeReviewSummary(job, {
-          shardSummaries: successfulSummaries,
-        });
-      } catch {
-        unifiedSummary = undefined;
-      }
-    }
-
     const rawAggregated = aggregateShardReviews(plan, shardResults, {
-      additionalFindings: context.structuralImpact?.deterministicFindings ?? [],
-      unifiedSummary,
       verdictPolicy,
     });
     const currentWithFingerprints = await Promise.all(
@@ -261,8 +278,29 @@ export async function analyzeReview(
       currentRunId: runId,
       prKey,
     });
+    let unifiedSummary: string | undefined;
+    if (
+      successfulSummaries.length > 1 &&
+      typeof services.model.synthesizeReviewSummary === "function"
+    ) {
+      try {
+        unifiedSummary = await services.model.synthesizeReviewSummary(job, {
+          shardSummaries: successfulSummaries,
+          verifiedFindings: reconciled.activeFindings.map((finding) => ({
+            diagnostic: finding.diagnostic,
+            severity: finding.severity,
+            path: finding.location.path,
+          })),
+        });
+      } catch {
+        unifiedSummary =
+          "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
+      }
+    }
+
     const finalAggregated = aggregateShardReviews(plan, shardResults, {
       canonicalFindings: reconciled.activeFindings,
+      unifiedSummary,
       reconciliation: reconciled.summary,
       structuralImpact: context.structuralImpact,
       verdictPolicy,
@@ -270,17 +308,13 @@ export async function analyzeReview(
     return {
       ...finalAggregated,
       activeFindings: reconciled.activeFindings,
-      effectivePolicyDigest:
-        context.schemaVersion === 3 ? context.effectivePolicyDigest : undefined,
-      policySource:
-        context.schemaVersion === 3 ? context.policySource : undefined,
+      effectivePolicyDigest: context.effectivePolicyDigest,
+      policySource: context.policySource,
       resolvedFindings: reconciled.resolvedFindings,
-      sourceDigest:
-        context.schemaVersion === 3 ? context.sourceDigest : undefined,
+      sourceDigest: context.sourceDigest,
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
-      waiversCount:
-        context.schemaVersion === 3 ? context.waiversCount : undefined,
+      waiversCount: context.waiversCount,
     };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);

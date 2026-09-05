@@ -1,0 +1,27 @@
+import { limitReviewText, reviewTextLimits } from "@holon/contracts";
+
+/** Reserve coverage/lifecycle information before allocating narrative space. */
+export function fitPublicationSummary(
+  prefix: string,
+  narrative: string,
+  suffix: string,
+): string {
+  prefix = limitReviewText(prefix, 2_000);
+  const notice =
+    "\n\n[Additional narrative omitted to fit the publication budget.]";
+  const boundedSuffix = limitReviewText(
+    suffix,
+    8_000,
+    "\n[Additional detail omitted.]",
+  );
+  const fixed = [prefix, boundedSuffix].filter(Boolean).join("\n\n");
+  const budget = Math.max(
+    0,
+    reviewTextLimits.publicationSummary - fixed.length - 4,
+  );
+  const body =
+    narrative.length > budget
+      ? limitReviewText(narrative, budget, notice)
+      : narrative;
+  return [prefix, body, boundedSuffix].filter(Boolean).join("\n\n");
+}

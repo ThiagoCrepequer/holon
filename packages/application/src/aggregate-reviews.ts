@@ -18,6 +18,7 @@ import {
 } from "@holon/domain";
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+import { fitPublicationSummary } from "./publication-summary.js";
 
 export interface AggregateShardReviewOptions {
   readonly additionalFindings?: readonly ReviewFinding[] | undefined;
@@ -34,7 +35,7 @@ export function formatStructuralImpactSection(
   const parts: string[] = [];
   if (report.contractBreaks.length > 0) {
     parts.push(
-      `- ⚠️ **Potential Contract Breaks**: ${report.contractBreaks.map((cb) => cb.description).join("; ")}`,
+      `- ⚠️ **Contract Investigation Leads**: ${report.contractBreaks.map((cb) => cb.description).join("; ")}`,
     );
   }
   if (report.changedSymbols.length > 0) {
@@ -113,12 +114,6 @@ function compareFindings(left: Finding, right: Finding): number {
   return left.location.line - right.location.line;
 }
 
-function limitSummary(value: string, maximumCodePoints = 4_000): string {
-  const characters = Array.from(value);
-  if (characters.length <= maximumCodePoints) return value;
-  return `${characters.slice(0, maximumCodePoints - 1).join("")}…`;
-}
-
 export function aggregateShardReviews(
   plan: ReviewPlan,
   shardResults: readonly ShardReviewResult[],
@@ -163,6 +158,14 @@ export function aggregateShardReviews(
       );
     } else {
       shardsAnalyzed += 1;
+      for (const code of result.outputLimitations ?? []) {
+        omissionReasons.push(`Shard ${result.shardIndex + 1}: ${code}.`);
+        if (
+          code === "input_context_omitted" &&
+          scopeStatus !== "partial_by_failure"
+        )
+          scopeStatus = "partial_by_policy";
+      }
       candidateFindings.push(...result.findings);
       const trimmedSummary = result.summary.trim();
       if (trimmedSummary.length > 0) {
@@ -222,18 +225,13 @@ export function aggregateShardReviews(
     summarySections.push(verdictDetails.reasons.join(" "));
   }
 
-  if (
-    options.unifiedSummary !== undefined &&
-    options.unifiedSummary.trim().length > 0
-  ) {
-    summarySections.push(options.unifiedSummary.trim());
-  } else if (shardSummaries.length === 0) {
-    summarySections.push(
-      "Holon reviewed the changes and found no functional regressions or contract breaks.",
-    );
-  } else {
-    summarySections.push(shardSummaries.join("\n\n"));
-  }
+  const prefix = summarySections.join("\n\n");
+  summarySections.length = 0;
+  const narrative =
+    options.unifiedSummary?.trim() ||
+    (shardSummaries.length
+      ? shardSummaries.join("\n\n")
+      : "No narrative summary is available; refer to the verified findings and review coverage.");
 
   if (scopeStatus === "partial_by_policy") {
     summarySections.push(
@@ -244,6 +242,19 @@ export function aggregateShardReviews(
       "Partial review: some changes could not be analyzed due to an execution failure.",
     );
   }
+
+  if (options.reconciliation !== undefined) {
+    const reconSection = formatReconciliationSection(options.reconciliation);
+    if (reconSection.length > 0) {
+      summarySections.push(reconSection);
+    }
+  }
+
+  if (omissionReasons.length)
+    summarySections.push(
+      "Review limitations:\n" +
+        [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
+    );
 
   const lowSeverity = sortedFindings.filter(
     (finding) => classifyFindingPublication(finding) === "summary_only",
@@ -257,13 +268,6 @@ export function aggregateShardReviews(
     );
   }
 
-  if (options.reconciliation !== undefined) {
-    const reconSection = formatReconciliationSection(options.reconciliation);
-    if (reconSection.length > 0) {
-      summarySections.push(reconSection);
-    }
-  }
-
   if (options.structuralImpact !== undefined) {
     const structuralSection = formatStructuralImpactSection(
       options.structuralImpact,
@@ -273,7 +277,11 @@ export function aggregateShardReviews(
     }
   }
 
-  const finalSummary = limitSummary(summarySections.join("\n\n"));
+  const finalSummary = fitPublicationSummary(
+    prefix,
+    narrative,
+    summarySections.join("\n\n"),
+  );
 
   return aggregatedReviewResultSchema.parse({
     findings: sortedFindings.map((f) => ({

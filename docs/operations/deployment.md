@@ -142,10 +142,11 @@ Fontes verificadas em 2026-08-30:
 15. Solicite duas páginas consecutivas de um arquivo grande e confirme que cada
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
-16. Durante o rollout, mantenha o executor N-1 enquanto sobe o control plane
-    dual-stack; confirme fallback apenas para método V2 ausente. Depois suba o
-    executor V2, confirme uso do broker e verifique que seus parâmetros não
-    contêm token. Um erro funcional V2 deve falhar fechado, sem downgrade.
+16. Publique executor, control-plane e admin da mesma revisão, admitindo indisponibilidade
+    durante a atualização. Preparação/contexto exigem RPC V3 e o detalhe admin exige
+    V2; não há downgrade para Workers antigos. Confirme uso do broker sem token
+    em parâmetros do executor. Não retome Workflows antigos como forma de validar
+    o novo contrato; inicie uma execução nova após concluir os deploys.
 17. Entregue eventos sintéticos B e depois A para o mesmo PR, com `updatedAt`
     de B mais novo; confirme que A fica obsoleto. Repita com `updatedAt`
     empatado e `receivedAt` distinto para confirmar o desempate causal.
@@ -183,4 +184,4 @@ podem ser repetidas e serão reconciliadas pelo ledger e pelos marcadores GitHub
 
 ## Identificação de versões (2026-09-05)
 
-Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, deploy coordenado, corpus offline/live e invalidação por perfil. A identificação faz parte do workflow padrão; `observe` registra os resultados sem enriquecer a investigação.

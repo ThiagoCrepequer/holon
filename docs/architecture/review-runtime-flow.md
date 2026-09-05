@@ -187,11 +187,21 @@ que deduplica achados, ordena por severidade, valida contra o Host Evidence Veri
 sumário executivo com a classificação de escopo (`complete`, `partial_by_policy`, `partial_by_failure`
 ou `unsupported`).
 
-Quebras determinísticas com linha `RIGHT` e excerpt verificáveis entram como
-candidatas no mesmo agregador e podem influenciar o veredito. Sinais sem âncora,
-incluindo remoções puras, ficam apenas no contexto e no resumo. Depois da
-reconciliação, somente findings canônicos ativos derivam o veredito final;
-findings dispensados, resolvidos ou obsoletos não permanecem bloqueando a run.
+Sinais lexicais são pistas investigativas, não findings automáticos. Mesmo com
+linha `RIGHT` e excerpt válidos, a remoção de export ou alteração SQL requer
+investigação de impacto causal. A busca parcial não prova ausência de consumidores.
+Depois da reconciliação, somente findings canônicos ativos derivam o veredito final
+e orientam a síntese; findings dispensados, resolvidos ou obsoletos não bloqueiam.
+
+O [ADR-0033](../decisions/0033-investigate-structural-leads-and-preserve-review-output.md)
+define limites compartilhados de retenção, oito findings e quatro evidências por
+finding, resumo por shard de 10.000 e publicação de 16.000 unidades UTF-16.
+`outputLimitations` registra perdas antes da normalização do SDK. Redação de
+segredos preserva esses indicadores; cobertura e ciclo de vida têm espaço
+reservado antes da narrativa. Falha de finalização após recuperação resulta em
+review incompleta, nunca publicação da investigação livre. Sharding por si só
+não marca truncamento. `model.output_limits` informa códigos de perda, e uso da
+investigação contabiliza todas as etapas via `totalUsage`.
 
 O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
 contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise
@@ -204,7 +214,7 @@ O request V3 leva apenas identidades não secretas e a política validada ao exe
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
-Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
+Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente RPC V3.
 
 ## Falhas esperadas
 

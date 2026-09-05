@@ -35,10 +35,10 @@ Formatos malformados, limites e resoluções externas viram limitações. Depend
 
 Inventário: 2.000 candidatos/1 MiB de listagem; 20 projetos; 64 KiB por configuração, 2 MiB por lock e 16 MiB total. Resultado de projetos limitado a 200.000 bytes por snapshot, com truncamento explícito para manter checkpoints limitados. Até 500 fatos e 100 tecnologias por projeto. O prompt de identificação usa projeção compacta de fatos e limite conservador de 11.000 bytes para caber no teto de 12.000 tokens, incluindo instruções; saída 4.000 tokens, sem retries automáticos do SDK. Um projeto pode tentar duas vezes; a run tem orçamento durável de oito chamadas, janela de 120 segundos e timeout de 30 segundos por chamada.
 
-Leases de 90 segundos, cooldown de cinco minutos, fencing monotônico mesmo após eviction, cache até 1.000 entradas/16 MiB. Registro por instalação agenda purge em lotes de 25 caches. Remoção/suspensão exige evento GitHub assinado. Readição/unsuspend usa nova geração; o cache antigo permanece revogado. Alarms continuam funcionando com a identificação desligada.
+Leases de 90 segundos, cooldown de cinco minutos, fencing monotônico mesmo após eviction, cache até 1.000 entradas/16 MiB. Registro por instalação agenda purge em lotes de 25 caches. Remoção/suspensão exige evento GitHub assinado. Readição/unsuspend usa nova geração; o cache antigo permanece revogado. A identificação integra o workflow padrão sem flag de habilitação; alarms de purge são independentes das execuções de review.
 
 ## Admin e operação
 
-Run detail mostra raízes, tecnologias, valores, tipo de declaração e seletor/arquivo de origem, além dos estados parcial/indisponível/sem registro. Dados são escapados como texto React. O RPC V2 adiciona as versões; V1 continua disponível durante rollout.
+Run detail mostra raízes, tecnologias, valores, tipo de declaração e seletor/arquivo de origem, além dos estados parcial/indisponível/sem registro. Dados são escapados como texto React. O RPC V2 é o único contrato de detalhe; o admin não aceita respostas V1 nem tenta métodos antigos.
 
 [Operação e avaliação](../operations/project-version-identification.md) descrevem ativação, invalidação e validação. Não há serviço de documentação, novo endpoint público de escrita ou valores de onboarding nesta etapa.

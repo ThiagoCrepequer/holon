@@ -14,19 +14,20 @@ describe("AdminReadEntrypoint", () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
     const ping = await entrypoint.pingV1();
     expect(ping).toEqual({ schemaVersion: 1 });
+    expect(entrypoint).not.toHaveProperty("getRunDetailV1");
   });
 
   it("fails fast with strict error if request is invalid", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    await expect(entrypoint.getRunDetailV1({})).rejects.toThrow();
+    await expect(entrypoint.getRunDetailV2({})).rejects.toThrow();
     await expect(
-      entrypoint.getRunDetailV1({ runId: "not-a-valid-run-id" }),
+      entrypoint.getRunDetailV2({ runId: "not-a-valid-run-id" }),
     ).rejects.toThrow();
   });
 
   it("returns null if the run does not exist in the ledger", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    const detail = await entrypoint.getRunDetailV1({ runId: validRunId });
+    const detail = await entrypoint.getRunDetailV2({ runId: validRunId });
     expect(detail).toBeNull();
     expect(await entrypoint.getRunDetailV2({ runId: validRunId })).toBeNull();
   });
@@ -94,15 +95,15 @@ describe("AdminReadEntrypoint", () => {
     });
     await ledger.saveProjectIdentification(validRunId, versions);
 
-    const detail = await entrypoint.getRunDetailV1({ runId: validRunId });
+    const detail = await entrypoint.getRunDetailV2({ runId: validRunId });
     expect(detail).not.toBeNull();
-    expect(detail?.schemaVersion).toBe(1);
+    expect(detail?.schemaVersion).toBe(2);
     expect(detail?.run.runId).toBe(validRunId);
     expect(detail?.run.headSha).toBe(validSha);
     expect(detail?.run.verdict).toBe("APPROVE");
     expect(detail?.currentFindings).toEqual([]);
     expect(detail?.structuredCi).toBeNull();
-    expect(detail).not.toHaveProperty("projectIdentification");
+    expect(detail?.projectIdentification).toEqual(versions);
     expect(
       await entrypoint.getRunDetailV2({ runId: validRunId }),
     ).toMatchObject({

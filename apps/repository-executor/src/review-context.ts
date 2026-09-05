@@ -1,7 +1,7 @@
 import {
-  reviewContextSchema,
-  type ExecutorRequest,
-  type ReviewContext,
+  reviewContextV3Schema,
+  type ExecutorRequestV3,
+  type ReviewContextV3,
   type ReviewFileMode,
   type ReviewPlan,
 } from "@holon/contracts";
@@ -33,7 +33,7 @@ interface ReviewFileCandidate {
 }
 
 export interface ReviewArtifacts {
-  readonly context: ReviewContext;
+  readonly context: ReviewContextV3;
   readonly contextBytes: number;
   readonly fileCount: number;
   readonly plan: ReviewPlan;
@@ -77,12 +77,12 @@ function prioritizeReviewFiles(
   return prioritized;
 }
 
-function serializeBoundedContext(context: ReviewContext): {
-  readonly context: ReviewContext;
+function serializeBoundedContext(context: ReviewContextV3): {
+  readonly context: ReviewContextV3;
   readonly serialized: string;
 } {
   const encode = (changedLineCount: number) => {
-    const candidate = reviewContextSchema.parse({
+    const candidate = reviewContextV3Schema.parse({
       ...context,
       changedLines: context.changedLines.slice(0, changedLineCount),
       truncated:
@@ -120,7 +120,7 @@ function serializeBoundedContext(context: ReviewContext): {
 }
 
 export function buildReviewArtifacts(
-  request: ExecutorRequest,
+  request: ExecutorRequestV3,
   repositoryFiles: readonly {
     readonly content: string;
     readonly path: string;
@@ -128,10 +128,7 @@ export function buildReviewArtifacts(
   repositoryScanTruncated = false,
 ): ReviewArtifacts {
   const diffFiles = splitPullRequestDiff(request.canonicalDiff);
-  const additionalExcludes =
-    request.schemaVersion === 3
-      ? request.effectivePolicy.additionalExcludes
-      : [];
+  const additionalExcludes = request.effectivePolicy.additionalExcludes;
   const policy = serializeReviewScopePolicy(
     createReviewScopePolicy(diffFiles, additionalExcludes),
   );
@@ -204,38 +201,19 @@ export function buildReviewArtifacts(
     repositoryScanTruncated,
   });
 
-  const unboundedContext = reviewContextSchema.parse(
-    request.schemaVersion === 3
-      ? {
-          changedLines,
-          effectivePolicyDigest: request.effectivePolicy.effectivePolicyDigest,
-          files: reviewFiles,
-          policySource: request.effectivePolicy.source,
-          schemaVersion: 3,
-          sourceDigest: request.effectivePolicy.sourceDigest,
-          structuralImpact,
-          surface,
-          truncated,
-          verdictStrictness: request.effectivePolicy.verdictStrictness,
-          waiversCount,
-        }
-      : request.schemaVersion === 2
-        ? {
-            changedLines,
-            files: reviewFiles,
-            schemaVersion: 2,
-            structuralImpact,
-            surface,
-            truncated,
-          }
-        : {
-            changedLines,
-            diff: reviewFiles.map((file) => file.patch).join(""),
-            structuralImpact,
-            surface,
-            truncated,
-          },
-  );
+  const unboundedContext = reviewContextV3Schema.parse({
+    changedLines,
+    effectivePolicyDigest: request.effectivePolicy.effectivePolicyDigest,
+    files: reviewFiles,
+    policySource: request.effectivePolicy.source,
+    schemaVersion: 3,
+    sourceDigest: request.effectivePolicy.sourceDigest,
+    structuralImpact,
+    surface,
+    truncated,
+    verdictStrictness: request.effectivePolicy.verdictStrictness,
+    waiversCount,
+  });
   const { context, serialized } = serializeBoundedContext(unboundedContext);
   const plan = buildReviewPlan(diffFiles, { additionalExcludes });
   return {

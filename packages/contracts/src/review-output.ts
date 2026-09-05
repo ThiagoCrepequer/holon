@@ -1,6 +1,16 @@
 import { z } from "zod";
 
 import {
+  reviewTextLimits,
+  limitReviewText,
+  reviewOutputLimitations,
+  reviewOutputLimitationCodes,
+} from "./review-limits.js";
+export const reviewOutputLimitationsSchema = z
+  .array(z.enum(reviewOutputLimitationCodes))
+  .max(20);
+
+import {
   findingIdSchema,
   positiveIntegerSchema,
   prKeySchema,
@@ -12,15 +22,15 @@ import {
 
 export const reviewFindingSchema = z.strictObject({
   confidence: z.number().min(0).max(1),
-  diagnostic: z.string().trim().min(30).max(600),
+  diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
   evidence: z
     .array(
       z
         .strictObject({
           endLine: positiveIntegerSchema.optional(),
-          excerpt: z.string().min(1).max(300),
+          excerpt: z.string().min(1).max(reviewTextLimits.excerpt),
           path: repositoryPathSchema,
-          reason: z.string().min(1).max(200),
+          reason: z.string().min(1).max(reviewTextLimits.reason),
           startLine: positiveIntegerSchema,
         })
         .refine(
@@ -34,7 +44,7 @@ export const reviewFindingSchema = z.strictObject({
         ),
     )
     .min(1)
-    .max(2),
+    .max(reviewTextLimits.evidence),
   location: z
     .strictObject({
       line: positiveIntegerSchema,
@@ -51,13 +61,19 @@ export const reviewFindingSchema = z.strictObject({
       },
     ),
   severity: z.enum(["critical", "high", "medium", "low"]),
-  suggestion: z.string().trim().min(1).max(800).optional(),
+  suggestion: z
+    .string()
+    .trim()
+    .min(1)
+    .max(reviewTextLimits.suggestion)
+    .optional(),
 });
 
 export const modelReviewOutputSchema = z.strictObject({
-  findings: z.array(reviewFindingSchema).max(3),
+  findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
   isDegraded: z.boolean().optional(),
-  summary: z.string().trim().min(1).max(2_500),
+  summary: z.string().trim().min(1).max(reviewTextLimits.summary),
+  outputLimitations: reviewOutputLimitationsSchema.optional(),
 });
 
 /**
@@ -90,58 +106,33 @@ const resilientConfidence = z.preprocess(
   z.number().min(0).max(1),
 );
 
-const resilientDiagnostic = z.preprocess((val) => {
-  if (typeof val === "string") {
-    const trimmed = val.trim();
-    if (trimmed.length > 600) return `${trimmed.slice(0, 597)}...`;
-    if (trimmed.length < 30) return `${trimmed} (verified during analysis)`;
-    return trimmed;
-  }
-  return val;
-}, z.string().trim().min(30).max(600));
-
+const boundedText = (maximum: number, minimum = 1, marker = "…") =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? limitReviewText(value.trim(), maximum, marker)
+        : value,
+    z.string().min(minimum).max(maximum),
+  );
+const resilientDiagnostic = boundedText(reviewTextLimits.diagnostic, 30);
 const resilientExcerpt = z.preprocess(
-  (val) =>
-    typeof val === "string" && val.length > 300 ? val.slice(0, 300) : val,
-  z.string().min(1).max(300),
+  (value) =>
+    typeof value === "string"
+      ? limitReviewText(value, reviewTextLimits.excerpt, "")
+      : value,
+  z.string().min(1).max(reviewTextLimits.excerpt),
 );
-
-const resilientReason = z.preprocess(
-  (val) =>
-    typeof val === "string" && val.length > 200
-      ? `${val.slice(0, 197)}...`
-      : val,
-  z.string().min(1).max(200),
+const resilientReason = boundedText(reviewTextLimits.reason);
+const resilientSuggestion = z.preprocess(
+  (value) =>
+    typeof value === "string"
+      ? value.trim()
+        ? limitReviewText(value.trim(), reviewTextLimits.suggestion)
+        : null
+      : value,
+  z.string().min(1).max(reviewTextLimits.suggestion).nullable(),
 );
-
-const resilientSuggestion = z.preprocess((val) => {
-  if (typeof val === "string") {
-    const trimmed = val.trim();
-    if (trimmed.length === 0) return null;
-    if (trimmed.length > 800) return `${trimmed.slice(0, 797)}...`;
-    return trimmed;
-  }
-  return val;
-}, z.string().trim().min(1).max(800).nullable());
-
-const resilientSummary = z.preprocess((val) => {
-  if (typeof val === "string") {
-    const trimmed = val.trim();
-    if (trimmed.length > 2_500) {
-      const slice = trimmed.slice(0, 2_497);
-      const lastBreak = Math.max(
-        slice.lastIndexOf(". "),
-        slice.lastIndexOf("\n"),
-      );
-      if (lastBreak > 2_000) {
-        return `${slice.slice(0, lastBreak + 1)}...`;
-      }
-      return `${slice}...`;
-    }
-    return trimmed;
-  }
-  return val;
-}, z.string().trim().min(1).max(2_500));
+const resilientSummary = boundedText(reviewTextLimits.summary);
 
 const resilientSeverity = z.preprocess(
   (val) => (typeof val === "string" ? val.toLowerCase().trim() : val),
@@ -154,10 +145,11 @@ const resilientSeverity = z.preprocess(
  * preprocessors ensure minor LLM output imperfections (length, extra fields, string numbers)
  * are gracefully sanitized rather than failing the review.
  */
-export const modelReviewTransportSchema = z
+const reviewTransportFields = z
   .object({
     findings: z.preprocess(
-      (val) => (Array.isArray(val) ? val.slice(0, 3) : []),
+      (val) =>
+        Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : [],
       z
         .array(
           z
@@ -165,7 +157,10 @@ export const modelReviewTransportSchema = z
               confidence: resilientConfidence,
               diagnostic: resilientDiagnostic,
               evidence: z.preprocess(
-                (val) => (Array.isArray(val) ? val.slice(0, 2) : []),
+                (val) =>
+                  Array.isArray(val)
+                    ? val.slice(0, reviewTextLimits.evidence)
+                    : [],
                 z
                   .array(
                     z
@@ -179,7 +174,7 @@ export const modelReviewTransportSchema = z
                       .strip(),
                   )
                   .min(1)
-                  .max(2),
+                  .max(reviewTextLimits.evidence),
               ),
               location: z
                 .object({
@@ -194,15 +189,29 @@ export const modelReviewTransportSchema = z
             })
             .strip(),
         )
-        .max(3),
+        .max(reviewTextLimits.findings),
     ),
     isDegraded: z.boolean().optional(),
     summary: resilientSummary,
+    outputLimitations: reviewOutputLimitationsSchema.optional(),
   })
   .strip();
 
+export const modelReviewTransportSchema = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null) return value;
+  return { ...value, outputLimitations: reviewOutputLimitations(value) };
+}, reviewTransportFields);
+
 export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
-  const transport = modelReviewTransportSchema.parse(value);
+  return modelReviewOutputFromTransport(
+    modelReviewTransportSchema.parse(value),
+  );
+}
+
+export function modelReviewOutputFromTransport(
+  raw: z.output<typeof modelReviewTransportSchema>,
+): ModelReviewOutput {
+  const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
     findings: transport.findings.map((finding) => ({
       ...finding,
@@ -222,6 +231,10 @@ export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
       ? { isDegraded: transport.isDegraded }
       : {}),
     summary: transport.summary,
+    ...(transport.outputLimitations?.length ? { isDegraded: true } : {}),
+    ...(transport.outputLimitations?.length
+      ? { outputLimitations: transport.outputLimitations }
+      : {}),
   });
 }
 

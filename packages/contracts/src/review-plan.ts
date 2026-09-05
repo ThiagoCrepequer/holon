@@ -6,6 +6,8 @@ import {
   reviewSurfaceSchema,
 } from "./executor.js";
 import { reconciliationSummarySchema } from "./finding-lifecycle.js";
+import { reviewTextLimits } from "./review-limits.js";
+import { reviewOutputLimitationsSchema } from "./review-output.js";
 import { reviewFindingSchema } from "./review-output.js";
 import {
   reviewVerdictDetailsSchema,
@@ -44,10 +46,11 @@ export const shardReviewResultSchema = z.strictObject({
   errorReason: z.string().optional(),
   findings: z.array(reviewFindingSchema),
   isDegraded: z.boolean().optional(),
+  outputLimitations: reviewOutputLimitationsSchema.optional(),
   shardId: z.string().min(1).max(100),
   shardIndex: z.number().int().nonnegative(),
   status: z.enum(["success", "failure"]),
-  summary: z.string().trim().max(4_000),
+  summary: z.string().trim().max(reviewTextLimits.summary),
 });
 
 export const aggregatedReviewResultSchema = z.strictObject({
@@ -56,7 +59,7 @@ export const aggregatedReviewResultSchema = z.strictObject({
   omissionReasons: z.array(z.string().min(1).max(300)),
   scopeStatus: reviewScopeStatusSchema,
   shardsAnalyzed: z.number().int().nonnegative(),
-  summary: z.string().trim().max(8_000),
+  summary: z.string().trim().max(reviewTextLimits.publicationSummary),
   totalShards: z.number().int().nonnegative(),
   reconciliation: reconciliationSummarySchema.optional(),
   verdict: reviewVerdictSchema.optional(),

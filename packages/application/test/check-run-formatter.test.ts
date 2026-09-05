@@ -191,7 +191,7 @@ describe("check-run-formatter", () => {
       summary: "Summary text",
     });
     expect(outputWithImpact.summary).toContain(
-      "- **Structural Impact**: 1 symbol(s) modified, 1 downstream reference(s), ⚠️ 1 contract break(s), 1 test gap(s)",
+      "- **Structural Impact**: 1 symbol(s) modified, 1 downstream reference(s), ⚠️ 1 contract investigation lead(s), 1 test gap(s)",
     );
 
     const outputWithFallbackCount = formatCheckRunOutput({

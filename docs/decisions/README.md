@@ -40,7 +40,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0022](0022-adopt-deterministic-structural-analyzers.md)                          | Adotar analisadores estruturais determinísticos em duas camadas            | `superseded` | 2026-09-03 |
 | [ADR-0023](0023-adopt-cloudflare-native-operational-reliability-and-observability.md) | Adotar confiabilidade operacional e observabilidade nativa Cloudflare      | `accepted`   | 2026-09-03 |
 | [ADR-0024](0024-persist-canonical-review-decision-for-feedback.md)                    | Persistir a decisão canônica da review para feedback                       | `accepted`   | 2026-09-03 |
-| [ADR-0025](0025-bound-structural-analysis-and-promote-verifiable-findings.md)         | Limitar análise estrutural e promover findings verificáveis                | `accepted`   | 2026-09-03 |
+| [ADR-0025](0025-bound-structural-analysis-and-promote-verifiable-findings.md)         | Limitar análise estrutural e promover findings verificáveis                | `superseded` | 2026-09-03 |
 | [ADR-0026](0026-centralize-github-app-keyring-and-enable-zero-downtime-rotation.md)   | Centralizar keyring do GitHub App e habilitar rotação de chave             | `accepted`   | 2026-09-03 |
 | [ADR-0027](0027-actively-supersede-obsolete-review-workflows.md)                      | Cancelar ativamente Workflows de review causalmente obsoletos              | `accepted`   | 2026-09-03 |
 | [ADR-0028](0028-adopt-declarative-repository-policy.md)                               | Adotar configuração declarativa por repositório com ancoragem na base      | `accepted`   | 2026-09-03 |
@@ -57,3 +57,9 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - Opções rejeitadas e consequências negativas são parte obrigatória da decisão.
 - Critérios de confirmação dizem como verificar se a decisão funcionou.
 - Use [o template de ADR](../templates/decision.md).
+
+- [ADR-0031 — Identificação de versões como comportamento padrão](0031-always-identify-project-versions.md)
+
+- [ADR-0032 — Exigir contratos RPC atuais](0032-require-current-rpc-contracts.md)
+
+- [ADR-0033 — Investigar sinais estruturais e preservar saída](0033-investigate-structural-leads-and-preserve-review-output.md)

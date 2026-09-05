@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import { reviewFindingSchema } from "./review-output.js";
 import { positiveIntegerSchema, repositoryPathSchema } from "./shared.js";
 
 export const changedSymbolKindSchema = z.enum([
@@ -92,7 +91,6 @@ export const structuralImpactReportSchema = z.strictObject({
   changedSymbols: z.array(changedSymbolSchema).max(100),
   contractBreaks: z.array(contractBreakSignalSchema).max(50),
   downstreamReferences: z.array(downstreamReferenceSchema).max(100),
-  deterministicFindings: z.array(reviewFindingSchema).max(50).optional(),
   repositoryScanTruncated: z.boolean().optional(),
   securitySurfaces: z.array(securitySurfaceSignalSchema).max(50),
   testGaps: z.array(testGapSignalSchema).max(50),
