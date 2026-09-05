@@ -39,6 +39,11 @@ export interface ModelReviewer {
     job: ReviewJob,
     input: {
       readonly shardSummaries: readonly string[];
+      readonly verifiedFindings: readonly {
+        diagnostic: string;
+        severity: string;
+        path: string;
+      }[];
     },
   ): Promise<string>;
 }

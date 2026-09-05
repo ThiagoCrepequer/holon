@@ -1234,7 +1234,8 @@ describe("ReviewLedgerObject", () => {
     await ledger.savePrFindings(testPrKey, [
       {
         diagnostic:
-          "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890",
+          "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890 " +
+          "界".repeat(1500),
         filePath: "src/api.ts",
         fingerprint:
           "fp:1111111111111111111111111111111111111111111111111111111111111111",
@@ -1257,6 +1258,7 @@ describe("ReviewLedgerObject", () => {
     const firstFinding = detail?.currentFindings[0];
     expect(firstFinding?.diagnostic).not.toContain("\u001b");
     expect(firstFinding?.diagnostic).not.toContain("ghp_secret");
+    expect(firstFinding?.diagnostic).toContain("界".repeat(1500));
   });
 
   it("returns null in getSanitizedAdminRunDetailV2 when run telemetry does not exist", async () => {

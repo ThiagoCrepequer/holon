@@ -27,7 +27,14 @@ export interface ReviewPromptResult {
 
 export interface ReviewGenerator {
   generate(request: ReviewGenerationRequest): Promise<unknown>;
-  synthesizeSummary?(summaries: readonly string[]): Promise<string>;
+  synthesizeSummary?(
+    summaries: readonly string[],
+    verifiedFindings?: readonly {
+      diagnostic: string;
+      severity: string;
+      path: string;
+    }[],
+  ): Promise<string>;
 }
 
 export interface RepositoryToolResult {
@@ -86,7 +93,7 @@ export const reviewInstructions = [
   "Only anchor findings to the supplied changed lines on the RIGHT side.",
   "When no RIGHT-side changed line is available, return no findings and describe only proven deletion or metadata risks in the summary.",
   "Silence is correct when evidence is insufficient.",
-  "Return at most the three highest-confidence findings.",
+  "Return at most eight highest-confidence findings. Structural hints are investigation leads, not proven defects. A removed export or destructive SQL statement alone is not a bug: verify affected consumers, migrations and supported contracts at the final snapshot. A partial scan cannot prove absence of consumers. Never assign severity from a structural hint alone.",
 ].join("\n");
 
 function compactChangedLineRanges(
@@ -257,10 +264,18 @@ export class GatewayModelReviewer implements ModelReviewer {
     _job: ReviewJob,
     input: {
       readonly shardSummaries: readonly string[];
+      readonly verifiedFindings: readonly {
+        diagnostic: string;
+        severity: string;
+        path: string;
+      }[];
     },
   ): Promise<string> {
     if (this.generator.synthesizeSummary !== undefined) {
-      return await this.generator.synthesizeSummary(input.shardSummaries);
+      return await this.generator.synthesizeSummary(
+        input.shardSummaries,
+        input.verifiedFindings,
+      );
     }
     return input.shardSummaries.join("\n\n");
   }

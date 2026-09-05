@@ -7,6 +7,7 @@ import {
   findingStatusSchema,
 } from "./finding-lifecycle.js";
 import { projectIdentificationResultV1Schema } from "./project-identification.js";
+import { reviewTextLimits } from "./review-limits.js";
 import { reviewScopeStatusSchema } from "./review-plan.js";
 import { reviewVerdictSchema } from "./review-verdict.js";
 import {
@@ -26,7 +27,7 @@ import {
 const nonNegativeSafeIntegerSchema = z.number().int().nonnegative().safe();
 
 export const adminFindingSummaryV1Schema = z.strictObject({
-  diagnostic: z.string().min(1).max(512),
+  diagnostic: z.string().min(1).max(reviewTextLimits.diagnostic),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
   line: positiveIntegerSchema,

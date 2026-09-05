@@ -228,38 +228,133 @@ describe("analyzeReview", () => {
     expect(ensureContext).toHaveBeenCalledWith(2, effectivePolicy);
   });
 
-  it("handles synthesizeReviewSummary failure gracefully when reviewing multiple shards", async () => {
-    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
-    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
+  it.each([true, false])(
+    "publishes synthesis or a safe fallback without marking sharding as truncation (failure=%s)",
+    async (failure) => {
+      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
+      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
 
-    const v2Context: ReviewContextV2 = {
-      changedLines: [
-        { line: 1, path: "src/a.ts", side: "RIGHT" },
-        { line: 1, path: "src/b.ts", side: "RIGHT" },
-      ],
-      files: [
-        { mode: "structural", patch: largePatch1, path: "src/a.ts" },
-        { mode: "structural", patch: largePatch2, path: "src/b.ts" },
-      ],
-      schemaVersion: 2,
-      truncated: false,
-    };
+      const v2Context: ReviewContextV2 = {
+        changedLines: [
+          { line: 1, path: "src/a.ts", side: "RIGHT" },
+          { line: 1, path: "src/b.ts", side: "RIGHT" },
+        ],
+        files: [
+          { mode: "structural", patch: largePatch1, path: "src/a.ts" },
+          { mode: "structural", patch: largePatch2, path: "src/b.ts" },
+        ],
+        schemaVersion: 2,
+        truncated: false,
+      };
 
-    const emit = vi.fn();
-    const services = createMockServices(v2Context);
-    (
-      services.model as unknown as {
-        synthesizeReviewSummary?: () => Promise<string>;
-      }
-    ).synthesizeReviewSummary = vi
-      .fn()
-      .mockRejectedValue(new Error("Synthesis failed"));
+      const emit = vi.fn();
+      const services = createMockServices(v2Context);
+      (
+        services.model as unknown as {
+          synthesizeReviewSummary?: () => Promise<string>;
+        }
+      ).synthesizeReviewSummary = failure
+        ? vi.fn().mockRejectedValue(new Error("Synthesis failed"))
+        : vi.fn().mockResolvedValue("Authoritative unified summary.");
 
-    const result = await analyzeReview(job, services, emit);
-    expect(result.policySource).toBe("default");
-    expect(result.waiversCount).toBe(0);
-    expect(result.verdict).toBe("APPROVE");
-  });
+      const result = await analyzeReview(job, services, emit);
+      expect(result.policySource).toBe("default");
+      expect(result.waiversCount).toBe(0);
+      expect(result.verdict).toBe("APPROVE");
+      if (!failure)
+        expect(result.summary).toContain("Authoritative unified summary.");
+      expect(result.summary).not.toContain("input_context_omitted");
+      expect(
+        emit.mock.calls.some(([event]) => event === "model.output_limits"),
+      ).toBe(false);
+    },
+  );
+
+  it.each([true, false])(
+    "keeps loss diagnostics and structural leads without automatic findings (input omitted=%s)",
+    async (inputOmitted) => {
+      const context: ReviewContextV2 = {
+        schemaVersion: 2,
+        truncated: inputOmitted,
+        files: [
+          { mode: "structural", path: "src/index.ts", patch: canonicalPatch },
+        ],
+        changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+        structuralImpact: {
+          changedSymbols: [
+            {
+              path: "src/index.ts",
+              name: "oldExport",
+              change: "deleted",
+              isExported: true,
+              kind: "constant",
+              line: 10,
+            },
+          ],
+          contractBreaks: [
+            {
+              path: "src/index.ts",
+              line: 10,
+              kind: "exported_symbol_removed",
+              severity: "critical",
+              description: "Removed export",
+            },
+          ],
+          downstreamReferences: [
+            {
+              targetPath: "src/index.ts",
+              callerPath: "src/consumer.ts",
+              callerLine: 1,
+              symbolName: "oldExport",
+              excerpt: "oldExport",
+            },
+          ],
+          securitySurfaces: [
+            {
+              path: "src/index.ts",
+              line: 10,
+              kind: "network_egress",
+              excerpt: "return null;",
+            },
+          ],
+          testGaps: [
+            {
+              sourcePath: "src/index.ts",
+              reason: "no_test_file_modified",
+              expectedTestPathPattern: "*.test.ts",
+            },
+          ],
+          repositoryScanTruncated: true,
+        },
+      };
+      const services = createMockServices(context);
+      const review = vi.fn().mockResolvedValue({
+        output: {
+          findings: [],
+          summary: "No consumer regression proven",
+          isDegraded: !inputOmitted,
+          outputLimitations: inputOmitted ? [] : ["summary_truncated"],
+        },
+        promptTruncated: inputOmitted,
+      });
+      services.model.review = review;
+      const emit = vi.fn();
+      const result = await analyzeReview(job, services, emit);
+      expect(result.findings).toHaveLength(0);
+      expect(result.verdict).toBe("COMMENT");
+      expect(result.summary).toContain(
+        inputOmitted ? "input_context_omitted" : "summary_truncated",
+      );
+      expect(review.mock.calls[0]?.[1]).toMatchObject({
+        truncated: inputOmitted,
+        structuralImpact: context.structuralImpact,
+      });
+      expect(emit).toHaveBeenCalledWith(
+        "model.output_limits",
+        expect.objectContaining({ inputContextOmitted: inputOmitted }),
+      );
+    },
+  );
 
   it("throws when all review shards fail in a multi-shard review", async () => {
     const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;

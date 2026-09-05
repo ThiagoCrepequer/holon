@@ -26,7 +26,8 @@ import {
   runTelemetrySchema,
   runTransitionSchema,
   timestampSchema,
-  truncateUtf8Bytes,
+  limitReviewText,
+  reviewTextLimits,
   type AdminCiSummaryV1,
   type AdminRunDetailV2,
   type AdminRunProjectionEventV1,
@@ -65,7 +66,10 @@ function sanitizeDiagnostic(raw: string): string {
   );
   const redacted = redactSecrets(noControls);
   const trimmed = redacted.trim();
-  return truncateUtf8Bytes(trimmed || "Diagnostic details unavailable", 512);
+  return limitReviewText(
+    trimmed || "Diagnostic details unavailable",
+    reviewTextLimits.diagnostic,
+  );
 }
 /* eslint-enable no-control-regex */
 

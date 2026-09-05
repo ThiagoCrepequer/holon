@@ -554,7 +554,11 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({ instructions: "system", prompt: "prompt" }),
-    ).resolves.toEqual(output);
+    ).resolves.toEqual({
+      ...output,
+      isDegraded: true,
+      outputLimitations: ["generation_length"],
+    });
     expect(sdk.generateText).toHaveBeenCalledTimes(3);
     const recovery = sdk.generateText.mock.calls[2]?.[0] as {
       readonly instructions: string;
@@ -825,7 +829,7 @@ describe("model review boundary", () => {
     });
   });
 
-  it("gracefully degrades to investigation summary when object generation fails semantically", async () => {
+  it("reports finalization failure without publishing investigation prose", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     const generator = new AiSdkReviewGenerator(
@@ -860,11 +864,13 @@ describe("model review boundary", () => {
     expect(result).toEqual({
       findings: [],
       isDegraded: true,
-      summary: "Investigation found no major flaws in the implementation.",
+      outputLimitations: ["finalization_failed"],
+      summary:
+        "Review finalization failed after recovery. Findings from the unfinished investigation were not published; this review is incomplete.",
     });
   });
 
-  it("extracts candidate findings from investigation text during degradation", async () => {
+  it("does not infer publishable findings from raw investigation prose during degradation", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     const generator = new AiSdkReviewGenerator(
@@ -899,7 +905,7 @@ describe("model review boundary", () => {
     expect(result.findings).toEqual([]);
   });
 
-  it("truncates long investigation summary gracefully during degradation", async () => {
+  it("does not publish long unfinished investigation during degradation", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     const generator = new AiSdkReviewGenerator(
@@ -933,7 +939,8 @@ describe("model review boundary", () => {
 
     expect(result.isDegraded).toBe(true);
     expect(result.summary.length).toBeLessThanOrEqual(2500);
-    expect(result.summary.endsWith("...")).toBe(true);
+    expect(result.summary).not.toContain("Sentence one.");
+    expect(result.summary).toContain("finalization failed");
   });
 
   it("synthesizes multi-shard review summaries via LLM when multiple summaries exist", async () => {
@@ -968,7 +975,7 @@ describe("model review boundary", () => {
     expect(single).toBe("Only one shard.");
   });
 
-  it("falls back gracefully to joined summaries if synthesizeSummary fails", async () => {
+  it("reports unavailable synthesis instead of concatenating conflicting shard summaries", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.model.mockReturnValue({ modelId: "dynamic/pr-review" });
     const generator = new AiSdkReviewGenerator(
@@ -988,6 +995,95 @@ describe("model review boundary", () => {
       "Shard 2 summary",
     ]);
 
-    expect(fallback).toBe("Shard 1 summary\n\nShard 2 summary");
+    expect(fallback).toContain("Narrative synthesis was unavailable");
+  });
+});
+
+describe("review loss diagnostics", () => {
+  it.each(["length", "tool-calls"])(
+    "retains investigation %s and cumulative usage through redaction",
+    async (finishReason) => {
+      sdk.createProvider.mockReturnValue(sdk.model);
+      sdk.generateText
+        .mockResolvedValueOnce({
+          finishReason,
+          text: "Investigation notes",
+          toolCalls: [],
+          steps: [{ toolCalls: [{}] }, { toolCalls: [{}, {}] }],
+          usage: { inputTokens: 1 },
+          totalUsage: { inputTokens: 300, outputTokens: 100, totalTokens: 400 },
+        })
+        .mockResolvedValueOnce({ finishReason: "stop", output, toolCalls: [] });
+      const usages: unknown[] = [];
+      const generator = new AiSdkReviewGenerator(
+        {
+          accountId: "account",
+          apiToken: "token",
+          gatewayId: "holon",
+          model: "dynamic/pr-review",
+        },
+        { run: async () => ({ content: "", truncated: false }) },
+        (usage) => usages.push(usage),
+      );
+      const result = redactModelReviewOutput(
+        (await generator.generate({
+          instructions: "system",
+          prompt: "prompt",
+        })) as ModelReviewOutput,
+      );
+      expect(result.isDegraded).toBe(true);
+      expect(result.outputLimitations).toContain(
+        finishReason === "length"
+          ? "generation_length"
+          : "investigation_incomplete",
+      );
+      expect(usages[0]).toMatchObject({
+        inputTokens: 300,
+        outputTokens: 100,
+        totalTokens: 400,
+        toolCallCount: 3,
+      });
+    },
+  );
+  it("records bounded failure metadata without publishing unfinished prose", async () => {
+    sdk.createProvider.mockReturnValue(sdk.model);
+    const error = Object.assign(new Error("private error detail"), {
+      name: "AI_NoObjectGeneratedError",
+      finishReason: "length",
+      usage: { inputTokens: -1, outputTokens: 8192, totalTokens: "invalid" },
+    });
+    sdk.generateText
+      .mockResolvedValueOnce({
+        text: "Unverified accusation from investigation",
+        finishReason: "stop",
+      })
+      .mockRejectedValue(error);
+    const usages: unknown[] = [];
+    const generator = new AiSdkReviewGenerator(
+      {
+        accountId: "account",
+        apiToken: "token",
+        gatewayId: "holon",
+        model: "dynamic/pr-review",
+      },
+      { run: async () => ({ content: "", truncated: false }) },
+      (usage) => usages.push(usage),
+    );
+    const result = (await generator.generate({
+      instructions: "system",
+      prompt: "prompt",
+    })) as ModelReviewOutput;
+    expect(result.summary).not.toContain("Unverified accusation");
+    expect(result.outputLimitations).toEqual([
+      "generation_length",
+      "finalization_failed",
+    ]);
+    expect(usages[1]).toMatchObject({
+      finishReason: "length",
+      inputTokens: undefined,
+      outputTokens: 8192,
+      totalTokens: undefined,
+    });
+    expect(JSON.stringify(usages)).not.toContain("private error detail");
   });
 });

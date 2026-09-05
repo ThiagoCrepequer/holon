@@ -64,6 +64,12 @@ export function redactModelReviewOutput(
   output: ModelReviewOutput,
 ): ModelReviewOutput {
   return {
+    ...(output.isDegraded !== undefined
+      ? { isDegraded: output.isDegraded }
+      : {}),
+    ...(output.outputLimitations?.length
+      ? { outputLimitations: output.outputLimitations }
+      : {}),
     findings: output.findings.map((finding) => ({
       ...finding,
       diagnostic: redactSecrets(finding.diagnostic),

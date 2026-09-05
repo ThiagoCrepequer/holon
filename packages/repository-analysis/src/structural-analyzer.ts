@@ -7,7 +7,6 @@ import {
   type DownstreamTracerOptions,
 } from "./downstream-tracer.js";
 import { detectSecuritySurfaces } from "./security-surface-detector.js";
-import { contractBreaksToFindings } from "./structural-findings.js";
 import { extractChangedSymbols } from "./symbol-extractor.js";
 import { detectTestGaps } from "./test-gap-detector.js";
 
@@ -39,15 +38,10 @@ export function analyzeStructuralImpact(
   );
   const testGaps = detectTestGaps(input.changedFiles);
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);
-  const deterministicFindings = contractBreaksToFindings(
-    contractBreaks,
-    input.changedFiles,
-  );
 
   return {
     changedSymbols: changedSymbols.slice(0, 100),
     contractBreaks: contractBreaks.slice(0, 50),
-    deterministicFindings: deterministicFindings.slice(0, 50),
     downstreamReferences: downstream.references.slice(0, 100),
     repositoryScanTruncated: input.repositoryScanTruncated ?? false,
     securitySurfaces: securitySurfaces.slice(0, 50),

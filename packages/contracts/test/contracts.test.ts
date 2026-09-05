@@ -833,14 +833,14 @@ describe("model output and publication ledger", () => {
       findings: [
         {
           confidence: "0.85",
-          diagnostic: "Too short", // < 30 chars, should be padded
+          diagnostic: "A causal explanation of a verified regression.",
           evidence: [
             {
               endLine: "10", // string number
-              excerpt: "e".repeat(350), // > 300 chars, should be clamped
+              excerpt: "e".repeat(350), // preserved under the larger limit
               extraEvidenceField: 123,
               path: "src/file.ts",
-              reason: "r".repeat(250), // > 200 chars, should be clamped
+              reason: "r".repeat(250), // preserved under the larger limit
               startLine: "5", // string number
             },
             {
@@ -852,7 +852,7 @@ describe("model output and publication ledger", () => {
             },
             {
               endLine: null,
-              excerpt: "third evidence", // > 2 evidences, should be sliced
+              excerpt: "third evidence", // retained under the larger evidence budget
               path: "src/file.ts",
               reason: "third reason",
               startLine: 30,
@@ -869,18 +869,18 @@ describe("model output and publication ledger", () => {
           suggestion: "   ", // empty whitespace, should become null
         },
       ],
-      summary: "s".repeat(2700), // > 2500 chars, should be clamped
+      summary: "s".repeat(2700), // retained under the larger summary budget
     };
 
     const parsed = modelReviewTransportSchema.parse(rawImperfection);
-    expect(parsed.summary.length).toBe(2500);
-    expect(parsed.summary.endsWith("...")).toBe(true);
+    expect(parsed.summary.length).toBe(2700);
+    expect(parsed.summary).toBe(rawImperfection.summary);
     const firstFinding = parsed.findings[0]!;
     const firstEvidence = firstFinding.evidence[0]!;
     expect(firstFinding.diagnostic.length).toBeGreaterThanOrEqual(30);
-    expect(firstFinding.evidence.length).toBe(2);
-    expect(firstEvidence.excerpt.length).toBe(300);
-    expect(firstEvidence.reason.length).toBe(200);
+    expect(firstFinding.evidence.length).toBe(3);
+    expect(firstEvidence.excerpt.length).toBe(350);
+    expect(firstEvidence.reason.length).toBe(250);
     expect(firstEvidence.startLine).toBe(5);
     expect(firstEvidence.endLine).toBe(10);
     expect(firstFinding.location.line).toBe(5);
@@ -896,22 +896,24 @@ describe("model output and publication ledger", () => {
   it("keeps the largest valid model result below the Workflow step limit", () => {
     const maximumFinding = {
       confidence: 1,
-      diagnostic: "d".repeat(600),
-      evidence: Array.from({ length: 2 }, () => ({
-        excerpt: "e".repeat(300),
+      diagnostic: "界".repeat(2000),
+      evidence: Array.from({ length: 4 }, () => ({
+        excerpt: "界".repeat(1200),
         path: "p".repeat(1_024),
-        reason: "r".repeat(200),
+        reason: "界".repeat(600),
         startLine: 1,
       })),
       location: { line: 1, path: "p".repeat(1_024), side: "RIGHT" },
       severity: "critical",
-      suggestion: "s".repeat(800),
+      suggestion: "界".repeat(3000),
     };
     const maximumOutput = modelReviewOutputSchema.parse({
-      findings: Array.from({ length: 3 }, () => maximumFinding),
-      summary: "s".repeat(2500),
+      findings: Array.from({ length: 8 }, () => maximumFinding),
+      summary: "界".repeat(10000),
     });
-    expect(JSON.stringify(maximumOutput).length).toBeLessThan(1_000_000);
+    expect(
+      new TextEncoder().encode(JSON.stringify(maximumOutput)).byteLength,
+    ).toBeLessThan(1_000_000);
   });
 
   it("parses isDegraded flag when present in model review output", () => {

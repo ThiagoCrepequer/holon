@@ -235,7 +235,6 @@ describe("RepositoryExecutorService", () => {
       structuralImpact: {
         changedSymbols: [],
         contractBreaks: [],
-        deterministicFindings: [],
         downstreamReferences: [],
         repositoryScanTruncated: false,
         securitySurfaces: [],

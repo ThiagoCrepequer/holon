@@ -9,6 +9,7 @@ import {
 
 import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
 import type { ReviewContext } from "./ports.js";
+import { fitPublicationSummary } from "./publication-summary.js";
 
 export function createReviewRun(job: ReviewJob): ReviewRun {
   return {
@@ -53,18 +54,12 @@ export function selectValidFindings(
   return selectFindingsWithCanonicalEvidence(candidates, context);
 }
 
-function limitSummary(value: string, maximumCodePoints = 4_000): string {
-  const characters = Array.from(value);
-  if (characters.length <= maximumCodePoints) return value;
-  return `${characters.slice(0, maximumCodePoints - 1).join("")}…`;
-}
-
 export function composeReviewSummary(
   summary: string,
   findings: readonly Finding[],
   partial: boolean,
 ): string {
-  const sections = [summary];
+  const sections: string[] = [];
   if (partial) {
     sections.push(
       "Partial review: at least one eligible patch or context section was omitted by a deterministic host budget.",
@@ -81,5 +76,5 @@ export function composeReviewSummary(
       ].join("\n"),
     );
   }
-  return limitSummary(sections.join("\n\n"));
+  return fitPublicationSummary("", summary, sections.join("\n\n"));
 }
