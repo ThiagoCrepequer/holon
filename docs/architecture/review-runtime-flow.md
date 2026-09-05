@@ -234,3 +234,7 @@ Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
   de cleanup na mesma transação; alarm repete sem substituir o erro causal.
 - Checkout transitório: destruir o Sandbox imediatamente e repetir uma vez;
   checkout permanente: destruir e falhar sem repetição.
+
+## Identificação de versões (2026-09-05)
+
+A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.

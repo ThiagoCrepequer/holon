@@ -103,3 +103,7 @@ Fontes verificadas em 2026-08-31:
 
 - [OpenAI model selection and evaluation](https://developers.openai.com/api/docs/guides/latest-model)
 - [Cloudflare dynamic routes](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/)
+
+## Identificação de versões (2026-09-05)
+
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
