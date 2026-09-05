@@ -244,7 +244,7 @@ describe("apps/admin router and server-side rendered views", () => {
 
     const mockRpcFail = {
       pingV1: vi.fn(),
-      getRunDetailV1: vi.fn().mockRejectedValue(new Error("RPC timeout")),
+      getRunDetailV2: vi.fn().mockRejectedValue(new Error("RPC timeout")),
     };
 
     const envWithRpc = {
@@ -271,8 +271,9 @@ describe("apps/admin router and server-side rendered views", () => {
 
     const mockRpcSuccess: AdminReadRpcClient = {
       pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-      getRunDetailV1: vi.fn().mockResolvedValue({
-        schemaVersion: 1,
+      getRunDetailV2: vi.fn().mockResolvedValue({
+        schemaVersion: 2,
+        projectIdentification: null,
         findingsPerspective: "current_pr_state",
         currentFindings: [
           {
@@ -322,7 +323,7 @@ describe("apps/admin router and server-side rendered views", () => {
       }),
     };
 
-    const candidate = await mockRpcSuccess.getRunDetailV1({
+    const candidate = await mockRpcSuccess.getRunDetailV2({
       runId: event.payload.runId,
     });
     const parsed = parseRpcRunDetail(candidate);

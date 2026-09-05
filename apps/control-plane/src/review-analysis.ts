@@ -161,13 +161,11 @@ export async function analyzeReview(
     });
 
     const verdictPolicy =
-      context.schemaVersion === 3 &&
       context.verdictStrictness === "block_all_confident_medium"
         ? { mediumSeverityThreshold: 1 }
         : undefined;
 
-    const policyExcludedFilesCount =
-      context.schemaVersion === 3 ? context.waiversCount : 0;
+    const policyExcludedFilesCount = context.waiversCount;
     const plan = buildReviewPlan(
       context.files.map((file) => ({
         changeType: "modified" as const,
@@ -186,15 +184,12 @@ export async function analyzeReview(
           context.schemaVersion === 3
             ? context.effectivePolicyDigest
             : undefined,
-        policySource:
-          context.schemaVersion === 3 ? context.policySource : undefined,
+        policySource: context.policySource,
         resolvedFindings: [],
-        sourceDigest:
-          context.schemaVersion === 3 ? context.sourceDigest : undefined,
+        sourceDigest: context.sourceDigest,
         structuralImpact: context.structuralImpact,
         updatedTrackedFindings: [],
-        waiversCount:
-          context.schemaVersion === 3 ? context.waiversCount : undefined,
+        waiversCount: context.waiversCount,
       };
     }
 
@@ -270,17 +265,13 @@ export async function analyzeReview(
     return {
       ...finalAggregated,
       activeFindings: reconciled.activeFindings,
-      effectivePolicyDigest:
-        context.schemaVersion === 3 ? context.effectivePolicyDigest : undefined,
-      policySource:
-        context.schemaVersion === 3 ? context.policySource : undefined,
+      effectivePolicyDigest: context.effectivePolicyDigest,
+      policySource: context.policySource,
       resolvedFindings: reconciled.resolvedFindings,
-      sourceDigest:
-        context.schemaVersion === 3 ? context.sourceDigest : undefined,
+      sourceDigest: context.sourceDigest,
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
-      waiversCount:
-        context.schemaVersion === 3 ? context.waiversCount : undefined,
+      waiversCount: context.waiversCount,
     };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);

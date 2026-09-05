@@ -1202,7 +1202,7 @@ describe("ReviewLedgerObject", () => {
     expect(proj?.state).toMatch(/^(completed|pending|processing)$/);
   });
 
-  it("sanitizes diagnostic in getSanitizedAdminRunDetailV1", async () => {
+  it("sanitizes diagnostic in getSanitizedAdminRunDetailV2", async () => {
     const testPrKey = "github:42:pr:7" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const testRunId = `github:42:pr:7:head:${"f".repeat(40)}` as RunId;
@@ -1250,7 +1250,7 @@ describe("ReviewLedgerObject", () => {
       },
     ]);
 
-    const detail = await ledger.getSanitizedAdminRunDetailV1(testRunId);
+    const detail = await ledger.getSanitizedAdminRunDetailV2(testRunId);
     expect(detail).not.toBeNull();
     expect(detail?.run.runId).toBe(testRunId);
     expect(detail?.currentFindings).toHaveLength(1);
@@ -1259,16 +1259,16 @@ describe("ReviewLedgerObject", () => {
     expect(firstFinding?.diagnostic).not.toContain("ghp_secret");
   });
 
-  it("returns null in getSanitizedAdminRunDetailV1 when run telemetry does not exist", async () => {
+  it("returns null in getSanitizedAdminRunDetailV2 when run telemetry does not exist", async () => {
     const testPrKey = "github:42:pr:7" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const missingRunId = `github:42:pr:7:head:${"0".repeat(40)}` as RunId;
 
-    const detail = await ledger.getSanitizedAdminRunDetailV1(missingRunId);
+    const detail = await ledger.getSanitizedAdminRunDetailV2(missingRunId);
     expect(detail).toBeNull();
   });
 
-  it("loads and exposes structuredCi in getSanitizedAdminRunDetailV1 and handles corrupted JSON safely", async () => {
+  it("loads and exposes structuredCi in getSanitizedAdminRunDetailV2 and handles corrupted JSON safely", async () => {
     const testPrKey = "github:42:pr:101" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const headSha1 = "1".repeat(40);
@@ -1311,7 +1311,7 @@ describe("ReviewLedgerObject", () => {
       verdict: "APPROVE",
     });
 
-    const detail = await ledger.getSanitizedAdminRunDetailV1(runId1);
+    const detail = await ledger.getSanitizedAdminRunDetailV2(runId1);
     expect(detail?.structuredCi?.status).toBe("available");
     expect(detail?.structuredCi?.failed).toBe(1);
 

@@ -42,14 +42,12 @@ const snapshot = () =>
   });
 function setup(
   discover?: RepositoryExecutorBinding["discoverProjectMetadataV1"],
-  enabled = true,
   mode = "enrich",
 ) {
   const identify = vi.fn(async () => ({ selectedFactIds: ["fact-0"] }));
   const service = createReviewServices(
     {
       ...env,
-      PROJECT_IDENTIFICATION_ENABLED: String(enabled),
       PROJECT_IDENTIFICATION_MODE: mode,
     } as Cloudflare.Env,
     job,
@@ -67,11 +65,8 @@ function setup(
   );
   return { service, identify };
 }
-it("skips disabled configuration and absent capability", async () => {
+it("reports absent capability without an activation setting", async () => {
   const policy = await createDefaultRepositoryPolicy(base);
-  expect(
-    await setup(undefined, false).service.identifyProjects!(policy),
-  ).toBeNull();
   expect(await setup().service.identifyProjects!(policy)).toMatchObject({
     status: "unavailable",
     limitations: ["executor-capability-unavailable"],
@@ -104,7 +99,7 @@ it("discovers both immutable snapshots then reuses a verified cache entry", asyn
   });
 });
 it("observe persists a result without enriching review context", async () => {
-  const { service } = setup(async () => await snapshot(), true, "observe");
+  const { service } = setup(async () => await snapshot(), "observe");
   const r = await service.identifyProjects!(
     await createDefaultRepositoryPolicy(base),
   );

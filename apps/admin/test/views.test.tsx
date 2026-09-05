@@ -1,4 +1,4 @@
-import type { AdminRunDetailV1 } from "@holon/contracts";
+import type { AdminRunDetailV2 } from "@holon/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -85,7 +85,7 @@ const baseSummary: AdminSummaryMetrics = {
   verdictDistribution: { approve: 8, comment: 1, requestChanges: 1 },
 };
 
-const detail: AdminRunDetailV1 = {
+const detail: AdminRunDetailV2 = {
   currentFindings: [
     {
       diagnostic: "Critical diagnostic",
@@ -126,7 +126,7 @@ const detail: AdminRunDetailV1 = {
     headSha: "a".repeat(40),
     isDegraded: false,
     prKey: "github:42:pr:7",
-    runId: baseRun.run_id as AdminRunDetailV1["run"]["runId"],
+    runId: baseRun.run_id as AdminRunDetailV2["run"]["runId"],
     scopeStatus: "complete",
     shardsCount: 1,
     stepTimings: [],
@@ -140,7 +140,8 @@ const detail: AdminRunDetailV1 = {
     toolCallsCount: 1,
     verdict: "APPROVE",
   },
-  schemaVersion: 1,
+  schemaVersion: 2,
+  projectIdentification: null,
   structuredCi: {
     durationMs: 1_000,
     failed: 0,

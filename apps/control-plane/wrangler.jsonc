@@ -6,7 +6,6 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ADMIN_PROJECTION_ENABLED": "true",
-    "PROJECT_IDENTIFICATION_ENABLED": "false",
     "PROJECT_IDENTIFICATION_MODE": "observe",
     "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
   },

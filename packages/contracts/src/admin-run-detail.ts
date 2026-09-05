@@ -45,10 +45,8 @@ export const adminCiSummaryV1Schema = z.strictObject({
   workflowName: z.string().trim().min(1).max(100).nullable(),
 });
 
-export const adminRunDetailV1Schema = z.strictObject({
-  projectIdentification: projectIdentificationResultV1Schema
-    .nullable()
-    .optional(),
+export const adminRunDetailV2Schema = z.strictObject({
+  projectIdentification: projectIdentificationResultV1Schema.nullable(),
   currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
   findingsPerspective: z.literal("current_pr_state"),
   run: z.strictObject({
@@ -65,15 +63,9 @@ export const adminRunDetailV1Schema = z.strictObject({
     toolCallsCount: nonNegativeSafeIntegerSchema,
     verdict: reviewVerdictSchema.nullable(),
   }),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   structuredCi: adminCiSummaryV1Schema.nullable(),
 });
-
-export const adminRunDetailV2Schema = adminRunDetailV1Schema.extend({
-  schemaVersion: z.literal(2),
-  projectIdentification: projectIdentificationResultV1Schema.nullable(),
-});
-export type AdminRunDetailV2 = z.infer<typeof adminRunDetailV2Schema>;
 
 export const adminReadRequestV1Schema = z.strictObject({
   runId: runIdSchema as z.ZodType<RunId>,
@@ -81,7 +73,7 @@ export const adminReadRequestV1Schema = z.strictObject({
 
 export type AdminFindingSummaryV1 = z.infer<typeof adminFindingSummaryV1Schema>;
 export type AdminCiSummaryV1 = z.infer<typeof adminCiSummaryV1Schema>;
-export type AdminRunDetailV1 = z.infer<typeof adminRunDetailV1Schema>;
+export type AdminRunDetailV2 = z.infer<typeof adminRunDetailV2Schema>;
 export type AdminReadRequestV1 = z.infer<typeof adminReadRequestV1Schema>;
 
 /**

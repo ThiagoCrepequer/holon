@@ -12,17 +12,11 @@ import {
   isPlatformTransientError,
 } from "@cloudflare/sandbox";
 import type {
-  ExecutorRequestV1,
-  ExecutorRequestV2,
   ExecutorRequestV3,
   GitHubCredentialRequest,
   GitHubCredentialResponse,
-  PreparedRepositoryV1,
-  PreparedRepositoryV2,
   PreparedRepositoryV3,
   RepositoryToolCall,
-  ReviewContextV1,
-  ReviewContextV2,
   ReviewContextV3,
 } from "@holon/contracts";
 import {
@@ -249,19 +243,6 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     );
   }
 
-  public prepare(
-    request: ExecutorRequestV1,
-    installationToken: string,
-  ): Promise<PreparedRepositoryV1> {
-    return this.service().prepare(request, installationToken);
-  }
-
-  public prepareRepositoryV2(
-    request: ExecutorRequestV2,
-  ): Promise<PreparedRepositoryV2> {
-    return this.service().prepareRepositoryV2(request);
-  }
-
   public prepareRepositoryV3(
     request: ExecutorRequestV3,
   ): Promise<PreparedRepositoryV3> {
@@ -270,14 +251,6 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
 
   public resolveContainerId(runId: string): string {
     return resolveContainerId(this.env.SANDBOXES, runId);
-  }
-
-  public loadContext(runId: string): Promise<ReviewContextV1> {
-    return this.service().loadContext(runId);
-  }
-
-  public loadContextV2(runId: string): Promise<ReviewContextV2> {
-    return this.service().loadContextV2(runId);
   }
 
   public loadContextV3(runId: string): Promise<ReviewContextV3> {

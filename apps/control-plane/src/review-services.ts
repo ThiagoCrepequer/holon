@@ -1,6 +1,3 @@
-function isProjectIdentificationEnabled(value: string): boolean {
-  return value === "true";
-}
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
 }
@@ -19,27 +16,17 @@ import {
   type ProjectMetadataRequestV1,
 } from "@holon/contracts";
 import {
-  executorRequestV1Schema,
-  executorRequestV2Schema,
   executorRequestV3Schema,
-  preparedRepositoryV1Schema,
-  preparedRepositoryV2Schema,
   preparedRepositoryV3Schema,
   repositoryToolResultSchema,
-  reviewContextV1Schema,
-  reviewContextV2Schema,
   reviewContextV3Schema,
   type AdminRunProjectionEventV1,
-  type ExecutorRequestV1,
-  type ExecutorRequestV2,
   type ExecutorRequestV3,
   type GitHubCredentialRequest,
-  type PreparedRepositoryV2,
   type PreparedRepositoryV3,
   type RepositoryPolicy,
   type RepositoryToolCall,
   type RepositoryToolResult,
-  type ReviewContextV2,
   type ReviewContextV3,
   type ReviewJob,
   type RunClaimV2Result,
@@ -61,15 +48,9 @@ import {
   interpretProjects,
   detectorRevision,
 } from "@holon/project-identification";
-import {
-  classifyPullRequestDiffFile,
-  isNonBinaryPullRequestPatch,
-  splitPullRequestDiff,
-} from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
 import type { PublicationLedger } from "./authorized-publication.js";
-import { createExpectedContainerId } from "./credential-broker.js";
 import {
   createKeyringTelemetryOptions,
   resolveControlPlaneKeyring,
@@ -93,16 +74,7 @@ export interface RepositoryExecutorBinding {
   ): Promise<ProjectIdentificationResultV1>;
   cleanup(runId: string): Promise<void>;
   hasContext(runId: string): Promise<boolean>;
-  loadContext?(runId: string): Promise<unknown>;
-  loadContextV2?(runId: string): Promise<ReviewContextV2>;
   loadContextV3?(runId: string): Promise<ReviewContextV3>;
-  prepare?(
-    request: ExecutorRequestV1,
-    installationToken: string,
-  ): Promise<unknown>;
-  prepareRepositoryV2?(
-    request: ExecutorRequestV2,
-  ): Promise<PreparedRepositoryV2>;
   prepareRepositoryV3?(
     request: ExecutorRequestV3,
   ): Promise<PreparedRepositoryV3>;
@@ -214,13 +186,11 @@ export interface ReviewServices {
     maximumPreparationAttempts: number,
     effectivePolicy?: RepositoryPolicy,
   ): Promise<void>;
-  loadContext(
-    effectivePolicy?: RepositoryPolicy,
-  ): Promise<ReviewContextV3 | ReviewContextV2>;
+  loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContextV3>;
   prepareRepository(
     maximumAttempts: number,
     effectivePolicy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2>;
+  ): Promise<PreparedRepositoryV3>;
   readCurrentHead(): Promise<string>;
   readCurrentRefs(): Promise<{
     readonly baseSha: string;
@@ -245,41 +215,6 @@ export class RepositoryTransientError extends Error {
     super(`HOLON_REPOSITORY_TRANSIENT:${reason}`, options);
     this.name = "RepositoryTransientError";
   }
-}
-
-type ExecutorRpcMethod =
-  | "loadContextV2"
-  | "loadContextV3"
-  | "prepareRepositoryV2"
-  | "prepareRepositoryV3"
-  | "resolveContainerId";
-
-export function isExecutorRpcMethodUnavailable(
-  error: unknown,
-  method: ExecutorRpcMethod,
-): boolean {
-  return (
-    error instanceof TypeError &&
-    error.message ===
-      `The RPC receiver does not implement the method "${method}".`
-  );
-}
-
-function legacyContextAsV2(rawContext: unknown): ReviewContextV2 {
-  const context = reviewContextV1Schema.parse(rawContext);
-  const files = splitPullRequestDiff(context.diff).flatMap((file) => {
-    const mode = classifyPullRequestDiffFile(file);
-    return mode === undefined || !isNonBinaryPullRequestPatch(file.patch)
-      ? []
-      : [{ mode, patch: file.patch, path: file.path }];
-  });
-  return reviewContextV2Schema.parse({
-    changedLines: context.changedLines,
-    files,
-    schemaVersion: 2,
-    ...(context.surface === undefined ? {} : { surface: context.surface }),
-    truncated: context.truncated ?? false,
-  });
 }
 
 function normalizeRepositoryFailure(
@@ -363,30 +298,16 @@ export function createReviewServices(
     });
 
   const resolveCredentialContainerId = async (): Promise<string> => {
-    try {
-      if (executor.resolveContainerId === undefined) {
-        throw new TypeError(
-          'The RPC receiver does not implement the method "resolveContainerId".',
-        );
-      }
-      const containerId = await executor.resolveContainerId(job.runId);
-      if (!/^[a-f0-9]{64}$/u.test(containerId)) {
-        throw new TypeError("Executor returned an invalid container ID");
-      }
-      return containerId;
-    } catch (error) {
-      if (!isExecutorRpcMethodUnavailable(error, "resolveContainerId")) {
-        throw error;
-      }
-      // Rollout bridge for an N-1 executor. That version still receives the
-      // installation token directly and does not consult the credential scope.
-      return createExpectedContainerId(job.runId);
+    const containerId = await executor.resolveContainerId!(job.runId);
+    if (!/^[a-f0-9]{64}$/u.test(containerId)) {
+      throw new TypeError("Executor returned an invalid container ID");
     }
+    return containerId;
   };
 
   const prepareOnce = async (
     policy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2> => {
+  ): Promise<PreparedRepositoryV3> => {
     try {
       const effectivePolicy =
         policy ??
@@ -419,69 +340,9 @@ export function createReviewServices(
         schemaVersion: 3,
       });
 
-      let prepared: unknown;
-      try {
-        if (executor.prepareRepositoryV3 === undefined) {
-          throw new TypeError(
-            'The RPC receiver does not implement the method "prepareRepositoryV3".',
-          );
-        }
-        prepared = await executor.prepareRepositoryV3(requestV3);
-        return preparedRepositoryV3Schema.parse(prepared);
-      } catch (error) {
-        if (!isExecutorRpcMethodUnavailable(error, "prepareRepositoryV3")) {
-          throw error;
-        }
-
-        // Rollout policy: downgrade to V2 is strictly forbidden if custom repository policy exists
-        if (effectivePolicy.source !== "default") {
-          logger.emit("repository.preparation_failed", {
-            ...logContext,
-            errorKind: "RepositoryV3RequiredError",
-            reason:
-              "Custom repository policy requires executor RPC V3, but executor does not support prepareRepositoryV3",
-            retryable: false,
-          });
-          throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
-        }
-
-        const requestV2 = executorRequestV2Schema.parse({
-          ...commonRequest,
-          installationId: job.envelope.installationId,
-          repositoryName: job.envelope.repository.name,
-          repositoryOwner: job.envelope.repository.owner,
-          schemaVersion: 2,
-        });
-
-        try {
-          if (executor.prepareRepositoryV2 === undefined) {
-            throw new TypeError(
-              'The RPC receiver does not implement the method "prepareRepositoryV2".',
-              { cause: error },
-            );
-          }
-          prepared = await executor.prepareRepositoryV2(requestV2);
-        } catch (v2Error) {
-          if (!isExecutorRpcMethodUnavailable(v2Error, "prepareRepositoryV2")) {
-            throw v2Error;
-          }
-          if (executor.prepare === undefined) {
-            throw new RepositoryTransientError("executor", { cause: v2Error });
-          }
-          const legacyRequest = executorRequestV1Schema.parse({
-            ...commonRequest,
-            schemaVersion: 1,
-          });
-          const legacy = preparedRepositoryV1Schema.parse(
-            await executor.prepare(legacyRequest, github.token),
-          );
-          return preparedRepositoryV2Schema.parse({
-            ...legacy,
-            schemaVersion: 2,
-          });
-        }
-        return preparedRepositoryV2Schema.parse(prepared);
-      }
+      return preparedRepositoryV3Schema.parse(
+        await executor.prepareRepositoryV3!(requestV3),
+      );
     } catch (error) {
       return normalizeRepositoryFailure(error, logger, logContext);
     }
@@ -490,7 +351,7 @@ export function createReviewServices(
   const prepareRepository = async (
     maximumAttempts: number,
     policy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3 | PreparedRepositoryV2> => {
+  ): Promise<PreparedRepositoryV3> => {
     if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts <= 0) {
       throw new TypeError("maximumAttempts must be a positive safe integer");
     }
@@ -644,41 +505,9 @@ export function createReviewServices(
     },
     loadContext: async (effectivePolicy) => {
       currentAnalysisPolicy = effectivePolicy;
-      const customPolicyActive =
-        effectivePolicy !== undefined && effectivePolicy.source !== "default";
-      if (executor.loadContextV3 !== undefined) {
-        try {
-          const loaded = await executor.loadContextV3(job.runId);
-          return reviewContextV3Schema.parse(loaded);
-        } catch (error) {
-          if (!isExecutorRpcMethodUnavailable(error, "loadContextV3")) {
-            throw error;
-          }
-          if (customPolicyActive) {
-            throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
-          }
-        }
-      }
-      if (customPolicyActive) {
-        throw new NonRetryableError("HOLON_EXECUTOR_RPC_V3_REQUIRED");
-      }
-      try {
-        if (executor.loadContextV2 === undefined) {
-          throw new TypeError(
-            'The RPC receiver does not implement the method "loadContextV2".',
-          );
-        }
-        const loaded = await executor.loadContextV2(job.runId);
-        return reviewContextV2Schema.parse(loaded);
-      } catch (error) {
-        if (!isExecutorRpcMethodUnavailable(error, "loadContextV2")) {
-          throw error;
-        }
-        if (executor.loadContext === undefined) {
-          throw new RepositoryTransientError("executor", { cause: error });
-        }
-        return legacyContextAsV2(await executor.loadContext(job.runId));
-      }
+      return reviewContextV3Schema.parse(
+        await executor.loadContextV3!(job.runId),
+      );
     },
     useProjectIdentification: (result) => {
       identificationInputTokens = result.usage?.inputTokens ?? 0;
@@ -693,8 +522,6 @@ export function createReviewServices(
       discoveryOnly = false,
       deadlineAt = Date.now() + 120000,
     ) => {
-      if (!isProjectIdentificationEnabled(env.PROJECT_IDENTIFICATION_ENABLED))
-        return null;
       const unavailable = (reason: string): ProjectIdentificationResultV1 => ({
         schemaVersion: 1,
         snapshotSha: job.envelope.pullRequest.headSha,

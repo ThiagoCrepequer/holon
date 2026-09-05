@@ -4,9 +4,9 @@ import {
   adminCiSummaryV1Schema,
   adminFindingSummaryV1Schema,
   adminReadRequestV1Schema,
-  adminRunDetailV1Schema,
+  adminRunDetailV2Schema,
   truncateUtf8Bytes,
-  type AdminRunDetailV1,
+  type AdminRunDetailV2,
 } from "../src/index.js";
 
 const sha = "c".repeat(40);
@@ -15,7 +15,7 @@ const runId = `${prKey}:head:${sha}` as const;
 
 describe("admin run detail contracts", () => {
   it("validates full admin run detail DTO", () => {
-    const detail: AdminRunDetailV1 = {
+    const detail: AdminRunDetailV2 = {
       currentFindings: [
         {
           diagnostic: "Potential SQL injection in query builder parameter.",
@@ -59,7 +59,8 @@ describe("admin run detail contracts", () => {
         toolCallsCount: 2,
         verdict: "REQUEST_CHANGES",
       },
-      schemaVersion: 1,
+      schemaVersion: 2,
+      projectIdentification: null,
       structuredCi: {
         durationMs: 45000,
         failed: 0,
@@ -71,12 +72,15 @@ describe("admin run detail contracts", () => {
       },
     };
 
-    const parsed = adminRunDetailV1Schema.parse(detail);
+    expect(
+      adminRunDetailV2Schema.safeParse({ ...detail, schemaVersion: 1 }).success,
+    ).toBe(false);
+    const parsed = adminRunDetailV2Schema.parse(detail);
     expect(parsed).toEqual(detail);
   });
 
   it("validates run detail with null structuredCi, verdict and scopeStatus", () => {
-    const detail: AdminRunDetailV1 = {
+    const detail: AdminRunDetailV2 = {
       currentFindings: [],
       findingsPerspective: "current_pr_state",
       run: {
@@ -102,11 +106,12 @@ describe("admin run detail contracts", () => {
         toolCallsCount: 0,
         verdict: null,
       },
-      schemaVersion: 1,
+      schemaVersion: 2,
+      projectIdentification: null,
       structuredCi: null,
     };
 
-    const parsed = adminRunDetailV1Schema.parse(detail);
+    const parsed = adminRunDetailV2Schema.parse(detail);
     expect(parsed.structuredCi).toBeNull();
     expect(parsed.run.scopeStatus).toBeNull();
     expect(parsed.run.verdict).toBeNull();

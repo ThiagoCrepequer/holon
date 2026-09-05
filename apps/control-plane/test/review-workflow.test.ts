@@ -150,13 +150,15 @@ function runtime(
   const cleanup = vi.fn(() => Promise.resolve());
   const resolvedContainerId = options.containerId ?? "f".repeat(64);
   const resolveContainerId = vi.fn(() => Promise.resolve(resolvedContainerId));
-  const prepareRepositoryV2 = vi.fn(() =>
+  const prepareRepositoryV3 = vi.fn(() =>
     Promise.resolve({
       changedLineCount: (options.context ?? context).changedLines.length,
       contextBytes: 100,
       fileCount: (options.context ?? context).files.length,
       runId: job.runId,
-      schemaVersion: 2 as const,
+      schemaVersion: 3 as const,
+      effectivePolicyDigest: "c".repeat(64),
+      waiversCount: 0,
       truncated: false,
     }),
   );
@@ -174,8 +176,17 @@ function runtime(
     executor: {
       cleanup,
       hasContext: () => Promise.resolve(true),
-      loadContextV2: () => Promise.resolve(options.context ?? context),
-      prepareRepositoryV2,
+      loadContextV3: () =>
+        Promise.resolve({
+          ...(options.context ?? context),
+          schemaVersion: 3,
+          effectivePolicyDigest: "c".repeat(64),
+          policySource: "default",
+          sourceDigest: null,
+          verdictStrictness: "default",
+          waiversCount: 0,
+        }),
+      prepareRepositoryV3,
       ...(options.containerId === null ? {} : { resolveContainerId }),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
     },
@@ -184,7 +195,7 @@ function runtime(
     wait: () => Promise.resolve(),
     ...(options.workflow === undefined ? {} : { workflow: options.workflow }),
   };
-  return { cleanup, posts, prepareRepositoryV2, resolveContainerId, value };
+  return { cleanup, posts, prepareRepositoryV3, resolveContainerId, value };
 }
 
 function event(instanceId: string, customJob: ReviewJob = job) {
@@ -225,32 +236,17 @@ describe("ReviewWorkflow", () => {
     expect(registeredContainerId).toBe("f".repeat(64));
   });
 
-  it("keeps the N-1 logical-name fallback limited to a missing RPC method", async () => {
+  it("fails instead of synthesizing a legacy container identity", async () => {
     const setup = runtime({ containerId: null });
-    let registeredContainerId: string | undefined;
-
     await expect(
       executeReviewWorkflow(
         env,
-        event("legacy-container-identity"),
-        immediateStep([], async (name) => {
-          if (name !== "prepare-repository") return;
-          const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-          await runInDurableObject(ledger, (_object, state) => {
-            registeredContainerId = state.storage.sql
-              .exec<{ container_id: string }>(
-                "SELECT container_id FROM credential_scopes WHERE run_id = ?",
-                job.runId,
-              )
-              .one().container_id;
-          });
-        }),
+        event("missing-container-identity"),
+        immediateStep([]),
         setup.value,
       ),
-    ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
-
-    expect(setup.resolveContainerId).not.toHaveBeenCalled();
-    expect(registeredContainerId).toBe(`r-16-7-${"a".repeat(40)}`);
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
   });
 
   it("fails closed when the executor returns a malformed platform ID", async () => {
@@ -264,7 +260,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).rejects.toThrow("Executor returned an invalid container ID");
-    expect(setup.prepareRepositoryV2).not.toHaveBeenCalled();
+    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
   });
 
   it("publishes with fresh ledger and head authorization before each mutation", async () => {
@@ -435,7 +431,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(setup.prepareRepositoryV2).not.toHaveBeenCalled();
+    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await runInDurableObject(ledger, (_object, state) => {
       expect(
@@ -747,7 +743,7 @@ describe("ReviewWorkflow", () => {
         duplicate.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "duplicate" });
-    expect(duplicate.prepareRepositoryV2).not.toHaveBeenCalled();
+    expect(duplicate.prepareRepositoryV3).not.toHaveBeenCalled();
   });
 
   it("reprepares lost model context with fresh sessions and a bounded retry", async () => {
@@ -781,7 +777,7 @@ describe("ReviewWorkflow", () => {
       executor: {
         ...setup.value.executor!,
         hasContext: () => Promise.resolve(contextExists),
-        prepareRepositoryV2: () => {
+        prepareRepositoryV3: () => {
           preparations += 1;
           if (preparations === 2) {
             const error = new Error(
@@ -796,7 +792,9 @@ describe("ReviewWorkflow", () => {
             contextBytes: 100,
             fileCount: 1,
             runId: job.runId,
-            schemaVersion: 2 as const,
+            schemaVersion: 3 as const,
+            effectivePolicyDigest: "c".repeat(64),
+            waiversCount: 0,
             truncated: false,
           });
         },
@@ -1695,7 +1693,7 @@ describe("ReviewWorkflow", () => {
         },
       },
     });
-    setup.prepareRepositoryV2.mockImplementation(() => {
+    setup.prepareRepositoryV3.mockImplementation(() => {
       const error = new Error(
         "HOLON_REPOSITORY_PERMANENT:fetch:command-failed",
       );
@@ -1868,7 +1866,6 @@ it("records identified versions and supplies them to the review only in enrich m
   }));
   const setup = runtime({ model: () => ({ review }) });
   const settings: Record<string, string> = {
-    PROJECT_IDENTIFICATION_ENABLED: "true",
     PROJECT_IDENTIFICATION_MODE: "enrich",
   };
   const configured = { ...env, ...settings } as Cloudflare.Env;
@@ -1926,9 +1923,7 @@ it("waits durably for an existing cache owner then reuses its result", async () 
   const identify = vi.fn(async () => ({ selectedFactIds: [] }));
   const setup = runtime();
   const names: string[] = [];
-  const overrides: Record<string, string> = {
-    PROJECT_IDENTIFICATION_ENABLED: "true",
-  };
+  const overrides: Record<string, string> = {};
   await executeReviewWorkflow(
     { ...env, ...overrides },
     event("identification-pending"),

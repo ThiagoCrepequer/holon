@@ -29,7 +29,7 @@ export default defineConfig({
                 async pingV1() {
                   return { schemaVersion: 1 };
                 }
-                async getRunDetailV1() {
+                async getRunDetailV2() {
                   return null;
                 }
               }

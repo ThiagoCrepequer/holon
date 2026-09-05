@@ -85,7 +85,16 @@ function createMockServices(
       loadPrFindings: () => Promise.resolve([]),
       savePrFindings: () => Promise.resolve(),
     } as unknown as ReviewServices["ledger"],
-    loadContext: () => Promise.resolve(context),
+    loadContext: () =>
+      Promise.resolve({
+        effectivePolicyDigest: "c".repeat(64),
+        policySource: "default",
+        sourceDigest: null,
+        verdictStrictness: "default",
+        waiversCount: 0,
+        ...context,
+        schemaVersion: 3,
+      }),
     model: {
       review: () => Promise.resolve(modelReview),
     },
@@ -247,8 +256,8 @@ describe("analyzeReview", () => {
       .mockRejectedValue(new Error("Synthesis failed"));
 
     const result = await analyzeReview(job, services, emit);
-    expect(result.policySource).toBeUndefined();
-    expect(result.waiversCount).toBeUndefined();
+    expect(result.policySource).toBe("default");
+    expect(result.waiversCount).toBe(0);
     expect(result.verdict).toBe("APPROVE");
   });
 

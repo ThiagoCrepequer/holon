@@ -1,10 +1,9 @@
 import {
   executorRequestSchema,
-  executorRequestV1Schema,
   executorRequestV3Schema,
   repositoryToolCallSchema,
-  reviewContextV1Schema,
-  type ReviewContextV1,
+  reviewContextV3Schema,
+  type ReviewContextV3,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -15,7 +14,7 @@ import {
   type SandboxPort,
 } from "../src/executor-service.js";
 
-const request = executorRequestV1Schema.parse({
+const request = executorRequestV3Schema.parse({
   baseSha: "b".repeat(40),
   canonicalDiff: [
     "diff --git a/src/index.ts b/src/index.ts",
@@ -29,7 +28,19 @@ const request = executorRequestV1Schema.parse({
   pullRequestNumber: 7,
   repositoryId: 42,
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 1,
+  schemaVersion: 3,
+  installationId: 99,
+  repositoryName: "api",
+  repositoryOwner: "acme",
+  effectivePolicy: {
+    additionalExcludes: [],
+    baseSha: "b".repeat(40),
+    effectivePolicyDigest: "c".repeat(64),
+    source: "default",
+    sourceDigest: null,
+    verdictStrictness: "default",
+    version: 1,
+  },
 });
 const legacyInstallationToken = "installation-token-value";
 
@@ -166,10 +177,12 @@ class FakeSandbox implements SandboxPort {
   }
 }
 
-async function loadLegacyContext(
+async function loadCurrentContext(
   service: RepositoryExecutorService,
-): Promise<ReviewContextV1> {
-  return reviewContextV1Schema.parse(await service.loadContext(request.runId));
+): Promise<ReviewContextV3> {
+  return reviewContextV3Schema.parse(
+    await service.loadContextV3(request.runId),
+  );
 }
 
 describe("RepositoryExecutorService", () => {
@@ -177,8 +190,22 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
+    for (const method of [
+      "prepare",
+      "prepareRepositoryV2",
+      "loadContext",
+      "loadContextV2",
+    ])
+      expect(service).not.toHaveProperty(method);
+    await expect(
+      service.prepareRepositoryV3({
+        ...request,
+        schemaVersion: 2,
+      } as unknown as typeof request),
+    ).rejects.toThrow();
+    expect(sandbox.configured).toBeUndefined();
     await expect(service.hasContext(request.runId)).resolves.toBe(false);
-    await service.prepare(request, legacyInstallationToken);
+    await service.prepareRepositoryV3(request);
     await expect(service.hasContext(request.runId)).resolves.toBe(true);
   });
 
@@ -189,18 +216,22 @@ describe("RepositoryExecutorService", () => {
       ["debug", "error", "info", "log", "warn"] as const
     ).map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).resolves.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).resolves.toMatchObject({
       changedLineCount: 1,
       fileCount: 1,
       runId: request.runId,
-      schemaVersion: 1,
+      schemaVersion: 3,
       truncated: false,
     });
-    await expect(service.loadContext(request.runId)).resolves.toEqual({
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
-      diff: request.canonicalDiff,
+      files: [
+        {
+          mode: "structural",
+          patch: request.canonicalDiff,
+          path: "src/index.ts",
+        },
+      ],
       structuralImpact: {
         changedSymbols: [],
         contractBreaks: [],
@@ -229,6 +260,7 @@ describe("RepositoryExecutorService", () => {
       truncated: false,
     });
     expect(sandbox.configured).toEqual({
+      installationId: 99,
       repositoryId: 42,
       repositoryName: "api",
       repositoryOwner: "acme",
@@ -272,25 +304,25 @@ describe("RepositoryExecutorService", () => {
     ]);
   });
 
-  it("prepares and loads the non-duplicated v2 context without a credential argument", async () => {
+  it("prepares and loads the current context without a credential argument", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const requestV2 = executorRequestSchema.parse({
+    const currentRequest = executorRequestSchema.parse({
       ...request,
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
-    if (requestV2.schemaVersion !== 2) throw new TypeError("Expected v2");
+    if (currentRequest.schemaVersion !== 3) throw new TypeError("Expected v3");
 
-    await expect(service.prepareRepositoryV2(requestV2)).resolves.toMatchObject(
-      {
-        fileCount: 1,
-        schemaVersion: 2,
-      },
-    );
-    await expect(service.loadContextV2(request.runId)).resolves.toMatchObject({
+    await expect(
+      service.prepareRepositoryV3(currentRequest),
+    ).resolves.toMatchObject({
+      fileCount: 1,
+      schemaVersion: 3,
+    });
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         {
@@ -299,7 +331,7 @@ describe("RepositoryExecutorService", () => {
           path: "src/index.ts",
         },
       ],
-      schemaVersion: 2,
+      schemaVersion: 3,
       truncated: false,
     });
     expect(sandbox.configured).toMatchObject({
@@ -371,7 +403,7 @@ describe("RepositoryExecutorService", () => {
   it("omits sensitive renames and denies their safe-looking destination for the run", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const requestV2 = executorRequestSchema.parse({
+    const currentRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/.env.production b/config.txt",
@@ -387,17 +419,17 @@ describe("RepositoryExecutorService", () => {
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
-    if (requestV2.schemaVersion !== 2) throw new TypeError("Expected v2");
+    if (currentRequest.schemaVersion !== 3) throw new TypeError("Expected v3");
 
-    await expect(service.prepareRepositoryV2(requestV2)).resolves.toMatchObject(
-      {
-        fileCount: 0,
-        schemaVersion: 2,
-      },
-    );
-    const context = await service.loadContextV2(request.runId);
+    await expect(
+      service.prepareRepositoryV3(currentRequest),
+    ).resolves.toMatchObject({
+      fileCount: 0,
+      schemaVersion: 3,
+    });
+    const context = await service.loadContextV3(request.runId);
     expect(context.files).toEqual([]);
     expect(JSON.stringify(context)).not.toMatch(
       /\.env\.production|super-secret|rotated-secret/u,
@@ -453,7 +485,7 @@ describe("RepositoryExecutorService", () => {
   it("includes safe textual patches while ignoring binary, lock, generated, vendored and minified files", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const textualRequest = executorRequestV1Schema.parse({
+    const textualRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/README.md b/README.md",
@@ -494,15 +526,17 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(textualRequest, legacyInstallationToken),
+      service.prepareRepositoryV3(textualRequest),
     ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
-    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
       surface: [],
     });
-    const context = await loadLegacyContext(service);
-    expect(context.diff).toContain("README.md");
-    expect(context.diff).not.toMatch(
+    const context = await loadCurrentContext(service);
+    expect(context.files.map((file) => file.patch).join("\n")).toContain(
+      "README.md",
+    );
+    expect(context.files.map((file) => file.patch).join("\n")).not.toMatch(
       /package-lock|generated\/client|vendor\/library|app\.min|logo\.png/u,
     );
   });
@@ -518,9 +552,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "initialize",
@@ -540,9 +572,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "initialize",
@@ -564,9 +594,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -587,9 +615,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -611,9 +637,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -635,9 +659,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "fetch",
@@ -651,9 +673,7 @@ describe("RepositoryExecutorService", () => {
       Promise.reject(new SandboxRuntimeError(true, "timed-out"));
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
     });
@@ -672,9 +692,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
       retryable: true,
@@ -685,9 +703,9 @@ describe("RepositoryExecutorService", () => {
   it("rejects an invalid installation identity before creating external access", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    await expect(service.prepare(request, "")).rejects.toThrow(
-      "installationToken",
-    );
+    await expect(
+      service.prepareRepositoryV3({ ...request, installationId: 0 }),
+    ).rejects.toThrow("installationId");
     expect(sandbox.configured).toBeUndefined();
   });
 
@@ -747,7 +765,7 @@ describe("RepositoryExecutorService", () => {
   it("reviews deletion-only patches instead of treating them as an empty scope", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const deletionRequest = executorRequestV1Schema.parse({
+    const deletionRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/policy.ts b/src/policy.ts",
@@ -759,14 +777,16 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(deletionRequest, legacyInstallationToken),
+      service.prepareRepositoryV3(deletionRequest),
     ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
-    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
       changedLines: [],
     });
-    expect((await loadLegacyContext(service)).diff).toContain(
-      "-assertAuthorized(request);",
-    );
+    expect(
+      (await loadCurrentContext(service)).files
+        .map((file) => file.patch)
+        .join("\n"),
+    ).toContain("-assertAuthorized(request);");
   });
 
   it("reserves early budget for textual context when structural patches are large", async () => {
@@ -774,7 +794,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const largeLine = "x".repeat(58_000);
     const documentationLine = "d".repeat(5_000);
-    const mixedRequest = executorRequestV1Schema.parse({
+    const mixedRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/a.ts b/src/a.ts",
@@ -796,12 +816,18 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(mixedRequest, legacyInstallationToken),
+      service.prepareRepositoryV3(mixedRequest),
     ).resolves.toMatchObject({ fileCount: 2, truncated: true });
-    const context = await loadLegacyContext(service);
-    expect(context.diff).toContain("src/a.ts");
-    expect(context.diff).toContain("README.md");
-    expect(context.diff).not.toContain("src/b.ts");
+    const context = await loadCurrentContext(service);
+    expect(context.files.map((file) => file.patch).join("\n")).toContain(
+      "src/a.ts",
+    );
+    expect(context.files.map((file) => file.patch).join("\n")).toContain(
+      "README.md",
+    );
+    expect(context.files.map((file) => file.patch).join("\n")).not.toContain(
+      "src/b.ts",
+    );
   });
 
   it("enforces review exclusions on tool capabilities and search results", async () => {
@@ -927,9 +953,7 @@ describe("RepositoryExecutorService", () => {
         : original(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(
-      service.prepare(request, legacyInstallationToken),
-    ).rejects.toMatchObject({
+    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       stage: "prepare-context",
     });
@@ -996,7 +1020,7 @@ describe("RepositoryExecutorService", () => {
   it("marks oversized diffs and file reads as truncated", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const oversizedRequest = executorRequestV1Schema.parse({
+    const oversizedRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/huge.ts b/src/huge.ts",
@@ -1007,14 +1031,11 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepare(
-      oversizedRequest,
-      legacyInstallationToken,
-    );
-    const context = await loadLegacyContext(service);
+    const prepared = await service.prepareRepositoryV3(oversizedRequest);
+    const context = await loadCurrentContext(service);
     expect(prepared.truncated).toBe(true);
     expect(prepared.fileCount).toBe(0);
-    expect(context.diff).toBe("");
+    expect(context.files.map((file) => file.patch).join("\n")).toBe("");
     const originalRun = sandbox.run.bind(sandbox);
     sandbox.run = (argv, options) =>
       argv[0] === "sed"
@@ -1066,7 +1087,7 @@ describe("RepositoryExecutorService", () => {
   it("bounds changed-line coordinate amplification before persisting context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const amplifiedRequest = executorRequestV1Schema.parse({
+    const amplifiedRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/index.ts b/src/index.ts",
@@ -1078,12 +1099,12 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepare(amplifiedRequest, legacyInstallationToken),
+      service.prepareRepositoryV3(amplifiedRequest),
     ).resolves.toMatchObject({
       changedLineCount: 5_000,
       truncated: true,
     });
-    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
       changedLines: expect.arrayContaining([
         { line: 5_000, path: "src/index.ts", side: "RIGHT" },
       ]),
@@ -1095,7 +1116,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const longPath = `src/${"coordinate".repeat(10)}.ts`;
-    const amplifiedRequest = executorRequestV1Schema.parse({
+    const amplifiedRequest = executorRequestV3Schema.parse({
       ...request,
       canonicalDiff: [
         `diff --git a/${longPath} b/${longPath}`,
@@ -1106,11 +1127,8 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepare(
-      amplifiedRequest,
-      legacyInstallationToken,
-    );
-    const context = await service.loadContext(request.runId);
+    const prepared = await service.prepareRepositoryV3(amplifiedRequest);
+    const context = await service.loadContextV3(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
     expect(prepared.changedLineCount).toBeLessThan(5_000);
