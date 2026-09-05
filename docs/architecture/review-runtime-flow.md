@@ -204,7 +204,7 @@ O request V3 leva apenas identidades não secretas e a política validada ao exe
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
-Sandbox. Os métodos V1 permanecem somente para rollout N-1 conforme ADR-0014.
+Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente RPC V3.
 
 ## Falhas esperadas
 

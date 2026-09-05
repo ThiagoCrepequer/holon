@@ -57,3 +57,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - Opções rejeitadas e consequências negativas são parte obrigatória da decisão.
 - Critérios de confirmação dizem como verificar se a decisão funcionou.
 - Use [o template de ADR](../templates/decision.md).
+
+- [ADR-0031 — Identificação de versões como comportamento padrão](0031-always-identify-project-versions.md)
+
+- [ADR-0032 — Exigir contratos RPC atuais](0032-require-current-rpc-contracts.md)

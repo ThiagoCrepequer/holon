@@ -176,4 +176,4 @@ Não atua sobre o banco remoto.
 
 ## Identificação de versões (2026-09-05)
 
-Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, deploy coordenado, corpus offline/live e invalidação por perfil. A identificação faz parte do workflow padrão; `observe` registra os resultados sem enriquecer a investigação.

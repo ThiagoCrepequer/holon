@@ -132,7 +132,7 @@ subpasta interna.
 - `queue`: consome o envelope normalizado e inicia ou reconcilia uma run;
 - classe `ReviewWorkflow` com checkpoints granulares, retries e terminalização
   após esgotamento;
-- classe `AdminReadEntrypoint`: RPC versionado `pingV1` e `getRunDetailV1` para consulta administrativa;
+- classe `AdminReadEntrypoint`: RPC versionado `pingV1` e `getRunDetailV2` para consulta administrativa;
 - composicao dos adapters reais por bindings e secrets gerados pelo Wrangler.
 
 `apps/admin` exporta um único módulo Workers (`workers/app.ts`) compondo:

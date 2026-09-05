@@ -10,11 +10,11 @@ last-reviewed: 2026-09-05
 
 ## Configuração
 
-No control-plane: `PROJECT_IDENTIFICATION_ENABLED=false`, `PROJECT_IDENTIFICATION_MODE=observe`, `PROJECT_IDENTIFICATION_PROFILE=identification-v1`. O modelo usa `AI_MODEL_ID` e credenciais do Gateway existente. Alterar o perfil invalida a reutilização lógica; mudar a rota dinâmica sem mudar o perfil pode reutilizar a classificação anterior. O detector também versiona a chave.
+A identificação faz parte do workflow padrão, sem flag de habilitação. No control-plane: `PROJECT_IDENTIFICATION_MODE=observe`, `PROJECT_IDENTIFICATION_PROFILE=identification-v1`. O modelo usa `AI_MODEL_ID` e credenciais do Gateway existente. Alterar o perfil invalida a reutilização lógica; mudar a rota dinâmica sem mudar o perfil pode reutilizar a classificação anterior. O detector também versiona a chave.
 
-`observe` identifica e registra para inspeção, mas não enriquece o prompt. `enrich` entrega a identificação à investigação. Desligar a flag impede novas identificações; não remove snapshots históricos ou interrompe alarms de purge. Runs anteriores mostram “not recorded”; não há backfill implícito.
+`observe` identifica e registra para inspeção, mas não enriquece o prompt. `enrich` entrega a identificação à investigação. Runs anteriores mostram “not recorded”; não há backfill implícito.
 
-Deploy autorizado: executor com nova capacidade, control-plane com as duas novas classes DO/migration acrescentada após `v1` e flag desligada, admin com cliente V2 e fallback V1. Depois smoke sintético, observe e avaliação antes de enrich. Não remover migration/namespace para rollback. Deploy, recursos remotos e chamadas live não foram executados pela implementação local.
+Deploy autorizado: executor com nova capacidade, control-plane com as duas novas classes DO/migration acrescentada após `v1` sem flag de habilitação, admin com cliente V2 obrigatório. Depois smoke sintético, observe e avaliação antes de enrich. Não remover migration/namespace para rollback. Deploy, recursos remotos e chamadas live não foram executados pela implementação local.
 
 ## Verificação
 
