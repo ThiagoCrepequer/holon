@@ -32,12 +32,31 @@ export function createSyntheticAdminRunRow(
   const repoId = Number(prParts[1]) || 0;
   const prNumber = Number(prParts[3]) || 0;
   const createdAt = detail.run.createdAt ?? new Date().toISOString();
+
+  let repoOwner = repoInfo?.repository_owner;
+  let repoName = repoInfo?.repository_name;
+
+  if (!repoOwner || !repoName) {
+    for (const step of detail.stepExecutions ?? []) {
+      const input = step.sanitizedInput as
+        | { repoOwner?: unknown; repoName?: unknown }
+        | null
+        | undefined;
+      if (typeof input?.repoOwner === "string" && input.repoOwner.length > 0) {
+        repoOwner = input.repoOwner;
+      }
+      if (typeof input?.repoName === "string" && input.repoName.length > 0) {
+        repoName = input.repoName;
+      }
+      if (repoOwner && repoName) break;
+    }
+  }
+
   return {
     run_id: detail.run.runId,
     repository_id: repoId,
-    repository_owner: repoInfo?.repository_owner ?? "repository",
-    repository_name:
-      repoInfo?.repository_name ?? (repoId ? `repo-${repoId}` : "unknown"),
+    repository_owner: repoOwner ?? "repository",
+    repository_name: repoName ?? (repoId ? `repo-${repoId}` : "unknown"),
     pr_key: detail.run.prKey,
     pr_number: prNumber,
     head_sha: detail.run.headSha,
@@ -45,7 +64,11 @@ export function createSyntheticAdminRunRow(
     verdict: detail.run.verdict ?? null,
     scope_status: detail.run.scopeStatus ?? null,
     review_phase_reached:
-      detail.run.runState === "publishing" ? "publishing" : "analysis_started",
+      detail.run.runState === "publishing"
+        ? "publishing"
+        : detail.run.runState === "queued"
+          ? "admitted"
+          : "analysis_started",
     review_admission_wait_ms: 0,
     execution_duration_ms: 0,
     input_tokens: detail.run.tokens?.inputTokens ?? 0,
@@ -126,6 +149,7 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
   const runState = rpcDetail?.run?.runState;
   const isActive =
     run.terminal_state === null ||
+    runState === "queued" ||
     runState === "running" ||
     runState === "publishing";
 

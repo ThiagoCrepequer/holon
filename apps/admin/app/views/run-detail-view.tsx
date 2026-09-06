@@ -102,12 +102,10 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   );
 
   React.useEffect(() => {
-    if (historicalFindings !== null) {
-      setFindingsTab("snapshot");
-    } else {
+    if (historicalFindings === null && findingsTab === "snapshot") {
       setFindingsTab("current");
     }
-  }, [historicalFindings]);
+  }, [historicalFindings, findingsTab]);
 
   const activeFindings =
     findingsTab === "snapshot" && historicalFindings !== null
@@ -155,7 +153,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-semibold text-[var(--text-primary)] break-words">
-                {run.repository_owner}/{run.repository_name} #{run.pr_number}
+                {`${run.repository_owner}/${run.repository_name} #${run.pr_number}`}
               </h1>
               <Badge
                 variant={
@@ -392,6 +390,11 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
             {findingsTab === "snapshot" && historicalFindings !== null
               ? "Achados capturados no momento em que esta execução foi analisada."
               : "Estado atual dos achados no PR (inclui resoluções ou novos achados de runs subsequentes)."}
+            {rpcDetail && "findingsPerspective" in rpcDetail && (
+              <span className="ml-2 font-mono text-[11px] text-[var(--text-muted)]">
+                &bull; Perspectiva: {rpcDetail.findingsPerspective}
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>

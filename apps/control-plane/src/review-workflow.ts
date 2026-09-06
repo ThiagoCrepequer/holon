@@ -1028,9 +1028,9 @@ export async function executeReviewWorkflow(
       modelStep,
       async () => await analyzeReview(job, services, emit, effectivePolicy),
       async () => {
-        let structuralFilesCount = 0;
-        let textualFilesCount = 0;
-        let estimatedTokens = 0;
+        let structuralFilesCount: number | null = null;
+        let textualFilesCount: number | null = null;
+        let estimatedTokens: number | null = null;
         try {
           const context = await services.loadContext(effectivePolicy);
           structuralFilesCount = context.files.filter(
@@ -1050,10 +1050,10 @@ export async function executeReviewWorkflow(
         }
         return {
           estimatedTokens,
-          modelRoute: services.modelRoute,
+          modelRoute: services.modelRoute || "unknown",
           structuralFilesCount,
           textualFilesCount,
-          toolsBudget: services.toolsBudget,
+          toolsBudget: services.toolsBudget ?? null,
         };
       },
       (out) => ({
@@ -1372,7 +1372,10 @@ export async function executeReviewWorkflow(
       outputTokens: usage.outputTokens,
       totalTokens: usage.inputTokens + usage.outputTokens,
     };
-    const cost = calculateInferenceCost("deepseek-chat", tokenAccounting);
+    const cost = calculateInferenceCost(
+      services.modelRoute || "deepseek-chat",
+      tokenAccounting,
+    );
     const runTelemetry: RunTelemetry = {
       cost,
       createdAt: finishedAt,

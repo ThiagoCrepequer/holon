@@ -444,6 +444,24 @@ describe("apps/admin router and server-side rendered views", () => {
             attempts: [],
             attemptsCount: 1,
             errorCode: null,
+            firstStartedAt: "2026-09-04T11:00:00.000Z",
+            lastEndedAt: "2026-09-04T11:00:01.000Z",
+            phase: "preparation",
+            sanitizedInput: {
+              baseSha: "b".repeat(40),
+              headSha: "a".repeat(40),
+              repoName: "cool-project",
+              repoOwner: "acme",
+            },
+            sanitizedOutput: null,
+            status: "completed",
+            stepName: "prepare-repository",
+            totalDurationMs: 1000,
+          },
+          {
+            attempts: [],
+            attemptsCount: 1,
+            errorCode: null,
             firstStartedAt: "2026-09-04T11:00:01.000Z",
             lastEndedAt: null,
             phase: "analysis",
@@ -474,6 +492,7 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(mockActiveV3.getRunDetailV3).toHaveBeenCalled();
     const html = await resp.text();
     expect(html).toContain(activeRunId);
+    expect(html).toContain("acme/cool-project #120");
     expect(html).toContain("analyze-review");
   });
 

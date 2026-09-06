@@ -1569,32 +1569,24 @@ export class ReviewLedgerObject
           startedAt,
         );
       } else {
+        if (existing.status === "completed") {
+          // Step is already completed; do not regress status or add new running attempts.
+          return;
+        }
         const nextAttempts = Math.max(existing.attempts_count, attempt);
         const resolvedInput = existing.sanitized_input_json ?? inputJson;
         const finalOrder =
           existing.step_order > 0 ? existing.step_order : resolvedStepOrder;
-        if (existing.status === "completed") {
-          this.ctx.storage.sql.exec(
-            "UPDATE step_executions SET attempts_count = ?, step_order = ?, updated_at = ?, sanitized_input_json = ? WHERE run_id = ? AND step_name = ?",
-            nextAttempts,
-            finalOrder,
-            startedAt,
-            resolvedInput,
-            runId,
-            stepName,
-          );
-        } else {
-          this.ctx.storage.sql.exec(
-            "UPDATE step_executions SET status = 'running', phase = ?, step_order = ?, attempts_count = ?, updated_at = ?, sanitized_input_json = ? WHERE run_id = ? AND step_name = ?",
-            phase,
-            finalOrder,
-            nextAttempts,
-            startedAt,
-            resolvedInput,
-            runId,
-            stepName,
-          );
-        }
+        this.ctx.storage.sql.exec(
+          "UPDATE step_executions SET status = 'running', phase = ?, step_order = ?, attempts_count = ?, updated_at = ?, sanitized_input_json = ? WHERE run_id = ? AND step_name = ?",
+          phase,
+          finalOrder,
+          nextAttempts,
+          startedAt,
+          resolvedInput,
+          runId,
+          stepName,
+        );
       }
 
       this.ctx.storage.sql.exec(
@@ -1645,8 +1637,11 @@ export class ReviewLedgerObject
         )
         .toArray()[0];
 
-      if (existingAttempt?.status === "completed") {
-        // Attempt is already completed. Idempotent no-op to prevent double-counting duration.
+      if (
+        existingAttempt?.status === "completed" ||
+        existingAttempt?.status === "failed"
+      ) {
+        // Attempt is already terminated. Idempotent no-op to prevent double-counting duration.
         return;
       }
 

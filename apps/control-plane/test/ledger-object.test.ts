@@ -1612,6 +1612,30 @@ describe("Migration 12 and step executions telemetry", () => {
     expect(steps[0]!.totalDurationMs).toBe(2000);
     expect(steps[0]!.attempts[1]!.status).toBe("completed");
 
+    // 5f. Calling recordStepAttemptComplete on already failed attempt 1 is a no-op
+    await ledger.recordStepAttemptComplete(
+      v12RunId,
+      "analyze-review",
+      1,
+      "2026-09-04T12:00:05.000Z",
+      800,
+    );
+    steps = await getSteps(v12RunId);
+    expect(steps[0]!.totalDurationMs).toBe(2000);
+    expect(steps[0]!.attempts[0]!.status).toBe("failed");
+
+    // 5g. Calling recordStepAttemptStart with new attempt 3 on already completed step is a no-op
+    await ledger.recordStepAttemptStart(
+      v12RunId,
+      "analyze-review",
+      "analysis",
+      3,
+      "2026-09-04T12:00:06.000Z",
+    );
+    steps = await getSteps(v12RunId);
+    expect(steps[0]!.status).toBe("completed");
+    expect(steps[0]!.attempts).toHaveLength(2);
+
     // 5d. Duplicate recordStepAttemptStart on in-progress attempt preserves original startedAt
     await ledger.recordStepAttemptStart(
       v12RunId,
