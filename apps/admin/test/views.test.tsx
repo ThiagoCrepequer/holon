@@ -1,12 +1,31 @@
-import type { AdminRunDetailV2 } from "@holon/contracts";
+import type {
+  AdminRunDetailV2,
+  AdminRunDetailV3,
+  StepExecutionNode,
+} from "@holon/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { StepInspectorDrawer } from "../app/components/workflow-canvas/step-inspector-drawer.js";
+import { WorkflowCanvas } from "../app/components/workflow-canvas/workflow-canvas.js";
+import * as useHydratedModule from "../app/hooks/use-hydrated.js";
+import {
+  getClientSnapshot,
+  getServerSnapshot,
+  subscribe,
+} from "../app/hooks/use-hydrated.js";
 import { NotFoundView } from "../app/routes/not-found.js";
+import {
+  createRevalidatorProxy,
+  setupAutoPolling,
+} from "../app/routes/run-detail.js";
 import { DashboardView } from "../app/views/dashboard-view.js";
 import { ReadinessView } from "../app/views/readiness-view.js";
-import { RunDetailView } from "../app/views/run-detail-view.js";
+import {
+  handleCloseComplete,
+  RunDetailView,
+} from "../app/views/run-detail-view.js";
 import { RunsView } from "../app/views/runs-view.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../workers/types.js";
 
@@ -312,6 +331,62 @@ describe("admin views", () => {
     expect(ciWithoutName).toContain("not_available");
   });
 
+  it("renders run detail with AdminRunDetailV3 execution graph and cleanup task", () => {
+    const v3Detail: AdminRunDetailV3 = {
+      cleanupTask: {
+        attempts: 1,
+        completedAt: "2026-09-04T11:00:06.000Z",
+        nextAttemptAt: null,
+        requestedAt: "2026-09-04T11:00:05.000Z",
+        state: "completed",
+      },
+      currentFindings: detail.currentFindings,
+      findingsPerspective: "current_pr_state",
+      graphSchemaVersion: 1,
+      historicalRunFindings: [],
+      projectIdentification: null,
+      run: {
+        ...detail.run,
+        runState: "completed",
+      },
+      schemaVersion: 3,
+      stepExecutions: [
+        {
+          attempts: [
+            {
+              attempt: 1,
+              durationMs: 25,
+              endedAt: "2026-09-04T11:00:01.025Z",
+              errorCode: null,
+              startedAt: "2026-09-04T11:00:01.000Z",
+              status: "completed",
+              waitBeforeRetryMs: null,
+            },
+          ],
+          attemptsCount: 1,
+          errorCode: null,
+          firstStartedAt: "2026-09-04T11:00:01.000Z",
+          lastEndedAt: "2026-09-04T11:00:01.025Z",
+          phase: "admission",
+          sanitizedInput: { runId: baseRun.run_id },
+          sanitizedOutput: { outcome: "claimed" },
+          status: "completed",
+          stepName: "claim-run",
+          totalDurationMs: 25,
+        },
+      ],
+      structuredCi: null,
+    };
+
+    const html = render(
+      <RunDetailView rpcDetail={v3Detail} run={baseRun} />,
+      "/runs/x",
+    );
+    expect(html).toContain("Workflow DAG &amp; Telemetria");
+    expect(html).toContain("claim-run");
+    expect(html).toContain("Sandbox Cleanup Task:");
+  });
+
   it("renders every readiness status and criticality", () => {
     for (const status of ["healthy", "degraded", "partial"] as const) {
       const componentStatus = status === "partial" ? "unknown" : status;
@@ -338,5 +413,410 @@ describe("admin views", () => {
 
   it("renders the catch-all page", () => {
     expect(render(<NotFoundView />, "/missing")).toContain("Page not found");
+  });
+
+  it("renders RunDetailView with selected step drawer open and cleanup badge", () => {
+    const v3Detail: AdminRunDetailV3 = {
+      cleanupTask: {
+        attempts: 2,
+        completedAt: null,
+        nextAttemptAt: "2026-09-04T12:00:00.000Z",
+        requestedAt: "2026-09-04T11:00:05.000Z",
+        state: "pending",
+      },
+      currentFindings: [
+        {
+          diagnostic: "Potential vulnerability in query handler",
+          filePath: "src/query.ts",
+          fingerprint: `fp:${"c".repeat(64)}`,
+          line: 42,
+          severity: "critical",
+          status: "new",
+          updatedAt: "2026-09-04T11:00:05.000Z",
+        },
+      ],
+      findingsPerspective: "both",
+      graphSchemaVersion: 1,
+      historicalRunFindings: [],
+      projectIdentification: null,
+      run: {
+        cost: null,
+        createdAt: "2026-09-04T11:00:00.000Z",
+        headSha: baseRun.head_sha,
+        isDegraded: false,
+        prKey: baseRun.pr_key,
+        runId: baseRun.run_id as `github:${number}:pr:${number}:head:${string}`,
+        runState: "completed",
+        scopeStatus: "complete",
+        shardsCount: 1,
+        stepTimings: [],
+        terminalState: "completed",
+        tokens: null,
+        toolCallsCount: 0,
+        updatedAt: "2026-09-04T11:00:05.000Z",
+        verdict: null,
+      },
+      schemaVersion: 3,
+      stepExecutions: [
+        {
+          attempts: [
+            {
+              attempt: 1,
+              durationMs: 25,
+              endedAt: "2026-09-04T11:00:01.025Z",
+              errorCode: null,
+              startedAt: "2026-09-04T11:00:01.000Z",
+              status: "completed",
+              waitBeforeRetryMs: null,
+            },
+          ],
+          attemptsCount: 1,
+          errorCode: null,
+          firstStartedAt: "2026-09-04T11:00:01.000Z",
+          lastEndedAt: "2026-09-04T11:00:01.025Z",
+          phase: "admission",
+          sanitizedInput: { runId: baseRun.run_id },
+          sanitizedOutput: { outcome: "claimed" },
+          status: "completed",
+          stepName: "claim-run",
+          totalDurationMs: 25,
+        },
+      ],
+      structuredCi: null,
+    };
+
+    const html = render(
+      <RunDetailView
+        rpcDetail={v3Detail}
+        run={baseRun}
+        initialSelectedStepName="claim-run"
+        isActive={false}
+      />,
+      "/runs/x",
+    );
+    expect(html).toContain("Workflow DAG &amp; Telemetria");
+    expect(html).toContain("Detalhes da etapa claim-run");
+    expect(html).toContain("Sandbox Cleanup Task:");
+    expect(html).toContain("pending");
+    expect(html).toContain("Tentativas: 2");
+  });
+
+  it("renders RunDetailView with rpcError and without rpcDetail", () => {
+    const htmlWithError = render(
+      <RunDetailView
+        rpcDetail={null}
+        run={baseRun}
+        rpcError="Control plane RPC binding not configured"
+      />,
+      "/runs/x",
+    );
+    expect(htmlWithError).toContain("Control plane RPC binding not configured");
+    expect(htmlWithError).toContain("RPC Drill-down degraded:");
+    expect(htmlWithError).toContain(
+      "Displaying cached projection data from D1 ledger.",
+    );
+  });
+});
+
+describe("StepInspectorDrawer", () => {
+  const sampleStep: StepExecutionNode = {
+    attempts: [
+      {
+        attempt: 1,
+        durationMs: 120,
+        endedAt: "2026-09-04T11:00:02.120Z",
+        errorCode: "NetworkTimeout",
+        startedAt: "2026-09-04T11:00:02.000Z",
+        status: "failed",
+        waitBeforeRetryMs: 1000,
+      },
+      {
+        attempt: 2,
+        durationMs: 95,
+        endedAt: "2026-09-04T11:00:04.095Z",
+        errorCode: null,
+        startedAt: "2026-09-04T11:00:04.000Z",
+        status: "completed",
+        waitBeforeRetryMs: null,
+      },
+    ],
+    attemptsCount: 2,
+    errorCode: null,
+    firstStartedAt: "2026-09-04T11:00:02.000Z",
+    lastEndedAt: "2026-09-04T11:00:04.095Z",
+    phase: "analysis",
+    sanitizedInput: { model: "claude-sonnet-4-6", maxTokens: 4096 },
+    sanitizedOutput: { verdict: "APPROVE", findingsCount: 0 },
+    status: "completed",
+    stepName: "analyze-review",
+    totalDurationMs: 215,
+  };
+
+  it("returns null when step is null", () => {
+    const html = renderToStaticMarkup(
+      <StepInspectorDrawer step={null} onClose={vi.fn()} />,
+    );
+    expect(html).toBe("");
+  });
+
+  it("renders server-side fallback aside with step name when step is provided", () => {
+    const html = renderToStaticMarkup(
+      <StepInspectorDrawer step={sampleStep} onClose={vi.fn()} />,
+    );
+    expect(html).toContain('data-testid="step-inspector-drawer"');
+    expect(html).toContain("analyze-review");
+    expect(html).toContain("Detalhes da etapa analyze-review");
+  });
+});
+
+describe("WorkflowCanvas", () => {
+  const steps: StepExecutionNode[] = [
+    {
+      attempts: [],
+      attemptsCount: 1,
+      errorCode: null,
+      firstStartedAt: "2026-09-04T11:00:01.000Z",
+      lastEndedAt: "2026-09-04T11:00:01.050Z",
+      phase: "admission",
+      sanitizedInput: null,
+      sanitizedOutput: null,
+      status: "completed",
+      stepName: "claim-run",
+      totalDurationMs: 50,
+    },
+    {
+      attempts: [],
+      attemptsCount: 2,
+      errorCode: "RetryError",
+      firstStartedAt: "2026-09-04T11:00:01.100Z",
+      lastEndedAt: null,
+      phase: "preparation",
+      sanitizedInput: null,
+      sanitizedOutput: null,
+      status: "running",
+      stepName: "prepare-repository",
+      totalDurationMs: 300,
+    },
+    {
+      attempts: [],
+      attemptsCount: 1,
+      errorCode: "FatalError",
+      firstStartedAt: "2026-09-04T11:00:02.000Z",
+      lastEndedAt: "2026-09-04T11:00:02.100Z",
+      phase: "analysis",
+      sanitizedInput: null,
+      sanitizedOutput: null,
+      status: "failed",
+      stepName: "analyze-review",
+      totalDurationMs: 100,
+    },
+  ];
+
+  it("renders DAG canvas view with all step nodes in SSR", () => {
+    const html = renderToStaticMarkup(
+      <WorkflowCanvas
+        stepExecutions={steps}
+        selectedStepName="analyze-review"
+        onSelectStep={vi.fn()}
+      />,
+    );
+    expect(html).toContain("Workflow DAG &amp; Telemetria");
+    expect(html).toContain("3 step(s)");
+    expect(html).toContain("claim-run");
+    expect(html).toContain("prepare-repository");
+    expect(html).toContain("analyze-review");
+  });
+
+  it("renders empty state when no step executions exist in SSR", () => {
+    const html = renderToStaticMarkup(
+      <WorkflowCanvas
+        stepExecutions={[]}
+        selectedStepName={null}
+        onSelectStep={vi.fn()}
+      />,
+    );
+    expect(html).toContain(
+      "Nenhuma execução de etapa registrada para este run.",
+    );
+    expect(html).toContain("0 step(s)");
+  });
+});
+
+describe("setupAutoPolling", () => {
+  it("returns no-op cleanup function when isActive is false", () => {
+    const revalidate = vi.fn();
+    const cleanup = setupAutoPolling(false, {
+      state: "idle",
+      revalidate,
+    });
+    expect(typeof cleanup).toBe("function");
+    cleanup();
+    expect(revalidate).not.toHaveBeenCalled();
+  });
+
+  it("registers interval and visibility listeners when active and handles tick", () => {
+    vi.useFakeTimers();
+    const listeners: Record<string, () => void> = {};
+    const mockDoc = {
+      visibilityState: "visible",
+      addEventListener: vi.fn((type: string, cb: () => void) => {
+        listeners[type] = cb;
+      }),
+      removeEventListener: vi.fn((type: string) => {
+        delete listeners[type];
+      }),
+    };
+
+    const originalDocument = (globalThis as unknown as { document?: unknown })
+      .document;
+    (globalThis as unknown as { document: unknown }).document = mockDoc;
+
+    try {
+      const revalidate = vi.fn();
+      const cleanup = setupAutoPolling(
+        true,
+        { state: "idle", revalidate },
+        100,
+      );
+
+      expect(mockDoc.addEventListener).toHaveBeenCalledWith(
+        "visibilitychange",
+        expect.any(Function),
+      );
+
+      // Trigger visibility change
+      if (listeners["visibilitychange"]) {
+        listeners["visibilitychange"]();
+        expect(revalidate).toHaveBeenCalledTimes(1);
+      }
+
+      // Advance timer to trigger interval tick
+      vi.advanceTimersByTime(110);
+      expect(revalidate).toHaveBeenCalledTimes(2);
+
+      cleanup();
+      expect(mockDoc.removeEventListener).toHaveBeenCalledWith(
+        "visibilitychange",
+        expect.any(Function),
+      );
+    } finally {
+      vi.useRealTimers();
+      (globalThis as unknown as { document?: unknown }).document =
+        originalDocument;
+    }
+  });
+
+  it("does not trigger revalidation when document is hidden or state is loading", () => {
+    const mockDoc = {
+      visibilityState: "hidden",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+
+    const originalDocument = (globalThis as unknown as { document?: unknown })
+      .document;
+    (globalThis as unknown as { document: unknown }).document = mockDoc;
+
+    try {
+      const revalidate = vi.fn();
+      const cleanup = setupAutoPolling(
+        true,
+        { state: "loading", revalidate },
+        100,
+      );
+      cleanup();
+      expect(revalidate).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as unknown as { document?: unknown }).document =
+        originalDocument;
+    }
+  });
+});
+
+describe("useHydrated", () => {
+  it("returns client and server snapshots and subscribe unsubscribe", () => {
+    expect(getClientSnapshot()).toBe(true);
+    expect(getServerSnapshot()).toBe(false);
+    const unsub = subscribe()();
+    expect(unsub).toBeUndefined();
+  });
+});
+
+describe("createRevalidatorProxy", () => {
+  it("forwards state getter and revalidate call to ref current", () => {
+    const revalidate = vi.fn();
+    const ref = { current: { state: "idle", revalidate } };
+    const proxy = createRevalidatorProxy(ref);
+    expect(proxy.state).toBe("idle");
+    proxy.revalidate();
+    expect(revalidate).toHaveBeenCalledTimes(1);
+
+    ref.current = { state: "loading", revalidate };
+    expect(proxy.state).toBe("loading");
+  });
+});
+
+describe("handleCloseComplete", () => {
+  it("navigates to /runs when closed", () => {
+    const navigate = vi.fn();
+    handleCloseComplete(false, navigate);
+    expect(navigate).toHaveBeenCalledWith("/runs");
+  });
+
+  it("does not navigate when still open", () => {
+    const navigate = vi.fn();
+    handleCloseComplete(true, navigate);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("hydrated component branches", () => {
+  const sampleStep: StepExecutionNode = {
+    attempts: [],
+    attemptsCount: 1,
+    errorCode: null,
+    firstStartedAt: "2026-09-04T11:00:01.000Z",
+    lastEndedAt: "2026-09-04T11:00:01.050Z",
+    phase: "admission",
+    sanitizedInput: null,
+    sanitizedOutput: null,
+    status: "completed",
+    stepName: "claim-run",
+    totalDurationMs: 50,
+  };
+
+  it("renders hydrated fallback for WorkflowCanvas and StepInspectorDrawer", () => {
+    const spy = vi
+      .spyOn(useHydratedModule, "useHydrated")
+      .mockReturnValue(true);
+    try {
+      const canvasHtml = renderToStaticMarkup(
+        <WorkflowCanvas
+          stepExecutions={[sampleStep]}
+          selectedStepName="claim-run"
+          onSelectStep={vi.fn()}
+        />,
+      );
+      expect(canvasHtml).toBeDefined();
+
+      const drawerHtml = renderToStaticMarkup(
+        <StepInspectorDrawer step={sampleStep} onClose={vi.fn()} />,
+      );
+      expect(drawerHtml).toBeDefined();
+
+      const viewHtml = render(
+        <RunDetailView rpcDetail={null} run={baseRun} embedded />,
+        "/runs/x",
+      );
+      expect(viewHtml).toBe("");
+
+      const layoutHtml = render(
+        <RunDetailView rpcDetail={null} run={baseRun} embedded={false} />,
+        "/runs/x",
+      );
+      expect(layoutHtml).toContain("Runs");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

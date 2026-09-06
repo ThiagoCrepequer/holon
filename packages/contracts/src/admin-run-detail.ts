@@ -23,6 +23,7 @@ import {
   stepTimingSchema,
   tokenAccountingSchema,
 } from "./telemetry.js";
+import { stepExecutionNodeSchema } from "./workflow-execution-preview.js";
 
 const nonNegativeSafeIntegerSchema = z.number().int().nonnegative().safe();
 
@@ -72,9 +73,59 @@ export const adminReadRequestV1Schema = z.strictObject({
   runId: runIdSchema as z.ZodType<RunId>,
 });
 
+export const adminCleanupTaskSummaryV1Schema = z.strictObject({
+  attempts: nonNegativeSafeIntegerSchema,
+  completedAt: timestampSchema.nullable(),
+  nextAttemptAt: timestampSchema.nullable(),
+  requestedAt: timestampSchema,
+  state: z.enum(["pending", "completed"]),
+});
+
+export const adminRunDetailV3Schema = z.strictObject({
+  cleanupTask: adminCleanupTaskSummaryV1Schema.nullable(),
+  currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
+  findingsPerspective: z.enum(["current_pr_state", "historical_run", "both"]),
+  graphSchemaVersion: z.literal(1),
+  historicalRunFindings: z.array(adminFindingSummaryV1Schema).max(100),
+  projectIdentification: projectIdentificationResultV1Schema.nullable(),
+  run: z.strictObject({
+    cost: costAccountingSchema.nullable(),
+    createdAt: timestampSchema.optional(),
+    headSha: gitShaSchema,
+    isDegraded: z.boolean(),
+    prKey: prKeySchema,
+    runId: runIdSchema as z.ZodType<RunId>,
+    runState: z.enum([
+      "queued",
+      "running",
+      "publishing",
+      "completed",
+      "failed_terminal",
+      "obsolete",
+    ]),
+    scopeStatus: reviewScopeStatusSchema.nullable(),
+    shardsCount: nonNegativeSafeIntegerSchema,
+    stepTimings: z.array(stepTimingSchema).max(100),
+    terminalState: z
+      .enum(["completed", "failed_terminal", "obsolete"])
+      .nullable(),
+    tokens: tokenAccountingSchema.nullable(),
+    toolCallsCount: nonNegativeSafeIntegerSchema,
+    updatedAt: timestampSchema.nullable().optional(),
+    verdict: reviewVerdictSchema.nullable(),
+  }),
+  schemaVersion: z.literal(3),
+  stepExecutions: z.array(stepExecutionNodeSchema).max(100),
+  structuredCi: adminCiSummaryV1Schema.nullable(),
+});
+
 export type AdminFindingSummaryV1 = z.infer<typeof adminFindingSummaryV1Schema>;
 export type AdminCiSummaryV1 = z.infer<typeof adminCiSummaryV1Schema>;
 export type AdminRunDetailV2 = z.infer<typeof adminRunDetailV2Schema>;
+export type AdminRunDetailV3 = z.infer<typeof adminRunDetailV3Schema>;
+export type AdminCleanupTaskSummaryV1 = z.infer<
+  typeof adminCleanupTaskSummaryV1Schema
+>;
 export type AdminReadRequestV1 = z.infer<typeof adminReadRequestV1Schema>;
 
 /**

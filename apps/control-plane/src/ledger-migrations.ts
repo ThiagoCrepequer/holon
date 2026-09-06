@@ -259,6 +259,45 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 11,
   },
+  {
+    statements: `
+      CREATE TABLE IF NOT EXISTS step_executions (
+        run_id TEXT NOT NULL,
+        step_name TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        status TEXT NOT NULL,
+        step_order INTEGER NOT NULL DEFAULT 0,
+        attempts_count INTEGER NOT NULL DEFAULT 1,
+        total_duration_ms INTEGER NOT NULL DEFAULT 0,
+        sanitized_input_json TEXT,
+        sanitized_output_json TEXT,
+        error_code TEXT,
+        first_started_at TEXT NOT NULL,
+        last_ended_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (run_id, step_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_step_executions_run
+        ON step_executions(run_id);
+
+      CREATE TABLE IF NOT EXISTS step_attempts (
+        run_id TEXT NOT NULL,
+        step_name TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        duration_ms INTEGER,
+        wait_before_retry_ms INTEGER,
+        error_code TEXT,
+        PRIMARY KEY (run_id, step_name, attempt)
+      );
+      CREATE INDEX IF NOT EXISTS idx_step_attempts_run_step
+        ON step_attempts(run_id, step_name);
+    `,
+    version: 12,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

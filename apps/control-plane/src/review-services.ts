@@ -30,6 +30,8 @@ import {
   type ReviewContextV3,
   type ReviewJob,
   type RunClaimV2Result,
+  type StepExecutionNode,
+  type StepPhase,
 } from "@holon/contracts";
 import { createPrKey, type RunId, type RunState } from "@holon/domain";
 import {
@@ -127,6 +129,33 @@ export interface WorkflowLedger
     occurredAt: string,
     operationId: string,
   ): Promise<void>;
+  recordStepAttemptStart?(
+    runId: string,
+    stepName: string,
+    phase: StepPhase,
+    attempt: number,
+    startedAt: string,
+    sanitizedInput?: Record<string, unknown> | null,
+    waitBeforeRetryMs?: number | null,
+    stepOrder?: number | null,
+  ): Promise<void>;
+  recordStepAttemptComplete?(
+    runId: string,
+    stepName: string,
+    attempt: number,
+    endedAt: string,
+    durationMs: number,
+    sanitizedOutput?: Record<string, unknown> | null,
+  ): Promise<void>;
+  recordStepAttemptFailure?(
+    runId: string,
+    stepName: string,
+    attempt: number,
+    endedAt: string,
+    durationMs: number,
+    errorCode: string,
+  ): Promise<void>;
+  getStepExecutions?(runId: string): Promise<StepExecutionNode[]>;
 }
 
 export interface ReviewRuntime {
@@ -277,7 +306,9 @@ export function createReviewServices(
     identificationOutputTokens = 0;
   const executor: RepositoryExecutorBinding =
     runtime.executor ?? env.REPOSITORY_EXECUTOR;
-  const ledger: WorkflowLedger = env.REVIEW_LEDGERS.getByName(prKeyFor(job));
+  const ledger = env.REVIEW_LEDGERS.getByName(
+    prKeyFor(job),
+  ) as unknown as WorkflowLedger;
   const wait = runtime.wait ?? ((delay) => scheduler.wait(delay));
   const createSession = async () =>
     await executeGitHubOperation(async () => {

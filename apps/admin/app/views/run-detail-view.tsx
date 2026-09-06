@@ -1,4 +1,8 @@
-import type { AdminRunDetailV2 } from "@holon/contracts";
+import type {
+  AdminRunDetailV2,
+  AdminRunDetailV3,
+  StepExecutionNode,
+} from "@holon/contracts";
 import {
   Badge,
   Card,
@@ -20,15 +24,30 @@ import { Link, useNavigate } from "react-router";
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
 import { ProjectVersions } from "../components/project-versions.js";
+import {
+  StepInspectorDrawer,
+  WorkflowCanvas,
+} from "../components/workflow-canvas/index.js";
 import { useHydrated } from "../hooks/use-hydrated.js";
 import { formatNumber } from "../utils/format.js";
 
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
   readonly run: AdminRunRow;
-  readonly rpcDetail: AdminRunDetailV2 | null;
+  readonly rpcDetail: AdminRunDetailV3 | AdminRunDetailV2 | null;
   readonly rpcError?: string | null | undefined;
   readonly embedded?: boolean | undefined;
+  readonly isActive?: boolean | undefined;
+  readonly initialSelectedStepName?: string | null | undefined;
+}
+
+export function handleCloseComplete(
+  isOpen: boolean,
+  navigate: (to: string) => void | Promise<void>,
+): void {
+  if (!isOpen) {
+    void navigate("/runs");
+  }
 }
 
 export const RunDetailView: React.FC<RunDetailViewProps> = ({
@@ -37,10 +56,31 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   rpcDetail,
   rpcError,
   embedded = false,
+  isActive: _isActive,
+  initialSelectedStepName,
 }) => {
   const navigate = useNavigate();
   const hydrated = useHydrated();
   const [open, setOpen] = React.useState(false);
+  const [selectedStepName, setSelectedStepName] = React.useState<string | null>(
+    initialSelectedStepName ?? null,
+  );
+
+  const stepExecutions: readonly StepExecutionNode[] = React.useMemo(() => {
+    if (!rpcDetail) return [];
+    if (
+      "stepExecutions" in rpcDetail &&
+      Array.isArray(rpcDetail.stepExecutions)
+    ) {
+      return rpcDetail.stepExecutions;
+    }
+    return [];
+  }, [rpcDetail]);
+
+  const selectedStep = React.useMemo(() => {
+    if (!selectedStepName) return null;
+    return stepExecutions.find((s) => s.stepName === selectedStepName) ?? null;
+  }, [selectedStepName, stepExecutions]);
   React.useEffect(() => {
     if (embedded) setOpen(true);
   }, [embedded]);
@@ -210,6 +250,53 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         </Card>
       </div>
 
+      {/* Workflow Execution DAG & Telemetry Preview */}
+      <div className="section-gap mb-4">
+        <div className="flex flex-col xl:flex-row gap-4 items-start">
+          <div className="flex-1 min-w-0 w-full">
+            <WorkflowCanvas
+              stepExecutions={stepExecutions}
+              selectedStepName={selectedStepName}
+              onSelectStep={setSelectedStepName}
+            />
+          </div>
+          {selectedStep && (
+            <div className="w-full xl:w-96 shrink-0 h-[480px]">
+              <StepInspectorDrawer
+                step={selectedStep}
+                onClose={() => setSelectedStepName(null)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sandbox Cleanup Task Notification (if available) */}
+      {rpcDetail && "cleanupTask" in rpcDetail && rpcDetail.cleanupTask && (
+        <div className="mb-4 p-3 bg-purple-950/20 border border-purple-800/40 rounded-lg flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400">⏰</span>
+            <span className="font-semibold text-purple-300">
+              Sandbox Cleanup Task:
+            </span>
+            <Badge
+              variant={
+                rpcDetail.cleanupTask.state === "completed"
+                  ? "success"
+                  : "neutral"
+              }
+              size="sm"
+            >
+              {rpcDetail.cleanupTask.state}
+            </Badge>
+          </div>
+          <span className="text-slate-400 font-mono text-[11px]">
+            Tentativas: {rpcDetail.cleanupTask.attempts} &bull; Solicitado em:{" "}
+            {rpcDetail.cleanupTask.requestedAt}
+          </span>
+        </div>
+      )}
+
       <ProjectVersions result={rpcDetail?.projectIdentification} />
 
       {/* Findings Section */}
@@ -318,11 +405,9 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         open={open}
         swipeDirection="right"
         onOpenChange={setOpen}
-        onOpenChangeComplete={(isOpen) => {
-          if (!isOpen) void navigate("/runs");
-        }}
+        onOpenChangeComplete={(isOpen) => handleCloseComplete(isOpen, navigate)}
       >
-        <DrawerPopup>
+        <DrawerPopup className="w-full max-w-6xl">
           <DrawerHeader>
             <DrawerTitle>Run detail</DrawerTitle>
             <DrawerClose className="rounded-md px-2 py-1 text-xs hover:bg-[var(--surface-hover)]">

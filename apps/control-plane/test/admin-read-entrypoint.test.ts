@@ -112,5 +112,27 @@ describe("AdminReadEntrypoint", () => {
         projects: [{ technologies: [{ name: "react" }] }],
       },
     });
+
+    // Test getRunDetailV3
+    const detailV3 = await entrypoint.getRunDetailV3({ runId: validRunId });
+    expect(detailV3).not.toBeNull();
+    expect(detailV3?.schemaVersion).toBe(3);
+    expect(detailV3?.run.runId).toBe(validRunId);
+    expect(detailV3?.run.runState).toBe("completed");
+    expect(detailV3?.run.terminalState).toBe("completed");
+    expect(detailV3?.projectIdentification).toEqual(versions);
+    expect(Array.isArray(detailV3?.stepExecutions)).toBe(true);
+  });
+
+  it("handles getRunDetailV3 validations and missing runs", async () => {
+    const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
+    await expect(entrypoint.getRunDetailV3({})).rejects.toThrow();
+    await expect(
+      entrypoint.getRunDetailV3({ runId: "bad-id" }),
+    ).rejects.toThrow();
+
+    const missingSha = "9".repeat(40);
+    const missingRunId = `github:42:pr:7:head:${missingSha}` as RunId;
+    expect(await entrypoint.getRunDetailV3({ runId: missingRunId })).toBeNull();
   });
 });

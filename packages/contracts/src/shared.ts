@@ -44,4 +44,5 @@ export const repositoryPathSchema = z
   }, "Expected a normalized repository-relative path");
 
 export const positiveIntegerSchema = z.number().int().positive().safe();
+export const nonNegativeIntegerSchema = z.number().int().nonnegative().safe();
 export const timestampSchema = z.iso.datetime({ offset: true });

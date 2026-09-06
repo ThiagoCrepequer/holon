@@ -32,6 +32,60 @@ export default defineConfig({
                 async getRunDetailV2() {
                   return null;
                 }
+                async getRunDetailV3() {
+                  return {
+                    cleanupTask: null,
+                    currentFindings: [],
+                    findingsPerspective: "both",
+                    graphSchemaVersion: 1,
+                    historicalRunFindings: [],
+                    projectIdentification: null,
+                    run: {
+                      cost: null,
+                      createdAt: "2026-09-04T11:00:00.000Z",
+                      headSha: "a".repeat(40),
+                      isDegraded: false,
+                      prKey: "github:42:pr:7",
+                      runId: "github:42:pr:7:head:" + "a".repeat(40),
+                      runState: "completed",
+                      scopeStatus: "complete",
+                      shardsCount: 1,
+                      stepTimings: [],
+                      terminalState: "completed",
+                      tokens: null,
+                      toolCallsCount: 0,
+                      updatedAt: "2026-09-04T11:00:05.000Z",
+                      verdict: "APPROVE",
+                    },
+                    schemaVersion: 3,
+                    stepExecutions: [
+                      {
+                        attempts: [
+                          {
+                            attempt: 1,
+                            durationMs: 25,
+                            endedAt: "2026-09-04T11:00:01.025Z",
+                            errorCode: null,
+                            startedAt: "2026-09-04T11:00:01.000Z",
+                            status: "completed",
+                            waitBeforeRetryMs: null,
+                          },
+                        ],
+                        attemptsCount: 1,
+                        errorCode: null,
+                        firstStartedAt: "2026-09-04T11:00:01.000Z",
+                        lastEndedAt: "2026-09-04T11:00:01.025Z",
+                        phase: "admission",
+                        sanitizedInput: { runId: "github:42:pr:7:head:" + "a".repeat(40) },
+                        sanitizedOutput: { outcome: "claimed" },
+                        status: "completed",
+                        stepName: "claim-run",
+                        totalDurationMs: 25,
+                      },
+                    ],
+                    structuredCi: null,
+                  };
+                }
               }
             `,
           },

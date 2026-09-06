@@ -263,6 +263,164 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(html).toContain("RPC drill-down unavailable");
   });
 
+  it("handles run detail when RPC binding is not configured", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const envNoRpc = {
+      ...env,
+      ADMIN_READ_API: undefined,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envNoRpc,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html).toContain("Control plane RPC binding not configured");
+  });
+
+  it("handles run detail when getRunDetailV3 succeeds with V3 detail", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const mockV3 = {
+      pingV1: vi.fn(),
+      getRunDetailV3: vi.fn().mockResolvedValue({
+        cleanupTask: null,
+        currentFindings: [],
+        findingsPerspective: "both",
+        graphSchemaVersion: 1,
+        historicalRunFindings: [],
+        projectIdentification: null,
+        run: {
+          cost: null,
+          createdAt: "2026-09-04T11:00:00.000Z",
+          headSha: event.payload.headSha,
+          isDegraded: false,
+          prKey: event.payload.prKey,
+          runId: event.payload.runId,
+          runState: "running",
+          scopeStatus: "complete",
+          shardsCount: 1,
+          stepTimings: [],
+          terminalState: null,
+          tokens: null,
+          toolCallsCount: 0,
+          updatedAt: "2026-09-04T11:00:05.000Z",
+          verdict: null,
+        },
+        schemaVersion: 3,
+        stepExecutions: [
+          {
+            attempts: [],
+            attemptsCount: 1,
+            errorCode: null,
+            firstStartedAt: "2026-09-04T11:00:01.000Z",
+            lastEndedAt: "2026-09-04T11:00:01.050Z",
+            phase: "admission",
+            sanitizedInput: null,
+            sanitizedOutput: null,
+            status: "completed",
+            stepName: "claim-run",
+            totalDurationMs: 50,
+          },
+        ],
+        structuredCi: null,
+      }),
+      getRunDetailV2: vi.fn(),
+    };
+
+    const envWithV3 = {
+      ...env,
+      ADMIN_READ_API: mockV3 as unknown as Fetcher,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envWithV3,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html).toContain("Workflow DAG &amp; Telemetria");
+    expect(html).toContain("claim-run");
+  });
+
+  it("falls back to getRunDetailV2 when getRunDetailV3 throws", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const mockFallback = {
+      pingV1: vi.fn(),
+      getRunDetailV3: vi.fn().mockRejectedValue(new Error("V3 not supported")),
+      getRunDetailV2: vi.fn().mockResolvedValue({
+        currentFindings: [],
+        findingsPerspective: "current_pr_state",
+        projectIdentification: null,
+        run: {
+          cost: null,
+          headSha: event.payload.headSha,
+          isDegraded: false,
+          prKey: event.payload.prKey,
+          runId: event.payload.runId,
+          scopeStatus: "complete",
+          shardsCount: 1,
+          stepTimings: [],
+          terminalState: "completed",
+          tokens: null,
+          toolCallsCount: 0,
+          verdict: null,
+        },
+        schemaVersion: 2,
+        structuredCi: null,
+      }),
+    };
+
+    const envWithFallback = {
+      ...env,
+      ADMIN_READ_API: mockFallback as unknown as Fetcher,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envWithFallback,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    expect(mockFallback.getRunDetailV3).toHaveBeenCalled();
+    expect(mockFallback.getRunDetailV2).toHaveBeenCalled();
+  });
+
   it("validates a successful RPC detail response at runtime", async () => {
     const event = await createSampleProjectionEvent({
       terminalAtEpochMs: Date.now() - 5000,
@@ -326,11 +484,32 @@ describe("apps/admin router and server-side rendered views", () => {
     const candidate = await mockRpcSuccess.getRunDetailV2({
       runId: event.payload.runId,
     });
+    expect(candidate).not.toBeNull();
+    if (!candidate) throw new Error("candidate is null");
     const parsed = parseRpcRunDetail(candidate);
     expect(parsed?.currentFindings[0]?.filePath).toBe("src/auth.ts");
     expect(() => parseRpcRunDetail({ schemaVersion: 1 })).toThrow(
       "Invalid RPC run detail response",
     );
+
+    const mockV3Candidate = {
+      ...candidate,
+      cleanupTask: null,
+      graphSchemaVersion: 1,
+      historicalRunFindings: [],
+      run: {
+        ...candidate.run,
+        runState: "completed" as const,
+      },
+      schemaVersion: 3,
+      stepExecutions: [],
+    };
+    const parsedV3 = parseRpcRunDetail(mockV3Candidate);
+    expect(parsedV3).toBeDefined();
+    if (parsedV3 && "stepExecutions" in parsedV3) {
+      expect(parsedV3.graphSchemaVersion).toBe(1);
+      expect(parsedV3.stepExecutions).toEqual([]);
+    }
   });
 
   describe("isLocalDevelopment and authentication bypass boundaries", () => {
