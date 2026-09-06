@@ -86,16 +86,17 @@ export const findingExcerptSchema = z.strictObject({
 });
 
 export const analyzeReviewSanitizedInputSchema = z.strictObject({
-  estimatedTokens: nonNegativeIntegerSchema,
+  estimatedTokens: nonNegativeIntegerSchema.nullable().optional(),
   modelRoute: z.string().max(100),
-  structuralFilesCount: nonNegativeIntegerSchema,
-  textualFilesCount: nonNegativeIntegerSchema,
-  toolsBudget: nonNegativeIntegerSchema,
+  structuralFilesCount: nonNegativeIntegerSchema.nullable().optional(),
+  textualFilesCount: nonNegativeIntegerSchema.nullable().optional(),
+  toolsBudget: nonNegativeIntegerSchema.nullable().optional(),
 });
 
 export const analyzeReviewSanitizedOutputSchema = z.strictObject({
   findingsCount: nonNegativeIntegerSchema,
-  findingsExcerptList: z.array(findingExcerptSchema).max(50),
+  findingsExcerptList: z.array(findingExcerptSchema).max(50).optional(),
+  historicalFindings: z.array(z.record(z.string(), z.any())).max(50).optional(),
   promptTruncated: z.boolean(),
   summary: z.string().max(1000),
 });

@@ -516,6 +516,83 @@ describe("admin views", () => {
       "Displaying cached projection data from D1 ledger.",
     );
   });
+
+  it("renders RunDetailView with both snapshot and current findings perspective tabs", () => {
+    const v3WithHistorical: AdminRunDetailV3 = {
+      cleanupTask: null,
+      currentFindings: [
+        {
+          diagnostic: "Current bug on PR",
+          filePath: "src/current.ts",
+          fingerprint: `fp:${"1".repeat(64)}`,
+          line: 10,
+          severity: "high",
+          status: "new",
+          updatedAt: "2026-09-04T12:00:00.000Z",
+        },
+      ],
+      findingsPerspective: "both",
+      graphSchemaVersion: 1,
+      historicalRunFindings: [
+        {
+          diagnostic: "Historical snapshot bug",
+          filePath: "src/old.ts",
+          fingerprint: `fp:${"2".repeat(64)}`,
+          line: 20,
+          severity: "critical",
+          status: "persistent",
+          updatedAt: "2026-09-04T11:00:00.000Z",
+        },
+      ],
+      projectIdentification: null,
+      run: {
+        ...detail.run,
+        runState: "completed",
+      },
+      schemaVersion: 3,
+      stepExecutions: [],
+      structuredCi: null,
+    };
+
+    const html = render(
+      <RunDetailView rpcDetail={v3WithHistorical} run={baseRun} />,
+      "/runs/x",
+    );
+    expect(html).toContain("Achados desta Execução (Snapshot) (1)");
+    expect(html).toContain("Estado Atual no PR (1)");
+    expect(html).toContain("src/old.ts:20");
+    expect(html).toContain("Historical snapshot bug");
+  });
+
+  it("renders RunDetailView when historicalRunFindings is null and terminal_state is null for active run", () => {
+    const activeRun: AdminRunRow = {
+      ...baseRun,
+      terminal_state: null,
+    };
+    const v3Active: AdminRunDetailV3 = {
+      cleanupTask: null,
+      currentFindings: [],
+      findingsPerspective: "current_pr_state",
+      graphSchemaVersion: 1,
+      historicalRunFindings: null,
+      projectIdentification: null,
+      run: {
+        ...detail.run,
+        runState: "running",
+        terminalState: null,
+      },
+      schemaVersion: 3,
+      stepExecutions: [],
+      structuredCi: null,
+    };
+
+    const html = render(
+      <RunDetailView rpcDetail={v3Active} run={activeRun} isActive={true} />,
+      "/runs/x",
+    );
+    expect(html).toContain("Snapshot da execução indisponível");
+    expect(html).toContain("running");
+  });
 });
 
 describe("StepInspectorDrawer", () => {

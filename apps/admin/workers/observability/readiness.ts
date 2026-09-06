@@ -9,7 +9,7 @@ export type ComponentHealth = "healthy" | "degraded" | "unknown";
 
 export interface AdminReadRpcClient {
   pingV1(): Promise<{ schemaVersion: 1 }>;
-  getRunDetailV2(request: { runId: string }): Promise<AdminRunDetailV2 | null>;
+  getRunDetailV2?(request: { runId: string }): Promise<AdminRunDetailV2 | null>;
   getRunDetailV3?(request: { runId: string }): Promise<AdminRunDetailV3 | null>;
 }
 

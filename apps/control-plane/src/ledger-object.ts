@@ -34,6 +34,7 @@ import {
   limitReviewText,
   reviewTextLimits,
   type AdminCiSummaryV1,
+  type AdminFindingSummaryV1,
   type AdminRunDetailV2,
   type AdminRunDetailV3,
   type AdminRunProjectionEventV1,
@@ -1521,6 +1522,23 @@ export class ReviewLedgerObject
     const resolvedStepOrder = stepOrder ?? 0;
 
     this.ctx.storage.transactionSync(() => {
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          started_at: string;
+        }>(
+          "SELECT status, started_at FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (existingAttempt) {
+        // Attempt already exists; do not overwrite started_at or revert completed/failed attempt to running.
+        return;
+      }
+
       const existing = this.ctx.storage.sql
         .exec<{
           status: string;
@@ -1582,11 +1600,7 @@ export class ReviewLedgerObject
       this.ctx.storage.sql.exec(
         `INSERT INTO step_attempts (
           run_id, step_name, attempt, status, started_at, wait_before_retry_ms
-        ) VALUES (?, ?, ?, 'running', ?, ?)
-        ON CONFLICT(run_id, step_name, attempt) DO UPDATE SET
-          status = 'running',
-          started_at = excluded.started_at,
-          wait_before_retry_ms = excluded.wait_before_retry_ms`,
+        ) VALUES (?, ?, ?, 'running', ?, ?)`,
         runId,
         stepName,
         attempt,
@@ -1619,14 +1633,45 @@ export class ReviewLedgerObject
     const outputJson = validatedOutput ? JSON.stringify(validatedOutput) : null;
 
     this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec(
-        "UPDATE step_attempts SET status = 'completed', ended_at = ?, duration_ms = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
-        endedAt,
-        durationMs,
-        runId,
-        stepName,
-        attempt,
-      );
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          duration_ms: number | null;
+        }>(
+          "SELECT status, duration_ms FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (existingAttempt?.status === "completed") {
+        // Attempt is already completed. Idempotent no-op to prevent double-counting duration.
+        return;
+      }
+
+      if (!existingAttempt) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO step_attempts (
+            run_id, step_name, attempt, status, started_at, ended_at, duration_ms
+          ) VALUES (?, ?, ?, 'completed', ?, ?, ?)`,
+          runId,
+          stepName,
+          attempt,
+          endedAt,
+          endedAt,
+          durationMs,
+        );
+      } else {
+        this.ctx.storage.sql.exec(
+          "UPDATE step_attempts SET status = 'completed', ended_at = ?, duration_ms = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          endedAt,
+          durationMs,
+          runId,
+          stepName,
+          attempt,
+        );
+      }
 
       this.ctx.storage.sql.exec(
         `UPDATE step_executions
@@ -1657,15 +1702,50 @@ export class ReviewLedgerObject
     const runId = runIdSchema.parse(rawRunId);
 
     this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec(
-        "UPDATE step_attempts SET status = 'failed', ended_at = ?, duration_ms = ?, error_code = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
-        endedAt,
-        durationMs,
-        errorCode,
-        runId,
-        stepName,
-        attempt,
-      );
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          duration_ms: number | null;
+        }>(
+          "SELECT status, duration_ms FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (
+        existingAttempt?.status === "failed" ||
+        existingAttempt?.status === "completed"
+      ) {
+        // Attempt already terminated. Idempotent no-op to prevent double-counting duration.
+        return;
+      }
+
+      if (!existingAttempt) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO step_attempts (
+            run_id, step_name, attempt, status, started_at, ended_at, duration_ms, error_code
+          ) VALUES (?, ?, ?, 'failed', ?, ?, ?, ?)`,
+          runId,
+          stepName,
+          attempt,
+          endedAt,
+          endedAt,
+          durationMs,
+          errorCode,
+        );
+      } else {
+        this.ctx.storage.sql.exec(
+          "UPDATE step_attempts SET status = 'failed', ended_at = ?, duration_ms = ?, error_code = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          endedAt,
+          durationMs,
+          errorCode,
+          runId,
+          stepName,
+          attempt,
+        );
+      }
 
       this.ctx.storage.sql.exec(
         `UPDATE step_executions
@@ -1774,12 +1854,8 @@ export class ReviewLedgerObject
         firstStartedAt: row.first_started_at,
         lastEndedAt: row.last_ended_at,
         phase: row.phase,
-        sanitizedInput: row.sanitized_input_json
-          ? JSON.parse(row.sanitized_input_json)
-          : null,
-        sanitizedOutput: row.sanitized_output_json
-          ? JSON.parse(row.sanitized_output_json)
-          : null,
+        sanitizedInput: safeJsonParse(row.sanitized_input_json),
+        sanitizedOutput: safeJsonParse(row.sanitized_output_json),
         status: row.status,
         stepName: row.step_name,
         stepOrder: row.step_order,
@@ -1867,44 +1943,28 @@ export class ReviewLedgerObject
       }),
     );
 
-    const historicalFindingRows = this.ctx.storage.sql
-      .exec<{
-        diagnostic: string;
-        file_path: string;
-        fingerprint: string;
-        line: number;
-        severity: "critical" | "high" | "medium" | "low";
-        status:
-          | "new"
-          | "persistent"
-          | "resolved"
-          | "obsolete"
-          | "reintroduced"
-          | "dismissed";
-        updated_at: string;
-      }>(
-        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
-         FROM pr_findings
-         WHERE pr_key = ? AND (first_seen_run_id = ? OR last_seen_run_id = ?)
-         ORDER BY updated_at DESC, fingerprint ASC
-         LIMIT 100`,
-        prKey,
-        runId,
+    const analyzeStepRow = this.ctx.storage.sql
+      .exec<{ sanitized_output_json: string | null }>(
+        "SELECT sanitized_output_json FROM step_executions WHERE run_id = ? AND step_name = 'analyze-review'",
         runId,
       )
-      .toArray();
+      .toArray()[0];
 
-    const historicalRunFindings = historicalFindingRows.map((row) =>
-      adminFindingSummaryV1Schema.parse({
-        diagnostic: sanitizeDiagnostic(row.diagnostic),
-        filePath: row.file_path,
-        fingerprint: row.fingerprint,
-        line: row.line,
-        severity: row.severity,
-        status: row.status,
-        updatedAt: row.updated_at,
-      }),
+    let historicalRunFindings: AdminFindingSummaryV1[] | null = null;
+    const parsedOutput = safeJsonParse(
+      analyzeStepRow?.sanitized_output_json ?? null,
     );
+    if (parsedOutput && Array.isArray(parsedOutput.historicalFindings)) {
+      historicalRunFindings = parsedOutput.historicalFindings
+        .map((item: unknown) => {
+          const res = adminFindingSummaryV1Schema.safeParse(item);
+          return res.success ? res.data : null;
+        })
+        .filter(
+          (item: AdminFindingSummaryV1 | null): item is AdminFindingSummaryV1 =>
+            item !== null,
+        );
+    }
 
     const stepExecutions = await this.getStepExecutions(runId);
 
@@ -1954,10 +2014,17 @@ export class ReviewLedgerObject
     const runState =
       terminalState ?? (rawState as "queued" | "running" | "publishing");
 
+    const findingsPerspective =
+      historicalRunFindings !== null
+        ? currentFindings.length > 0
+          ? "both"
+          : "historical_run"
+        : "current_pr_state";
+
     return adminRunDetailV3Schema.parse({
       cleanupTask,
       currentFindings,
-      findingsPerspective: "both",
+      findingsPerspective,
       graphSchemaVersion: 1,
       historicalRunFindings,
       projectIdentification,
@@ -2055,4 +2122,16 @@ function rowToRunTelemetry(row: RunTelemetryRow): RunTelemetry {
     toolCallsCount: row.tool_calls,
     ...(row.verdict !== null ? { verdict: row.verdict } : {}),
   });
+}
+
+function safeJsonParse(val: string | null): Record<string, unknown> | null {
+  if (!val) return null;
+  try {
+    const parsed = JSON.parse(val);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }

@@ -202,6 +202,8 @@ export interface ReviewServices {
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
   readonly model: ModelReviewer;
+  readonly modelRoute?: string | undefined;
+  readonly toolsBudget?: number | undefined;
   readonly telemetry: TelemetryEmitter;
   readonly workflow: WorkflowController;
   getAccumulatedUsage(): {
@@ -519,6 +521,8 @@ export function createReviewServices(
     executor,
     ledger,
     model,
+    modelRoute: env.AI_MODEL_ID,
+    toolsBudget: 12,
     telemetry,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     getAccumulatedUsage: () => ({

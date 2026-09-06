@@ -32,7 +32,11 @@ export default defineConfig({
                 async getRunDetailV2() {
                   return null;
                 }
-                async getRunDetailV3() {
+                async getRunDetailV3(args) {
+                  if (!args?.runId || args.runId.includes("999999") || args.runId.includes("missing")) {
+                    return null;
+                  }
+                  const runId = args.runId;
                   return {
                     cleanupTask: null,
                     currentFindings: [],
@@ -46,7 +50,7 @@ export default defineConfig({
                       headSha: "a".repeat(40),
                       isDegraded: false,
                       prKey: "github:42:pr:7",
-                      runId: "github:42:pr:7:head:" + "a".repeat(40),
+                      runId,
                       runState: "completed",
                       scopeStatus: "complete",
                       shardsCount: 1,

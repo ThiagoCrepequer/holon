@@ -279,6 +279,12 @@ describe("workflow-execution-preview contracts", () => {
     expect(parsed.run.terminalState).toBeNull();
     expect(parsed.stepExecutions).toHaveLength(1);
     expect(parsed.schemaVersion).toBe(3);
+    expect(
+      adminRunDetailV3Schema.parse({
+        ...runningDetail,
+        historicalRunFindings: null,
+      }).historicalRunFindings,
+    ).toBeNull();
   });
 
   it("validates adminRunDetailV3Schema with completed run and cleanup task", () => {

@@ -86,7 +86,10 @@ export const adminRunDetailV3Schema = z.strictObject({
   currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
   findingsPerspective: z.enum(["current_pr_state", "historical_run", "both"]),
   graphSchemaVersion: z.literal(1),
-  historicalRunFindings: z.array(adminFindingSummaryV1Schema).max(100),
+  historicalRunFindings: z
+    .array(adminFindingSummaryV1Schema)
+    .max(100)
+    .nullable(),
   projectIdentification: projectIdentificationResultV1Schema.nullable(),
   run: z.strictObject({
     cost: costAccountingSchema.nullable(),

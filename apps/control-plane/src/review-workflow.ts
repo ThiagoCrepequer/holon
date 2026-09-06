@@ -323,7 +323,10 @@ export async function executeReviewWorkflow(
     phase: StepPhase,
     config: Parameters<WorkflowStep["do"]>[1],
     fn: (ctx: Parameters<Parameters<WorkflowStep["do"]>[2]>[0]) => Promise<T>,
-    sanitizeInput?: () => Record<string, unknown> | null,
+    sanitizeInput?: () =>
+      | Promise<Record<string, unknown> | null>
+      | Record<string, unknown>
+      | null,
     sanitizeOutput?: (output: T) => Record<string, unknown> | null,
     rollbackOptions?: Parameters<WorkflowStep["do"]>[3],
   ): Promise<T> => {
@@ -345,7 +348,7 @@ export async function executeReviewWorkflow(
           (ctx as { step?: { count?: number } } | undefined)?.step?.count ?? 0;
         const attemptStartDate = new Date();
         const attemptStartedAtIso = attemptStartDate.toISOString();
-        const inputPayload = sanitizeInput ? sanitizeInput() : null;
+        const inputPayload = sanitizeInput ? await sanitizeInput() : null;
         await safeRecordStepStart(
           services.ledger,
           run.id,
@@ -1024,17 +1027,48 @@ export async function executeReviewWorkflow(
       "analysis",
       modelStep,
       async () => await analyzeReview(job, services, emit, effectivePolicy),
-      () => ({
-        estimatedTokens: 0,
-        modelRoute: "deepseek-chat",
-        structuralFilesCount: 0,
-        textualFilesCount: 0,
-        toolsBudget: 10,
-      }),
+      async () => {
+        let structuralFilesCount = 0;
+        let textualFilesCount = 0;
+        let estimatedTokens = 0;
+        try {
+          const context = await services.loadContext(effectivePolicy);
+          structuralFilesCount = context.files.filter(
+            (file) => file.mode === "structural",
+          ).length;
+          textualFilesCount = context.files.filter(
+            (file) => file.mode === "textual",
+          ).length;
+          const patchBytes = context.files.reduce(
+            (total, file) =>
+              total + new TextEncoder().encode(file.patch).byteLength,
+            0,
+          );
+          estimatedTokens = Math.ceil(patchBytes / 4);
+        } catch {
+          // fallback if context load fails
+        }
+        return {
+          estimatedTokens,
+          modelRoute: services.modelRoute,
+          structuralFilesCount,
+          textualFilesCount,
+          toolsBudget: services.toolsBudget,
+        };
+      },
       (out) => ({
-        findingsCount: out.findings.length,
-        promptTruncated: false,
+        findingsCount: out.activeFindings.length,
+        promptTruncated: out.promptTruncated || out.contextTruncated,
         summary: out.summary.slice(0, 500),
+        historicalFindings: out.activeFindings.slice(0, 50).map((f) => ({
+          diagnostic: f.diagnostic.slice(0, 300),
+          filePath: f.location.path,
+          fingerprint: f.fingerprint,
+          line: f.location.line,
+          severity: f.severity,
+          status: f.status,
+          updatedAt: now(),
+        })),
       }),
     );
     reviewPhaseReached = "analyzed";

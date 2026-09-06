@@ -1570,6 +1570,72 @@ describe("Migration 12 and step executions telemetry", () => {
     );
     steps = await getSteps(v12RunId);
     expect(steps[0]!.status).toBe("completed");
+    expect(steps[0]!.attempts[1]!.status).toBe("completed");
+    expect(steps[0]!.attempts[1]!.startedAt).toBe("2026-09-04T12:00:02.500Z");
+
+    // 5b. Duplicate recordStepAttemptComplete call is strictly idempotent and does NOT double duration
+    await ledger.recordStepAttemptComplete(
+      v12RunId,
+      "analyze-review",
+      2,
+      "2026-09-04T12:00:04.000Z",
+      1500,
+    );
+    steps = await getSteps(v12RunId);
+    expect(steps[0]!.totalDurationMs).toBe(2000); // remains 2000 ms, NOT doubled to 3500 ms!
+    expect(steps[0]!.attempts[1]!.durationMs).toBe(1500);
+
+    // 5c. Duplicate recordStepAttemptFailure on attempt 1 does NOT double duration or overwrite error
+    await ledger.recordStepAttemptFailure(
+      v12RunId,
+      "analyze-review",
+      1,
+      "2026-09-04T12:00:01.000Z",
+      500,
+      "model_timeout",
+    );
+    steps = await getSteps(v12RunId);
+    expect(steps[0]!.totalDurationMs).toBe(2000); // remains 2000 ms
+    expect(steps[0]!.attempts[0]!.durationMs).toBe(500);
+    expect(steps[0]!.attempts[0]!.errorCode).toBe("TransientTimeoutError");
+
+    // 5e. Calling recordStepAttemptFailure on already completed attempt 2 is a no-op
+    await ledger.recordStepAttemptFailure(
+      v12RunId,
+      "analyze-review",
+      2,
+      "2026-09-04T12:00:04.500Z",
+      1500,
+      "late_error",
+    );
+    steps = await getSteps(v12RunId);
+    expect(steps[0]!.totalDurationMs).toBe(2000);
+    expect(steps[0]!.attempts[1]!.status).toBe("completed");
+
+    // 5d. Duplicate recordStepAttemptStart on in-progress attempt preserves original startedAt
+    await ledger.recordStepAttemptStart(
+      v12RunId,
+      "duplicate-start-step",
+      "admission",
+      1,
+      "2026-09-04T12:00:00.000Z",
+      null,
+      null,
+      10,
+    );
+    await ledger.recordStepAttemptStart(
+      v12RunId,
+      "duplicate-start-step",
+      "admission",
+      1,
+      "2026-09-04T12:00:10.000Z",
+      null,
+      null,
+      10,
+    );
+    steps = await getSteps(v12RunId);
+    const dupStep = steps.find((s) => s.stepName === "duplicate-start-step");
+    expect(dupStep?.attempts[0]!.startedAt).toBe("2026-09-04T12:00:00.000Z");
 
     // 6. Deterministic sorting with stepOrder even when startedAt is identical
     await ledger.recordStepAttemptStart(
@@ -1688,20 +1754,36 @@ describe("Migration 12 and step executions telemetry", () => {
       },
     ]);
 
-    // Record step execution for run 1
+    // Record step execution for run 1 with analyze-review output snapshot
     await ledger.recordStepAttemptStart(
       runId1,
-      "prepare-repository",
-      "preparation",
+      "analyze-review",
+      "analysis",
       1,
       "2026-09-04T10:00:02.000Z",
     );
     await ledger.recordStepAttemptComplete(
       runId1,
-      "prepare-repository",
+      "analyze-review",
       1,
       "2026-09-04T10:00:03.000Z",
       1000,
+      {
+        findingsCount: 1,
+        historicalFindings: [
+          {
+            diagnostic: "Bug in old code",
+            filePath: "src/old.ts",
+            fingerprint: `fp:${"1".repeat(64)}`,
+            line: 10,
+            severity: "medium",
+            status: "resolved",
+            updatedAt: "2026-09-04T10:00:03.000Z",
+          },
+        ],
+        promptTruncated: false,
+        summary: "Old summary",
+      },
     );
 
     const detail1 = await ledger.getSanitizedAdminRunDetailV3(runId1);
@@ -1709,13 +1791,14 @@ describe("Migration 12 and step executions telemetry", () => {
     expect(detail1?.run.runId).toBe(runId1);
     expect(detail1?.run.runState).toBe("completed");
     expect(detail1?.currentFindings).toHaveLength(2);
-    // Historical findings for run 1 should only contain the finding from run 1
+    // Historical findings for run 1 derived from analyze-review snapshot
     expect(detail1?.historicalRunFindings).toHaveLength(1);
-    expect(detail1?.historicalRunFindings[0]!.filePath).toBe("src/old.ts");
+    expect(detail1?.historicalRunFindings![0]!.filePath).toBe("src/old.ts");
+    expect(detail1?.findingsPerspective).toBe("both");
     expect(detail1?.stepExecutions).toHaveLength(1);
-    expect(detail1?.stepExecutions[0]!.stepName).toBe("prepare-repository");
+    expect(detail1?.stepExecutions[0]!.stepName).toBe("analyze-review");
 
-    // Run 2: currently running
+    // Run 2: currently running with analyze-review output snapshot
     await ledger.claimRun(
       {
         attempt: 0,
@@ -1733,6 +1816,36 @@ describe("Migration 12 and step executions telemetry", () => {
       "2026-09-04T11:00:01.000Z",
       "op-r2-start",
     );
+    await ledger.recordStepAttemptStart(
+      runId2,
+      "analyze-review",
+      "analysis",
+      1,
+      "2026-09-04T11:00:02.000Z",
+    );
+    await ledger.recordStepAttemptComplete(
+      runId2,
+      "analyze-review",
+      1,
+      "2026-09-04T11:00:03.000Z",
+      1000,
+      {
+        findingsCount: 1,
+        historicalFindings: [
+          {
+            diagnostic: "Bug introduced in new code",
+            filePath: "src/new.ts",
+            fingerprint: `fp:${"2".repeat(64)}`,
+            line: 20,
+            severity: "high",
+            status: "new",
+            updatedAt: "2026-09-04T11:00:03.000Z",
+          },
+        ],
+        promptTruncated: false,
+        summary: "New summary",
+      },
+    );
 
     const detail2 = await ledger.getSanitizedAdminRunDetailV3(runId2);
     expect(detail2).not.toBeNull();
@@ -1740,7 +1853,104 @@ describe("Migration 12 and step executions telemetry", () => {
     expect(detail2?.run.runState).toBe("running");
     expect(detail2?.run.terminalState).toBeNull();
     expect(detail2?.historicalRunFindings).toHaveLength(1);
-    expect(detail2?.historicalRunFindings[0]!.filePath).toBe("src/new.ts");
+    expect(detail2?.historicalRunFindings![0]!.filePath).toBe("src/new.ts");
+
+    // Run 3: queued/active but has not executed analyze-review yet -> historicalRunFindings is null
+    const runId3 = `github:42:pr:120:head:${"3".repeat(40)}` as RunId;
+    await ledger.claimRun(
+      {
+        attempt: 0,
+        createdAt: "2026-09-04T12:00:00.000Z",
+        id: runId3,
+        prKey,
+        state: "queued",
+      },
+      "workflow-3",
+    );
+    const detail3 = await ledger.getSanitizedAdminRunDetailV3(runId3);
+    expect(detail3).not.toBeNull();
+    expect(detail3?.historicalRunFindings).toBeNull();
+    expect(detail3?.findingsPerspective).toBe("current_pr_state");
+
+    // Run 4: on a PR without current findings, historicalRunFindings produces perspective "historical_run"
+    const prKey4 = "github:42:pr:121" as const;
+    const ledger4 = env.REVIEW_LEDGERS.getByName(prKey4);
+    const runId4 = `github:42:pr:121:head:${"4".repeat(40)}` as RunId;
+    await ledger4.claimRun(
+      {
+        attempt: 0,
+        createdAt: "2026-09-04T12:00:00.000Z",
+        id: runId4,
+        prKey: prKey4,
+        state: "queued",
+      },
+      "workflow-4",
+    );
+    await ledger4.recordStepAttemptStart(
+      runId4,
+      "analyze-review",
+      "analysis",
+      1,
+      "2026-09-04T12:00:02.000Z",
+    );
+    await ledger4.recordStepAttemptComplete(
+      runId4,
+      "analyze-review",
+      1,
+      "2026-09-04T12:00:03.000Z",
+      1000,
+      {
+        findingsCount: 2,
+        historicalFindings: [
+          {
+            diagnostic: "Valid finding",
+            filePath: "src/valid.ts",
+            fingerprint: `fp:${"4".repeat(64)}`,
+            line: 5,
+            severity: "low",
+            status: "new",
+            updatedAt: "2026-09-04T12:00:03.000Z",
+          },
+          { invalid: "not a finding" }, // fails schema safeParse
+        ],
+        promptTruncated: false,
+        summary: "Run 4 summary",
+      },
+    );
+    const detail4 = await ledger4.getSanitizedAdminRunDetailV3(runId4);
+    expect(detail4).not.toBeNull();
+    expect(detail4?.historicalRunFindings).toHaveLength(1);
+    expect(detail4?.currentFindings).toHaveLength(0);
+    expect(detail4?.findingsPerspective).toBe("historical_run");
+
+    // Run 5: with corrupt sanitized_output_json
+    const runId5 = `github:42:pr:121:head:${"5".repeat(40)}` as RunId;
+    await ledger4.claimRun(
+      {
+        attempt: 0,
+        createdAt: "2026-09-04T13:00:00.000Z",
+        id: runId5,
+        prKey: prKey4,
+        state: "queued",
+      },
+      "workflow-5",
+    );
+    await ledger4.recordStepAttemptStart(
+      runId5,
+      "analyze-review",
+      "analysis",
+      1,
+      "2026-09-04T13:00:00.000Z",
+    );
+    await runInDurableObject(ledger4, (_obj, state) => {
+      state.storage.sql.exec(
+        "UPDATE step_executions SET sanitized_output_json = '{ invalid json' WHERE run_id = ?",
+        runId5,
+      );
+    });
+    const detail5 = await ledger4.getSanitizedAdminRunDetailV3(runId5);
+    expect(detail5).not.toBeNull();
+    expect(detail5?.historicalRunFindings).toBeNull();
 
     // Non-existent run returns null
     const missing = await ledger.getSanitizedAdminRunDetailV3(

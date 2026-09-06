@@ -81,6 +81,38 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
     if (!selectedStepName) return null;
     return stepExecutions.find((s) => s.stepName === selectedStepName) ?? null;
   }, [selectedStepName, stepExecutions]);
+
+  const historicalFindings = React.useMemo(() => {
+    if (
+      rpcDetail &&
+      "historicalRunFindings" in rpcDetail &&
+      Array.isArray(rpcDetail.historicalRunFindings)
+    ) {
+      return rpcDetail.historicalRunFindings;
+    }
+    return null;
+  }, [rpcDetail]);
+
+  const currentFindings = React.useMemo(() => {
+    return rpcDetail?.currentFindings ?? [];
+  }, [rpcDetail]);
+
+  const [findingsTab, setFindingsTab] = React.useState<"snapshot" | "current">(
+    () => (historicalFindings !== null ? "snapshot" : "current"),
+  );
+
+  React.useEffect(() => {
+    if (historicalFindings !== null) {
+      setFindingsTab("snapshot");
+    } else {
+      setFindingsTab("current");
+    }
+  }, [historicalFindings]);
+
+  const activeFindings =
+    findingsTab === "snapshot" && historicalFindings !== null
+      ? historicalFindings
+      : currentFindings;
   React.useEffect(() => {
     if (embedded) setOpen(true);
   }, [embedded]);
@@ -141,12 +173,23 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
               </Badge>
               <Badge
                 variant={
-                  run.terminal_state === "completed" ? "success" : "neutral"
+                  run.terminal_state === "completed"
+                    ? "success"
+                    : run.terminal_state === "failed_terminal"
+                      ? "danger"
+                      : run.terminal_state === null
+                        ? "info"
+                        : "neutral"
                 }
                 size="sm"
                 dot
               >
-                {run.terminal_state}
+                {run.terminal_state ??
+                  (rpcDetail &&
+                  "run" in rpcDetail &&
+                  "runState" in rpcDetail.run
+                    ? rpcDetail.run.runState
+                    : "running")}
               </Badge>
             </div>
             <CardDescription className="font-mono text-xs text-[var(--text-muted)] mt-1 break-all">
@@ -302,24 +345,70 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       {/* Findings Section */}
       <Card className="section-gap">
         <CardHeader className="pb-3">
-          <CardTitle>
-            Findings & Diagnostics
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)] font-mono">
-              ({rpcDetail ? rpcDetail.currentFindings.length : 0} items)
-            </span>
-          </CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle>
+              Findings & Diagnostics
+              <span className="ml-2 text-xs font-normal text-[var(--text-muted)] font-mono">
+                ({activeFindings.length} items)
+              </span>
+            </CardTitle>
+
+            {/* Findings Perspective Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-muted)] rounded-lg text-xs font-medium">
+              {historicalFindings !== null ? (
+                <button
+                  type="button"
+                  data-testid="tab-findings-snapshot"
+                  onClick={() => setFindingsTab("snapshot")}
+                  className={`px-2.5 py-1 rounded transition-colors ${
+                    findingsTab === "snapshot"
+                      ? "bg-[var(--surface-hover)] text-[var(--text-primary)] shadow-xs font-semibold"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  Achados desta Execução (Snapshot) ({historicalFindings.length}
+                  )
+                </button>
+              ) : (
+                <span className="px-2.5 py-1 text-[11px] text-[var(--text-muted)] italic">
+                  Snapshot da execução indisponível
+                </span>
+              )}
+              <button
+                type="button"
+                data-testid="tab-findings-current"
+                onClick={() => setFindingsTab("current")}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  findingsTab === "current"
+                    ? "bg-[var(--surface-hover)] text-[var(--text-primary)] shadow-xs font-semibold"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Estado Atual no PR ({currentFindings.length})
+              </button>
+            </div>
+          </div>
+          <CardDescription className="text-xs text-[var(--text-muted)] mt-1">
+            {findingsTab === "snapshot" && historicalFindings !== null
+              ? "Achados capturados no momento em que esta execução foi analisada."
+              : "Estado atual dos achados no PR (inclui resoluções ou novos achados de runs subsequentes)."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {!rpcDetail || rpcDetail.currentFindings.length === 0 ? (
+          {!rpcDetail || activeFindings.length === 0 ? (
             <div className="py-8">
               <EmptyState
                 title="No findings emitted"
-                description="This review run did not produce any actionable diagnostic findings."
+                description={
+                  findingsTab === "snapshot"
+                    ? "Esta execução específica não produziu achados diagnósticos acionáveis."
+                    : "Não há achados ativos atualmente no pull request."
+                }
               />
             </div>
           ) : (
             <div className="space-y-4">
-              {rpcDetail.currentFindings.map((f) => (
+              {activeFindings.map((f) => (
                 <div
                   key={f.fingerprint}
                   className="p-4 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/50 space-y-2"
