@@ -12,8 +12,10 @@ import {
 } from "@holon/contracts";
 import {
   adminCiSummaryV1Schema,
+  adminCleanupTaskSummaryV1Schema,
   adminFindingSummaryV1Schema,
   adminRunDetailV2Schema,
+  adminRunDetailV3Schema,
   adminRunProjectionEventV1Schema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
@@ -25,16 +27,23 @@ import {
   runStateSchema,
   runTelemetrySchema,
   runTransitionSchema,
+  sanitizePayloadRecord,
+  stepAttemptTelemetrySchema,
+  stepExecutionNodeSchema,
   timestampSchema,
   limitReviewText,
   reviewTextLimits,
   type AdminCiSummaryV1,
+  type AdminFindingSummaryV1,
   type AdminRunDetailV2,
+  type AdminRunDetailV3,
   type AdminRunProjectionEventV1,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type RunTelemetry,
   type RunClaimV2Result,
+  type StepAttemptTelemetry,
+  type StepExecutionNode,
   type SupersededWorkflow,
   type TrackedFinding,
 } from "@holon/contracts";
@@ -1486,6 +1495,562 @@ export class ReviewLedgerObject
       structuredCi,
     });
   }
+
+  public async recordStepAttemptStart(
+    rawRunId: string,
+    stepName: string,
+    phase: "admission" | "preparation" | "analysis" | "publication" | "cleanup",
+    attempt: number,
+    startedAt: string,
+    sanitizedInput?: Record<string, unknown> | null,
+    waitBeforeRetryMs?: number | null,
+    stepOrder?: number | null,
+  ): Promise<void> {
+    const runId = runIdSchema.parse(rawRunId);
+    let validatedInput: Record<string, unknown> | null = null;
+    if (sanitizedInput) {
+      try {
+        validatedInput = sanitizePayloadRecord(sanitizedInput);
+      } catch {
+        validatedInput = {
+          sanitized: false,
+          redactedReason: "payload_rejected",
+        };
+      }
+    }
+    const inputJson = validatedInput ? JSON.stringify(validatedInput) : null;
+    const resolvedStepOrder = stepOrder ?? 0;
+
+    this.ctx.storage.transactionSync(() => {
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          started_at: string;
+        }>(
+          "SELECT status, started_at FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (existingAttempt) {
+        // Attempt already exists; do not overwrite started_at or revert completed/failed attempt to running.
+        return;
+      }
+
+      const existing = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          attempts_count: number;
+          sanitized_input_json: string | null;
+          step_order: number;
+        }>(
+          "SELECT status, attempts_count, sanitized_input_json, step_order FROM step_executions WHERE run_id = ? AND step_name = ?",
+          runId,
+          stepName,
+        )
+        .toArray()[0];
+
+      if (!existing) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO step_executions (
+            run_id, step_name, phase, status, step_order, attempts_count, total_duration_ms,
+            sanitized_input_json, first_started_at, created_at, updated_at
+          ) VALUES (?, ?, ?, 'running', ?, ?, 0, ?, ?, ?, ?)`,
+          runId,
+          stepName,
+          phase,
+          resolvedStepOrder,
+          attempt,
+          inputJson,
+          startedAt,
+          startedAt,
+          startedAt,
+        );
+      } else {
+        if (existing.status === "completed") {
+          // Step is already completed; do not regress status or add new running attempts.
+          return;
+        }
+        const nextAttempts = Math.max(existing.attempts_count, attempt);
+        const resolvedInput = existing.sanitized_input_json ?? inputJson;
+        const finalOrder =
+          existing.step_order > 0 ? existing.step_order : resolvedStepOrder;
+        this.ctx.storage.sql.exec(
+          "UPDATE step_executions SET status = 'running', phase = ?, step_order = ?, attempts_count = ?, updated_at = ?, sanitized_input_json = ? WHERE run_id = ? AND step_name = ?",
+          phase,
+          finalOrder,
+          nextAttempts,
+          startedAt,
+          resolvedInput,
+          runId,
+          stepName,
+        );
+      }
+
+      this.ctx.storage.sql.exec(
+        `INSERT INTO step_attempts (
+          run_id, step_name, attempt, status, started_at, wait_before_retry_ms
+        ) VALUES (?, ?, ?, 'running', ?, ?)`,
+        runId,
+        stepName,
+        attempt,
+        startedAt,
+        waitBeforeRetryMs ?? null,
+      );
+    });
+  }
+
+  public async recordStepAttemptComplete(
+    rawRunId: string,
+    stepName: string,
+    attempt: number,
+    endedAt: string,
+    durationMs: number,
+    sanitizedOutput?: Record<string, unknown> | null,
+  ): Promise<void> {
+    const runId = runIdSchema.parse(rawRunId);
+    let validatedOutput: Record<string, unknown> | null = null;
+    if (sanitizedOutput) {
+      try {
+        validatedOutput = sanitizePayloadRecord(sanitizedOutput);
+      } catch {
+        validatedOutput = {
+          sanitized: false,
+          redactedReason: "payload_rejected",
+        };
+      }
+    }
+    const outputJson = validatedOutput ? JSON.stringify(validatedOutput) : null;
+
+    this.ctx.storage.transactionSync(() => {
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          duration_ms: number | null;
+        }>(
+          "SELECT status, duration_ms FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (
+        existingAttempt?.status === "completed" ||
+        existingAttempt?.status === "failed"
+      ) {
+        // Attempt is already terminated. Idempotent no-op to prevent double-counting duration.
+        return;
+      }
+
+      if (!existingAttempt) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO step_attempts (
+            run_id, step_name, attempt, status, started_at, ended_at, duration_ms
+          ) VALUES (?, ?, ?, 'completed', ?, ?, ?)`,
+          runId,
+          stepName,
+          attempt,
+          endedAt,
+          endedAt,
+          durationMs,
+        );
+      } else {
+        this.ctx.storage.sql.exec(
+          "UPDATE step_attempts SET status = 'completed', ended_at = ?, duration_ms = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          endedAt,
+          durationMs,
+          runId,
+          stepName,
+          attempt,
+        );
+      }
+
+      this.ctx.storage.sql.exec(
+        `UPDATE step_executions
+         SET status = 'completed',
+             last_ended_at = ?,
+             total_duration_ms = total_duration_ms + ?,
+             sanitized_output_json = COALESCE(?, sanitized_output_json),
+             updated_at = ?
+         WHERE run_id = ? AND step_name = ?`,
+        endedAt,
+        durationMs,
+        outputJson,
+        endedAt,
+        runId,
+        stepName,
+      );
+    });
+  }
+
+  public async recordStepAttemptFailure(
+    rawRunId: string,
+    stepName: string,
+    attempt: number,
+    endedAt: string,
+    durationMs: number,
+    errorCode: string,
+  ): Promise<void> {
+    const runId = runIdSchema.parse(rawRunId);
+
+    this.ctx.storage.transactionSync(() => {
+      const existingAttempt = this.ctx.storage.sql
+        .exec<{
+          status: string;
+          duration_ms: number | null;
+        }>(
+          "SELECT status, duration_ms FROM step_attempts WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          runId,
+          stepName,
+          attempt,
+        )
+        .toArray()[0];
+
+      if (
+        existingAttempt?.status === "failed" ||
+        existingAttempt?.status === "completed"
+      ) {
+        // Attempt already terminated. Idempotent no-op to prevent double-counting duration.
+        return;
+      }
+
+      if (!existingAttempt) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO step_attempts (
+            run_id, step_name, attempt, status, started_at, ended_at, duration_ms, error_code
+          ) VALUES (?, ?, ?, 'failed', ?, ?, ?, ?)`,
+          runId,
+          stepName,
+          attempt,
+          endedAt,
+          endedAt,
+          durationMs,
+          errorCode,
+        );
+      } else {
+        this.ctx.storage.sql.exec(
+          "UPDATE step_attempts SET status = 'failed', ended_at = ?, duration_ms = ?, error_code = ? WHERE run_id = ? AND step_name = ? AND attempt = ?",
+          endedAt,
+          durationMs,
+          errorCode,
+          runId,
+          stepName,
+          attempt,
+        );
+      }
+
+      this.ctx.storage.sql.exec(
+        `UPDATE step_executions
+         SET status = CASE WHEN status = 'completed' THEN 'completed' ELSE 'failed' END,
+             last_ended_at = ?,
+             total_duration_ms = total_duration_ms + ?,
+             error_code = ?,
+             updated_at = ?
+         WHERE run_id = ? AND step_name = ?`,
+        endedAt,
+        durationMs,
+        errorCode,
+        endedAt,
+        runId,
+        stepName,
+      );
+    });
+  }
+
+  public async getStepExecutions(
+    rawRunId: string,
+  ): Promise<StepExecutionNode[]> {
+    const runId = runIdSchema.parse(rawRunId);
+
+    const stepRows = this.ctx.storage.sql
+      .exec<{
+        step_name: string;
+        phase:
+          | "admission"
+          | "preparation"
+          | "analysis"
+          | "publication"
+          | "cleanup";
+        status:
+          | "pending"
+          | "running"
+          | "completed"
+          | "failed"
+          | "obsolete"
+          | "skipped";
+        step_order: number;
+        attempts_count: number;
+        total_duration_ms: number;
+        sanitized_input_json: string | null;
+        sanitized_output_json: string | null;
+        error_code: string | null;
+        first_started_at: string;
+        last_ended_at: string | null;
+      }>(
+        `SELECT step_name, phase, status, step_order, attempts_count, total_duration_ms,
+                sanitized_input_json, sanitized_output_json, error_code,
+                first_started_at, last_ended_at
+         FROM step_executions
+         WHERE run_id = ?
+         ORDER BY step_order ASC, first_started_at ASC, step_name ASC`,
+        runId,
+      )
+      .toArray();
+
+    if (stepRows.length === 0) {
+      return [];
+    }
+
+    const attemptRows = this.ctx.storage.sql
+      .exec<{
+        step_name: string;
+        attempt: number;
+        status: "running" | "completed" | "failed" | "interrupted";
+        started_at: string;
+        ended_at: string | null;
+        duration_ms: number | null;
+        wait_before_retry_ms: number | null;
+        error_code: string | null;
+      }>(
+        `SELECT step_name, attempt, status, started_at, ended_at,
+                duration_ms, wait_before_retry_ms, error_code
+         FROM step_attempts
+         WHERE run_id = ?
+         ORDER BY step_name ASC, attempt ASC`,
+        runId,
+      )
+      .toArray();
+
+    const attemptsByStep = new Map<string, StepAttemptTelemetry[]>();
+    for (const row of attemptRows) {
+      const list = attemptsByStep.get(row.step_name) ?? [];
+      list.push(
+        stepAttemptTelemetrySchema.parse({
+          attempt: row.attempt,
+          durationMs: row.duration_ms,
+          endedAt: row.ended_at,
+          errorCode: row.error_code,
+          startedAt: row.started_at,
+          status: row.status,
+          waitBeforeRetryMs: row.wait_before_retry_ms,
+        }),
+      );
+      attemptsByStep.set(row.step_name, list);
+    }
+
+    return stepRows.map((row) =>
+      stepExecutionNodeSchema.parse({
+        attempts: attemptsByStep.get(row.step_name) ?? [],
+        attemptsCount: row.attempts_count,
+        errorCode: row.error_code,
+        firstStartedAt: row.first_started_at,
+        lastEndedAt: row.last_ended_at,
+        phase: row.phase,
+        sanitizedInput: safeJsonParse(row.sanitized_input_json),
+        sanitizedOutput: safeJsonParse(row.sanitized_output_json),
+        status: row.status,
+        stepName: row.step_name,
+        stepOrder: row.step_order,
+        totalDurationMs: row.total_duration_ms,
+      }),
+    );
+  }
+
+  public async getSanitizedAdminRunDetailV3(
+    rawRunId: string,
+  ): Promise<AdminRunDetailV3 | null> {
+    const runId = runIdSchema.parse(rawRunId);
+    const prKey = derivePrKeyFromRunId(runId);
+
+    const runRows = this.ctx.storage.sql
+      .exec<{
+        id: string;
+        pr_key: string;
+        state: string;
+        attempt: number;
+        created_at: string;
+        updated_at: string | null;
+        decision_head_sha: string | null;
+        decision_scope_status: string | null;
+        decision_shards_analyzed: number | null;
+        decision_total_shards: number | null;
+        decision_is_degraded: number | null;
+      }>(
+        `SELECT id, pr_key, state, attempt, created_at, updated_at,
+                decision_head_sha, decision_scope_status, decision_shards_analyzed,
+                decision_total_shards, decision_is_degraded
+         FROM runs
+         WHERE id = ?`,
+        runId,
+      )
+      .toArray();
+
+    if (runRows.length === 0) {
+      return null;
+    }
+    const runRow = runRows[0]!;
+
+    const telemetry = await this.loadRunTelemetry(runId);
+
+    const headSha =
+      telemetry?.headSha ??
+      runRow.decision_head_sha ??
+      runId.split(":head:")[1] ??
+      "";
+
+    const currentFindingRows = this.ctx.storage.sql
+      .exec<{
+        diagnostic: string;
+        file_path: string;
+        fingerprint: string;
+        line: number;
+        severity: "critical" | "high" | "medium" | "low";
+        status:
+          | "new"
+          | "persistent"
+          | "resolved"
+          | "obsolete"
+          | "reintroduced"
+          | "dismissed";
+        updated_at: string;
+      }>(
+        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
+         FROM pr_findings
+         WHERE pr_key = ?
+         ORDER BY updated_at DESC, fingerprint ASC
+         LIMIT 100`,
+        prKey,
+      )
+      .toArray();
+
+    const currentFindings = currentFindingRows.map((row) =>
+      adminFindingSummaryV1Schema.parse({
+        diagnostic: sanitizeDiagnostic(row.diagnostic),
+        filePath: row.file_path,
+        fingerprint: row.fingerprint,
+        line: row.line,
+        severity: row.severity,
+        status: row.status,
+        updatedAt: row.updated_at,
+      }),
+    );
+
+    const analyzeStepRow = this.ctx.storage.sql
+      .exec<{ sanitized_output_json: string | null }>(
+        "SELECT sanitized_output_json FROM step_executions WHERE run_id = ? AND step_name = 'analyze-review'",
+        runId,
+      )
+      .toArray()[0];
+
+    let historicalRunFindings: AdminFindingSummaryV1[] | null = null;
+    const parsedOutput = safeJsonParse(
+      analyzeStepRow?.sanitized_output_json ?? null,
+    );
+    if (parsedOutput && Array.isArray(parsedOutput.historicalFindings)) {
+      historicalRunFindings = parsedOutput.historicalFindings
+        .map((item: unknown) => {
+          const res = adminFindingSummaryV1Schema.safeParse(item);
+          return res.success ? res.data : null;
+        })
+        .filter(
+          (item: AdminFindingSummaryV1 | null): item is AdminFindingSummaryV1 =>
+            item !== null,
+        );
+    }
+
+    const stepExecutions = await this.getStepExecutions(runId);
+
+    const ciEvidence = headSha
+      ? await this.loadCiEvidence(prKey, headSha)
+      : null;
+    const structuredCi = ciEvidence?.structuredCi ?? null;
+    const projectIdentification =
+      (await this.ctx.storage.get<ProjectIdentificationResultV1>(
+        "project-identification:" + runId,
+      )) ?? null;
+
+    const cleanupRows = this.ctx.storage.sql
+      .exec<{
+        state: "pending" | "completed";
+        attempts: number;
+        requested_at: string;
+        completed_at: string | null;
+        next_attempt_at: string | null;
+      }>(
+        `SELECT state, attempts, requested_at, completed_at, next_attempt_at
+         FROM cleanup_tasks
+         WHERE run_id = ?`,
+        runId,
+      )
+      .toArray();
+
+    const cleanupTask =
+      cleanupRows.length > 0
+        ? adminCleanupTaskSummaryV1Schema.parse({
+            attempts: cleanupRows[0]!.attempts,
+            completedAt: cleanupRows[0]!.completed_at,
+            nextAttemptAt: cleanupRows[0]!.next_attempt_at,
+            requestedAt: cleanupRows[0]!.requested_at,
+            state: cleanupRows[0]!.state,
+          })
+        : null;
+
+    const rawState = runRow.state;
+    const terminalState =
+      telemetry?.terminalState ??
+      (rawState === "completed" ||
+      rawState === "failed_terminal" ||
+      rawState === "obsolete"
+        ? rawState
+        : null);
+    const runState =
+      terminalState ?? (rawState as "queued" | "running" | "publishing");
+
+    const findingsPerspective =
+      historicalRunFindings !== null
+        ? currentFindings.length > 0
+          ? "both"
+          : "historical_run"
+        : "current_pr_state";
+
+    return adminRunDetailV3Schema.parse({
+      cleanupTask,
+      currentFindings,
+      findingsPerspective,
+      graphSchemaVersion: 1,
+      historicalRunFindings,
+      projectIdentification,
+      run: {
+        cost: telemetry?.cost ?? null,
+        createdAt: runRow.created_at,
+        headSha,
+        isDegraded: telemetry?.isDegraded ?? runRow.decision_is_degraded === 1,
+        prKey,
+        runId,
+        runState,
+        scopeStatus:
+          telemetry?.scopeStatus ??
+          (runRow.decision_scope_status === "in_scope" ||
+          runRow.decision_scope_status === "out_of_scope"
+            ? runRow.decision_scope_status
+            : null),
+        shardsCount:
+          telemetry?.shardsCount ?? runRow.decision_total_shards ?? 1,
+        stepTimings: telemetry?.stepTimings ?? [],
+        terminalState,
+        tokens: telemetry?.tokens ?? null,
+        toolCallsCount: telemetry?.toolCallsCount ?? 0,
+        updatedAt: runRow.updated_at,
+        verdict: telemetry?.verdict ?? null,
+      },
+      schemaVersion: 3,
+      stepExecutions: [...stepExecutions],
+      structuredCi,
+    });
+  }
 }
 
 interface RunTelemetryRow extends Record<string, SqlStorageValue> {
@@ -1552,4 +2117,16 @@ function rowToRunTelemetry(row: RunTelemetryRow): RunTelemetry {
     toolCallsCount: row.tool_calls,
     ...(row.verdict !== null ? { verdict: row.verdict } : {}),
   });
+}
+
+function safeJsonParse(val: string | null): Record<string, unknown> | null {
+  if (!val) return null;
+  try {
+    const parsed = JSON.parse(val);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }

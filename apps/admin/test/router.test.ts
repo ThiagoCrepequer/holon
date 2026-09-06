@@ -244,7 +244,7 @@ describe("apps/admin router and server-side rendered views", () => {
 
     const mockRpcFail = {
       pingV1: vi.fn(),
-      getRunDetailV2: vi.fn().mockRejectedValue(new Error("RPC timeout")),
+      getRunDetailV3: vi.fn().mockRejectedValue(new Error("RPC timeout")),
     };
 
     const envWithRpc = {
@@ -263,6 +263,239 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(html).toContain("RPC drill-down unavailable");
   });
 
+  it("handles run detail when RPC binding is not configured", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const envNoRpc = {
+      ...env,
+      ADMIN_READ_API: undefined,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envNoRpc,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html).toContain("Control plane RPC binding not configured");
+  });
+
+  it("handles run detail when getRunDetailV3 succeeds with V3 detail", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const mockV3 = {
+      pingV1: vi.fn(),
+      getRunDetailV3: vi.fn().mockResolvedValue({
+        cleanupTask: null,
+        currentFindings: [],
+        findingsPerspective: "both",
+        graphSchemaVersion: 1,
+        historicalRunFindings: [],
+        projectIdentification: null,
+        run: {
+          cost: null,
+          createdAt: "2026-09-04T11:00:00.000Z",
+          headSha: event.payload.headSha,
+          isDegraded: false,
+          prKey: event.payload.prKey,
+          runId: event.payload.runId,
+          runState: "running",
+          scopeStatus: "complete",
+          shardsCount: 1,
+          stepTimings: [],
+          terminalState: null,
+          tokens: null,
+          toolCallsCount: 0,
+          updatedAt: "2026-09-04T11:00:05.000Z",
+          verdict: null,
+        },
+        schemaVersion: 3,
+        stepExecutions: [
+          {
+            attempts: [],
+            attemptsCount: 1,
+            errorCode: null,
+            firstStartedAt: "2026-09-04T11:00:01.000Z",
+            lastEndedAt: "2026-09-04T11:00:01.050Z",
+            phase: "admission",
+            sanitizedInput: null,
+            sanitizedOutput: null,
+            status: "completed",
+            stepName: "claim-run",
+            totalDurationMs: 50,
+          },
+        ],
+        structuredCi: null,
+      }),
+      getRunDetailV2: vi.fn(),
+    };
+
+    const envWithV3 = {
+      ...env,
+      ADMIN_READ_API: mockV3 as unknown as Fetcher,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envWithV3,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    const html = await resp.text();
+    expect(html).toContain("Workflow DAG &amp; Telemetria");
+    expect(html).toContain("claim-run");
+  });
+
+  it("sets rpcError without falling back to V2 when getRunDetailV3 fails (ADR-0032)", async () => {
+    const event = await createSampleProjectionEvent({
+      terminalAtEpochMs: Date.now() - 5000,
+    });
+    await storage.insertProjection(event);
+
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(event.payload.runId)}`,
+      { headers },
+    );
+
+    const mockV3Fail = {
+      pingV1: vi.fn(),
+      getRunDetailV3: vi.fn().mockRejectedValue(new Error("V3 RPC failed")),
+      getRunDetailV2: vi.fn(),
+    };
+
+    const envWithFail = {
+      ...env,
+      ADMIN_READ_API: mockV3Fail as unknown as Fetcher,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envWithFail,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    expect(mockV3Fail.getRunDetailV3).toHaveBeenCalled();
+    expect(mockV3Fail.getRunDetailV2).not.toHaveBeenCalled();
+    const html = await resp.text();
+    expect(html).toContain("RPC drill-down unavailable");
+  });
+
+  it("renders 200 with active run and polling when D1 has no row and RPC returns active run", async () => {
+    const activeRunId =
+      "github:42:pr:120:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const headers = await createValidAuthHeader();
+    const req = new Request(
+      `https://admin.example.com/runs/${encodeURIComponent(activeRunId)}`,
+      { headers },
+    );
+
+    const mockActiveV3 = {
+      pingV1: vi.fn(),
+      getRunDetailV3: vi.fn().mockResolvedValue({
+        cleanupTask: null,
+        currentFindings: [],
+        findingsPerspective: "current_pr_state",
+        graphSchemaVersion: 1,
+        historicalRunFindings: [],
+        projectIdentification: null,
+        run: {
+          cost: null,
+          createdAt: "2026-09-04T11:00:00.000Z",
+          headSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          isDegraded: false,
+          prKey: "github:42:pr:120",
+          runId: activeRunId,
+          runState: "running",
+          scopeStatus: "complete",
+          shardsCount: 1,
+          stepTimings: [],
+          terminalState: null,
+          tokens: null,
+          toolCallsCount: 0,
+          updatedAt: "2026-09-04T11:00:05.000Z",
+          verdict: null,
+        },
+        schemaVersion: 3,
+        stepExecutions: [
+          {
+            attempts: [],
+            attemptsCount: 1,
+            errorCode: null,
+            firstStartedAt: "2026-09-04T11:00:00.000Z",
+            lastEndedAt: "2026-09-04T11:00:01.000Z",
+            phase: "preparation",
+            sanitizedInput: {
+              baseSha: "b".repeat(40),
+              headSha: "a".repeat(40),
+              repoName: "cool-project",
+              repoOwner: "acme",
+            },
+            sanitizedOutput: null,
+            status: "completed",
+            stepName: "prepare-repository",
+            totalDurationMs: 1000,
+          },
+          {
+            attempts: [],
+            attemptsCount: 1,
+            errorCode: null,
+            firstStartedAt: "2026-09-04T11:00:01.000Z",
+            lastEndedAt: null,
+            phase: "analysis",
+            sanitizedInput: null,
+            sanitizedOutput: null,
+            status: "running",
+            stepName: "analyze-review",
+            totalDurationMs: 0,
+          },
+        ],
+        structuredCi: null,
+      }),
+      getRunDetailV2: vi.fn(),
+    };
+
+    const envWithActive = {
+      ...env,
+      ADMIN_READ_API: mockActiveV3 as unknown as Fetcher,
+    } as unknown as AdminEnv;
+
+    const resp = await handleConsoleRequest(
+      req,
+      envWithActive,
+      mockCtx,
+      authConfig(),
+    );
+    expect(resp.status).toBe(200);
+    expect(mockActiveV3.getRunDetailV3).toHaveBeenCalled();
+    const html = await resp.text();
+    expect(html).toContain(activeRunId);
+    expect(html).toContain("acme/cool-project #120");
+    expect(html).toContain("analyze-review");
+  });
+
   it("validates a successful RPC detail response at runtime", async () => {
     const event = await createSampleProjectionEvent({
       terminalAtEpochMs: Date.now() - 5000,
@@ -271,10 +504,8 @@ describe("apps/admin router and server-side rendered views", () => {
 
     const mockRpcSuccess: AdminReadRpcClient = {
       pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-      getRunDetailV2: vi.fn().mockResolvedValue({
-        schemaVersion: 2,
-        projectIdentification: null,
-        findingsPerspective: "current_pr_state",
+      getRunDetailV3: vi.fn().mockResolvedValue({
+        cleanupTask: null,
         currentFindings: [
           {
             fingerprint:
@@ -287,6 +518,10 @@ describe("apps/admin router and server-side rendered views", () => {
             updatedAt: "2026-09-04T12:00:00.000Z",
           },
         ],
+        findingsPerspective: "current_pr_state",
+        graphSchemaVersion: 1,
+        historicalRunFindings: null,
+        projectIdentification: null,
         run: {
           cost: {
             currency: "USD",
@@ -298,6 +533,7 @@ describe("apps/admin router and server-side rendered views", () => {
           isDegraded: false,
           prKey: event.payload.prKey,
           runId: event.payload.runId,
+          runState: "completed",
           scopeStatus: "complete",
           shardsCount: 1,
           stepTimings: [],
@@ -311,6 +547,8 @@ describe("apps/admin router and server-side rendered views", () => {
           toolCallsCount: 1,
           verdict: "APPROVE",
         },
+        schemaVersion: 3,
+        stepExecutions: [],
         structuredCi: {
           durationMs: 1000,
           failed: 0,
@@ -323,11 +561,18 @@ describe("apps/admin router and server-side rendered views", () => {
       }),
     };
 
-    const candidate = await mockRpcSuccess.getRunDetailV2({
+    const candidate = await mockRpcSuccess.getRunDetailV3!({
       runId: event.payload.runId,
     });
+    expect(candidate).not.toBeNull();
+    if (!candidate) throw new Error("candidate is null");
     const parsed = parseRpcRunDetail(candidate);
     expect(parsed?.currentFindings[0]?.filePath).toBe("src/auth.ts");
+    expect(parsed?.schemaVersion).toBe(3);
+    expect(parsed?.stepExecutions).toEqual([]);
+    expect(() => parseRpcRunDetail({ schemaVersion: 2 })).toThrow(
+      "Invalid RPC run detail response",
+    );
     expect(() => parseRpcRunDetail({ schemaVersion: 1 })).toThrow(
       "Invalid RPC run detail response",
     );

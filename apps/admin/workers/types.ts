@@ -6,7 +6,7 @@ export interface AdminRunRow {
   pr_key: string;
   pr_number: number;
   head_sha: string;
-  terminal_state: "completed" | "failed_terminal" | "obsolete";
+  terminal_state: "completed" | "failed_terminal" | "obsolete" | null;
   verdict: "APPROVE" | "REQUEST_CHANGES" | "COMMENT" | null;
   scope_status:
     | "complete"

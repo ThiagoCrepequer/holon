@@ -28,6 +28,8 @@ export type ReconciledReviewOutput = AggregatedReviewResult & {
   readonly policySource?: RepositoryPolicySource | undefined;
   readonly resolvedFindings: readonly TrackedFinding[];
   readonly sourceDigest?: string | null | undefined;
+  readonly promptTruncated?: boolean | undefined;
+  readonly contextTruncated?: boolean | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly updatedTrackedFindings: readonly TrackedFinding[];
   readonly waiversCount?: number | undefined;
@@ -71,8 +73,12 @@ async function reviewShards(
   structuralImpact: StructuralImpactReport | undefined,
   inputTruncated = false,
   emit?: EmitReviewEvent,
-): Promise<readonly ShardReviewResult[]> {
+): Promise<{
+  readonly results: readonly ShardReviewResult[];
+  readonly anyPromptTruncated: boolean;
+}> {
   const results: ShardReviewResult[] = [];
+  let anyPromptTruncated = false;
   const identification = services.getProjectIdentification?.();
   for (const shard of plan.shards) {
     const shardContext = {
@@ -124,6 +130,9 @@ async function reviewShards(
     };
     try {
       const reviewResult = await services.model.review(job, shardContext);
+      if (reviewResult.promptTruncated) {
+        anyPromptTruncated = true;
+      }
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
       if (modelOutput.outputLimitations?.length || reviewResult.promptTruncated)
         emit?.("model.output_limits", {
@@ -169,7 +178,7 @@ async function reviewShards(
   ) {
     throw new Error("All review shards failed during model execution");
   }
-  return results;
+  return { anyPromptTruncated, results };
 }
 
 export async function analyzeReview(
@@ -216,11 +225,13 @@ export async function analyzeReview(
       return {
         ...aggregateShardReviews(plan, [], { verdictPolicy }),
         activeFindings: [],
+        contextTruncated: context.truncated,
         effectivePolicyDigest:
           context.schemaVersion === 3
             ? context.effectivePolicyDigest
             : undefined,
         policySource: context.policySource,
+        promptTruncated: context.truncated,
         resolvedFindings: [],
         sourceDigest: context.sourceDigest,
         structuralImpact: context.structuralImpact,
@@ -229,7 +240,7 @@ export async function analyzeReview(
       };
     }
 
-    const shardResults = await reviewShards(
+    const { results: shardResults, anyPromptTruncated } = await reviewShards(
       job,
       services,
       plan,
@@ -315,6 +326,8 @@ export async function analyzeReview(
       structuralImpact: context.structuralImpact,
       updatedTrackedFindings: reconciled.updatedTrackedFindings,
       waiversCount: context.waiversCount,
+      contextTruncated: context.truncated,
+      promptTruncated: anyPromptTruncated || context.truncated,
     };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);

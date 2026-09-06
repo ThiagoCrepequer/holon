@@ -1,4 +1,8 @@
-import type { AdminRunDetailV2 } from "@holon/contracts";
+import type {
+  AdminRunDetailV2,
+  AdminRunDetailV3,
+  StepExecutionNode,
+} from "@holon/contracts";
 import {
   Badge,
   Card,
@@ -20,15 +24,30 @@ import { Link, useNavigate } from "react-router";
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
 import { ProjectVersions } from "../components/project-versions.js";
+import {
+  StepInspectorDrawer,
+  WorkflowCanvas,
+} from "../components/workflow-canvas/index.js";
 import { useHydrated } from "../hooks/use-hydrated.js";
 import { formatNumber } from "../utils/format.js";
 
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
   readonly run: AdminRunRow;
-  readonly rpcDetail: AdminRunDetailV2 | null;
+  readonly rpcDetail: AdminRunDetailV3 | AdminRunDetailV2 | null;
   readonly rpcError?: string | null | undefined;
   readonly embedded?: boolean | undefined;
+  readonly isActive?: boolean | undefined;
+  readonly initialSelectedStepName?: string | null | undefined;
+}
+
+export function handleCloseComplete(
+  isOpen: boolean,
+  navigate: (to: string) => void | Promise<void>,
+): void {
+  if (!isOpen) {
+    void navigate("/runs");
+  }
 }
 
 export const RunDetailView: React.FC<RunDetailViewProps> = ({
@@ -37,10 +56,61 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
   rpcDetail,
   rpcError,
   embedded = false,
+  isActive: _isActive,
+  initialSelectedStepName,
 }) => {
   const navigate = useNavigate();
   const hydrated = useHydrated();
   const [open, setOpen] = React.useState(false);
+  const [selectedStepName, setSelectedStepName] = React.useState<string | null>(
+    initialSelectedStepName ?? null,
+  );
+
+  const stepExecutions: readonly StepExecutionNode[] = React.useMemo(() => {
+    if (!rpcDetail) return [];
+    if (
+      "stepExecutions" in rpcDetail &&
+      Array.isArray(rpcDetail.stepExecutions)
+    ) {
+      return rpcDetail.stepExecutions;
+    }
+    return [];
+  }, [rpcDetail]);
+
+  const selectedStep = React.useMemo(() => {
+    if (!selectedStepName) return null;
+    return stepExecutions.find((s) => s.stepName === selectedStepName) ?? null;
+  }, [selectedStepName, stepExecutions]);
+
+  const historicalFindings = React.useMemo(() => {
+    if (
+      rpcDetail &&
+      "historicalRunFindings" in rpcDetail &&
+      Array.isArray(rpcDetail.historicalRunFindings)
+    ) {
+      return rpcDetail.historicalRunFindings;
+    }
+    return null;
+  }, [rpcDetail]);
+
+  const currentFindings = React.useMemo(() => {
+    return rpcDetail?.currentFindings ?? [];
+  }, [rpcDetail]);
+
+  const [findingsTab, setFindingsTab] = React.useState<"snapshot" | "current">(
+    () => (historicalFindings !== null ? "snapshot" : "current"),
+  );
+
+  React.useEffect(() => {
+    if (historicalFindings === null && findingsTab === "snapshot") {
+      setFindingsTab("current");
+    }
+  }, [historicalFindings, findingsTab]);
+
+  const activeFindings =
+    findingsTab === "snapshot" && historicalFindings !== null
+      ? historicalFindings
+      : currentFindings;
   React.useEffect(() => {
     if (embedded) setOpen(true);
   }, [embedded]);
@@ -83,7 +153,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-semibold text-[var(--text-primary)] break-words">
-                {run.repository_owner}/{run.repository_name} #{run.pr_number}
+                {`${run.repository_owner}/${run.repository_name} #${run.pr_number}`}
               </h1>
               <Badge
                 variant={
@@ -101,12 +171,23 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
               </Badge>
               <Badge
                 variant={
-                  run.terminal_state === "completed" ? "success" : "neutral"
+                  run.terminal_state === "completed"
+                    ? "success"
+                    : run.terminal_state === "failed_terminal"
+                      ? "danger"
+                      : run.terminal_state === null
+                        ? "info"
+                        : "neutral"
                 }
                 size="sm"
                 dot
               >
-                {run.terminal_state}
+                {run.terminal_state ??
+                  (rpcDetail &&
+                  "run" in rpcDetail &&
+                  "runState" in rpcDetail.run
+                    ? rpcDetail.run.runState
+                    : "running")}
               </Badge>
             </div>
             <CardDescription className="font-mono text-xs text-[var(--text-muted)] mt-1 break-all">
@@ -210,29 +291,127 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         </Card>
       </div>
 
+      {/* Workflow Execution DAG & Telemetry Preview */}
+      <div className="section-gap mb-4">
+        <div className="flex flex-col xl:flex-row gap-4 items-start">
+          <div className="flex-1 min-w-0 w-full">
+            <WorkflowCanvas
+              stepExecutions={stepExecutions}
+              selectedStepName={selectedStepName}
+              onSelectStep={setSelectedStepName}
+            />
+          </div>
+          {selectedStep && (
+            <div className="w-full xl:w-96 shrink-0 h-[480px]">
+              <StepInspectorDrawer
+                step={selectedStep}
+                onClose={() => setSelectedStepName(null)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sandbox Cleanup Task Notification (if available) */}
+      {rpcDetail && "cleanupTask" in rpcDetail && rpcDetail.cleanupTask && (
+        <div className="mb-4 p-3 bg-purple-950/20 border border-purple-800/40 rounded-lg flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-purple-400">⏰</span>
+            <span className="font-semibold text-purple-300">
+              Sandbox Cleanup Task:
+            </span>
+            <Badge
+              variant={
+                rpcDetail.cleanupTask.state === "completed"
+                  ? "success"
+                  : "neutral"
+              }
+              size="sm"
+            >
+              {rpcDetail.cleanupTask.state}
+            </Badge>
+          </div>
+          <span className="text-slate-400 font-mono text-[11px]">
+            Tentativas: {rpcDetail.cleanupTask.attempts} &bull; Solicitado em:{" "}
+            {rpcDetail.cleanupTask.requestedAt}
+          </span>
+        </div>
+      )}
+
       <ProjectVersions result={rpcDetail?.projectIdentification} />
 
       {/* Findings Section */}
       <Card className="section-gap">
         <CardHeader className="pb-3">
-          <CardTitle>
-            Findings & Diagnostics
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)] font-mono">
-              ({rpcDetail ? rpcDetail.currentFindings.length : 0} items)
-            </span>
-          </CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle>
+              Findings & Diagnostics
+              <span className="ml-2 text-xs font-normal text-[var(--text-muted)] font-mono">
+                ({activeFindings.length} items)
+              </span>
+            </CardTitle>
+
+            {/* Findings Perspective Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-[var(--surface-muted)] rounded-lg text-xs font-medium">
+              {historicalFindings !== null ? (
+                <button
+                  type="button"
+                  data-testid="tab-findings-snapshot"
+                  onClick={() => setFindingsTab("snapshot")}
+                  className={`px-2.5 py-1 rounded transition-colors ${
+                    findingsTab === "snapshot"
+                      ? "bg-[var(--surface-hover)] text-[var(--text-primary)] shadow-xs font-semibold"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  Achados desta Execução (Snapshot) ({historicalFindings.length}
+                  )
+                </button>
+              ) : (
+                <span className="px-2.5 py-1 text-[11px] text-[var(--text-muted)] italic">
+                  Snapshot da execução indisponível
+                </span>
+              )}
+              <button
+                type="button"
+                data-testid="tab-findings-current"
+                onClick={() => setFindingsTab("current")}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  findingsTab === "current"
+                    ? "bg-[var(--surface-hover)] text-[var(--text-primary)] shadow-xs font-semibold"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Estado Atual no PR ({currentFindings.length})
+              </button>
+            </div>
+          </div>
+          <CardDescription className="text-xs text-[var(--text-muted)] mt-1">
+            {findingsTab === "snapshot" && historicalFindings !== null
+              ? "Achados capturados no momento em que esta execução foi analisada."
+              : "Estado atual dos achados no PR (inclui resoluções ou novos achados de runs subsequentes)."}
+            {rpcDetail && "findingsPerspective" in rpcDetail && (
+              <span className="ml-2 font-mono text-[11px] text-[var(--text-muted)]">
+                &bull; Perspectiva: {rpcDetail.findingsPerspective}
+              </span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {!rpcDetail || rpcDetail.currentFindings.length === 0 ? (
+          {!rpcDetail || activeFindings.length === 0 ? (
             <div className="py-8">
               <EmptyState
                 title="No findings emitted"
-                description="This review run did not produce any actionable diagnostic findings."
+                description={
+                  findingsTab === "snapshot"
+                    ? "Esta execução específica não produziu achados diagnósticos acionáveis."
+                    : "Não há achados ativos atualmente no pull request."
+                }
               />
             </div>
           ) : (
             <div className="space-y-4">
-              {rpcDetail.currentFindings.map((f) => (
+              {activeFindings.map((f) => (
                 <div
                   key={f.fingerprint}
                   className="p-4 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/50 space-y-2"
@@ -318,11 +497,9 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         open={open}
         swipeDirection="right"
         onOpenChange={setOpen}
-        onOpenChangeComplete={(isOpen) => {
-          if (!isOpen) void navigate("/runs");
-        }}
+        onOpenChangeComplete={(isOpen) => handleCloseComplete(isOpen, navigate)}
       >
-        <DrawerPopup>
+        <DrawerPopup className="w-full max-w-6xl">
           <DrawerHeader>
             <DrawerTitle>Run detail</DrawerTitle>
             <DrawerClose className="rounded-md px-2 py-1 text-xs hover:bg-[var(--surface-hover)]">

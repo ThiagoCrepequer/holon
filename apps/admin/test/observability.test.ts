@@ -627,6 +627,58 @@ describe("Observability clients and readiness probe", () => {
       expect(reportWrong.checks.rpc).toBe("degraded");
     });
 
+    it("reports degraded when D1 probe times out", async () => {
+      vi.useFakeTimers();
+      try {
+        const mockDb = {
+          prepare: vi.fn().mockReturnValue({
+            first: vi.fn().mockReturnValue(new Promise(() => {})),
+          }),
+        } as unknown as D1Database;
+        const mockRpc: AdminReadRpcClient = {
+          pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
+          getRunDetailV2: vi.fn().mockResolvedValue(null),
+        };
+        const env = {
+          DB: mockDb,
+          ADMIN_READ_API: mockRpc as unknown as Fetcher,
+        } as unknown as AdminEnv;
+
+        const checkPromise = checkReadiness(env);
+        await vi.advanceTimersByTimeAsync(1100);
+        const report = await checkPromise;
+        expect(report.checks.d1).toBe("degraded");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("reports degraded when RPC probe times out", async () => {
+      vi.useFakeTimers();
+      try {
+        const mockDb = {
+          prepare: vi.fn().mockReturnValue({
+            first: vi.fn().mockResolvedValue({ alive: 1 }),
+          }),
+        } as unknown as D1Database;
+        const mockRpc: AdminReadRpcClient = {
+          pingV1: vi.fn().mockReturnValue(new Promise(() => {})),
+          getRunDetailV2: vi.fn().mockResolvedValue(null),
+        };
+        const env = {
+          DB: mockDb,
+          ADMIN_READ_API: mockRpc as unknown as Fetcher,
+        } as unknown as AdminEnv;
+
+        const checkPromise = checkReadiness(env);
+        await vi.advanceTimersByTimeAsync(2100);
+        const report = await checkPromise;
+        expect(report.checks.rpc).toBe("degraded");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("reports degraded when queue freshness breaches the SLO", async () => {
       const mockDb = {
         prepare: vi.fn().mockReturnValue({
