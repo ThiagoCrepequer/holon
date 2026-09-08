@@ -148,7 +148,7 @@ O control-plane obtém do GitHub o diff canônico bruto e o transporta no reques
 do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
 checkpoint: o executor o divide em patches completos, sem executar
 `git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto V3. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+contexto V4. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -173,7 +173,7 @@ Antes da preparação, o control plane lê a política exclusivamente no
 `baseSha`. O resultado validado é output durável de
 `resolve-repository-policy` e acompanha toda reconstrução do Sandbox; não
 depende de estado em memória entre callbacks. Uma política customizada exige
-`prepareRepositoryV3` e `loadContextV3`, sem downgrade. Exclusões adicionais
+`prepareRepositoryV3` e `loadContextV4`, sem downgrade. Exclusões adicionais
 produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
 restantes; paths protegidos têm precedência sobre essas exclusões.
 
@@ -217,7 +217,7 @@ O request V3 leva apenas identidades não secretas e a política validada ao exe
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
-Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente RPC V3.
+Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa preparação V3 e leitura V4 conforme ADR-0035.
 
 ## Falhas esperadas
 
@@ -268,3 +268,13 @@ correção: exige resolução explícita com evidência atual verificada; pendê
 sem revalidação impedem aprovação. Respostas de resolução têm marcador e
 reconciliação idempotente. O cleanup terminal apaga o artefato agregado após
 confirmar destruição do executor.
+
+## Seleção e narrativa — ADR-0035
+
+O planner recebe o diff canônico elegível antes de limitar os shards; o executor
+persiste os patches inteiros selecionados em V4 (até 300 kB em cinco shards de
+60 kB, 50 arquivos, 5.000 coordenadas e 500 kB de JSON). Toda omissão marca cobertura
+parcial. Mesmo sem arquivos selecionados, `truncated` impede classificar a execução
+como ausência de mudanças elegíveis. A publicação de revisão parcial, degradada ou
+com revalidação pendente usa narrativa determinística de incompletude e mantém os
+findings verificados; não solicita síntese adicional ao modelo.

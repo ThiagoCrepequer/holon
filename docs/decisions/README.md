@@ -28,10 +28,10 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0010](0010-use-dynamic-route-for-pr-review.md)                                   | Usar Dynamic Route para selecionar o modelo de PR review                   | `superseded` | 2026-08-30 |
 | [ADR-0011](0011-centralize-model-fallback-in-dynamic-route.md)                        | Centralizar fallback de modelo na Dynamic Route                            | `superseded` | 2026-08-30 |
 | [ADR-0012](0012-use-canonical-diff-and-bounded-semantic-recovery.md)                  | Usar diff canônico e recuperação semântica limitada                        | `superseded` | 2026-08-30 |
-| [ADR-0013](0013-use-tiered-structural-and-textual-review.md)                          | Usar diff canônico, review estrutural JS/TS e textual elegível             | `accepted`   | 2026-08-30 |
+| [ADR-0013](0013-use-tiered-structural-and-textual-review.md)                          | Usar diff canônico, review estrutural JS/TS e textual elegível             | `superseded` | 2026-08-30 |
 | [ADR-0014](0014-version-executor-rpc-and-broker-github-credentials.md)                | Versionar RPC e emitir credenciais GitHub por broker                       | `accepted`   | 2026-08-30 |
 | [ADR-0015](0015-use-causal-admission-and-durable-terminal-cleanup.md)                 | Usar admissão causal e cleanup terminal durável                            | `accepted`   | 2026-08-30 |
-| [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md)             | Exigir patches completos e evidência verificável pelo host                 | `accepted`   | 2026-08-30 |
+| [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md)             | Exigir patches completos e evidência verificável pelo host                 | `superseded` | 2026-08-30 |
 | [ADR-0017](0017-select-review-output-harness-from-evidence.md)                        | Selecionar harness de saída por avaliação comparativa                      | `superseded` | 2026-08-31 |
 | [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                        | Adotar gerador desacoplado em duas fases com gate no host                  | `accepted`   | 2026-09-01 |
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)                     | Derivar veredito determinístico de review por política no host             | `accepted`   | 2026-09-02 |
@@ -60,8 +60,10 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 
 - [ADR-0031 — Identificação de versões como comportamento padrão](0031-always-identify-project-versions.md)
 
-- [ADR-0032 — Exigir contratos RPC atuais](0032-require-current-rpc-contracts.md)
+- [ADR-0032 — Exigir contratos RPC atuais](0032-require-current-rpc-contracts.md) — substituída pela ADR-0035.
 
 - [ADR-0033 — Investigar sinais estruturais e preservar saída](0033-investigate-structural-leads-and-preserve-review-output.md)
 
 - [ADR-0034 — Checkpoints duráveis e revalidação conservadora](0034-make-review-checkpoints-and-revalidation-durable.md)
+
+- [ADR-0035 — Planejar o contexto completo antes dos limites de shards](0035-plan-complete-context-before-sharding.md)

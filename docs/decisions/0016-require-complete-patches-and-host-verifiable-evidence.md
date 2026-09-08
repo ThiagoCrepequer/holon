@@ -1,7 +1,8 @@
 ---
 id: ADR-0016
 kind: decision
-status: accepted
+superseded-by: 0035-plan-complete-context-before-sharding.md
+status: superseded
 date: 2026-08-30
 owners:
   - core-team

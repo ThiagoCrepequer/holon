@@ -34,3 +34,5 @@ Nao criam uma decisao por si so.
 - Promova uma conclusao para ADR quando ela resultar em escolha normativa.
 - Use prioritariamente documentacao oficial, schemas publicados e testes
   reproduziveis.
+
+- [2026-09-08 — Omissão de contexto antes do planejamento](2026-09-08-context-budget-omission.md)

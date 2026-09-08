@@ -79,7 +79,7 @@ estrito. Configurações inválidas falham sem retry e nunca iniciam o Sandbox.
 Exclusões universais e padrões capazes de atingir política, workflows,
 `SECURITY.md` ou `CODEOWNERS` são rejeitados. Além disso, a autorização de
 contexto e tools dá precedência aos paths protegidos, como defesa em
-profundidade. Toda política exige RPC V3; não existe fallback para V2/V1. O par de digests registra os bytes da
+profundidade. Toda política exige preparação V3 e leitura de contexto V4; não existe fallback para V2/V1. O par de digests registra os bytes da
 fonte e a política canônica sem persistir o conteúdo do arquivo.
 
 O executor implementado não executa scripts do repositório:
@@ -145,7 +145,8 @@ continua sendo conteúdo não confiável; "elegível" não significa seguro.
 
 Antes de prompt, resultado de ferramenta e saída publicável, o host redige
 formatos conhecidos de credenciais. O prompt inicial é limitado a 100 kB, o
-diff persistido a 120 kB, tool calls a doze, leituras a 500 linhas/100 kB e
+patches persistidos a 300 kB agregados (60 kB por arquivo/shard, até cinco shards;
+JSON completo limitado a 500 kB), tool calls a doze, leituras a 500 linhas/100 kB e
 coordenadas a 5.000. Redação
 heurística reduz exposição acidental, mas não substitui a política de dados do
 provedor nem garante detectar todo segredo possível.

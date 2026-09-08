@@ -143,7 +143,7 @@ Fontes verificadas em 2026-08-30:
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
 16. Publique executor, control-plane e admin da mesma revisão, admitindo indisponibilidade
-    durante a atualização. Preparação/contexto exigem RPC V3 e o detalhe admin exige
+    durante a atualização. Preparação exige RPC V3 e leitura de contexto exige RPC V4 e o detalhe admin exige
     V2; não há downgrade para Workers antigos. Confirme uso do broker sem token
     em parâmetros do executor. Não retome Workflows antigos como forma de validar
     o novo contrato; inicie uma execução nova após concluir os deploys.
@@ -205,3 +205,12 @@ No smoke posterior, verificar uma run nova, retomada entre shards, preservação
 de uso/versões, feedback durante publicação e cleanup de artefatos em sucesso,
 falha e obsolescência. A prova local não substitui esse smoke. Referência:
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md).
+
+## Transição do contexto — ADR-0035
+
+Além da drenagem prevista na ADR-0034, atualizar executor e control-plane para a
+mesma revisão antes de admitir novas runs. A preparação e os metadados continuam
+V3; `loadContextV4` exige artefato V4. Não há leitura negociada de V3 nem conversão
+ou retentativa automática de runs antigas. Manter também o admin na mesma revisão,
+conforme a política vigente de deploy coordenado. Validar uma nova execução somente
+após concluir o deploy; a reprodução local do diff não comprova esse rollout.

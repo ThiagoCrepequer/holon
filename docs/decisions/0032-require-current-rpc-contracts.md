@@ -1,7 +1,8 @@
 ---
 id: ADR-0032
 kind: decision
-status: accepted
+superseded-by: 0035-plan-complete-context-before-sharding.md
+status: superseded
 owners: [core-team]
 last-reviewed: 2026-09-05
 ---

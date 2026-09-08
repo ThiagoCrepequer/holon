@@ -15,16 +15,16 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 ## Contratos implementados
 
-| Modulo                 | Contratos principais                                                        |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `webhook.ts`           | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                      |
-| `executor.ts`          | RPC V3 exact-SHA, política de escopo, broker, tools e resultados            |
-| `repository-policy.ts` | YAML v1 normalizado, digests, exclusões e rigor de veredito                 |
-| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação          |
-| `admin-projection.ts`  | Envelopes V1 de projeção assíncrona, hash RFC 8785 e validação temporal     |
-| `admin-run-detail.ts`  | DTO V2 de detalhe read-only para o console operacional via RPC              |
-| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1      |
-| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados |
+| Modulo                 | Contratos principais                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `webhook.ts`           | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                              |
+| `executor.ts`          | Preparação V3/contexto V4 exact-SHA, política de escopo, broker, tools e resultados |
+| `repository-policy.ts` | YAML v1 normalizado, digests, exclusões e rigor de veredito                         |
+| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação                  |
+| `admin-projection.ts`  | Envelopes V1 de projeção assíncrona, hash RFC 8785 e validação temporal             |
+| `admin-run-detail.ts`  | DTO V2 de detalhe read-only para o console operacional via RPC                      |
+| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1              |
+| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados         |
 
 ## Regras
 
@@ -39,10 +39,11 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 O pedido V3 do executor aceita no máximo 2 MB UTF-8 de diff canônico bruto;
 portanto, o request precede a classificação e pode conter seções que serão
 excluídas. O contexto persistido seleciona até 50 patches textuais elegíveis,
-60 kB por arquivo, 120 kB agregados e 5.000 linhas alteradas. Cada arquivo registra modo `structural` para
+60 kB por arquivo, 300 kB agregados em até cinco shards e 5.000 linhas alteradas,
+com teto adicional de 500 kB de JSON serializado. Cada arquivo registra modo `structural` para
 JS/TS ou `textual` para os demais formatos. Binários, lockfiles, artefatos
 gerados e caminhos potencialmente sensíveis reconhecidos pelas heurísticas não
-entram nesse contexto nem são enviados ao modelo. O contexto V3 preserva cada
+entram nesse contexto nem são enviados ao modelo. O contexto V4 preserva cada
 patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
 paths e resultados das tools. A saída por shard contém até oito findings, quatro evidências
 por finding e resumo de até 10.000 unidades UTF-16 (ADR-0033).
@@ -60,7 +61,11 @@ registra no scope; o nome determinístico passado a `idFromName` não é o
 `containerId`. APIs de preparação/contexto V1 e V2 foram removidas.
 
 O pedido V3 adiciona a política efetiva e o executor persiste
-`ReviewContextV3` com `ReviewScopePolicyV2`. V3 é obrigatório em preparação e leitura para toda política, sem downgrade. `sourceDigest` identifica os bytes UTF-8 originais;
+`ReviewContextV4` com `ReviewScopePolicyV2`. Preparação e metadados permanecem V3;
+a leitura exige `loadContextV4` para toda política, sem downgrade. O schema histórico
+V3 continua limitado a 120 kB; contextos por shard permanecem V2.
+A seleção ocorre no planner antes da persistência, conforme
+[ADR-0035](../decisions/0035-plan-complete-context-before-sharding.md). `sourceDigest` identifica os bytes UTF-8 originais;
 `effectivePolicyDigest` identifica o JSON canônico aplicado. Ambos são hashes
 SHA-256 e aparecem na telemetria e no Check Run sem expor o conteúdo da
 configuração.
