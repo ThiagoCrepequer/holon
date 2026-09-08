@@ -1,7 +1,7 @@
 import type { StepExecutionNode } from "@holon/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StepInspectorDrawer } from "../app/components/workflow-canvas/step-inspector-drawer.client.js";
 import { WorkflowCanvas } from "../app/components/workflow-canvas/workflow-canvas.client.js";
@@ -68,9 +68,101 @@ const mockStepExecutions: StepExecutionNode[] = [
   },
 ];
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(460);
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("WorkflowCanvas Component", () => {
+  it("places execution steps in one vertical sequence", () => {
+    render(
+      <WorkflowCanvas
+        stepExecutions={mockStepExecutions}
+        selectedStepName={null}
+        onSelectStep={() => {}}
+      />,
+    );
+    const first = screen.getByTestId("canvas-node-claim-run");
+    const second = screen.getByTestId("canvas-node-analyze-review");
+    expect(first.style.left).toBe(second.style.left);
+    expect(Number.parseFloat(second.style.top)).toBeGreaterThan(
+      Number.parseFloat(first.style.top) +
+        Number.parseFloat(first.style.height),
+    );
+  });
+
+  it("pans without selecting a node, then allows a normal click", () => {
+    const select = vi.fn();
+    render(
+      <WorkflowCanvas
+        stepExecutions={mockStepExecutions}
+        selectedStepName={null}
+        onSelectStep={select}
+      />,
+    );
+    const area = screen.getByTestId("canvas-view-area");
+    const node = screen.getByTestId("canvas-node-claim-run");
+    area.scrollTop = 150;
+    fireEvent.pointerDown(node, { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(area, { clientX: 200, clientY: 100, buttons: 1 });
+    fireEvent.pointerUp(area);
+    expect(area.scrollTop).toBe(250);
+    fireEvent.click(node, { detail: 1 });
+    expect(select).not.toHaveBeenCalled();
+    fireEvent.pointerDown(node, {
+      button: 0,
+      clientX: 200,
+      clientY: 100,
+      buttons: 1,
+    });
+    fireEvent.pointerUp(area);
+    fireEvent.click(node, { detail: 1 });
+    expect(select).toHaveBeenCalledWith("claim-run");
+  });
+
+  it.each([18, 100])("anchors zoom and fits all %s measured steps", (count) => {
+    const manySteps = Array.from({ length: count }, (_, i) => ({
+      ...mockStepExecutions[0]!,
+      stepName: `step-${i}`,
+      stepOrder: i,
+    }));
+    render(
+      <WorkflowCanvas
+        stepExecutions={manySteps}
+        selectedStepName={null}
+        onSelectStep={() => {}}
+      />,
+    );
+    const area = screen.getByTestId("canvas-view-area");
+    area.scrollTop = 300;
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(area.scrollTop).toBeCloseTo(353); // (300 + 460/2) * 1.1 - 460/2
+    const viewport = screen.getByTestId("canvas-viewport");
+    const content = screen.getByTestId("canvas-scroll-content");
+    expect(Number.parseFloat(content.style.height)).toBeCloseTo(
+      Number.parseFloat(viewport.style.height) * 1.1,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ajustar" }));
+    expect(area.scrollTop).toBe(0);
+    expect(Number.parseFloat(content.style.height)).toBeCloseTo(460);
+    expect(Number.parseFloat(content.style.width)).toBeLessThanOrEqual(800);
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByText("100%")).toBeDefined();
+    expect(area.scrollTop).toBe(0);
+  });
+
   it("renders steps in DAG canvas and switches to timeline", () => {
     const onSelectStep = vi.fn();
     render(
@@ -125,14 +217,14 @@ describe("WorkflowCanvas Component", () => {
 
     // Phase headers
     expect(screen.getAllByText("admission").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("preparation")).toBeDefined();
+    expect(screen.queryByText("preparation")).toBeNull();
     expect(screen.getAllByText("analysis").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("publication")).toBeDefined();
-    expect(screen.getByText("cleanup")).toBeDefined();
+    expect(screen.queryByText("publication")).toBeNull();
+    expect(screen.queryByText("cleanup")).toBeNull();
 
     // Node selection ring styling
     const claimNode = screen.getByTestId("canvas-node-claim-run");
-    expect(claimNode.className).toContain("ring-2 ring-orange-500");
+    expect(claimNode.className).toContain("ring-2 ring-[var(--accent)]");
   });
 
   it("handles zoom controls", () => {
@@ -160,7 +252,7 @@ describe("WorkflowCanvas Component", () => {
 
     const fitBtn = screen.getByRole("button", { name: "Ajustar" });
     fireEvent.click(fitBtn);
-    expect(screen.getByText("85%")).toBeDefined();
+    expect(screen.getByText("100%")).toBeDefined();
 
     // Test zoom clamping
     for (let i = 0; i < 15; i++) {
@@ -171,7 +263,7 @@ describe("WorkflowCanvas Component", () => {
     for (let i = 0; i < 20; i++) {
       fireEvent.click(zoomOutBtn);
     }
-    expect(screen.getByText("50%")).toBeDefined();
+    expect(screen.getByText("5%")).toBeDefined();
   });
 
   it("renders empty state when no step executions exist", () => {

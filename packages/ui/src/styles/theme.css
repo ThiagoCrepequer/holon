@@ -127,16 +127,13 @@
 
 /* Base UI keeps the popup mounted until these transitions finish. */
 .drawer-popup {
-  transform: translate3d(var(--drawer-swipe-movement-x, 0px), 0, 0);
+  transform: translate3d(0, 0, 0);
   transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 .drawer-popup[data-starting-style],
 .drawer-popup[data-ending-style] {
   transform: translate3d(100%, 0, 0);
-}
-.drawer-popup[data-swiping] {
-  transition: none;
 }
 .drawer-popup[data-ending-style] {
   transition-duration: 220ms;

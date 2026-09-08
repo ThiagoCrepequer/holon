@@ -117,3 +117,17 @@ Consultados em **2026-09-04**: [Base UI Drawer](https://base-ui.com/react/compon
 e [Tailwind Animations](https://tailwind-animations.com/). As utilidades CSS da
 biblioteca não substituem o controle de montagem da rota; a implementação usa
 o ciclo de transições do Base UI já instalado.
+
+## Navegação do workflow executado
+
+O canvas apresenta as etapas de cima para baixo na ordem da execução, com as
+fases identificadas ao longo da sequência. A área tem altura limitada e rolagem
+nativa: mouse permite arrastar, touch preserva pan/inércia do navegador e teclado
+permite explorar a região e focar os nós. Um arraste não seleciona a etapa.
+
+O zoom preserva o centro visível e atualiza as dimensões roláveis, mantendo as
+bordas alcançáveis. “Ajustar” calcula o enquadramento com as dimensões reais da
+área; “Reset” volta a 100% e ao início. Os controles ficam fora da área rolável.
+O painel lateral usa um Dialog modal com aparência de drawer, sem gesto de
+fechamento por arraste; mantém foco contido, Escape, botão de fechamento e
+animações de entrada/saída com respeito a movimento reduzido.

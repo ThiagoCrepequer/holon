@@ -495,7 +495,6 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
     return (
       <Drawer
         open={open}
-        swipeDirection="right"
         onOpenChange={setOpen}
         onOpenChangeComplete={(isOpen) => handleCloseComplete(isOpen, navigate)}
       >
