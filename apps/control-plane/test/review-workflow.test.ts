@@ -323,10 +323,10 @@ function runtime(
     executor: {
       cleanup,
       hasContext: () => Promise.resolve(true),
-      loadContextV3: () =>
+      loadContextV4: () =>
         Promise.resolve({
           ...(options.context ?? context),
-          schemaVersion: 3,
+          schemaVersion: 4,
           effectivePolicyDigest: "c".repeat(64),
           policySource: "default",
           sourceDigest: null,
@@ -1440,7 +1440,8 @@ describe("ReviewWorkflow", () => {
     const summaryPost = setup.posts.find((p) =>
       p.route.includes("/pulls/{pull_number}/reviews"),
     );
-    expect(summaryPost?.body).toContain("Shard 2 review succeeded.");
+    expect(summaryPost?.body).toContain("This review is incomplete.");
+    expect(summaryPost?.body).not.toContain("Shard 2 review succeeded.");
     expect(summaryPost?.body).toContain(
       "Partial review: some changes could not be analyzed due to an execution failure.",
     );

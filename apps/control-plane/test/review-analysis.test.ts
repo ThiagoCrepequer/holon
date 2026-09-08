@@ -1,7 +1,7 @@
 import {
   reviewJobV2Schema,
   type ReviewContextV2,
-  type ReviewContextV3,
+  type ReviewContextV4,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -58,8 +58,8 @@ const moderateFinding = {
 };
 
 function createMockServices(
-  context: ReviewContextV3 | ReviewContextV2,
-  modelReview = {
+  context: ReviewContextV4 | ReviewContextV2,
+  modelReview: Awaited<ReturnType<ReviewServices["model"]["review"]>> = {
     output: {
       findings: [moderateFinding],
       summary: "Review summary",
@@ -93,7 +93,7 @@ function createMockServices(
         verdictStrictness: "default",
         waiversCount: 0,
         ...context,
-        schemaVersion: 3,
+        schemaVersion: 4,
       }),
     model: {
       review: () => Promise.resolve(modelReview),
@@ -113,15 +113,64 @@ function createMockServices(
 }
 
 describe("analyzeReview", () => {
-  it("applies strictness block_all_confident_medium under V3 context to block on a single medium finding", async () => {
-    const v3Context: ReviewContextV3 = {
+  it.each(["omitted", "degraded"] as const)(
+    "skips synthesis for incomplete multi-shard review (%s)",
+    async (reason) => {
+      const services = createMockServices(
+        {
+          schemaVersion: 2,
+          changedLines: [],
+          files: Array.from({ length: 21 }, (_, index) => ({
+            mode: "structural" as const,
+            path: `src/file-${index}.ts`,
+            patch: `@@ -1 +1 @@\n-old\n+new\n`,
+          })),
+          truncated: reason === "omitted",
+        },
+        {
+          output: {
+            findings: [],
+            summary: "Everything looks correct.",
+            isDegraded: reason === "degraded",
+          },
+          promptTruncated: false,
+        },
+      );
+      const synthesis = vi.fn().mockResolvedValue("Everything looks correct.");
+      services.model.synthesizeReviewSummary = synthesis;
+      const result = await analyzeReview(job, services, vi.fn());
+      expect(result.totalShards).toBe(2);
+      expect(result.summary).toContain("This review is incomplete");
+      expect(result.summary).not.toContain("Everything looks correct");
+      expect(synthesis).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports partial coverage when every eligible patch was omitted before planning", async () => {
+    const services = createMockServices({
+      schemaVersion: 2,
+      changedLines: [],
+      files: [],
+      truncated: true,
+    });
+    const review = vi.spyOn(services.model, "review");
+    const result = await analyzeReview(job, services, vi.fn());
+    expect(result.scopeStatus).toBe("partial_by_policy");
+    expect(result.verdict).toBe("COMMENT");
+    expect(result.summary).toContain("This review is incomplete");
+    expect(result.summary).not.toContain("No eligible changes");
+    expect(review).not.toHaveBeenCalled();
+  });
+
+  it("applies strictness block_all_confident_medium under V4 context to block on a single medium finding", async () => {
+    const v4Context: ReviewContextV4 = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -129,7 +178,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v3Context);
+    const services = createMockServices(v4Context);
     const result = await analyzeReview(job, services, emit);
 
     expect(result.verdict).toBe("REQUEST_CHANGES");
@@ -138,15 +187,15 @@ describe("analyzeReview", () => {
     expect(result.waiversCount).toBe(0);
   });
 
-  it("applies default strictness under V3 context approving a single moderate finding", async () => {
-    const v3Context: ReviewContextV3 = {
+  it("applies default strictness under V4 context approving a single moderate finding", async () => {
+    const v4Context: ReviewContextV4 = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: "default",
-      schemaVersion: 3,
+      schemaVersion: 4,
       sourceDigest: null,
       truncated: false,
       verdictStrictness: "default",
@@ -154,7 +203,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v3Context);
+    const services = createMockServices(v4Context);
     const result = await analyzeReview(job, services, emit);
 
     expect(result.verdict).toBe("APPROVE");
@@ -164,14 +213,14 @@ describe("analyzeReview", () => {
   });
 
   it("marks partial_by_policy when waiversCount > 0 resulting in COMMENT verdict", async () => {
-    const v3Context: ReviewContextV3 = {
+    const v4Context: ReviewContextV4 = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -179,7 +228,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v3Context);
+    const services = createMockServices(v4Context);
     const modelReview = vi.spyOn(services.model, "review");
     const result = await analyzeReview(job, services, emit);
 
@@ -193,14 +242,14 @@ describe("analyzeReview", () => {
   });
 
   it("passes the durable policy into context reconstruction", async () => {
-    const v3Context: ReviewContextV3 = {
+    const v4Context: ReviewContextV4 = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "default",
@@ -215,7 +264,7 @@ describe("analyzeReview", () => {
       verdictStrictness: "default" as const,
       version: 1 as const,
     };
-    const services = createMockServices(v3Context);
+    const services = createMockServices(v4Context);
     const ensureContext = vi.fn(() => Promise.resolve());
 
     await analyzeReview(

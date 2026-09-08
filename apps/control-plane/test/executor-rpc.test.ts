@@ -78,7 +78,7 @@ describe("current executor RPC contract", () => {
     );
     await expect(services.prepareRepository(1)).rejects.toBe(permanent);
   });
-  it("prepares repository and loads context with V3 when supported", async () => {
+  it("prepares with the V3 request and reads only V4 context", async () => {
     const policy = {
       additionalExcludes: ["vendor/**"],
       baseSha: "b".repeat(40),
@@ -98,7 +98,7 @@ describe("current executor RPC contract", () => {
       truncated: false,
       waiversCount: 0,
     });
-    const loadContextV3 = vi.fn().mockResolvedValue({
+    const loadContextV4 = vi.fn().mockResolvedValue({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
@@ -109,7 +109,7 @@ describe("current executor RPC contract", () => {
         },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -123,7 +123,7 @@ describe("current executor RPC contract", () => {
         executor: {
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          loadContextV3,
+          loadContextV4,
           prepareRepositoryV3,
           runTool: () => Promise.resolve({ content: "", truncated: false }),
         },
@@ -139,9 +139,9 @@ describe("current executor RPC contract", () => {
     const loaded = await services.loadContext();
     expect(loaded).toMatchObject({
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
     });
-    expect(loadContextV3).toHaveBeenCalledOnce();
+    expect(loadContextV4).toHaveBeenCalledOnce();
   });
   it("reads current refs via session or falls back to headSha", async () => {
     const sessionWithRefs = {
@@ -236,9 +236,9 @@ describe("current executor RPC contract", () => {
           'The RPC receiver does not implement the method "prepareRepositoryV3".',
         );
       },
-      loadContextV3: async () => {
+      loadContextV4: async () => {
         throw new TypeError(
-          'The RPC receiver does not implement the method "loadContextV3".',
+          'The RPC receiver does not implement the method "loadContextV4".',
         );
       },
     };
@@ -264,38 +264,46 @@ describe("current executor RPC contract", () => {
     ])
       expect(old).not.toHaveBeenCalled();
   });
-  it("rejects old response shapes from current endpoints", async () => {
-    const services = createReviewServices(
-      env,
-      job,
-      {
-        createSession: async () => installationSession(),
-        executor: {
-          cleanup: async () => {},
-          hasContext: async () => true,
-          runTool: async () => ({ content: "", truncated: false }),
-          prepareRepositoryV3: vi.fn().mockResolvedValue({
-            schemaVersion: 2,
-            changedLineCount: 0,
-            contextBytes: 1,
-            fileCount: 0,
-            runId: job.runId,
-            truncated: false,
-          }),
-          loadContextV3: vi.fn().mockResolvedValue({
-            schemaVersion: 2,
-            changedLines: [],
-            files: [],
-            truncated: false,
-          }),
+  it.each([2, 3])(
+    "rejects old context V%s from the current endpoint",
+    async (schemaVersion) => {
+      const services = createReviewServices(
+        env,
+        job,
+        {
+          createSession: async () => installationSession(),
+          executor: {
+            cleanup: async () => {},
+            hasContext: async () => true,
+            runTool: async () => ({ content: "", truncated: false }),
+            prepareRepositoryV3: vi.fn().mockResolvedValue({
+              schemaVersion: 2,
+              changedLineCount: 0,
+              contextBytes: 1,
+              fileCount: 0,
+              runId: job.runId,
+              truncated: false,
+            }),
+            loadContextV4: vi.fn().mockResolvedValue({
+              schemaVersion,
+              effectivePolicyDigest: "c".repeat(64),
+              policySource: "default",
+              sourceDigest: null,
+              verdictStrictness: "default",
+              waiversCount: 0,
+              changedLines: [],
+              files: [],
+              truncated: false,
+            }),
+          },
         },
-      },
-      { emit: () => {} },
-      {},
-    );
-    await expect(services.prepareRepository(1)).rejects.toBeInstanceOf(
-      NonRetryableError,
-    );
-    await expect(services.loadContext()).rejects.toThrow();
-  });
+        { emit: () => {} },
+        {},
+      );
+      await expect(services.prepareRepository(1)).rejects.toBeInstanceOf(
+        NonRetryableError,
+      );
+      await expect(services.loadContext()).rejects.toThrow();
+    },
+  );
 });

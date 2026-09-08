@@ -212,68 +212,87 @@ export const reviewContextV2Schema = z
     }
   });
 
-export const reviewContextV3Schema = z
-  .strictObject({
-    projectIdentification: projectIdentificationResultV1Schema.optional(),
-    changedLines: changedLinesSchema,
-    effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-    files: z.array(reviewContextFileSchema).max(50),
-    policySource: repositoryPolicySourceSchema,
-    schemaVersion: z.literal(3),
-    sourceDigest: z
-      .string()
-      .regex(/^[a-f0-9]{64}$/u)
-      .nullable(),
-    structuralImpact: structuralImpactReportSchema.optional(),
-    surface: reviewSurfaceSchema,
-    truncated: z.boolean(),
-    verdictStrictness: repositoryVerdictStrictnessSchema,
-    waiversCount: z.number().int().nonnegative(),
-  })
-  .superRefine((context, refinement) => {
-    const modes = new Map(
-      context.files.map((file) => [file.path, file.mode] as const),
-    );
-    const paths = new Set(modes.keys());
-    if (paths.size !== context.files.length) {
-      refinement.addIssue({
-        code: "custom",
-        message: "reviewed file paths must be unique",
-        path: ["files"],
-      });
-    }
-    const patchBytes = context.files.reduce(
-      (total, file) => total + utf8ByteLength(file.patch),
-      0,
-    );
-    if (patchBytes > 120_000) {
-      refinement.addIssue({
-        code: "custom",
-        message: "review context patches exceed the 120000-byte budget",
-        path: ["files"],
-      });
-    }
-    for (const [index, changedLine] of context.changedLines.entries()) {
-      if (!paths.has(changedLine.path)) {
+function policyReviewContextSchema<V extends 3 | 4>(
+  version: V,
+  maximumPatchBytes: number,
+) {
+  return z
+    .strictObject({
+      projectIdentification: projectIdentificationResultV1Schema.optional(),
+      changedLines: changedLinesSchema,
+      effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+      files: z.array(reviewContextFileSchema).max(50),
+      policySource: repositoryPolicySourceSchema,
+      schemaVersion: z.literal(version),
+      sourceDigest: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/u)
+        .nullable(),
+      structuralImpact: structuralImpactReportSchema.optional(),
+      surface: reviewSurfaceSchema,
+      truncated: z.boolean(),
+      verdictStrictness: repositoryVerdictStrictnessSchema,
+      waiversCount: z.number().int().nonnegative(),
+    })
+    .superRefine((context, refinement) => {
+      const modes = new Map(
+        context.files.map((file) => [file.path, file.mode] as const),
+      );
+      const paths = new Set(modes.keys());
+      if (paths.size !== context.files.length) {
         refinement.addIssue({
           code: "custom",
-          message: "changed line path must identify a reviewed file",
-          path: ["changedLines", index, "path"],
+          message: "reviewed file paths must be unique",
+          path: ["files"],
         });
       }
-    }
-    for (const [index, signal] of (context.surface ?? []).entries()) {
-      if (modes.get(signal.path) !== "structural") {
+      const patchBytes = context.files.reduce(
+        (total, file) => total + utf8ByteLength(file.patch),
+        0,
+      );
+      if (patchBytes > maximumPatchBytes) {
         refinement.addIssue({
           code: "custom",
-          message: "review surface path must identify a structural file",
-          path: ["surface", index, "path"],
+          message: `review context patches exceed the ${maximumPatchBytes}-byte budget`,
+          path: ["files"],
         });
       }
-    }
-  });
+      if (version === 4) {
+        for (const [index, file] of context.files.entries()) {
+          if (utf8ByteLength(file.patch) > 60_000)
+            refinement.addIssue({
+              code: "custom",
+              message: "review context file exceeds the 60000-byte budget",
+              path: ["files", index, "patch"],
+            });
+        }
+      }
+      for (const [index, changedLine] of context.changedLines.entries()) {
+        if (!paths.has(changedLine.path)) {
+          refinement.addIssue({
+            code: "custom",
+            message: "changed line path must identify a reviewed file",
+            path: ["changedLines", index, "path"],
+          });
+        }
+      }
+      for (const [index, signal] of (context.surface ?? []).entries()) {
+        if (modes.get(signal.path) !== "structural") {
+          refinement.addIssue({
+            code: "custom",
+            message: "review surface path must identify a structural file",
+            path: ["surface", index, "path"],
+          });
+        }
+      }
+    });
+}
+
+export const reviewContextV3Schema = policyReviewContextSchema(3, 120_000);
+export const reviewContextV4Schema = policyReviewContextSchema(4, 300_000);
 
 export const reviewContextSchema = z.union([
+  reviewContextV4Schema,
   reviewContextV3Schema,
   reviewContextV2Schema,
   reviewContextV1Schema,
@@ -469,6 +488,7 @@ export type ReviewSurfaceSignal = NonNullable<
 export type ReviewContextV1 = z.infer<typeof reviewContextV1Schema>;
 export type ReviewContextV2 = z.infer<typeof reviewContextV2Schema>;
 export type ReviewContextV3 = z.infer<typeof reviewContextV3Schema>;
+export type ReviewContextV4 = z.infer<typeof reviewContextV4Schema>;
 export type ReviewContext = z.infer<typeof reviewContextSchema>;
 export type PreparedRepositoryV1 = z.infer<typeof preparedRepositoryV1Schema>;
 export type PreparedRepositoryV2 = z.infer<typeof preparedRepositoryV2Schema>;

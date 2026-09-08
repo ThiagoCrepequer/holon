@@ -240,7 +240,19 @@ export async function analyzeReview(
       })),
       { policyExcludedFilesCount: context.waiversCount },
     );
-    return { context, plan };
+    return {
+      context,
+      plan: context.truncated
+        ? {
+            ...plan,
+            scopeStatus: "partial_by_policy" as const,
+            omissionReasons: [
+              ...plan.omissionReasons,
+              "Eligible patches or context sections were omitted by the executor budget.",
+            ],
+          }
+        : plan,
+    };
   };
   try {
     const runId = createReviewRun(job).id;
@@ -353,7 +365,7 @@ export async function analyzeReview(
           activeFindings: [],
           contextTruncated: context.truncated,
           effectivePolicyDigest:
-            context.schemaVersion === 3
+            context.schemaVersion === 4
               ? context.effectivePolicyDigest
               : undefined,
           policySource: context.policySource,
@@ -450,6 +462,10 @@ export async function analyzeReview(
       });
       let unifiedSummary: string | undefined;
       if (
+        rawAggregated.scopeStatus === "complete" &&
+        rawAggregated.isDegraded !== true &&
+        !context.truncated &&
+        (reconciled.summary.unverifiedCount ?? 0) === 0 &&
         successfulSummaries.length > 1 &&
         typeof services.model.synthesizeReviewSummary === "function"
       ) {

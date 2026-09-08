@@ -50,6 +50,44 @@ describe("aggregateShardReviews", () => {
     unsupportedFilesCount: 0,
   };
 
+  it.each(["partial_by_policy", "partial_by_failure", "degraded"] as const)(
+    "does not publish a model's global all-clear for an incomplete review: %s",
+    (mode) => {
+      const result = aggregateShardReviews(
+        {
+          ...plan,
+          scopeStatus: mode === "partial_by_policy" ? mode : "complete",
+        },
+        [
+          {
+            findings: [],
+            shardId: "shard-0",
+            shardIndex: 0,
+            status: "success",
+            summary: "No regressions exist anywhere in this PR.",
+            isDegraded: mode === "degraded",
+          },
+          {
+            findings: [],
+            shardId: "shard-1",
+            shardIndex: 1,
+            status: mode === "partial_by_failure" ? "failure" : "success",
+            summary: "The whole PR is safe.",
+          },
+        ],
+        {
+          unifiedSummary:
+            "All changes are documentation only and safe to merge.",
+        },
+      );
+      expect(result.summary).not.toContain("safe to merge");
+      expect(result.summary).not.toContain("No regressions exist");
+      expect(result.summary).toContain("incomplete");
+      expect(result.summary).toContain("0 verified finding");
+      expect(result.verdict).toBe("COMMENT");
+    },
+  );
+
   it("handles unsupported review plans", () => {
     const unsupportedPlan = {
       omissionReasons: ["No supported files"],

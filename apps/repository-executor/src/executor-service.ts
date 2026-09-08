@@ -2,12 +2,12 @@ import {
   projectMetadataRequestV1Schema,
   executorRequestV3Schema,
   preparedRepositoryV3Schema,
-  reviewContextV3Schema,
+  reviewContextV4Schema,
   runIdSchema,
   type ExecutorRequestV3,
   type PreparedRepositoryV3,
   type RepositoryToolCall,
-  type ReviewContextV3,
+  type ReviewContextV4,
 } from "@holon/contracts";
 import { isMetadataPath } from "@holon/project-identification";
 import {
@@ -226,16 +226,16 @@ export class RepositoryExecutorService {
     return collectProjectMetadata(this.sandboxes.get(request.runId), request);
   }
 
-  private async loadAnyContext(runId: string): Promise<ReviewContextV3> {
+  private async loadAnyContext(runId: string): Promise<ReviewContextV4> {
     const requestRunId = runIdSchema.parse(runId);
     const serialized = await this.sandboxes
       .get(requestRunId)
       .readFile(contextPath);
-    return reviewContextV3Schema.parse(JSON.parse(serialized) as unknown);
+    return reviewContextV4Schema.parse(JSON.parse(serialized) as unknown);
   }
 
-  public async loadContextV3(runId: string): Promise<ReviewContextV3> {
-    return reviewContextV3Schema.parse(await this.loadAnyContext(runId));
+  public async loadContextV4(runId: string): Promise<ReviewContextV4> {
+    return reviewContextV4Schema.parse(await this.loadAnyContext(runId));
   }
 
   public async hasContext(runId: string): Promise<boolean> {

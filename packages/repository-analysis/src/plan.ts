@@ -32,6 +32,29 @@ interface EligibleFile {
   readonly patchBytes: number;
 }
 
+// Preserve an initial opportunity for both modes and the existing 3:1 preference.
+function balanceReviewModes(files: readonly EligibleFile[]): EligibleFile[] {
+  const structural = files.filter((file) => file.mode === "structural");
+  const textual = files.filter((file) => file.mode === "textual");
+  const selected: EligibleFile[] = [];
+  let structuralIndex = 0;
+  let textualIndex = 0;
+  const take = (mode: "structural" | "textual") => {
+    const file =
+      mode === "structural"
+        ? structural[structuralIndex++]
+        : textual[textualIndex++];
+    if (file) selected.push(file);
+  };
+  take("structural");
+  take("textual");
+  while (structuralIndex < structural.length || textualIndex < textual.length) {
+    for (let index = 0; index < 3; index += 1) take("structural");
+    take("textual");
+  }
+  return selected;
+}
+
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
@@ -180,7 +203,19 @@ export function buildReviewPlan(
     files: [],
   };
 
-  for (const item of prioritizedFiles) {
+  let selectedFileCount = 0;
+  let oversizedFileCount = 0;
+  let omittedByFileLimit = 0;
+  for (const item of balanceReviewModes(prioritizedFiles)) {
+    if (item.patchBytes > maxShardDiffBytes) {
+      oversizedFileCount += 1;
+      continue;
+    }
+    if (selectedFileCount >= 50) {
+      omittedByFileLimit += 1;
+      continue;
+    }
+    selectedFileCount += 1;
     const wouldExceedBytes =
       currentShard.files.length > 0 &&
       currentShard.byteLength + item.patchBytes > maxShardDiffBytes;
@@ -218,6 +253,18 @@ export function buildReviewPlan(
   const omissionReasons: string[] = [];
   let scopeStatus: "complete" | "partial_by_policy" = "complete";
 
+  if (oversizedFileCount > 0) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push(
+      `${oversizedFileCount} eligible file(s) omitted whole because their patches exceed the ${maxShardDiffBytes}-byte limit per shard.`,
+    );
+  }
+  if (omittedByFileLimit > 0) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push(
+      `${omittedByFileLimit} eligible file(s) omitted by the 50-file limit across shards.`,
+    );
+  }
   if (policyExcludedFilesCount > 0) {
     scopeStatus = "partial_by_policy";
     omissionReasons.push(

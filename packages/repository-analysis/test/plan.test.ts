@@ -73,3 +73,33 @@ describe("buildReviewPlan", () => {
     );
   });
 });
+
+function patchFor(path: string, bytes = 100): string {
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1 @@\n+${"x".repeat(bytes)}\n`;
+}
+
+it("omits an oversized file completely without starving later eligible patches", () => {
+  const plan = buildReviewPlan(
+    splitPullRequestDiff(patchFor("src/a.ts", 60_001) + patchFor("src/b.ts")),
+  );
+  expect(plan.scopeStatus).toBe("partial_by_policy");
+  expect(plan.totalEligibleFiles).toBe(2);
+  expect(plan.shards.flatMap((s) => s.files.map((f) => f.path))).toEqual([
+    "src/b.ts",
+  ]);
+  expect(plan.omissionReasons.join(" ")).toContain("byte limit");
+});
+
+it("bounds selected files across all shards and records omitted eligible files", () => {
+  const plan = buildReviewPlan(
+    splitPullRequestDiff(
+      Array.from({ length: 51 }, (_, i) =>
+        patchFor(`src/file${String(i).padStart(2, "0")}.ts`),
+      ).join(""),
+    ),
+  );
+  expect(plan.totalEligibleFiles).toBe(51);
+  expect(plan.shards.flatMap((s) => s.files)).toHaveLength(50);
+  expect(plan.scopeStatus).toBe("partial_by_policy");
+  expect(plan.omissionReasons.join(" ")).toContain("file limit");
+});

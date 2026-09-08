@@ -19,7 +19,7 @@ import {
   executorRequestV3Schema,
   preparedRepositoryV3Schema,
   repositoryToolResultSchema,
-  reviewContextV3Schema,
+  reviewContextV4Schema,
   type AdminRunProjectionEventV1,
   type ExecutorRequestV3,
   type GitHubCredentialRequest,
@@ -27,7 +27,7 @@ import {
   type RepositoryPolicy,
   type RepositoryToolCall,
   type RepositoryToolResult,
-  type ReviewContextV3,
+  type ReviewContextV4,
   type ReviewJob,
   type RunClaimV2Result,
   type StepExecutionNode,
@@ -83,7 +83,7 @@ export interface RepositoryExecutorBinding {
   ): Promise<ProjectIdentificationResultV1>;
   cleanup(runId: string): Promise<void>;
   hasContext(runId: string): Promise<boolean>;
-  loadContextV3?(runId: string): Promise<ReviewContextV3>;
+  loadContextV4?(runId: string): Promise<ReviewContextV4>;
   prepareRepositoryV3?(
     request: ExecutorRequestV3,
   ): Promise<PreparedRepositoryV3>;
@@ -247,7 +247,7 @@ export interface ReviewServices {
     maximumPreparationAttempts: number,
     effectivePolicy?: RepositoryPolicy,
   ): Promise<void>;
-  loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContextV3>;
+  loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContextV4>;
   prepareRepository(
     maximumAttempts: number,
     effectivePolicy?: RepositoryPolicy,
@@ -592,8 +592,8 @@ export function createReviewServices(
     },
     loadContext: async (effectivePolicy) => {
       currentAnalysisPolicy = effectivePolicy;
-      return reviewContextV3Schema.parse(
-        await executor.loadContextV3!(job.runId),
+      return reviewContextV4Schema.parse(
+        await executor.loadContextV4!(job.runId),
       );
     },
     useProjectIdentification: (result) => {

@@ -232,11 +232,13 @@ export function aggregateShardReviews(
 
   const prefix = summarySections.join("\n\n");
   summarySections.length = 0;
-  const narrative =
-    options.unifiedSummary?.trim() ||
-    (shardSummaries.length
-      ? shardSummaries.join("\n\n")
-      : "No narrative summary is available; refer to the verified findings and review coverage.");
+  const incomplete = scopeStatus !== "complete" || isAnyShardDegraded;
+  const narrative = incomplete
+    ? `This review is incomplete. ${sortedFindings.length} verified finding(s) were retained from ${shardsAnalyzed} of ${plan.shards.length} planned shards. No conclusion is made about omitted changes or unfinished investigation.`
+    : options.unifiedSummary?.trim() ||
+      (shardSummaries.length
+        ? shardSummaries.join("\n\n")
+        : "No narrative summary is available; refer to the verified findings and review coverage.");
 
   if (scopeStatus === "partial_by_policy") {
     summarySections.push(

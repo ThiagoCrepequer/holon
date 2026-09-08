@@ -1,8 +1,7 @@
 import {
-  reviewContextV3Schema,
+  reviewContextV4Schema,
   type ExecutorRequestV3,
-  type ReviewContextV3,
-  type ReviewFileMode,
+  type ReviewContextV4,
   type ReviewPlan,
 } from "@holon/contracts";
 import {
@@ -20,20 +19,11 @@ import {
   serializeReviewScopePolicy,
 } from "./review-scope-policy.js";
 
-const maximumFiles = 50;
-const maximumDiffBytes = 120_000;
-const maximumFileDiffBytes = 60_000;
 const maximumChangedLines = 5_000;
 const maximumContextBytes = 500_000;
 
-interface ReviewFileCandidate {
-  readonly mode: ReviewFileMode;
-  readonly patch: string;
-  readonly path: string;
-}
-
 export interface ReviewArtifacts {
-  readonly context: ReviewContextV3;
+  readonly context: ReviewContextV4;
   readonly contextBytes: number;
   readonly fileCount: number;
   readonly plan: ReviewPlan;
@@ -41,48 +31,12 @@ export interface ReviewArtifacts {
   readonly serializedContext: string;
 }
 
-function prioritizeReviewFiles(
-  files: readonly ReviewFileCandidate[],
-): readonly ReviewFileCandidate[] {
-  const structural = files
-    .filter((file) => file.mode === "structural")
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-  const textual = files
-    .filter((file) => file.mode === "textual")
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-  const prioritized: ReviewFileCandidate[] = [];
-  let structuralIndex = 0;
-  let textualIndex = 0;
-  const takeStructural = () => {
-    const file = structural[structuralIndex];
-    if (file !== undefined) {
-      prioritized.push(file);
-      structuralIndex += 1;
-    }
-  };
-  const takeTextual = () => {
-    const file = textual[textualIndex];
-    if (file !== undefined) {
-      prioritized.push(file);
-      textualIndex += 1;
-    }
-  };
-
-  takeStructural();
-  takeTextual();
-  while (structuralIndex < structural.length || textualIndex < textual.length) {
-    for (let index = 0; index < 3; index += 1) takeStructural();
-    takeTextual();
-  }
-  return prioritized;
-}
-
-function serializeBoundedContext(context: ReviewContextV3): {
-  readonly context: ReviewContextV3;
+function serializeBoundedContext(context: ReviewContextV4): {
+  readonly context: ReviewContextV4;
   readonly serialized: string;
 } {
   const encode = (changedLineCount: number) => {
-    const candidate = reviewContextV3Schema.parse({
+    const candidate = reviewContextV4Schema.parse({
       ...context,
       changedLines: context.changedLines.slice(0, changedLineCount),
       truncated:
@@ -133,47 +87,15 @@ export function buildReviewArtifacts(
     createReviewScopePolicy(diffFiles, additionalExcludes),
   );
 
-  let globallyEligibleCount = 0;
-  const supportedFiles = prioritizeReviewFiles(
-    diffFiles.flatMap((file) => {
-      const globalMode = classifyPullRequestDiffFile(file);
-      if (globalMode !== undefined && isNonBinaryPullRequestPatch(file.patch)) {
-        globallyEligibleCount += 1;
-      }
-      const mode = classifyPullRequestDiffFile(file, additionalExcludes);
-      return mode === undefined || !isNonBinaryPullRequestPatch(file.patch)
-        ? []
-        : [{ mode, patch: file.patch, path: file.path }];
-    }),
-  );
-  const waiversCount = Math.max(
-    0,
-    globallyEligibleCount - supportedFiles.length,
-  );
-
-  let totalBytes = 0;
-  let truncated = supportedFiles.length > maximumFiles;
-  const reviewFiles: ReviewFileCandidate[] = [];
-  const selectedPaths = new Set<string>();
-
-  for (const file of supportedFiles) {
-    if (selectedPaths.has(file.path)) continue;
-    if (reviewFiles.length === maximumFiles) {
-      truncated = true;
-      break;
-    }
-    const patchBytes = new TextEncoder().encode(file.patch).byteLength;
-    if (
-      patchBytes > maximumFileDiffBytes ||
-      totalBytes + patchBytes > maximumDiffBytes
-    ) {
-      truncated = true;
-      continue;
-    }
-    selectedPaths.add(file.path);
-    totalBytes += patchBytes;
-    reviewFiles.push(file);
-  }
+  const plan = buildReviewPlan(diffFiles, { additionalExcludes });
+  const waiversCount = diffFiles.filter(
+    (file) =>
+      classifyPullRequestDiffFile(file) !== undefined &&
+      isNonBinaryPullRequestPatch(file.patch) &&
+      classifyPullRequestDiffFile(file, additionalExcludes) === undefined,
+  ).length;
+  const reviewFiles = plan.shards.flatMap((shard) => shard.files);
+  let truncated = plan.scopeStatus === "partial_by_policy";
 
   const changedLines: Array<{
     line: number;
@@ -201,12 +123,12 @@ export function buildReviewArtifacts(
     repositoryScanTruncated,
   });
 
-  const unboundedContext = reviewContextV3Schema.parse({
+  const unboundedContext = reviewContextV4Schema.parse({
     changedLines,
     effectivePolicyDigest: request.effectivePolicy.effectivePolicyDigest,
     files: reviewFiles,
     policySource: request.effectivePolicy.source,
-    schemaVersion: 3,
+    schemaVersion: 4,
     sourceDigest: request.effectivePolicy.sourceDigest,
     structuralImpact,
     surface,
@@ -215,7 +137,6 @@ export function buildReviewArtifacts(
     waiversCount,
   });
   const { context, serialized } = serializeBoundedContext(unboundedContext);
-  const plan = buildReviewPlan(diffFiles, { additionalExcludes });
   return {
     context,
     contextBytes: new TextEncoder().encode(serialized).byteLength,

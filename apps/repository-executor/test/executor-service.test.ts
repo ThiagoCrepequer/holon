@@ -2,8 +2,8 @@ import {
   executorRequestSchema,
   executorRequestV3Schema,
   repositoryToolCallSchema,
-  reviewContextV3Schema,
-  type ReviewContextV3,
+  reviewContextV4Schema,
+  type ReviewContextV4,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -179,9 +179,9 @@ class FakeSandbox implements SandboxPort {
 
 async function loadCurrentContext(
   service: RepositoryExecutorService,
-): Promise<ReviewContextV3> {
-  return reviewContextV3Schema.parse(
-    await service.loadContextV3(request.runId),
+): Promise<ReviewContextV4> {
+  return reviewContextV4Schema.parse(
+    await service.loadContextV4(request.runId),
   );
 }
 
@@ -195,6 +195,7 @@ describe("RepositoryExecutorService", () => {
       "prepareRepositoryV2",
       "loadContext",
       "loadContextV2",
+      "loadContextV3",
     ])
       expect(service).not.toHaveProperty(method);
     await expect(
@@ -223,7 +224,7 @@ describe("RepositoryExecutorService", () => {
       schemaVersion: 3,
       truncated: false,
     });
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         {
@@ -321,7 +322,7 @@ describe("RepositoryExecutorService", () => {
       fileCount: 1,
       schemaVersion: 3,
     });
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         {
@@ -330,7 +331,7 @@ describe("RepositoryExecutorService", () => {
           path: "src/index.ts",
         },
       ],
-      schemaVersion: 3,
+      schemaVersion: 4,
       truncated: false,
     });
     expect(sandbox.configured).toMatchObject({
@@ -379,7 +380,7 @@ describe("RepositoryExecutorService", () => {
         waiversCount: 0,
       },
     );
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
@@ -390,7 +391,7 @@ describe("RepositoryExecutorService", () => {
         },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 3,
+      schemaVersion: 4,
       verdictStrictness: "block_all_confident_medium",
       waiversCount: 0,
     });
@@ -428,7 +429,7 @@ describe("RepositoryExecutorService", () => {
       fileCount: 0,
       schemaVersion: 3,
     });
-    const context = await service.loadContextV3(request.runId);
+    const context = await service.loadContextV4(request.runId);
     expect(context.files).toEqual([]);
     expect(JSON.stringify(context)).not.toMatch(
       /\.env\.production|super-secret|rotated-secret/u,
@@ -527,7 +528,7 @@ describe("RepositoryExecutorService", () => {
     await expect(
       service.prepareRepositoryV3(textualRequest),
     ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
       surface: [],
     });
@@ -778,7 +779,7 @@ describe("RepositoryExecutorService", () => {
     await expect(
       service.prepareRepositoryV3(deletionRequest),
     ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: [],
     });
     expect(
@@ -788,7 +789,7 @@ describe("RepositoryExecutorService", () => {
     ).toContain("-assertAuthorized(request);");
   });
 
-  it("reserves early budget for textual context when structural patches are large", async () => {
+  it("keeps structural and textual patches when the complete plan fits across shards", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const largeLine = "x".repeat(58_000);
@@ -816,7 +817,7 @@ describe("RepositoryExecutorService", () => {
 
     await expect(
       service.prepareRepositoryV3(mixedRequest),
-    ).resolves.toMatchObject({ fileCount: 2, truncated: true });
+    ).resolves.toMatchObject({ fileCount: 3, truncated: false });
     const context = await loadCurrentContext(service);
     expect(context.files.map((file) => file.patch).join("\n")).toContain(
       "src/a.ts",
@@ -824,7 +825,7 @@ describe("RepositoryExecutorService", () => {
     expect(context.files.map((file) => file.patch).join("\n")).toContain(
       "README.md",
     );
-    expect(context.files.map((file) => file.patch).join("\n")).not.toContain(
+    expect(context.files.map((file) => file.patch).join("\n")).toContain(
       "src/b.ts",
     );
   });
@@ -1103,7 +1104,7 @@ describe("RepositoryExecutorService", () => {
       changedLineCount: 5_000,
       truncated: true,
     });
-    await expect(service.loadContextV3(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
       changedLines: expect.arrayContaining([
         { line: 5_000, path: "src/index.ts", side: "RIGHT" },
       ]),
@@ -1127,7 +1128,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     const prepared = await service.prepareRepositoryV3(amplifiedRequest);
-    const context = await service.loadContextV3(request.runId);
+    const context = await service.loadContextV4(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
     expect(prepared.changedLineCount).toBeLessThan(5_000);
