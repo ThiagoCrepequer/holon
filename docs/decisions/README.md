@@ -21,7 +21,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0003](0003-adopt-initial-typescript-application-stack.md)                        | Adotar stack TypeScript inicial e um unico control-plane Worker            | `accepted`   | 2026-08-29 |
 | [ADR-0004](0004-adopt-workflows-do-ledger-and-sandbox-executor.md)                    | Adotar Workflows, ledger por PR e executor Sandbox isolado                 | `accepted`   | 2026-08-29 |
 | [ADR-0005](0005-use-ai-gateway-rest-api-with-ai-sdk.md)                               | Usar a API REST atual do AI Gateway com AI SDK                             | `superseded` | 2026-08-29 |
-| [ADR-0006](0006-use-granular-workflow-checkpoints.md)                                 | Usar checkpoints granulares e contexto efêmero no Sandbox                  | `accepted`   | 2026-08-29 |
+| [ADR-0006](0006-use-granular-workflow-checkpoints.md)                                 | Usar checkpoints granulares e contexto efêmero no Sandbox                  | `superseded` | 2026-08-29 |
 | [ADR-0007](0007-use-ai-gateway-compat-with-byok.md)                                   | Usar AI Gateway Compat com Custom Provider e BYOK                          | `superseded` | 2026-08-30 |
 | [ADR-0008](0008-bound-sandbox-lifetime-and-use-virtual-github-egress.md)              | Limitar vida do Sandbox e usar egress GitHub por host virtual              | `accepted`   | 2026-08-30 |
 | [ADR-0009](0009-use-provider-specific-ai-gateway-route.md)                            | Usar rota específica do Custom Provider e uma camada de retries            | `superseded` | 2026-08-30 |
@@ -35,7 +35,7 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0017](0017-select-review-output-harness-from-evidence.md)                        | Selecionar harness de saída por avaliação comparativa                      | `superseded` | 2026-08-31 |
 | [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                        | Adotar gerador desacoplado em duas fases com gate no host                  | `accepted`   | 2026-09-01 |
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)                     | Derivar veredito determinístico de review por política no host             | `accepted`   | 2026-09-02 |
-| [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md)        | Reconciliar findings entre commits via fingerprinting e ciclo              | `accepted`   | 2026-09-02 |
+| [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md)        | Reconciliar findings entre commits via fingerprinting e ciclo              | `superseded` | 2026-09-02 |
 | [ADR-0021](0021-capture-human-feedback-and-calibration-signals.md)                    | Capturar feedback humano, comandos de dispensa e calibração                | `accepted`   | 2026-09-02 |
 | [ADR-0022](0022-adopt-deterministic-structural-analyzers.md)                          | Adotar analisadores estruturais determinísticos em duas camadas            | `superseded` | 2026-09-03 |
 | [ADR-0023](0023-adopt-cloudflare-native-operational-reliability-and-observability.md) | Adotar confiabilidade operacional e observabilidade nativa Cloudflare      | `accepted`   | 2026-09-03 |
@@ -63,3 +63,5 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - [ADR-0032 — Exigir contratos RPC atuais](0032-require-current-rpc-contracts.md)
 
 - [ADR-0033 — Investigar sinais estruturais e preservar saída](0033-investigate-structural-leads-and-preserve-review-output.md)
+
+- [ADR-0034 — Checkpoints duráveis e revalidação conservadora](0034-make-review-checkpoints-and-revalidation-durable.md)

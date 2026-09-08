@@ -61,7 +61,7 @@ sequenceDiagram
         CO->>AN: step prepare-repository
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
-        CO->>RE: step analyze-review + tool handles
+        CO->>RE: steps analyze-shard-N + tool handles
         loop at most six investigation steps
             RE->>AN: read/search/parse allowed content
             AN-->>RE: evidence with provenance
@@ -109,9 +109,12 @@ sequenceDiagram
 Na ordem normal, o Workflow executa `claim-run`, zero ou mais
 `terminate-superseded-workflow-N`, `start-run`,
 `revalidate-initial-refs`, `start-check-run`, `resolve-repository-policy`,
-`prepare-repository`, `analyze-review`, `begin-publication`,
+`prepare-repository`, identificação por projeto, `plan-review`,
+`analyze-shard-N`, `analyze-review`, `begin-publication`,
 `revalidate-current-refs`, zero ou mais `publish-inline-N`,
-`publish-summary`, `save-pr-findings`, `record-review-decision`, `complete-check-run`,
+respostas de resolução, `publish-summary`, `save-pr-findings`,
+`format-check-run-output`, `record-review-decision`, `complete-check-run`,
+`completed-snapshot-accounting`,
 `complete-run-and-schedule-cleanup` e o
 registro durável de cleanup.
 
@@ -248,3 +251,20 @@ Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+## Checkpoints e revalidação — 2026-09-08
+
+A [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
+define checkpoints por shard, manifesto limitado e artefato privado temporário
+no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
+feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
+relógio da identificação ficam dentro de steps, preservando resultados em replay.
+
+A análise distribui 600 segundos entre shards restantes e reserva tempo para
+finalização/recuperação; síntese tem 30 segundos adicionais. As 12 tools têm
+quotas por shard e reserva durável antes da chamada. Erro de evidência ou
+orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
+correção: exige resolução explícita com evidência atual verificada; pendências
+sem revalidação impedem aprovação. Respostas de resolução têm marcador e
+reconciliação idempotente. O cleanup terminal apaga o artefato agregado após
+confirmar destruição do executor.

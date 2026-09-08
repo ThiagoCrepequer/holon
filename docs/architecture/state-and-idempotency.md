@@ -122,7 +122,8 @@ conhecido. A resposta no GitHub contém marcador determinístico para reconcilia
 o intervalo entre efeito externo e persistência do ID.
 
 A reconciliação de ciclo de vida é dependente de cobertura: um finding ausente
-só vira `resolved` quando seu arquivo foi revisado, e só vira `obsolete` quando
+só vira `resolved` com confirmação explícita de correção e evidência atual
+verificada em seu arquivo revisado, e só vira `obsolete` quando
 uma análise completa prova que o arquivo deixou o PR. Falha de shard, resposta
 degradada ou escopo parcial preservam findings fora da cobertura observada.
 
@@ -132,3 +133,18 @@ imediato; o alarm assume pendências com mais de 30 segundos. Os relógios de
 retry de supersession e cleanup são independentes, portanto uma API de Workflow
 indisponível não impede a destruição de um Sandbox. Uma conclusão de
 supersession não remove o histórico da run nem sua tarefa de cleanup.
+
+## Persistência da análise — ADR-0034
+
+A migration 13 adiciona `pr_findings.evidence_fingerprint`,
+`review_analysis_artifacts` e `analysis_usage`. A primeira gravação do artefato
+é imutável por run; o manifesto do checkpoint exclui histórico e evidências.
+Gravação de findings reaplica feedback na mesma transação. O matching
+secundário exige unicidade; registros legados preservam o ID primário.
+
+Reservas de tools e deduplicação de eventos de uso ocorrem no DO. Tempos vêm de
+`step_attempts`; snapshots terminais persistem contadores e tempos observados.
+Resoluções usam o mesmo protocolo de claim/marcador/reconciliação de publicação,
+com identidade por fingerprint e head. Veja a
+[ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
+para os limites de contabilidade e matching.

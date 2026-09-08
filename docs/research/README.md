@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-08
 ---
 
 # Investigacoes
@@ -24,6 +24,8 @@ Nao criam uma decisao por si so.
 - [Incidente de diff divergente e output semântico ausente](2026-08-30-canonical-diff-and-semantic-output-incident.md)
 - [Smoke remoto do fluxo de review do GitHub App](2026-08-31-live-github-app-review-smoke.md)
 - [Toolchain e arquitetura do Console Operacional Interno](2026-09-04-internal-operational-console-toolchain.md)
+
+- [Confiabilidade do core de review](2026-09-08-review-core-reliability.md)
 
 ## Politica de manutencao
 

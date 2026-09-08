@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-08
 ---
 
 # Provisionamento e deploy
@@ -185,3 +185,23 @@ podem ser repetidas e serão reconciliadas pelo ledger e pelos marcadores GitHub
 ## Identificação de versões (2026-09-05)
 
 Consulte o [runbook de identificação](project-version-identification.md) para configuração, deploy coordenado, corpus offline/live e invalidação por perfil. A identificação faz parte do workflow padrão; `observe` registra os resultados sem enriquecer a investigação.
+
+## Transição dos checkpoints do core — ADR-0034
+
+Esta alteração tem validação local, sem deploy ou smoke remoto nesta entrega.
+Não exige novos secrets, bindings ou recursos remotos. A migration 13 do SQLite
+é automática no DO e aditiva; isso não torna compatíveis os históricos antigos
+do Workflow com a nova sequência de steps.
+
+Antes de um deploy autorizado, suspenda novas admissões e drene as instâncias
+antigas. Se for necessário interrompê-las, use o fluxo operacional de
+terminalização/cancelamento com cleanup e confirme que as obrigações foram
+concluídas antes de substituir o código. Não retome instâncias antigas sob o
+novo código, nem instâncias novas sob rollback para o código anterior. Reabra
+admissões somente depois de confirmar a transição. Não apagar ledger para
+forçar compatibilidade.
+
+No smoke posterior, verificar uma run nova, retomada entre shards, preservação
+de uso/versões, feedback durante publicação e cleanup de artefatos em sucesso,
+falha e obsolescência. A prova local não substitui esse smoke. Referência:
+[ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md).

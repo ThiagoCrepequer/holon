@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-08
 ---
 
 # Contratos
@@ -44,8 +44,8 @@ JS/TS ou `textual` para os demais formatos. Binários, lockfiles, artefatos
 gerados e caminhos potencialmente sensíveis reconhecidos pelas heurísticas não
 entram nesse contexto nem são enviados ao modelo. O contexto V3 preserva cada
 patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
-paths e resultados das tools. A saída contém até três findings, duas evidências
-por finding e um resumo de até 800 caracteres.
+paths e resultados das tools. A saída por shard contém até oito findings, quatro evidências
+por finding e resumo de até 10.000 unidades UTF-16 (ADR-0033).
 
 `read_file` aceita uma janela inclusiva de no máximo 500 linhas. Depois de
 resolver e autorizar o path real, o executor traduz essa janela para um comando
@@ -68,3 +68,18 @@ configuração.
 ## Identificação de versões — 2026-09-05
 
 `packages/contracts/src/project-identification.ts` define requests por SHA, evidências, resultados, cache e output restrito do modelo. Declarações exigem IDs existentes com valor/nome/tipo coincidentes. `AdminRunDetailV2` adiciona o snapshot ao drill-down; `getRunDetailV2` é o único RPC de detalhe, sem fallback V1. Consulte a [arquitetura](../architecture/project-version-identification.md) e a [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md).
+
+## Manifesto, contabilidade e resoluções — 2026-09-08
+
+`review-analysis.ts` valida o artefato agregado e o manifesto de checkpoint,
+que exclui evidências/histórico e limita a 40 coordenadas de findings ativos.
+Diagnósticos do manifesto têm até 300 unidades UTF-16; o artefato conserva o
+texto validado integral. `analysisUsageSchema` valida contadores não negativos;
+`analysisAccountingSchema` inclui tempos das tentativas.
+
+`review-output.ts` aceita `resolutions` opcionais, até oito por shard, com
+fingerprint, confiança, localização, diagnóstico e evidências. A aceitação
+semântica exige o gate do host descrito na
+[ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md).
+`finding-lifecycle.ts` aceita hash secundário opcional para compatibilidade dos
+registros antigos; ausência não autoriza inferir um match de identidade.
