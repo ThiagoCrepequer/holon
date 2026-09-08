@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunDetailView } from "../app/views/run-detail-view.js";
 import type { AdminRunRow } from "../workers/types.js";
@@ -49,7 +49,19 @@ const baseRun: AdminRunRow = {
   workflow_started_at: "2026-09-04T11:00:01.000Z",
 };
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("run detail dismissal", () => {
   it.each(["Close", "Escape", "Back to list", "Runs"])(

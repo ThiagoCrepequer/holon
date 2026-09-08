@@ -59,7 +59,7 @@ export const StepInspectorDrawer: React.FC<StepInspectorDrawerProps> = ({
   return (
     <aside
       data-testid="step-inspector-drawer"
-      className="w-96 border-l border-slate-800 bg-[#111827] flex flex-col z-20 shrink-0 shadow-2xl transition-all h-full"
+      className="w-full sm:w-96 max-w-full border-l border-slate-800 bg-[#111827] flex flex-col z-20 shrink-0 shadow-2xl transition-all h-full"
       aria-label={`Detalhes da etapa ${step.stepName}`}
     >
       {/* Header */}

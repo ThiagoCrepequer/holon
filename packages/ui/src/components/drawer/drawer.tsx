@@ -1,18 +1,18 @@
-import { Drawer as BaseDrawer } from "@base-ui/react";
+import { Dialog as BaseDialog } from "@base-ui/react";
 import * as React from "react";
 
 import { cn } from "../../utils/cn.js";
 
-export const Drawer = BaseDrawer.Root;
-export const DrawerTrigger = BaseDrawer.Trigger;
-export const DrawerPortal = BaseDrawer.Portal;
-export const DrawerClose = BaseDrawer.Close;
+export const Drawer = BaseDialog.Root;
+export const DrawerTrigger = BaseDialog.Trigger;
+export const DrawerPortal = BaseDialog.Portal;
+export const DrawerClose = BaseDialog.Close;
 
 export const DrawerBackdrop = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseDrawer.Backdrop>
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Backdrop>
 >(({ className, ...props }, ref) => (
-  <BaseDrawer.Backdrop
+  <BaseDialog.Backdrop
     ref={ref}
     className={cn("drawer-backdrop fixed inset-0 z-50 bg-black/40", className)}
     {...props}
@@ -22,12 +22,12 @@ DrawerBackdrop.displayName = "DrawerBackdrop";
 
 export const DrawerPopup = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof BaseDrawer.Popup>
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Popup>
 >(({ className, children, ...props }, ref) => (
-  <BaseDrawer.Portal>
+  <BaseDialog.Portal>
     <DrawerBackdrop />
-    <BaseDrawer.Viewport className="fixed inset-0 z-50 pointer-events-none">
-      <BaseDrawer.Popup
+    <div className="fixed inset-0 z-50 pointer-events-none">
+      <BaseDialog.Popup
         ref={ref}
         className={cn(
           "fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-2xl bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl",
@@ -37,9 +37,9 @@ export const DrawerPopup = React.forwardRef<
         {...props}
       >
         {children}
-      </BaseDrawer.Popup>
-    </BaseDrawer.Viewport>
-  </BaseDrawer.Portal>
+      </BaseDialog.Popup>
+    </div>
+  </BaseDialog.Portal>
 ));
 DrawerPopup.displayName = "DrawerPopup";
 
@@ -59,9 +59,9 @@ DrawerHeader.displayName = "DrawerHeader";
 
 export const DrawerTitle = React.forwardRef<
   HTMLHeadingElement,
-  React.ComponentPropsWithoutRef<typeof BaseDrawer.Title>
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Title>
 >(({ className, ...props }, ref) => (
-  <BaseDrawer.Title
+  <BaseDialog.Title
     ref={ref}
     className={cn(
       "text-sm font-semibold text-[var(--text-primary)]",
@@ -74,9 +74,9 @@ DrawerTitle.displayName = "DrawerTitle";
 
 export const DrawerDescription = React.forwardRef<
   HTMLParagraphElement,
-  React.ComponentPropsWithoutRef<typeof BaseDrawer.Description>
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Description>
 >(({ className, ...props }, ref) => (
-  <BaseDrawer.Description
+  <BaseDialog.Description
     ref={ref}
     className={cn("text-xs text-[var(--text-muted)]", className)}
     {...props}

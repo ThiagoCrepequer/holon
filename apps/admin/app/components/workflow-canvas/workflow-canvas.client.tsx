@@ -1,6 +1,8 @@
 import type { StepExecutionNode } from "@holon/contracts";
 import * as React from "react";
 
+import { useCanvasNavigation } from "./use-canvas-navigation.client.js";
+
 export interface WorkflowCanvasProps {
   readonly stepExecutions: readonly StepExecutionNode[];
   readonly selectedStepName: string | null;
@@ -10,14 +12,6 @@ export interface WorkflowCanvasProps {
 }
 
 type CanvasViewMode = "canvas" | "timeline";
-
-const PHASES = [
-  "admission",
-  "preparation",
-  "analysis",
-  "publication",
-  "cleanup",
-] as const;
 
 function phaseIcon(phase: string): string {
   switch (phase) {
@@ -68,17 +62,6 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const [viewMode, setViewMode] = React.useState<CanvasViewMode>(
     initialViewMode ?? "canvas",
   );
-  const [zoom, setZoom] = React.useState(1.0);
-
-  const handleZoom = (delta: number) => {
-    setZoom((prev) =>
-      Math.min(Math.max(Number((prev + delta).toFixed(1)), 0.5), 2.0),
-    );
-  };
-
-  const handleResetZoom = () => setZoom(1.0);
-  const handleFit = () => setZoom(0.85);
-
   const stepsSorted = React.useMemo(() => {
     return stepExecutions.toSorted((a, b) => {
       if (a.stepOrder !== undefined && b.stepOrder !== undefined) {
@@ -91,111 +74,51 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     });
   }, [stepExecutions]);
 
-  // Compute topological DAG node positions based on phase pipeline
+  // Keep actual execution order across phases; no horizontal phase lanes.
   const { nodePositions, canvasWidth, canvasHeight } = React.useMemo(() => {
     const positions = new Map<string, NodePosition>();
-    const CARD_WIDTH = 224;
-    const CARD_HEIGHT = 100;
-    const COL_GAP = 76;
-    const ROW_GAP = 30;
-    const START_X = 40;
-    const START_Y = 60;
-
-    // Group steps by known phase, preserving sequence order
-    const phaseStepsMap = new Map<string, StepExecutionNode[]>();
-    for (const p of PHASES) {
-      phaseStepsMap.set(p, []);
-    }
-    for (const step of stepsSorted) {
-      const list = phaseStepsMap.get(step.phase) ?? [];
-      list.push(step);
-      phaseStepsMap.set(step.phase, list);
-    }
-
-    let maxRows = 1;
-    let globalIndex = 0;
-
-    PHASES.forEach((phase, colIdx) => {
-      const stepsInPhase = phaseStepsMap.get(phase) ?? [];
-      if (stepsInPhase.length > maxRows) {
-        maxRows = stepsInPhase.length;
-      }
-
-      stepsInPhase.forEach((step, rowIdx) => {
-        const x = START_X + colIdx * (CARD_WIDTH + COL_GAP);
-        const y = START_Y + rowIdx * (CARD_HEIGHT + ROW_GAP);
-        positions.set(step.stepName, {
-          height: CARD_HEIGHT,
-          index: globalIndex++,
-          step,
-          width: CARD_WIDTH,
-          x,
-          y,
-        });
+    let y = 24;
+    for (const [index, step] of stepsSorted.entries()) {
+      if (index === 0 || stepsSorted[index - 1]?.phase !== step.phase) y += 36;
+      positions.set(step.stepName, {
+        x: 24,
+        y,
+        width: 320,
+        height: 112,
+        step,
+        index,
       });
-    });
-
-    const totalWidth = Math.max(
-      1100,
-      START_X * 2 + PHASES.length * (CARD_WIDTH + COL_GAP),
-    );
-    const totalHeight = Math.max(
-      460,
-      START_Y + maxRows * (CARD_HEIGHT + ROW_GAP) + 40,
-    );
-
-    return {
-      canvasHeight: totalHeight,
-      canvasWidth: totalWidth,
-      nodePositions: positions,
-    };
+      y += 148;
+    }
+    return { nodePositions: positions, canvasWidth: 368, canvasHeight: y + 12 };
   }, [stepsSorted]);
+  const navigation = useCanvasNavigation(
+    canvasWidth,
+    canvasHeight,
+    viewMode === "canvas",
+  );
+  const { zoom } = navigation;
+  const handleZoom = navigation.zoomBy;
+  const handleResetZoom = navigation.reset;
+  const handleFit = navigation.fit;
+  const svgId = React.useId().replaceAll(":", "");
 
-  // Compute SVG edge curves between sequential steps
+  // Connections always follow the vertical execution sequence.
   const edges = React.useMemo(() => {
-    const list: Array<{
-      id: string;
-      d: string;
-      status: string;
-    }> = [];
-
-    for (let i = 0; i < stepsSorted.length - 1; i++) {
-      const source = stepsSorted[i];
-      const target = stepsSorted[i + 1];
-      if (!source || !target) continue;
-
-      const pos1 = nodePositions.get(source.stepName);
-      const pos2 = nodePositions.get(target.stepName);
-      if (!pos1 || !pos2) continue;
-
-      let d = "";
-      if (pos1.x === pos2.x) {
-        // Vertical connection inside same phase column
-        const startX = pos1.x + pos1.width / 2;
-        const startY = pos1.y + pos1.height;
-        const endX = pos2.x + pos2.width / 2;
-        const endY = pos2.y;
-        const dy = Math.max(15, (endY - startY) / 2);
-        d = `M ${startX} ${startY} C ${startX} ${startY + dy}, ${endX} ${endY - dy}, ${endX} ${endY}`;
-      } else {
-        // Horizontal / cross-column connection
-        const startX = pos1.x + pos1.width;
-        const startY = pos1.y + pos1.height / 2;
-        const endX = pos2.x;
-        const endY = pos2.y + pos2.height / 2;
-        const dx = Math.max(30, (endX - startX) / 2);
-        d = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
-      }
-
-      list.push({
-        d,
-        id: `${source.stepName}->${target.stepName}`,
-        status: target.status,
-      });
-    }
-
-    return list;
-  }, [stepsSorted, nodePositions]);
+    const positions = Array.from(nodePositions.values());
+    return positions.slice(1).map((target, index) => {
+      const source = positions[index]!;
+      const x = source.x + source.width / 2;
+      const startY = source.y + source.height;
+      const endY = target.y;
+      const bend = (endY - startY) / 2;
+      return {
+        id: `${source.step.stepName}->${target.step.stepName}`,
+        d: `M ${x} ${startY} C ${x} ${startY + bend}, ${x} ${endY - bend}, ${x} ${endY}`,
+        status: target.step.status,
+      };
+    });
+  }, [nodePositions]);
 
   return (
     <div
@@ -212,13 +135,14 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           stroke-dasharray: 6 6;
           animation: flowDash 1.4s linear infinite;
         }
+        @media (prefers-reduced-motion: reduce) { .flow-line { animation: none; } }
       `}</style>
 
       {/* Canvas Top Bar */}
-      <div className="h-12 border-b border-slate-800 bg-[#111827] px-4 flex items-center justify-between shrink-0">
+      <div className="min-h-12 py-2 gap-2 flex-wrap border-b border-slate-800 bg-[#111827] px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
             <span>Workflow DAG & Telemetria</span>
           </div>
           <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-800 text-slate-400 border border-slate-700">
@@ -231,9 +155,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           <button
             type="button"
             onClick={() => setViewMode("canvas")}
+            aria-pressed={viewMode === "canvas"}
             className={`px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
               viewMode === "canvas"
-                ? "bg-orange-600 text-white shadow-sm"
+                ? "bg-[var(--accent)] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -255,9 +180,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           <button
             type="button"
             onClick={() => setViewMode("timeline")}
+            aria-pressed={viewMode === "timeline"}
             className={`px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
               viewMode === "timeline"
-                ? "bg-orange-600 text-white shadow-sm"
+                ? "bg-[var(--accent)] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -281,262 +207,302 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
       {/* CANVAS VIEW */}
       {viewMode === "canvas" && (
-        <div
-          data-testid="canvas-view-area"
-          className="relative flex-1 min-h-[460px] overflow-auto bg-[#0a0f1d] p-6 flex items-center justify-center select-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(#1e293b 1.2px, transparent 1.2px)",
-            backgroundSize: "24px 24px",
-          }}
-        >
-          {/* Zoom Controls Overlay */}
-          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 p-1 rounded-lg shadow-xl backdrop-blur-sm text-xs">
-            <button
-              type="button"
-              onClick={() => handleZoom(-0.1)}
-              aria-label="Zoom out"
-              className="w-7 h-7 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold transition"
-            >
-              −
-            </button>
-            <span className="font-mono px-2 text-slate-400 text-[11px]">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => handleZoom(0.1)}
-              aria-label="Zoom in"
-              className="w-7 h-7 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold transition"
-            >
-              +
-            </button>
-            <div className="h-3.5 w-[1px] bg-slate-700 mx-1" />
-            <button
-              type="button"
-              onClick={handleResetZoom}
-              className="px-2 py-1 rounded hover:bg-slate-800 text-[11px] text-slate-300 transition"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={handleFit}
-              className="px-2 py-1 rounded hover:bg-slate-800 text-[11px] text-slate-300 transition"
-            >
-              Ajustar
-            </button>
-          </div>
-
-          {stepExecutions.length === 0 ? (
-            <div className="text-center text-slate-500 py-16">
-              <p className="text-sm font-medium">
-                Nenhuma execução de etapa registrada para este run.
-              </p>
-              <p className="text-xs mt-1">
-                Os passos são sincronizados pelo Durable Object conforme o
-                workflow avança.
-              </p>
+        <div className="flex flex-col min-h-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b border-slate-800">
+            {/* Zoom Controls Overlay */}
+            <div className="shrink-0 z-20 flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 p-1 rounded-lg  text-xs">
+              <button
+                type="button"
+                onClick={() => handleZoom(-0.1)}
+                disabled={zoom <= 0.05 || !stepExecutions.length}
+                aria-label="Zoom out"
+                className="w-7 h-7 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold transition"
+              >
+                −
+              </button>
+              <span className="font-mono px-2 text-slate-400 text-[11px]">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => handleZoom(0.1)}
+                disabled={zoom >= 2 || !stepExecutions.length}
+                aria-label="Zoom in"
+                className="w-7 h-7 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold transition"
+              >
+                +
+              </button>
+              <div className="h-3.5 w-[1px] bg-slate-700 mx-1" />
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-[11px] text-slate-300 transition"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={handleFit}
+                className="px-2 py-1 rounded hover:bg-slate-800 text-[11px] text-slate-300 transition"
+              >
+                Ajustar
+              </button>
             </div>
-          ) : (
-            <div
-              data-testid="canvas-viewport"
-              className="relative transition-transform duration-150 origin-center"
-              style={{
-                height: `${canvasHeight}px`,
-                transform: `scale(${zoom})`,
-                width: `${canvasWidth}px`,
-              }}
-            >
-              {/* Topological Phase Column Headers */}
-              {PHASES.map((phase, idx) => {
-                const colX = 40 + idx * (224 + 76);
-                return (
-                  <div
-                    key={phase}
-                    style={{ left: `${colX}px`, top: "14px" }}
-                    className="absolute flex items-center gap-1 text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-500 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80"
-                  >
-                    <span>{phaseIcon(phase)}</span>
-                    <span>{phase}</span>
-                  </div>
-                );
-              })}
 
-              {/* Dynamic SVG Connections Layer */}
-              <svg
-                className="absolute inset-0 w-full h-full pointer-events-none z-0"
+            <span className="text-xs text-slate-400 px-2">
+              Arraste para navegar · Role para explorar
+            </span>
+          </div>
+          <div
+            ref={navigation.area}
+            {...navigation.handlers}
+            data-testid="canvas-view-area"
+            tabIndex={0}
+            role="region"
+            aria-label="Workflow: arraste ou use as teclas de seta para navegar"
+            className={`relative h-[min(65vh,720px)] min-h-[280px] overflow-auto overscroll-contain bg-[#0a0f1d] select-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${navigation.dragging ? "cursor-grabbing" : "cursor-grab"}`}
+            style={{
+              backgroundImage: "radial-gradient(#1e293b 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          >
+            {stepExecutions.length === 0 ? (
+              <div className="text-center text-slate-500 py-16">
+                <p className="text-sm font-medium">
+                  Nenhuma execução de etapa registrada para este run.
+                </p>
+                <p className="text-xs mt-1">
+                  Os passos são sincronizados pelo Durable Object conforme o
+                  workflow avança.
+                </p>
+              </div>
+            ) : (
+              <div
+                className="relative"
+                data-testid="canvas-scroll-content"
                 style={{
-                  height: `${canvasHeight}px`,
-                  width: `${canvasWidth}px`,
+                  width: navigation.scaledWidth,
+                  height: navigation.scaledHeight,
                 }}
               >
-                <defs>
-                  <linearGradient
-                    id="gradSuccess"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="0%"
-                  >
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.85" />
-                    <stop
-                      offset="100%"
-                      stopColor="#06b6d4"
-                      stopOpacity="0.85"
-                    />
-                  </linearGradient>
-                  <marker
-                    id="arrow-success"
-                    viewBox="0 0 10 10"
-                    refX="6"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M 0 1 L 8 5 L 0 9 z" fill="#06b6d4" />
-                  </marker>
-                  <marker
-                    id="arrow-active"
-                    viewBox="0 0 10 10"
-                    refX="6"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M 0 1 L 8 5 L 0 9 z" fill="#f59e0b" />
-                  </marker>
-                  <marker
-                    id="arrow-failed"
-                    viewBox="0 0 10 10"
-                    refX="6"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M 0 1 L 8 5 L 0 9 z" fill="#f43f5e" />
-                  </marker>
-                  <marker
-                    id="arrow-default"
-                    viewBox="0 0 10 10"
-                    refX="6"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569" />
-                  </marker>
-                </defs>
-
-                {edges.map((edge) => {
-                  const isRunning = edge.status === "running";
-                  const isFailed = edge.status === "failed";
-                  const isCompleted = edge.status === "completed";
-
-                  const stroke = isFailed
-                    ? "#f43f5e"
-                    : isRunning
-                      ? "#f59e0b"
-                      : isCompleted
-                        ? "url(#gradSuccess)"
-                        : "#475569";
-
-                  const marker = isFailed
-                    ? "url(#arrow-failed)"
-                    : isRunning
-                      ? "url(#arrow-active)"
-                      : isCompleted
-                        ? "url(#arrow-success)"
-                        : "url(#arrow-default)";
-
-                  return (
-                    <path
-                      key={edge.id}
-                      data-testid={`flow-path-${edge.id}`}
-                      d={edge.d}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={isRunning ? 2.5 : 2}
-                      markerEnd={marker}
-                      className={isRunning ? "flow-line" : ""}
-                    />
-                  );
-                })}
-              </svg>
-
-              {/* Positioned Node Cards */}
-              {Array.from(nodePositions.values()).map((pos) => {
-                const step = pos.step;
-                const isSelected = selectedStepName === step.stepName;
-                const statusClass = stepStatusColor(step.status);
-
-                return (
-                  <button
-                    key={step.stepName}
-                    type="button"
-                    data-testid={`canvas-node-${step.stepName}`}
-                    onClick={() => onSelectStep(step.stepName)}
-                    style={{
-                      height: `${pos.height}px`,
-                      left: `${pos.x}px`,
-                      top: `${pos.y}px`,
-                      width: `${pos.width}px`,
-                    }}
-                    className={`absolute text-left bg-slate-900/95 border rounded-xl p-3 shadow-lg cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-xl z-10 ${
-                      isSelected
-                        ? "border-orange-500 ring-2 ring-orange-500/40 shadow-orange-500/10"
-                        : "border-slate-800 hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center text-[10px] font-mono text-slate-300">
-                          {pos.index + 1}
-                        </span>
-                        <span className="text-xs">{phaseIcon(step.phase)}</span>
-                        <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">
-                          {step.phase}
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${statusClass}`}
+                <div
+                  data-testid="canvas-viewport"
+                  className="absolute origin-top-left"
+                  style={{
+                    height: canvasHeight,
+                    width: canvasWidth,
+                    left: navigation.offsetX,
+                    top: 0,
+                    transform: `scale(${zoom})`,
+                  }}
+                >
+                  {Array.from(nodePositions.values())
+                    .filter(
+                      (pos) =>
+                        pos.index === 0 ||
+                        stepsSorted[pos.index - 1]?.phase !== pos.step.phase,
+                    )
+                    .map((pos) => (
+                      <div
+                        key={pos.step.stepName}
+                        style={{ left: pos.x, top: pos.y - 30 }}
+                        className="absolute text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400"
                       >
-                        {step.status}
-                      </span>
-                    </div>
+                        {phaseIcon(pos.step.phase)} {pos.step.phase}
+                      </div>
+                    ))}
 
-                    <h4
-                      title={step.stepName}
-                      className="text-xs font-semibold text-slate-100 font-mono truncate"
-                    >
-                      {step.stepName}
-                    </h4>
+                  {/* Dynamic SVG Connections Layer */}
+                  <svg
+                    className="absolute inset-0 w-full h-full pointer-events-none z-0"
+                    style={{
+                      height: `${canvasHeight}px`,
+                      width: `${canvasWidth}px`,
+                    }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id={`${svgId}-gradSuccess`}
+                        gradientUnits="userSpaceOnUse"
+                        x1="0%"
+                        y1="0%"
+                        x2={canvasWidth}
+                        y2={canvasHeight}
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="#10b981"
+                          stopOpacity="0.85"
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#06b6d4"
+                          stopOpacity="0.85"
+                        />
+                      </linearGradient>
+                      <marker
+                        id={`${svgId}-arrow-success`}
+                        viewBox="0 0 10 10"
+                        refX="6"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 8 5 L 0 9 z" fill="#06b6d4" />
+                      </marker>
+                      <marker
+                        id={`${svgId}-arrow-active`}
+                        viewBox="0 0 10 10"
+                        refX="6"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 8 5 L 0 9 z" fill="#f59e0b" />
+                      </marker>
+                      <marker
+                        id={`${svgId}-arrow-failed`}
+                        viewBox="0 0 10 10"
+                        refX="6"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 8 5 L 0 9 z" fill="#f43f5e" />
+                      </marker>
+                      <marker
+                        id={`${svgId}-arrow-default`}
+                        viewBox="0 0 10 10"
+                        refX="6"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto-start-reverse"
+                      >
+                        <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569" />
+                      </marker>
+                    </defs>
 
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-                      <span>
-                        {step.attemptsCount > 1 ? (
-                          <span className="text-amber-400 font-medium">
-                            {step.attemptsCount} att.
+                    {edges.map((edge) => {
+                      const isRunning = edge.status === "running";
+                      const isFailed = edge.status === "failed";
+                      const isCompleted = edge.status === "completed";
+
+                      const stroke = isFailed
+                        ? "#f43f5e"
+                        : isRunning
+                          ? "#f59e0b"
+                          : isCompleted
+                            ? `url(#${svgId}-gradSuccess)`
+                            : "#475569";
+
+                      const marker = isFailed
+                        ? `url(#${svgId}-arrow-failed)`
+                        : isRunning
+                          ? `url(#${svgId}-arrow-active)`
+                          : isCompleted
+                            ? `url(#${svgId}-arrow-success)`
+                            : `url(#${svgId}-arrow-default)`;
+
+                      return (
+                        <path
+                          key={edge.id}
+                          data-testid={`flow-path-${edge.id}`}
+                          d={edge.d}
+                          fill="none"
+                          stroke={stroke}
+                          strokeWidth={isRunning ? 2.5 : 2}
+                          markerEnd={marker}
+                          className={isRunning ? "flow-line" : ""}
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {/* Positioned Node Cards */}
+                  {Array.from(nodePositions.values()).map((pos) => {
+                    const step = pos.step;
+                    const isSelected = selectedStepName === step.stepName;
+                    const statusClass = stepStatusColor(step.status);
+
+                    return (
+                      <button
+                        key={step.stepName}
+                        type="button"
+                        data-testid={`canvas-node-${step.stepName}`}
+                        onClick={() => onSelectStep(step.stepName)}
+                        aria-pressed={isSelected}
+                        onFocus={(event) => {
+                          if (event.currentTarget.matches(":focus-visible"))
+                            event.currentTarget.scrollIntoView?.({
+                              block: "nearest",
+                              inline: "nearest",
+                            });
+                        }}
+                        style={{
+                          height: `${pos.height}px`,
+                          left: `${pos.x}px`,
+                          top: `${pos.y}px`,
+                          width: `${pos.width}px`,
+                        }}
+                        className={`absolute text-left bg-slate-900/95 border rounded-xl p-3 shadow-lg cursor-pointer transition-colors hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] z-10 ${
+                          isSelected
+                            ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
+                            : "border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center text-[10px] font-mono text-slate-300">
+                              {pos.index + 1}
+                            </span>
+                            <span className="text-xs">
+                              {phaseIcon(step.phase)}
+                            </span>
+                            <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">
+                              {step.phase}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${statusClass}`}
+                          >
+                            {step.status}
                           </span>
-                        ) : (
-                          "1 att."
-                        )}
-                      </span>
-                      <span className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300">
-                        {step.totalDurationMs >= 1000
-                          ? `${(step.totalDurationMs / 1000).toFixed(2)}s`
-                          : `${step.totalDurationMs}ms`}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                        </div>
+
+                        <h4
+                          title={step.stepName}
+                          className="text-xs font-semibold text-slate-100 font-mono break-all leading-4 line-clamp-2"
+                        >
+                          {step.stepName}
+                        </h4>
+
+                        <div className="mt-2 flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
+                          <span>
+                            {step.attemptsCount > 1 ? (
+                              <span className="text-amber-400 font-medium">
+                                {step.attemptsCount} att.
+                              </span>
+                            ) : (
+                              "1 att."
+                            )}
+                          </span>
+                          <span className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300">
+                            {step.totalDurationMs >= 1000
+                              ? `${(step.totalDurationMs / 1000).toFixed(2)}s`
+                              : `${step.totalDurationMs}ms`}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -569,7 +535,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
                     <tr
                       key={step.stepName}
                       className={`hover:bg-slate-900/60 transition ${
-                        isSelected ? "bg-orange-500/10" : ""
+                        isSelected ? "bg-[var(--accent)]/10" : ""
                       }`}
                     >
                       <td className="py-2.5 px-3 font-mono text-slate-500">
