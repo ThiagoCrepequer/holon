@@ -64,6 +64,19 @@ export function redactModelReviewOutput(
   output: ModelReviewOutput,
 ): ModelReviewOutput {
   return {
+    ...(output.resolutions !== undefined
+      ? {
+          resolutions: output.resolutions.map((resolution) => ({
+            ...resolution,
+            diagnostic: redactSecrets(resolution.diagnostic),
+            evidence: resolution.evidence.map((evidence) => ({
+              ...evidence,
+              excerpt: redactSecrets(evidence.excerpt),
+              reason: redactSecrets(evidence.reason),
+            })),
+          })),
+        }
+      : {}),
     ...(output.isDegraded !== undefined
       ? { isDegraded: output.isDegraded }
       : {}),

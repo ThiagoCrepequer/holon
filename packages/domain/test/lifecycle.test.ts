@@ -150,7 +150,7 @@ describe("lifecycle", () => {
     expect(result.updatedTrackedFindings[0]?.githubCommentId).toBe(9999);
   });
 
-  it("classifies missing finding as RESOLVED if file is still touched by PR", () => {
+  it("classifies a host-confirmed correction as RESOLVED in a reviewed file", () => {
     const tracked1: TrackedFinding = {
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
@@ -170,7 +170,10 @@ describe("lifecycle", () => {
     // On commit 2, finding1 is fixed (no current findings), but src/db.ts is still modified in PR
     const result = reconcileFindings({
       baselineFindings: [tracked1],
-      coverage: completeCoverage("src/db.ts"),
+      coverage: {
+        ...completeCoverage("src/db.ts"),
+        confirmedResolvedFingerprints: [finding1.fingerprint],
+      },
       currentFindings: [],
       currentHeadSha: sha2,
       currentRunId: runId2,
@@ -320,7 +323,10 @@ describe("lifecycle", () => {
     // and trackedOldFixed is fixed in src/secret.ts (which is still in prFiles)
     const result = reconcileFindings({
       baselineFindings: [tracked1, trackedOldFixed],
-      coverage: completeCoverage("src/db.ts", "src/admin.ts", "src/secret.ts"),
+      coverage: {
+        ...completeCoverage("src/db.ts", "src/admin.ts", "src/secret.ts"),
+        confirmedResolvedFingerprints: [oldFindingFingerprint],
+      },
       currentFindings: [finding1, finding2],
       currentHeadSha: sha2,
       currentRunId: runId2,

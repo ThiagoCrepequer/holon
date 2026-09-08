@@ -33,6 +33,12 @@ import {
   type StepExecutionNode,
   type StepPhase,
 } from "@holon/contracts";
+import type {
+  ReconciledReviewOutput,
+  ReviewAnalysisCheckpoint,
+  AnalysisUsage,
+  AnalysisAccounting,
+} from "@holon/contracts";
 import { createPrKey, type RunId, type RunState } from "@holon/domain";
 import {
   createInstallationSessionWithKeyring,
@@ -43,7 +49,8 @@ import { GatewayProjectIdentificationModel } from "@holon/model";
 import {
   AiSdkReviewGenerator,
   GatewayModelReviewer,
-  createBoundedRepositoryToolRunner,
+  createPartitionedRepositoryToolRunner,
+  RepositoryToolBudgetExceededError,
   createRedactingRepositoryToolRunner,
 } from "@holon/model";
 import {
@@ -94,6 +101,25 @@ export interface WorkflowLedger
     CiEvidenceLedger,
     FindingLifecycleLedger,
     RunTelemetryLedger {
+  saveReviewAnalysis(
+    runId: string,
+    output: ReconciledReviewOutput,
+  ): Promise<ReviewAnalysisCheckpoint>;
+  loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput>;
+  recordAnalysisUsage(
+    runId: string,
+    eventId: string,
+    usage: AnalysisUsage,
+  ): Promise<void>;
+  reserveAnalysisToolCall(
+    runId: string,
+    index: number,
+    totalShards: number,
+  ): Promise<boolean>;
+  loadAnalysisAccounting(runId: string): Promise<AnalysisAccounting>;
+  loadFindingFeedbacks(
+    prKey: Parameters<FindingLifecycleLedger["loadPrFindings"]>[0],
+  ): Promise<readonly import("@holon/domain").FindingFeedbackRecord[]>;
   saveProjectIdentification?(
     runId: string,
     result: ProjectIdentificationResultV1,
@@ -162,7 +188,9 @@ export interface ReviewRuntime {
   readonly identificationModel?: import("@holon/application").ProjectIdentificationModel;
   readonly adminProjectionQueue?: Queue<unknown>;
   readonly createModel?: (
-    toolRunner: ReturnType<typeof createBoundedRepositoryToolRunner>,
+    toolRunner: ReturnType<
+      typeof createPartitionedRepositoryToolRunner
+    >["runner"],
   ) => ModelReviewer;
   readonly createSession?: (
     installationId: number,
@@ -190,6 +218,8 @@ function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
 }
 
 export interface ReviewServices {
+  beginReviewShard?(index: number, totalShards: number): void;
+  reviewToolBudgetExceeded?(): boolean;
   useProjectIdentification?(result: ProjectIdentificationResultV1): void;
   getProjectIdentification?(): ProjectIdentificationResultV1 | undefined;
   identifyProjects?(
@@ -405,11 +435,21 @@ export function createReviewServices(
   let inputTokens = 0;
   let outputTokens = 0;
   let toolCallsCount = 0;
+  let shardIndex = 0;
+  let shardCount = 1;
   let currentAnalysisPolicy: RepositoryPolicy | undefined;
 
-  const toolRunner = createBoundedRepositoryToolRunner(
+  const toolBudget = createPartitionedRepositoryToolRunner(
     createRedactingRepositoryToolRunner({
       run: async (call) => {
+        if (
+          !(await ledger.reserveAnalysisToolCall(
+            job.runId,
+            shardIndex,
+            shardCount,
+          ))
+        )
+          throw new RepositoryToolBudgetExceededError(12);
         toolCallsCount += 1;
         if (!(await executor.hasContext(job.runId))) {
           await prepareRepository(2, currentAnalysisPolicy);
@@ -421,6 +461,7 @@ export function createReviewServices(
     }),
     12,
   );
+  const toolRunner = toolBudget.runner;
   const model =
     runtime.createModel?.(toolRunner) ??
     new GatewayModelReviewer(
@@ -439,9 +480,14 @@ export function createReviewServices(
           model: env.AI_MODEL_ID,
         },
         toolRunner,
-        (usage) => {
+        async (usage) => {
           inputTokens += usage.inputTokens ?? 0;
           outputTokens += usage.outputTokens ?? 0;
+          await ledger.recordAnalysisUsage(job.runId, crypto.randomUUID(), {
+            inputTokens: usage.inputTokens ?? 0,
+            outputTokens: usage.outputTokens ?? 0,
+            toolCallsCount: 0,
+          });
           logger.emit("model.usage", { ...logContext, ...usage });
         },
       ),
@@ -523,6 +569,12 @@ export function createReviewServices(
     model,
     modelRoute: env.AI_MODEL_ID,
     toolsBudget: 12,
+    beginReviewShard: (index, totalShards) => {
+      shardIndex = index;
+      shardCount = totalShards;
+      toolBudget.beginShard(index, totalShards);
+    },
+    reviewToolBudgetExceeded: () => toolBudget.exceeded(),
     telemetry,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     getAccumulatedUsage: () => ({

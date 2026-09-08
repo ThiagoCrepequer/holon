@@ -3,8 +3,10 @@ import {
   reviewJobV2Schema,
   type ReviewContextV2,
   type ReviewJob,
+  type ModelReviewOutput,
 } from "@holon/contracts";
 import type { RunId } from "@holon/domain";
+import { computeStableFingerprint } from "@holon/domain";
 import { identifySnapshot } from "@holon/project-identification";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -103,6 +105,151 @@ function immediateStep(
     },
   } as unknown as WorkflowStep;
 }
+
+function cachedSteps(cache: Map<string, unknown>): WorkflowStep {
+  return {
+    sleep: async () => {},
+    do: async (name: string, config: unknown, callback: unknown) => {
+      if (cache.has(name)) return structuredClone(cache.get(name));
+      // Keep the artifact alive while this test replays the publication tail.
+      if (name === "complete-run-and-schedule-cleanup")
+        return new Date(Date.now()).toISOString();
+      const fn = typeof config === "function" ? config : callback;
+      if (typeof fn !== "function") throw new TypeError("callback");
+      const result: unknown = await fn();
+      cache.set(name, structuredClone(result));
+      return result;
+    },
+  } as unknown as WorkflowStep;
+}
+
+it("publishes the latest human severity even when feedback arrives after analysis", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  const fingerprint = await computeStableFingerprint({
+    diagnostic: finding.diagnostic,
+    excerpt: finding.evidence[0]!.excerpt,
+    path: finding.location.path,
+  });
+  await ledger.savePrFindings("github:42:pr:7", [
+    {
+      fingerprint,
+      diagnostic: finding.diagnostic,
+      filePath: finding.location.path,
+      line: 10,
+      severity: "high",
+      confidence: 0.95,
+      status: "new",
+      prKey: "github:42:pr:7",
+      firstSeenHeadSha: "a".repeat(40),
+      lastSeenHeadSha: "a".repeat(40),
+      firstSeenRunId:
+        job.runId as `github:${number}:pr:${number}:head:${string}`,
+      lastSeenRunId:
+        job.runId as `github:${number}:pr:${number}:head:${string}`,
+      githubCommentId: 99,
+      updatedAt: new Date().toISOString(),
+    },
+  ]);
+  const setup = runtime();
+  await executeReviewWorkflow(
+    env,
+    event("late-feedback"),
+    immediateStep([], async (name) => {
+      if (name !== "analyze-review") return;
+      await ledger.applyFindingFeedback({
+        prKey: "github:42:pr:7",
+        targetCommentId: 99,
+        githubCommentId: 100,
+        deliveryId: "github:late-feedback",
+        createdAt: new Date().toISOString(),
+        authorLogin: "maintainer",
+        authorAssociation: "MEMBER",
+        label: "wrong_severity",
+        targetSeverity: "low",
+        update: { severity: "low" },
+      });
+    }),
+    setup.value,
+  );
+  const summary = setup.posts.findLast((post) =>
+    post.route.includes("/pulls/{pull_number}/reviews"),
+  );
+  expect(summary?.event).toBe("APPROVE");
+  expect((await ledger.loadPrFindings("github:42:pr:7"))[0]?.severity).toBe(
+    "low",
+  );
+});
+
+it("reconstructs persisted versions, usage and start time when callbacks are replayed after the identification deadline", async () => {
+  const initialTime = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(initialTime);
+  const identification = await identifySnapshot({
+    snapshotSha: job.envelope.pullRequest.headSha,
+    policyDigest: "p",
+    modelRevision: "m",
+    files: [
+      { path: "package.json", content: '{"dependencies":{"react":"19.0.0"}}' },
+    ],
+  });
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  const review = vi.fn(async (_job: ReviewJob, _context: ReviewContextV2) => {
+    await ledger.recordAnalysisUsage(job.runId, "test-model-call", {
+      inputTokens: 100,
+      outputTokens: 20,
+      toolCallsCount: 0,
+    });
+    return {
+      output: { findings: [], summary: "No issues." },
+      promptTruncated: false,
+    };
+  });
+  const setup = runtime({
+    model: () => ({ review }),
+    now: () => new Date(Date.now()).toISOString(),
+  });
+  const identificationSettings: Record<string, string> = {
+    PROJECT_IDENTIFICATION_MODE: "enrich",
+  };
+  const settings = { ...env, ...identificationSettings } as Cloudflare.Env;
+  const configured = {
+    ...setup.value,
+    identificationModel: {
+      identify: async () => ({ selectedFactIds: ["fact-0"] }),
+    },
+    executor: {
+      ...setup.value.executor!,
+      discoverProjectMetadataV1: async () => identification,
+    },
+  };
+  const cache = new Map<string, unknown>();
+  await executeReviewWorkflow(
+    settings,
+    event("cached-replay"),
+    cachedSteps(cache),
+    configured,
+  );
+  const first = await ledger.loadRunTelemetry(job.runId);
+  expect(first?.tokens.inputTokens).toBe(100);
+  clock.mockReturnValue(initialTime + 180_000);
+  cache.delete("analyze-shard-1");
+  cache.delete("analyze-review");
+  cache.delete("save-run-telemetry");
+  await executeReviewWorkflow(
+    settings,
+    event("cached-replay"),
+    cachedSteps(cache),
+    configured,
+  );
+  expect(review).toHaveBeenCalledTimes(2);
+  expect(review.mock.calls[1]?.[1]).toMatchObject({
+    projectIdentification: {
+      projects: [{ technologies: [{ name: "react" }] }],
+    },
+  });
+  const replayed = await ledger.loadRunTelemetry(job.runId);
+  expect(replayed?.tokens.inputTokens).toBe(100);
+  expect(replayed?.queueWaitMs).toBe(first?.queueWaitMs);
+});
 
 function session(
   posts: Array<{
@@ -1376,6 +1523,8 @@ describe("ReviewWorkflow", () => {
 
     let currentFindings: (typeof finding)[] = [finding];
     let currentHead = sha1;
+    const reviewContext = { ...context, files: [...context.files] };
+    let resolutions: NonNullable<ModelReviewOutput["resolutions"]> = [];
 
     const createJobForSha = (sha: string): ReviewJob =>
       reviewJobV2Schema.parse({
@@ -1391,11 +1540,13 @@ describe("ReviewWorkflow", () => {
       });
 
     const setup = runtime({
+      context: reviewContext,
       head: () => currentHead,
       model: () => ({
         review: () =>
           Promise.resolve({
             output: {
+              resolutions,
               findings: currentFindings,
               summary: "Model review completed.",
             },
@@ -1443,6 +1594,33 @@ describe("ReviewWorkflow", () => {
     // 3. Commit 3: author fixes the finding -> resolved!
     currentHead = sha3;
     currentFindings = [];
+    reviewContext.files = [
+      {
+        ...context.files[0]!,
+        patch: canonicalPatch.replace("return null;", "return value;"),
+      },
+    ];
+    const previous = (
+      await env.REVIEW_LEDGERS.getByName("github:42:pr:7").loadPrFindings(
+        "github:42:pr:7",
+      )
+    )[0]!;
+    resolutions = [
+      {
+        fingerprint: previous.fingerprint,
+        confidence: 0.98,
+        diagnostic: "The corrected branch now returns the required value.",
+        location: finding.location,
+        evidence: [
+          {
+            ...finding.evidence[0]!,
+            excerpt: "return value;",
+            reason: "The required non-null value is returned.",
+          },
+        ],
+      },
+    ];
+
     const result3 = await executeReviewWorkflow(
       env,
       event("lifecycle-run-3", createJobForSha(sha3)),
@@ -1471,6 +1649,8 @@ describe("ReviewWorkflow", () => {
     const sha4 = "4".repeat(40);
     currentHead = sha4;
     currentFindings = [finding];
+    resolutions = [];
+    reviewContext.files = [...context.files];
     const result4 = await executeReviewWorkflow(
       env,
       event("lifecycle-run-4", createJobForSha(sha4)),
@@ -1488,7 +1668,7 @@ describe("ReviewWorkflow", () => {
     expect(inlinePostsRun4).toHaveLength(2); // New inline comment for reintroduced finding
   });
 
-  it("handles resolution reply failure gracefully without failing review", async () => {
+  it("propagates resolution reply failure for durable retry instead of silently completing", async () => {
     const posts: Array<{
       readonly body: unknown;
       readonly event?: unknown;
@@ -1511,13 +1691,17 @@ describe("ReviewWorkflow", () => {
       });
 
     let currentHead = sha1;
+    const reviewContext = { ...context, files: [...context.files] };
+    let resolutions: NonNullable<ModelReviewOutput["resolutions"]> = [];
 
     const setup = runtime({
+      context: reviewContext,
       head: () => currentHead,
       model: () => ({
         review: () =>
           Promise.resolve({
             output: {
+              resolutions,
               findings: currentHead === sha1 ? [finding] : [],
               summary: "Model analysis.",
             },
@@ -1535,8 +1719,35 @@ describe("ReviewWorkflow", () => {
       setup.value,
     );
 
-    // Run 2: reply endpoint rejects
+    // Run 2: a verified correction requires a reply, but the endpoint rejects.
     currentHead = sha2;
+    reviewContext.files = [
+      {
+        ...context.files[0]!,
+        patch: canonicalPatch.replace("return null;", "return value;"),
+      },
+    ];
+    const previous = (
+      await env.REVIEW_LEDGERS.getByName("github:42:pr:7").loadPrFindings(
+        "github:42:pr:7",
+      )
+    )[0]!;
+    resolutions = [
+      {
+        fingerprint: previous.fingerprint,
+        confidence: 0.98,
+        diagnostic: "The corrected branch now returns the required value.",
+        location: finding.location,
+        evidence: [
+          {
+            ...finding.evidence[0]!,
+            excerpt: "return value;",
+            reason: "The required non-null value is returned.",
+          },
+        ],
+      },
+    ];
+
     const runtimeWithFailingReply: ReviewRuntime = {
       ...setup.value,
       createSession: async () => {
@@ -1556,14 +1767,14 @@ describe("ReviewWorkflow", () => {
       },
     };
 
-    const result2 = await executeReviewWorkflow(
-      env,
-      event("res-fail-run-2", createJobForSha(sha2)),
-      immediateStep([]),
-      runtimeWithFailingReply,
-    );
-
-    expect(result2.outcome).toBe("completed");
+    await expect(
+      executeReviewWorkflow(
+        env,
+        event("res-fail-run-2", createJobForSha(sha2)),
+        immediateStep([]),
+        runtimeWithFailingReply,
+      ),
+    ).rejects.toThrow("HOLON_GITHUB_TRANSIENT");
   });
 
   it("incorporates pre-existing CI evidence saved in ledger into initial review summary", async () => {

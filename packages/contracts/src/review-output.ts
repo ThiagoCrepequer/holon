@@ -69,7 +69,13 @@ export const reviewFindingSchema = z.strictObject({
     .optional(),
 });
 
+export const reviewResolutionSchema = reviewFindingSchema
+  .omit({ severity: true, suggestion: true })
+  .extend({
+    fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
+  });
 export const modelReviewOutputSchema = z.strictObject({
+  resolutions: z.array(reviewResolutionSchema).max(8).optional(),
   findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
   isDegraded: z.boolean().optional(),
   summary: z.string().trim().min(1).max(reviewTextLimits.summary),
@@ -147,6 +153,7 @@ const resilientSeverity = z.preprocess(
  */
 const reviewTransportFields = z
   .object({
+    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
     findings: z.preprocess(
       (val) =>
         Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : [],
@@ -213,6 +220,9 @@ export function modelReviewOutputFromTransport(
 ): ModelReviewOutput {
   const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
+    ...(transport.resolutions !== undefined
+      ? { resolutions: transport.resolutions }
+      : {}),
     findings: transport.findings.map((finding) => ({
       ...finding,
       evidence: finding.evidence.map((evidence) => ({

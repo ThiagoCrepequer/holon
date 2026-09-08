@@ -298,6 +298,26 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     `,
     version: 12,
   },
+  {
+    version: 13,
+    statements: `
+      ALTER TABLE pr_findings ADD COLUMN evidence_fingerprint TEXT;
+      CREATE TABLE review_analysis_artifacts (
+        run_id TEXT NOT NULL,
+        part INTEGER NOT NULL,
+        payload BLOB NOT NULL,
+        PRIMARY KEY(run_id, part)
+      );
+      CREATE TABLE analysis_usage (
+        run_id TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        tool_calls INTEGER NOT NULL,
+        PRIMARY KEY(run_id, event_id)
+      );
+    `,
+  },
 ] as const;
 
 function baselineTables(sql: SqlStorage): readonly string[] {

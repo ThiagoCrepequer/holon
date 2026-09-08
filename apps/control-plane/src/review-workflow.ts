@@ -6,6 +6,8 @@ import {
 } from "@holon/application";
 import {
   buildAdminProjectionEventV1,
+  buildReviewAnalysisCheckpoint,
+  reviewAnalysisCheckpointSchema,
   runClaimV2ResultSchema,
   reviewJobSchema,
   type AdminRunProjectionPayloadV1,
@@ -43,11 +45,13 @@ import { NonRetryableError } from "cloudflare:workflows";
 import {
   isReviewMutationNotAuthorizedError,
   publishAuthorized,
+  publishResolutionAuthorized,
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
 import { consoleLogger, errorKind } from "./observability.js";
 import { resolveRepositoryPolicy } from "./repository-policy-resolver.js";
 import { analyzeReview } from "./review-analysis.js";
+import { loadReviewWithCurrentFeedback } from "./review-feedback-refresh.js";
 import {
   createReviewServices,
   type GitHubMutationContext,
@@ -301,7 +305,11 @@ export async function executeReviewWorkflow(
   let reviewPhaseReached: ReviewPhaseReached = "admitted";
   let analysisStartedAtIso: string | null = null;
 
-  const workflowStartedAt = now();
+  const workflowStartedAt = await step.do(
+    "workflow-start-time",
+    stateStep,
+    async () => now(),
+  );
   const stepTimings: StepTiming[] = [];
   const recordStepTiming = (
     stepName: string,
@@ -475,7 +483,11 @@ export async function executeReviewWorkflow(
     const obsoleteAt = occurredAt;
     const obsoleteDurationMs = durationFrom(rawEvent.timestamp, obsoleteAt);
     const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
-    const usage = services.getAccumulatedUsage();
+    const usage = await step.do(
+      "obsolete-snapshot-accounting",
+      stateStep,
+      async () => services.ledger.loadAnalysisAccounting(run.id),
+    );
     const tokenAccounting = {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
@@ -493,7 +505,7 @@ export async function executeReviewWorkflow(
       runId: run.id,
       scopeStatus: null,
       shardsCount: 0,
-      stepTimings,
+      stepTimings: usage.stepTimings,
       terminalState: "obsolete",
       tokens: tokenAccounting,
       toolCallsCount: usage.toolCallsCount,
@@ -915,28 +927,34 @@ export async function executeReviewWorkflow(
           usage: { inputTokens: 0, outputTokens: 0, modelCalls: 0 },
         };
         for (const [index, project] of discovered.projects.entries()) {
-          if (Date.now() - identificationStarted >= 120000) {
-            identification.projects.push({
-              ...project,
-              status: "partial",
-              limitations: [...project.limitations, "identification-deadline"],
-            });
-            continue;
-          }
+          const identifyProject = async () => {
+            if (Date.now() >= identificationStarted + 120000)
+              return {
+                ...discovered,
+                projects: [
+                  {
+                    ...project,
+                    status: "partial" as const,
+                    limitations: [
+                      ...project.limitations,
+                      "identification-deadline",
+                    ],
+                  },
+                ],
+                usage: { inputTokens: 0, outputTokens: 0, modelCalls: 0 },
+              };
+            return services.identifyProjects!(
+              identificationPolicy,
+              { ...discovered, projects: [project] },
+              false,
+              identificationStarted + 120000,
+            );
+          };
           let result = await runInstrumentedStep(
             `identify-project-v1-${index}`,
             "preparation",
             modelStep,
-            async () =>
-              services.identifyProjects!(
-                identificationPolicy,
-                {
-                  ...discovered,
-                  projects: [project],
-                },
-                false,
-                identificationStarted + 120000,
-              ),
+            identifyProject,
             () => ({
               projectPath: project.root,
               projectType: project.ecosystem,
@@ -946,12 +964,17 @@ export async function executeReviewWorkflow(
           for (
             let waiting = 0;
             waiting < 3 &&
-            Date.now() - identificationStarted < 90000 &&
             result?.projects.some((p) =>
               p.limitations.includes("identification-pending"),
             );
             waiting++
           ) {
+            const mayWait = await step.do(
+              `continue-project-identification-v1-${index}-${waiting}`,
+              stateStep,
+              async () => Date.now() - identificationStarted < 90000,
+            );
+            if (!mayWait) break;
             await step.sleep(
               `wait-project-identification-v1-${index}-${waiting}`,
               "30 seconds",
@@ -960,16 +983,7 @@ export async function executeReviewWorkflow(
               `retry-project-identification-v1-${index}-${waiting}`,
               "preparation",
               modelStep,
-              async () =>
-                services.identifyProjects!(
-                  identificationPolicy,
-                  {
-                    ...discovered,
-                    projects: [project],
-                  },
-                  false,
-                  identificationStarted + 120000,
-                ),
+              identifyProject,
               () => ({
                 projectPath: project.root,
                 projectType: project.ecosystem,
@@ -1020,57 +1034,45 @@ export async function executeReviewWorkflow(
       }
     }
 
-    analysisStartedAtIso = now();
-    reviewPhaseReached = "analysis_started";
-    const output = await runInstrumentedStep(
-      "analyze-review",
-      "analysis",
-      modelStep,
-      async () => await analyzeReview(job, services, emit, effectivePolicy),
-      async () => {
-        let structuralFilesCount: number | null = null;
-        let textualFilesCount: number | null = null;
-        let estimatedTokens: number | null = null;
-        try {
-          const context = await services.loadContext(effectivePolicy);
-          structuralFilesCount = context.files.filter(
-            (file) => file.mode === "structural",
-          ).length;
-          textualFilesCount = context.files.filter(
-            (file) => file.mode === "textual",
-          ).length;
-          const patchBytes = context.files.reduce(
-            (total, file) =>
-              total + new TextEncoder().encode(file.patch).byteLength,
-            0,
-          );
-          estimatedTokens = Math.ceil(patchBytes / 4);
-        } catch {
-          // fallback if context load fails
-        }
-        return {
-          estimatedTokens,
-          modelRoute: services.modelRoute || "unknown",
-          structuralFilesCount,
-          textualFilesCount,
-          toolsBudget: services.toolsBudget ?? null,
-        };
-      },
-      (out) => ({
-        findingsCount: out.activeFindings.length,
-        promptTruncated: out.promptTruncated || out.contextTruncated,
-        summary: out.summary.slice(0, 500),
-        historicalFindings: out.activeFindings.slice(0, 50).map((f) => ({
-          diagnostic: f.diagnostic.slice(0, 300),
-          filePath: f.location.path,
-          fingerprint: f.fingerprint,
-          line: f.location.line,
-          severity: f.severity,
-          status: f.status,
-          updatedAt: now(),
-        })),
-      }),
+    analysisStartedAtIso = await step.do(
+      "analysis-start-time",
+      stateStep,
+      async () => now(),
     );
+    reviewPhaseReached = "analysis_started";
+    let output = await analyzeReview(job, services, emit, effectivePolicy, {
+      runStep: (name, phase, callback) =>
+        runInstrumentedStep(
+          name,
+          phase,
+          name === "plan-review" ? repositoryStep : modelStep,
+          callback,
+          () => ({
+            modelRoute: services.modelRoute ?? "unknown",
+            toolsBudget: services.toolsBudget ?? null,
+          }),
+          (result) => {
+            if (name !== "analyze-review") return null;
+            const checkpoint = reviewAnalysisCheckpointSchema.parse(result);
+            return {
+              findingsCount: checkpoint.activeFindings.length,
+              promptTruncated:
+                checkpoint.promptTruncated || checkpoint.contextTruncated,
+              summary: checkpoint.summary.slice(0, 500),
+              historicalFindings: checkpoint.activeFindings.map((finding) => ({
+                diagnostic: finding.diagnostic,
+                filePath: finding.location.path,
+                fingerprint: finding.fingerprint,
+                line: finding.location.line,
+                severity: finding.severity,
+                status: finding.status,
+                updatedAt: now(),
+              })),
+            };
+          },
+        ),
+      finish: (result) => services.ledger.saveReviewAnalysis(run.id, result),
+    });
     reviewPhaseReached = "analyzed";
 
     await moveTo("begin-publication", "running", "publishing", false);
@@ -1103,10 +1105,10 @@ export async function executeReviewWorkflow(
     }
 
     let findingsPublished = 0;
-    const trackedToPersist = [...output.updatedTrackedFindings];
+    const publishedCommentIds = new Map<string, number>();
 
     for (const [index, finding] of output.activeFindings.entries()) {
-      if (classifyFindingPublication(finding) !== "inline") continue;
+      if (finding.confidence < 0.8 || finding.severity === "low") continue;
 
       // Suppress duplicate inline comments for persistent findings
       if (
@@ -1123,11 +1125,26 @@ export async function executeReviewWorkflow(
         async () => {
           const github = await services.createMutationContext();
           try {
+            const detail = await loadReviewWithCurrentFeedback(
+              services.ledger,
+              run.id,
+              prKey,
+            );
+            const effectiveFinding = detail.activeFindings.find(
+              (candidate) => candidate.fingerprint === finding.fingerprint,
+            );
+            if (
+              effectiveFinding === undefined ||
+              classifyFindingPublication(effectiveFinding) !== "inline"
+            )
+              return { authorized: true, published: false } as const;
             const findingId = await createFindingId(run.id, {
-              diagnostic: finding.diagnostic,
-              endLine: finding.location.line,
-              path: finding.location.path,
-              startLine: finding.location.startLine ?? finding.location.line,
+              diagnostic: effectiveFinding.diagnostic,
+              endLine: effectiveFinding.location.line,
+              path: effectiveFinding.location.path,
+              startLine:
+                effectiveFinding.location.startLine ??
+                effectiveFinding.location.line,
             });
             let commentId: number | undefined;
             const published = await publishAuthorized(
@@ -1136,13 +1153,13 @@ export async function executeReviewWorkflow(
               run.id,
               findingId,
               "inline",
-              renderFinding(finding),
+              renderFinding(effectiveFinding),
               {
-                line: finding.location.line,
-                path: finding.location.path,
+                line: effectiveFinding.location.line,
+                path: effectiveFinding.location.path,
                 side: "RIGHT",
-                ...(finding.location.startLine !== undefined
-                  ? { startLine: finding.location.startLine }
+                ...(effectiveFinding.location.startLine !== undefined
+                  ? { startLine: effectiveFinding.location.startLine }
                   : {}),
               },
               () => authorizeMutation(github, "review"),
@@ -1177,48 +1194,46 @@ export async function executeReviewWorkflow(
         );
       }
       if (result.commentId !== undefined) {
-        const trackedIndex = trackedToPersist.findIndex(
-          (t) => t.fingerprint === finding.fingerprint,
-        );
-        const existing = trackedToPersist[trackedIndex];
-        if (existing !== undefined) {
-          trackedToPersist[trackedIndex] = {
-            ...existing,
-            githubCommentId: result.commentId,
-          };
-        }
+        publishedCommentIds.set(finding.fingerprint, result.commentId);
       }
       if (result.published) findingsPublished += 1;
     }
 
     // Notify resolutions on original comment threads
-    for (const [index, resolved] of output.resolvedFindings.entries()) {
-      const commentId = resolved.githubCommentId;
-      if (commentId === undefined) continue;
+    for (let index = 0; index < output.resolvedFindingsCount; index += 1) {
       const resolutionAuthorized = await runInstrumentedStep(
         `notify-resolved-${index + 1}`,
         "publication",
         publicationStep,
         async () => {
           const github = await services.createMutationContext();
-          if (github.publisher.replyToComment === undefined) return true;
-          if (!(await authorizeMutation(github, "review"))) return false;
+          const original = (await services.ledger.loadReviewAnalysis(run.id))
+            .resolvedFindings[index];
+          const refreshed = await loadReviewWithCurrentFeedback(
+            services.ledger,
+            run.id,
+            prKey,
+          );
+          const resolved = refreshed.resolvedFindings.find(
+            (finding) => finding.fingerprint === original?.fingerprint,
+          );
+          if (resolved?.githubCommentId === undefined) return true;
           try {
-            const shortSha = job.envelope.pullRequest.headSha.slice(0, 7);
-            await github.publisher.replyToComment(
-              commentId,
-              `✅ Defeito resolvido no commit \`${shortSha}\`.`,
+            await publishResolutionAuthorized(
+              services.ledger,
+              github.publisher,
+              run.id,
+              resolved,
+              job.envelope.pullRequest.headSha,
+              () => authorizeMutation(github, "review"),
             );
             return true;
           } catch (error) {
-            emit("finding.resolution_reply_failed", {
-              commentId,
-              errorKind: errorKind(error),
-            });
-            return true;
+            if (isReviewMutationNotAuthorizedError(error)) return false;
+            throw error;
           }
         },
-        () => ({ commentId }),
+        () => ({ resolutionIndex: index }),
         (authorized) => ({ authorized }),
       );
       if (!resolutionAuthorized) {
@@ -1236,7 +1251,12 @@ export async function executeReviewWorkflow(
       publicationStep,
       async () => {
         const github = await services.createMutationContext();
-        let summaryText = output.summary;
+        const currentReview = await loadReviewWithCurrentFeedback(
+          services.ledger,
+          run.id,
+          prKey,
+        );
+        let summaryText = currentReview.summary;
         try {
           const ciEvidence = await services.ledger.loadCiEvidence(
             prKey,
@@ -1262,10 +1282,14 @@ export async function executeReviewWorkflow(
             "summary",
             "summary",
             summaryText,
-            { event: output.verdict },
+            { event: currentReview.verdict },
             () => authorizeMutation(github, "review"),
           );
-          return { authorized: true, published } as const;
+          return {
+            authorized: true,
+            published,
+            checkpoint: buildReviewAnalysisCheckpoint(currentReview),
+          } as const;
         } catch (error) {
           if (isReviewMutationNotAuthorizedError(error)) {
             return { authorized: false, published: false } as const;
@@ -1275,7 +1299,7 @@ export async function executeReviewWorkflow(
       },
       () => ({
         activeFindingsCount: output.activeFindings.length,
-        resolvedFindingsCount: output.resolvedFindings.length,
+        resolvedFindingsCount: output.resolvedFindingsCount,
         verdict: output.verdict,
       }),
       (res) => ({
@@ -1291,20 +1315,74 @@ export async function executeReviewWorkflow(
       );
     }
 
+    output = summaryResult.checkpoint;
+
     // Persist tracked findings in ledger
     await runInstrumentedStep(
       "save-pr-findings",
       "publication",
       publicationStep,
       async () => {
-        await services.ledger.savePrFindings(prKey, trackedToPersist);
+        const detail = await services.ledger.loadReviewAnalysis(run.id);
+        await services.ledger.savePrFindings(
+          prKey,
+          detail.updatedTrackedFindings.map((finding) => ({
+            ...finding,
+            githubCommentId:
+              publishedCommentIds.get(finding.fingerprint) ??
+              finding.githubCommentId,
+          })),
+        );
       },
       () => ({
         prKey,
-        trackedFindingsCount: trackedToPersist.length,
+        trackedFindingsCount: publishedCommentIds.size,
       }),
       () => ({ saved: true }),
     );
+    const { checkRunConclusion, checkRunOutput, checkpoint } =
+      await runInstrumentedStep(
+        "format-check-run-output",
+        "publication",
+        stateStep,
+        async () => {
+          const detail = await loadReviewWithCurrentFeedback(
+            services.ledger,
+            run.id,
+            prKey,
+          );
+          const isPartial =
+            detail.scopeStatus === "partial_by_policy" ||
+            detail.scopeStatus === "partial_by_failure";
+          const conclusion = determineCheckRunConclusion(
+            detail.findings,
+            isPartial,
+            detail.verdict,
+          );
+          const formattedOutput = formatCheckRunOutput({
+            durationMs: durationFrom(rawEvent.timestamp, now()),
+            effectivePolicyDigest: detail.effectivePolicyDigest,
+            findings: detail.findings,
+            partial: isPartial,
+            policySource: detail.policySource,
+            reconciliation: detail.reconciliation,
+            scopeStatus: detail.scopeStatus,
+            shardsAnalyzed: detail.shardsAnalyzed,
+            structuralImpact: detail.structuralImpact,
+            sourceDigest: detail.sourceDigest,
+            summary: detail.summary,
+            totalShards: detail.totalShards,
+            verdict: detail.verdict,
+            waiversCount: detail.waiversCount,
+          });
+          return {
+            checkRunConclusion: conclusion,
+            checkRunOutput: formattedOutput,
+            checkpoint: buildReviewAnalysisCheckpoint(detail),
+          };
+        },
+      );
+    output = checkpoint;
     await runInstrumentedStep(
       "record-review-decision",
       "publication",
@@ -1326,30 +1404,6 @@ export async function executeReviewWorkflow(
       () => ({ recorded: true }),
     );
 
-    const isPartial =
-      output.scopeStatus === "partial_by_policy" ||
-      output.scopeStatus === "partial_by_failure";
-    const checkRunConclusion = determineCheckRunConclusion(
-      output.findings,
-      isPartial,
-      output.verdict,
-    );
-    const checkRunOutput = formatCheckRunOutput({
-      durationMs: durationFrom(rawEvent.timestamp, now()),
-      effectivePolicyDigest: output.effectivePolicyDigest,
-      findings: output.findings,
-      partial: isPartial,
-      policySource: output.policySource,
-      reconciliation: output.reconciliation,
-      scopeStatus: output.scopeStatus,
-      shardsAnalyzed: output.shardsAnalyzed,
-      structuralImpact: output.structuralImpact,
-      sourceDigest: output.sourceDigest,
-      summary: output.summary,
-      totalShards: output.totalShards,
-      verdict: output.verdict,
-      waiversCount: output.waiversCount,
-    });
     const checkRunAuthorized = await updateCheckRunCompleted(
       "complete-check-run",
       checkRunConclusion,
@@ -1366,7 +1420,11 @@ export async function executeReviewWorkflow(
     const finishedAt = now();
     const totalDurationMs = durationFrom(rawEvent.timestamp, finishedAt);
     const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
-    const usage = services.getAccumulatedUsage();
+    const usage = await step.do(
+      "completed-snapshot-accounting",
+      stateStep,
+      async () => services.ledger.loadAnalysisAccounting(run.id),
+    );
     const tokenAccounting = {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
@@ -1393,7 +1451,7 @@ export async function executeReviewWorkflow(
       runId: run.id,
       scopeStatus: output.scopeStatus,
       shardsCount: output.totalShards,
-      stepTimings,
+      stepTimings: usage.stepTimings,
       ...(output.sourceDigest === undefined
         ? {}
         : { sourceDigest: output.sourceDigest }),
@@ -1505,7 +1563,11 @@ export async function executeReviewWorkflow(
     const failedAt = now();
     const failedDurationMs = durationFrom(rawEvent.timestamp, failedAt);
     const queueWaitMs = durationFrom(rawEvent.timestamp, workflowStartedAt);
-    const usage = services.getAccumulatedUsage();
+    const usage = await step.do(
+      "failed-snapshot-accounting",
+      stateStep,
+      async () => services.ledger.loadAnalysisAccounting(run.id),
+    );
     const tokenAccounting = {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
@@ -1532,7 +1594,7 @@ export async function executeReviewWorkflow(
       runId: run.id,
       scopeStatus: "partial_by_failure",
       shardsCount: 1,
-      stepTimings,
+      stepTimings: usage.stepTimings,
       terminalState: "failed_terminal",
       tokens: tokenAccounting,
       toolCallsCount: usage.toolCallsCount,

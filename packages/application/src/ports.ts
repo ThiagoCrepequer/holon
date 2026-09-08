@@ -22,9 +22,17 @@ import type {
   RunState,
 } from "@holon/domain";
 
+export type ReviewContext = ReviewContextV2 & {
+  readonly deadlineAt?: number | undefined;
+  readonly priorFindings?:
+    | readonly Pick<
+        TrackedFinding,
+        "fingerprint" | "diagnostic" | "filePath" | "severity"
+      >[]
+    | undefined;
+};
 export type {
   CreateCheckRunInput,
-  ReviewContextV2 as ReviewContext,
   UpdateCheckRunInput,
 } from "@holon/contracts";
 
@@ -34,7 +42,7 @@ export interface ModelReviewResult {
 }
 
 export interface ModelReviewer {
-  review(job: ReviewJob, context: ReviewContextV2): Promise<ModelReviewResult>;
+  review(job: ReviewJob, context: ReviewContext): Promise<ModelReviewResult>;
   synthesizeReviewSummary?(
     job: ReviewJob,
     input: {

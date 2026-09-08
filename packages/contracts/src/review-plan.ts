@@ -9,6 +9,7 @@ import { reconciliationSummarySchema } from "./finding-lifecycle.js";
 import { reviewTextLimits } from "./review-limits.js";
 import { reviewOutputLimitationsSchema } from "./review-output.js";
 import { reviewFindingSchema } from "./review-output.js";
+import { reviewResolutionSchema } from "./review-output.js";
 import {
   reviewVerdictDetailsSchema,
   reviewVerdictSchema,
@@ -43,6 +44,7 @@ export const reviewPlanSchema = z.strictObject({
 });
 
 export const shardReviewResultSchema = z.strictObject({
+  resolutions: z.array(reviewResolutionSchema).max(8).optional(),
   errorReason: z.string().optional(),
   findings: z.array(reviewFindingSchema),
   isDegraded: z.boolean().optional(),

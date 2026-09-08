@@ -7,6 +7,7 @@ import type {
 } from "./identity.js";
 
 export interface TrackedFinding {
+  readonly evidenceFingerprint?: string | undefined;
   readonly confidence?: number | undefined;
   readonly diagnostic: string;
   readonly filePath: string;
@@ -24,6 +25,7 @@ export interface TrackedFinding {
 }
 
 export interface ReconciledFinding extends Finding {
+  readonly evidenceFingerprint?: string | undefined;
   readonly fingerprint: FindingFingerprint;
   readonly firstSeenHeadSha?: string | undefined;
   readonly previousCommentId?: number | undefined;
@@ -31,6 +33,7 @@ export interface ReconciledFinding extends Finding {
 }
 
 export interface ReconciliationSummary {
+  readonly unverifiedCount?: number | undefined;
   readonly dismissedCount: number;
   readonly newCount: number;
   readonly obsoleteCount: number;
@@ -41,12 +44,14 @@ export interface ReconciliationSummary {
 }
 
 export interface FindingWithFingerprint extends Finding {
+  readonly evidenceFingerprint?: string | undefined;
   readonly fingerprint: FindingFingerprint;
 }
 
 export interface ReconcileFindingsInput {
   readonly baselineFindings: readonly TrackedFinding[];
   readonly coverage: {
+    readonly confirmedResolvedFingerprints?: readonly string[] | undefined;
     readonly isComplete: boolean;
     readonly pullRequestFiles: readonly string[];
     readonly reviewedFiles: readonly string[];
@@ -79,9 +84,36 @@ export function reconcileFindings(
   const dismissedFindings: ReconciledFinding[] = [];
   const handledFingerprints = new Set<FindingFingerprint>();
   const updatedTrackedMap = new Map<FindingFingerprint, TrackedFinding>();
+  const currentIds = new Set(input.currentFindings.map((f) => f.fingerprint));
+  const confirmedResolved = new Set(
+    input.coverage.confirmedResolvedFingerprints ?? [],
+  );
+  let unverifiedCount = 0;
 
   // 1. Process current findings against baseline
-  for (const current of input.currentFindings) {
+  for (const candidate of input.currentFindings) {
+    const evidenceMatches =
+      candidate.evidenceFingerprint === undefined
+        ? []
+        : input.baselineFindings.filter(
+            (previous) =>
+              previous.evidenceFingerprint === candidate.evidenceFingerprint &&
+              previous.filePath === candidate.location.path,
+          );
+    const uniqueCandidate =
+      input.currentFindings.filter(
+        (f) => f.evidenceFingerprint === candidate.evidenceFingerprint,
+      ).length === 1;
+    const evidenceMatch =
+      evidenceMatches.length === 1 && uniqueCandidate
+        ? evidenceMatches[0]
+        : undefined;
+    const current =
+      !baselineMap.has(candidate.fingerprint) &&
+      evidenceMatch !== undefined &&
+      !currentIds.has(evidenceMatch.fingerprint)
+        ? { ...candidate, fingerprint: evidenceMatch.fingerprint }
+        : candidate;
     handledFingerprints.add(current.fingerprint);
     const existing = baselineMap.get(current.fingerprint);
 
@@ -94,6 +126,8 @@ export function reconcileFindings(
       // The issue is still active -> persistent
       const tracked: TrackedFinding = {
         ...existing,
+        evidenceFingerprint:
+          current.evidenceFingerprint ?? existing.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
@@ -113,6 +147,8 @@ export function reconcileFindings(
       // The issue was resolved before, but has been reintroduced
       const tracked: TrackedFinding = {
         ...existing,
+        evidenceFingerprint:
+          current.evidenceFingerprint ?? existing.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
@@ -132,6 +168,8 @@ export function reconcileFindings(
       // Previously dismissed issue still matches: preserve dismissal without blocking
       const tracked: TrackedFinding = {
         ...existing,
+        evidenceFingerprint:
+          current.evidenceFingerprint ?? existing.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
@@ -148,6 +186,7 @@ export function reconcileFindings(
     } else {
       // Entirely new issue
       const tracked: TrackedFinding = {
+        evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         diagnostic: current.diagnostic,
         filePath: current.location.path,
@@ -188,8 +227,11 @@ export function reconcileFindings(
       existing.status === "persistent" ||
       existing.status === "reintroduced"
     ) {
-      if (reviewedFiles.has(existing.filePath)) {
-        // File is still part of PR diff, but issue is gone -> resolved!
+      if (
+        reviewedFiles.has(existing.filePath) &&
+        confirmedResolved.has(existing.fingerprint)
+      ) {
+        // Silence is not proof of a fix: require a host-verified correction.
         const resolved: TrackedFinding = {
           ...existing,
           status: "resolved",
@@ -213,6 +255,7 @@ export function reconcileFindings(
         // A partial run has no authority to resolve or obsolete findings in
         // files it did not successfully review.
         updatedTrackedMap.set(existing.fingerprint, existing);
+        unverifiedCount += 1;
       }
     } else {
       // Previously resolved or obsolete remains as is
@@ -234,6 +277,7 @@ export function reconcileFindings(
   const dismissedCount = dismissedFindings.length;
 
   const summary: ReconciliationSummary = {
+    ...(unverifiedCount > 0 ? { unverifiedCount } : {}),
     dismissedCount,
     newCount,
     obsoleteCount,

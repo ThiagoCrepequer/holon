@@ -248,7 +248,10 @@ describe("analyzeReview", () => {
       };
 
       const emit = vi.fn();
-      const services = createMockServices(v2Context);
+      const services = createMockServices(v2Context, {
+        output: { findings: [], summary: "Review summary" },
+        promptTruncated: false,
+      });
       (
         services.model as unknown as {
           synthesizeReviewSummary?: () => Promise<string>;
@@ -374,7 +377,10 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v2Context);
+    const services = createMockServices(v2Context, {
+      output: { findings: [], summary: "Review summary" },
+      promptTruncated: false,
+    });
     services.model.review = vi
       .fn()
       .mockRejectedValue(new Error("Model timeout"));
@@ -395,7 +401,10 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v2Context);
+    const services = createMockServices(v2Context, {
+      output: { findings: [], summary: "Review summary" },
+      promptTruncated: false,
+    });
     services.model.review = vi
       .fn()
       .mockRejectedValue(new Error("HOLON_MODEL_NON_RETRYABLE:schema_invalid"));
@@ -404,4 +413,195 @@ describe("analyzeReview", () => {
       "HOLON_MODEL_NON_RETRYABLE:schema_invalid",
     );
   });
+});
+
+function revalidationContext(): ReviewContextV2 {
+  return {
+    schemaVersion: 2,
+    changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+    files: [
+      { mode: "structural", path: "src/index.ts", patch: canonicalPatch },
+    ],
+    truncated: false,
+  };
+}
+
+it("rejects invented evidence and refuses an approval when every proposed finding is rejected", async () => {
+  const services = createMockServices(revalidationContext());
+  services.model.review = vi.fn().mockResolvedValue({
+    output: {
+      findings: [
+        {
+          ...moderateFinding,
+          evidence: [
+            { ...moderateFinding.evidence[0], excerpt: "invented code" },
+          ],
+        },
+      ],
+      summary: "Looks good",
+    },
+    promptTruncated: false,
+  });
+  const result = await analyzeReview(job, services, () => undefined);
+  expect(result.activeFindings).toHaveLength(0);
+  expect(result.isDegraded).toBe(true);
+  expect(result.verdict).toBe("COMMENT");
+});
+
+it.each(["silence", "invented", "low-confidence", "unchanged", "valid"])(
+  "requires changed canonical correction evidence for resolution: %s",
+  async (mode) => {
+    const { computeEvidenceFingerprint } = await import("@holon/domain");
+    const fingerprint = `fp:${"f".repeat(64)}` as const;
+    const services = createMockServices(revalidationContext());
+    services.ledger.loadPrFindings = vi.fn().mockResolvedValue([
+      {
+        fingerprint,
+        evidenceFingerprint: await computeEvidenceFingerprint("src/index.ts", [
+          {
+            ...moderateFinding.evidence[0]!,
+            excerpt:
+              mode === "unchanged" ? "return null;" : "return user.name;",
+          },
+        ]),
+        diagnostic: "The property access throws for a null user",
+        filePath: "src/index.ts",
+        line: 10,
+        confidence: 0.95,
+        severity: "high",
+        status: "new",
+        prKey: "github:42:pr:7",
+        firstSeenHeadSha: "b".repeat(40),
+        lastSeenHeadSha: "b".repeat(40),
+        firstSeenRunId: job.runId,
+        lastSeenRunId: job.runId,
+        updatedAt: "2026-09-08T12:00:00Z",
+      },
+    ]);
+    services.model.review = vi.fn().mockResolvedValue({
+      output: {
+        findings: [],
+        summary: "Review complete",
+        resolutions:
+          mode === "silence"
+            ? []
+            : [
+                {
+                  fingerprint,
+                  confidence: mode === "low-confidence" ? 0.8 : 0.95,
+                  diagnostic:
+                    "The new return no longer dereferences the null user",
+                  location: moderateFinding.location,
+                  evidence: [
+                    {
+                      ...moderateFinding.evidence[0],
+                      excerpt:
+                        mode === "invented"
+                          ? "return user?.name;"
+                          : "return null;",
+                    },
+                  ],
+                },
+              ],
+      },
+      promptTruncated: false,
+    });
+    const result = await analyzeReview(job, services, () => undefined);
+    expect(result.resolvedFindings).toHaveLength(mode === "valid" ? 1 : 0);
+    expect(result.verdict).toBe(mode === "valid" ? "APPROVE" : "COMMENT");
+  },
+);
+
+it("replays completed shard checkpoints without repeating model calls after aggregation interruption", async () => {
+  const services = createMockServices(revalidationContext());
+  const review = vi.fn().mockResolvedValue({
+    output: { findings: [moderateFinding], summary: "Review complete" },
+    promptTruncated: false,
+  });
+  services.model.review = review;
+  const cache = new Map<string, unknown>();
+  let interrupted = false;
+  const execution = {
+    async runStep<R>(
+      name: string,
+      _phase: "preparation" | "analysis",
+      fn: () => Promise<R>,
+    ): Promise<R> {
+      if (cache.has(name)) return cache.get(name) as R;
+      if (name === "analyze-review" && !interrupted) {
+        interrupted = true;
+        throw new Error("simulated process interruption");
+      }
+      const value = await fn();
+      cache.set(name, value);
+      return value;
+    },
+    finish: async (output: import("@holon/contracts").ReconciledReviewOutput) =>
+      output,
+  };
+  await expect(
+    analyzeReview(job, services, () => undefined, undefined, execution),
+  ).rejects.toThrow("simulated process interruption");
+  expect(review).toHaveBeenCalledTimes(1);
+  const result = await analyzeReview(
+    job,
+    services,
+    () => undefined,
+    undefined,
+    execution,
+  );
+  expect(review).toHaveBeenCalledTimes(1);
+  expect(result.activeFindings).toHaveLength(1);
+});
+
+it("retries a failed shard without spending another model call on its successful predecessor", async () => {
+  const files = ["a", "b"].map((name) => ({
+    path: `src/${name}.ts`,
+    mode: "structural" as const,
+    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,1600 @@\n${`+${name};\n`.repeat(1600)}`,
+  }));
+  const services = createMockServices({
+    schemaVersion: 2,
+    files,
+    changedLines: files.map((f) => ({
+      path: f.path,
+      line: 1,
+      side: "RIGHT" as const,
+    })),
+    truncated: false,
+  });
+  const calls: string[] = [];
+  services.model.review = vi.fn(async (_job, context) => {
+    const path = context.files[0]!.path;
+    calls.push(path);
+    if (path === "src/b.ts" && calls.filter((p) => p === path).length === 1)
+      throw new Error("transient provider failure");
+    return {
+      output: { findings: [], summary: "Review complete" },
+      promptTruncated: false,
+    };
+  });
+  const result = await analyzeReview(
+    job,
+    services,
+    () => undefined,
+    undefined,
+    {
+      async runStep<R>(
+        _name: string,
+        _phase: "preparation" | "analysis",
+        fn: () => Promise<R>,
+      ): Promise<R> {
+        try {
+          return await fn();
+        } catch {
+          return await fn();
+        }
+      },
+      finish: async (output) => output,
+    },
+  );
+  expect(calls).toEqual(["src/a.ts", "src/b.ts", "src/b.ts"]);
+  expect(result.shardsAnalyzed).toBe(2);
+  expect(result.scopeStatus).toBe("complete");
 });

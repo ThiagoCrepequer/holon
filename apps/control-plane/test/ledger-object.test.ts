@@ -271,6 +271,8 @@ describe("ReviewLedgerObject", () => {
         DROP TABLE IF EXISTS workflow_supersessions;
         DROP TABLE IF EXISTS run_telemetry;
         DROP TABLE IF EXISTS projection_tasks;
+        DROP TABLE IF EXISTS review_analysis_artifacts;
+        DROP TABLE IF EXISTS analysis_usage;
         ALTER TABLE runs RENAME TO runs_v2;
         CREATE TABLE runs (
           id TEXT PRIMARY KEY,
@@ -312,6 +314,7 @@ describe("ReviewLedgerObject", () => {
         { version: 10 },
         { version: 11 },
         { version: 12 },
+        { version: 13 },
       ]);
       expect(
         state.storage.sql
@@ -904,6 +907,28 @@ describe("ReviewLedgerObject", () => {
     await expect(ledger.loadFindingFeedbacks(prKey)).resolves.toHaveLength(1);
     await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
       { confidence: 0.62, status: "dismissed" },
+    ]);
+
+    // The review loaded its baseline before the human response arrived.
+    const dismissed = (await ledger.loadPrFindings(prKey))[0]!;
+    await ledger.savePrFindings(prKey, [
+      { ...dismissed, status: "persistent" },
+    ]);
+    await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
+      { status: "dismissed" },
+    ]);
+    await ledger.applyFindingFeedback({
+      ...input,
+      deliveryId: "github:severity-feedback",
+      label: "wrong_severity",
+      targetSeverity: "low",
+      update: { severity: "low" },
+    });
+    await ledger.savePrFindings(prKey, [
+      { ...dismissed, severity: "critical", status: "persistent" },
+    ]);
+    await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
+      { status: "dismissed", severity: "low" },
     ]);
   });
 
@@ -1749,7 +1774,7 @@ describe("Migration 12 and step executions telemetry", () => {
     // Add findings: one produced by run 1, one updated later by run 2
     await ledger.savePrFindings(prKey, [
       {
-        diagnostic: "Bug in old code",
+        diagnostic: "A concrete functional defect in the old code.",
         filePath: "src/old.ts",
         fingerprint: `fp:${"1".repeat(64)}`,
         firstSeenHeadSha: "1".repeat(40),
@@ -1763,7 +1788,7 @@ describe("Migration 12 and step executions telemetry", () => {
         updatedAt: "2026-09-04T10:00:05.000Z",
       },
       {
-        diagnostic: "Bug introduced in new code",
+        diagnostic: "A concrete functional defect introduced in new code.",
         filePath: "src/new.ts",
         fingerprint: `fp:${"2".repeat(64)}`,
         firstSeenHeadSha: "2".repeat(40),
@@ -1796,7 +1821,7 @@ describe("Migration 12 and step executions telemetry", () => {
         findingsCount: 1,
         historicalFindings: [
           {
-            diagnostic: "Bug in old code",
+            diagnostic: "A concrete functional defect in the old code.",
             filePath: "src/old.ts",
             fingerprint: `fp:${"1".repeat(64)}`,
             line: 10,
@@ -1857,7 +1882,7 @@ describe("Migration 12 and step executions telemetry", () => {
         findingsCount: 1,
         historicalFindings: [
           {
-            diagnostic: "Bug introduced in new code",
+            diagnostic: "A concrete functional defect introduced in new code.",
             filePath: "src/new.ts",
             fingerprint: `fp:${"2".repeat(64)}`,
             line: 20,

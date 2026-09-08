@@ -66,6 +66,11 @@ export function formatReconciliationSection(
   summary: ReconciliationSummary,
 ): string {
   const parts: string[] = [];
+  if ((summary.unverifiedCount ?? 0) > 0) {
+    parts.push(
+      `- 🔎 **${summary.unverifiedCount}** previous issue(s) await verified correction; absence from this review does not confirm resolution.`,
+    );
+  }
   if (summary.resolvedCount > 0) {
     parts.push(
       `- ✅ **${summary.resolvedCount}** issue(s) resolved from previous commits.`,
@@ -204,9 +209,9 @@ export function aggregateShardReviews(
     options.canonicalFindings ?? verifiedFindings
   ).toSorted(compareFindings);
 
-  const isAnyShardDegraded = shardResults.some(
-    (result) => result.isDegraded === true,
-  );
+  const isAnyShardDegraded =
+    (options.reconciliation?.unverifiedCount ?? 0) > 0 ||
+    shardResults.some((result) => result.isDegraded === true);
 
   const verdictDetails = determineReviewVerdict({
     findings: sortedFindings,

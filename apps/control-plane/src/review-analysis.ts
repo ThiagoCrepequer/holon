@@ -1,18 +1,22 @@
-import { aggregateShardReviews, createReviewRun } from "@holon/application";
+import {
+  aggregateShardReviews,
+  createReviewRun,
+  selectFindingsWithCanonicalEvidence,
+} from "@holon/application";
 import {
   modelReviewOutputSchema,
-  type AggregatedReviewResult,
+  reconciledReviewOutputSchema,
+  type ReconciledReviewOutput,
   type ReviewJob,
   type RepositoryPolicy,
-  type RepositoryPolicySource,
   type ShardReviewResult,
   type StructuralImpactReport,
 } from "@holon/contracts";
 import {
   computeStableFingerprint,
+  computeEvidenceFingerprint,
   createPrKey,
   reconcileFindings,
-  type ReconciledFinding,
   type TrackedFinding,
 } from "@holon/domain";
 import { nonRetryableModelFailureCode } from "@holon/model";
@@ -22,18 +26,15 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { errorKind } from "./observability.js";
 import type { ReviewServices } from "./review-services.js";
 
-export type ReconciledReviewOutput = AggregatedReviewResult & {
-  readonly activeFindings: readonly ReconciledFinding[];
-  readonly effectivePolicyDigest?: string | undefined;
-  readonly policySource?: RepositoryPolicySource | undefined;
-  readonly resolvedFindings: readonly TrackedFinding[];
-  readonly sourceDigest?: string | null | undefined;
-  readonly promptTruncated?: boolean | undefined;
-  readonly contextTruncated?: boolean | undefined;
-  readonly structuralImpact?: StructuralImpactReport | undefined;
-  readonly updatedTrackedFindings: readonly TrackedFinding[];
-  readonly waiversCount?: number | undefined;
-};
+export type { ReconciledReviewOutput } from "@holon/contracts";
+export interface ReviewAnalysisExecution<T> {
+  runStep<R>(
+    name: string,
+    phase: "preparation" | "analysis",
+    callback: () => Promise<R>,
+  ): Promise<R>;
+  finish(output: ReconciledReviewOutput): Promise<T>;
+}
 
 type EmitReviewEvent = (
   event: string,
@@ -73,6 +74,9 @@ async function reviewShards(
   structuralImpact: StructuralImpactReport | undefined,
   inputTruncated = false,
   emit?: EmitReviewEvent,
+  baseline: readonly TrackedFinding[] = [],
+  shardIndex?: number,
+  deadlineAt?: number,
 ): Promise<{
   readonly results: readonly ShardReviewResult[];
   readonly anyPromptTruncated: boolean;
@@ -81,7 +85,23 @@ async function reviewShards(
   let anyPromptTruncated = false;
   const identification = services.getProjectIdentification?.();
   for (const shard of plan.shards) {
+    if (shardIndex !== undefined && shard.index !== shardIndex) continue;
+    services.beginReviewShard?.(shard.index, plan.shards.length);
     const shardContext = {
+      deadlineAt,
+      priorFindings: baseline
+        .filter(
+          (f) =>
+            ["new", "persistent", "reintroduced"].includes(f.status) &&
+            shard.files.some((file) => file.path === f.filePath),
+        )
+        .slice(0, 8)
+        .map(({ fingerprint, diagnostic, filePath, severity }) => ({
+          fingerprint,
+          diagnostic,
+          filePath,
+          severity,
+        })),
       projectIdentification: identification
         ? {
             ...identification,
@@ -134,6 +154,13 @@ async function reviewShards(
         anyPromptTruncated = true;
       }
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
+      const budgetExceeded = services.reviewToolBudgetExceeded?.() === true;
+      const verifiedFindings = selectFindingsWithCanonicalEvidence(
+        modelOutput.findings,
+        shardContext,
+      );
+      const evidenceRejected =
+        verifiedFindings.length !== modelOutput.findings.length;
       if (modelOutput.outputLimitations?.length || reviewResult.promptTruncated)
         emit?.("model.output_limits", {
           shardIndex: shard.index,
@@ -141,14 +168,23 @@ async function reviewShards(
           inputContextOmitted: reviewResult.promptTruncated,
         });
       results.push({
-        findings: modelOutput.findings,
-        isDegraded: modelOutput.isDegraded || reviewResult.promptTruncated,
+        findings: modelOutput.findings.filter((finding) =>
+          verifiedFindings.includes(finding),
+        ),
+        resolutions: modelOutput.resolutions,
+        isDegraded:
+          modelOutput.isDegraded ||
+          reviewResult.promptTruncated ||
+          budgetExceeded ||
+          evidenceRejected,
         outputLimitations: [
           ...new Set([
             ...(modelOutput.outputLimitations ?? []),
             ...(reviewResult.promptTruncated
               ? ["input_context_omitted" as const]
               : []),
+            ...(budgetExceeded ? ["tool_budget_exhausted" as const] : []),
+            ...(evidenceRejected ? ["evidence_rejected" as const] : []),
           ]),
         ],
         shardId: shard.id,
@@ -157,60 +193,43 @@ async function reviewShards(
         summary: modelOutput.summary,
       });
     } catch (error) {
-      if (plan.shards.length === 1) throw error;
       const failureCode = nonRetryableModelFailureCode(error);
-      results.push({
-        errorReason:
-          failureCode === undefined
-            ? `model_${errorKind(error)}`
-            : `model_${failureCode}`,
-        findings: [],
-        shardId: shard.id,
-        shardIndex: shard.index,
-        status: "failure",
-        summary: "",
-      });
+      if (failureCode !== undefined)
+        throw new NonRetryableError(`HOLON_MODEL_NON_RETRYABLE:${failureCode}`);
+      throw error;
     }
-  }
-  if (
-    results.length > 0 &&
-    results.every((result) => result.status === "failure")
-  ) {
-    throw new Error("All review shards failed during model execution");
   }
   return { anyPromptTruncated, results };
 }
 
+export function analyzeReview(
+  job: ReviewJob,
+  services: ReviewServices,
+  emit: EmitReviewEvent,
+  effectivePolicy?: RepositoryPolicy,
+): Promise<ReconciledReviewOutput>;
+export function analyzeReview<T>(
+  job: ReviewJob,
+  services: ReviewServices,
+  emit: EmitReviewEvent,
+  effectivePolicy: RepositoryPolicy | undefined,
+  execution: ReviewAnalysisExecution<T>,
+): Promise<T>;
 export async function analyzeReview(
   job: ReviewJob,
   services: ReviewServices,
   emit: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
-): Promise<ReconciledReviewOutput> {
-  try {
-    const runId = createReviewRun(job).id;
+  execution?: ReviewAnalysisExecution<unknown>,
+): Promise<unknown> {
+  const runStep = <R>(
+    name: string,
+    phase: "preparation" | "analysis",
+    fn: () => Promise<R>,
+  ): Promise<R> => (execution ? execution.runStep(name, phase, fn) : fn());
+  const load = async () => {
     await services.ensureContext(2, effectivePolicy);
     const context = await services.loadContext(effectivePolicy);
-    const patchBytes = contextBytes(context);
-    emit("model.input", {
-      changedLineCount: context.changedLines.length,
-      estimatedPatchTokens: Math.ceil(patchBytes / 4),
-      patchBytes,
-      structuralFileCount: context.files.filter(
-        (file) => file.mode === "structural",
-      ).length,
-      surfaceCount: context.surface?.length ?? 0,
-      textualFileCount: context.files.filter((file) => file.mode === "textual")
-        .length,
-      truncated: context.truncated,
-    });
-
-    const verdictPolicy =
-      context.verdictStrictness === "block_all_confident_medium"
-        ? { mediumSeverityThreshold: 1 }
-        : undefined;
-
-    const policyExcludedFilesCount = context.waiversCount;
     const plan = buildReviewPlan(
       context.files.map((file) => ({
         changeType: "modified" as const,
@@ -219,116 +238,260 @@ export async function analyzeReview(
         patch: file.patch,
         path: file.path,
       })),
-      { policyExcludedFilesCount },
+      { policyExcludedFilesCount: context.waiversCount },
     );
-    if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
-      return {
-        ...aggregateShardReviews(plan, [], { verdictPolicy }),
-        activeFindings: [],
-        contextTruncated: context.truncated,
-        effectivePolicyDigest:
-          context.schemaVersion === 3
-            ? context.effectivePolicyDigest
-            : undefined,
-        policySource: context.policySource,
-        promptTruncated: context.truncated,
-        resolvedFindings: [],
-        sourceDigest: context.sourceDigest,
-        structuralImpact: context.structuralImpact,
-        updatedTrackedFindings: [],
-        waiversCount: context.waiversCount,
-      };
-    }
-
-    const { results: shardResults, anyPromptTruncated } = await reviewShards(
-      job,
-      services,
-      plan,
-      context.structuralImpact,
-      context.truncated || plan.scopeStatus === "partial_by_policy",
-      emit,
-    );
-
-    const successfulSummaries = shardResults
-      .filter((r) => r.status === "success" && r.summary.trim().length > 0)
-      .map((r) => r.summary.trim());
-
-    const rawAggregated = aggregateShardReviews(plan, shardResults, {
-      verdictPolicy,
-    });
-    const currentWithFingerprints = await Promise.all(
-      rawAggregated.findings.map(async (finding) => ({
-        ...finding,
-        fingerprint: await computeStableFingerprint({
-          diagnostic: finding.diagnostic,
-          excerpt: finding.evidence[0]?.excerpt ?? "",
-          path: finding.location.path,
-        }),
-      })),
-    );
+    return { context, plan };
+  };
+  try {
+    const runId = createReviewRun(job).id;
     const prKey = createPrKey({
       provider: "github",
       pullRequestNumber: job.envelope.pullRequest.number,
       repositoryId: job.envelope.repository.id,
     });
-    const baseline = await services.ledger.loadPrFindings(prKey);
-    const pullRequestFiles = plan.shards.flatMap((shard) =>
-      shard.files.map((file) => file.path),
-    );
-    const reconciled = reconcileFindings({
-      baselineFindings: baseline,
-      coverage: {
-        isComplete:
-          rawAggregated.scopeStatus === "complete" &&
-          rawAggregated.isDegraded !== true,
-        pullRequestFiles,
-        reviewedFiles: reviewedFiles(plan, shardResults),
-      },
-      currentFindings: currentWithFingerprints,
-      currentHeadSha: job.envelope.pullRequest.headSha,
-      currentRunId: runId,
-      prKey,
+    const planning = await runStep("plan-review", "preparation", async () => {
+      const { context, plan } = await load();
+      const patchBytes = contextBytes(context);
+      emit("model.input", {
+        changedLineCount: context.changedLines.length,
+        estimatedPatchTokens: Math.ceil(patchBytes / 4),
+        patchBytes,
+        structuralFileCount: context.files.filter(
+          (file) => file.mode === "structural",
+        ).length,
+        surfaceCount: context.surface?.length ?? 0,
+        textualFileCount: context.files.filter(
+          (file) => file.mode === "textual",
+        ).length,
+        truncated: context.truncated,
+      });
+      return {
+        shardIds: plan.shards.map((shard) => shard.id),
+        deadlineAt: Date.now() + 600_000,
+      };
     });
-    let unifiedSummary: string | undefined;
-    if (
-      successfulSummaries.length > 1 &&
-      typeof services.model.synthesizeReviewSummary === "function"
-    ) {
-      try {
-        unifiedSummary = await services.model.synthesizeReviewSummary(job, {
-          shardSummaries: successfulSummaries,
-          verifiedFindings: reconciled.activeFindings.map((finding) => ({
-            diagnostic: finding.diagnostic,
-            severity: finding.severity,
-            path: finding.location.path,
-          })),
-        });
-      } catch {
-        unifiedSummary =
-          "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
-      }
+    const shardResults: ShardReviewResult[] = [];
+    let anyPromptTruncated = false;
+    for (const [index, shardId] of planning.shardIds.entries()) {
+      const result = await runStep(
+        `analyze-shard-${index + 1}`,
+        "analysis",
+        async () => {
+          const { context, plan } = await load();
+          if (plan.shards[index]?.id !== shardId)
+            throw new NonRetryableError("Review plan changed during replay");
+          if (Date.now() >= planning.deadlineAt)
+            return {
+              results: [
+                {
+                  shardId,
+                  shardIndex: index,
+                  status: "failure" as const,
+                  findings: [],
+                  summary: "",
+                  errorReason: "analysis_deadline",
+                },
+              ],
+              anyPromptTruncated: false,
+            };
+          const perShardDeadline =
+            Date.now() +
+            Math.max(
+              1,
+              Math.floor(
+                (planning.deadlineAt - Date.now()) /
+                  (planning.shardIds.length - index),
+              ),
+            );
+          return reviewShards(
+            job,
+            services,
+            plan,
+            context.structuralImpact,
+            context.truncated || plan.scopeStatus === "partial_by_policy",
+            emit,
+            await services.ledger.loadPrFindings(prKey),
+            index,
+            perShardDeadline,
+          );
+        },
+      ).catch((error: unknown) => {
+        if (planning.shardIds.length === 1) throw error;
+        return {
+          anyPromptTruncated: false,
+          results: [
+            {
+              shardId,
+              shardIndex: index,
+              status: "failure" as const,
+              findings: [],
+              summary: "",
+              errorReason: `model_${nonRetryableModelFailureCode(error) ?? errorKind(error)}`,
+            },
+          ],
+        };
+      });
+      shardResults.push(...result.results);
+      anyPromptTruncated ||= result.anyPromptTruncated;
     }
+    if (
+      shardResults.length &&
+      shardResults.every((result) => result.status === "failure")
+    )
+      throw new Error("All review shards failed during model execution");
+    return await runStep("analyze-review", "analysis", async () => {
+      const { context, plan } = await load();
 
-    const finalAggregated = aggregateShardReviews(plan, shardResults, {
-      canonicalFindings: reconciled.activeFindings,
-      unifiedSummary,
-      reconciliation: reconciled.summary,
-      structuralImpact: context.structuralImpact,
-      verdictPolicy,
+      const verdictPolicy =
+        context.verdictStrictness === "block_all_confident_medium"
+          ? { mediumSeverityThreshold: 1 }
+          : undefined;
+
+      if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
+        const output: ReconciledReviewOutput = {
+          ...aggregateShardReviews(plan, [], { verdictPolicy }),
+          activeFindings: [],
+          contextTruncated: context.truncated,
+          effectivePolicyDigest:
+            context.schemaVersion === 3
+              ? context.effectivePolicyDigest
+              : undefined,
+          policySource: context.policySource,
+          promptTruncated: context.truncated,
+          resolvedFindings: [],
+          sourceDigest: context.sourceDigest,
+          structuralImpact: context.structuralImpact,
+          updatedTrackedFindings: [],
+          waiversCount: context.waiversCount,
+        };
+        return execution ? execution.finish(output) : output;
+      }
+
+      const successfulSummaries = shardResults
+        .filter((r) => r.status === "success" && r.summary.trim().length > 0)
+        .map((r) => r.summary.trim());
+
+      const rawAggregated = aggregateShardReviews(plan, shardResults, {
+        verdictPolicy,
+      });
+      const currentWithFingerprints = await Promise.all(
+        rawAggregated.findings.map(async (finding) => ({
+          ...finding,
+          evidenceFingerprint: await computeEvidenceFingerprint(
+            finding.location.path,
+            finding.evidence,
+          ),
+          fingerprint: await computeStableFingerprint({
+            diagnostic: finding.diagnostic,
+            excerpt: finding.evidence[0]?.excerpt ?? "",
+            path: finding.location.path,
+          }),
+        })),
+      );
+      const baseline = await services.ledger.loadPrFindings(prKey);
+      const confirmedResolvedFingerprints = (
+        await Promise.all(
+          shardResults
+            .filter(
+              (result) =>
+                result.status === "success" && result.isDegraded !== true,
+            )
+            .flatMap((result) =>
+              (result.resolutions ?? []).map(async (resolution) => {
+                const previous = baseline.find(
+                  (f) =>
+                    f.fingerprint === resolution.fingerprint &&
+                    f.filePath === resolution.location.path,
+                );
+                const shard = plan.shards.find(
+                  (candidateShard) => candidateShard.id === result.shardId,
+                );
+                if (
+                  !previous ||
+                  !shard?.files.some(
+                    (file) => file.path === previous.filePath,
+                  ) ||
+                  resolution.confidence < 0.9
+                )
+                  return [];
+                const verified = selectFindingsWithCanonicalEvidence(
+                  [{ ...resolution, severity: previous.severity }],
+                  { ...context, schemaVersion: 2 },
+                );
+                if (!verified.length) return [];
+                const evidenceFingerprint = await computeEvidenceFingerprint(
+                  resolution.location.path,
+                  resolution.evidence,
+                );
+                return previous.evidenceFingerprint === evidenceFingerprint
+                  ? []
+                  : [resolution.fingerprint];
+              }),
+            ),
+        )
+      ).flat();
+      const pullRequestFiles = plan.shards.flatMap((shard) =>
+        shard.files.map((file) => file.path),
+      );
+      const reconciled = reconcileFindings({
+        baselineFindings: baseline,
+        coverage: {
+          confirmedResolvedFingerprints,
+          isComplete:
+            rawAggregated.scopeStatus === "complete" &&
+            rawAggregated.isDegraded !== true,
+          pullRequestFiles,
+          reviewedFiles: reviewedFiles(plan, shardResults),
+        },
+        currentFindings: currentWithFingerprints,
+        currentHeadSha: job.envelope.pullRequest.headSha,
+        currentRunId: runId,
+        prKey,
+      });
+      let unifiedSummary: string | undefined;
+      if (
+        successfulSummaries.length > 1 &&
+        typeof services.model.synthesizeReviewSummary === "function"
+      ) {
+        try {
+          unifiedSummary = await services.model.synthesizeReviewSummary(job, {
+            shardSummaries: successfulSummaries,
+            verifiedFindings: reconciled.activeFindings.map((finding) => ({
+              diagnostic: finding.diagnostic,
+              severity: finding.severity,
+              path: finding.location.path,
+            })),
+          });
+        } catch {
+          unifiedSummary =
+            "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
+        }
+      }
+
+      const finalAggregated = aggregateShardReviews(plan, shardResults, {
+        canonicalFindings: reconciled.activeFindings,
+        unifiedSummary,
+        reconciliation: reconciled.summary,
+        structuralImpact: context.structuralImpact,
+        verdictPolicy,
+      });
+      const output = reconciledReviewOutputSchema.parse({
+        ...finalAggregated,
+        analysisIsDegraded: rawAggregated.isDegraded === true,
+        verdictPolicy,
+        activeFindings: reconciled.activeFindings,
+        effectivePolicyDigest: context.effectivePolicyDigest,
+        policySource: context.policySource,
+        resolvedFindings: reconciled.resolvedFindings,
+        sourceDigest: context.sourceDigest,
+        structuralImpact: context.structuralImpact,
+        updatedTrackedFindings: reconciled.updatedTrackedFindings,
+        waiversCount: context.waiversCount,
+        contextTruncated: context.truncated,
+        promptTruncated: anyPromptTruncated || context.truncated,
+      });
+      return execution ? execution.finish(output) : output;
     });
-    return {
-      ...finalAggregated,
-      activeFindings: reconciled.activeFindings,
-      effectivePolicyDigest: context.effectivePolicyDigest,
-      policySource: context.policySource,
-      resolvedFindings: reconciled.resolvedFindings,
-      sourceDigest: context.sourceDigest,
-      structuralImpact: context.structuralImpact,
-      updatedTrackedFindings: reconciled.updatedTrackedFindings,
-      waiversCount: context.waiversCount,
-      contextTruncated: context.truncated,
-      promptTruncated: anyPromptTruncated || context.truncated,
-    };
   } catch (error) {
     const failureCode = nonRetryableModelFailureCode(error);
     if (failureCode !== undefined) {

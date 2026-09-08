@@ -47,6 +47,11 @@ import {
   type SupersededWorkflow,
   type TrackedFinding,
 } from "@holon/contracts";
+import type { AnalysisAccounting, AnalysisUsage } from "@holon/contracts";
+import type {
+  ReconciledReviewOutput,
+  ReviewAnalysisCheckpoint,
+} from "@holon/contracts";
 import type {
   FindingFingerprint,
   PrKey,
@@ -63,6 +68,8 @@ import { DurableObject } from "cloudflare:workers";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
+import { ReviewAccountingStore } from "./review-accounting-store.js";
+import { ReviewAnalysisStore } from "./review-analysis-store.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 /* eslint-disable no-control-regex */
@@ -985,6 +992,60 @@ export class ReviewLedgerObject
 
   private async cleanupRepository(runId: string): Promise<void> {
     await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
+    this.ctx.storage.sql.exec(
+      "DELETE FROM review_analysis_artifacts WHERE run_id = ?",
+      runId,
+    );
+  }
+
+  public saveReviewAnalysis(
+    runId: string,
+    output: ReconciledReviewOutput,
+  ): Promise<ReviewAnalysisCheckpoint> {
+    return Promise.resolve(
+      new ReviewAnalysisStore(this.ctx.storage).save(runId, output),
+    );
+  }
+
+  public loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput> {
+    return Promise.resolve(
+      new ReviewAnalysisStore(this.ctx.storage).load(runId),
+    );
+  }
+
+  public recordAnalysisUsage(
+    runId: string,
+    eventId: string,
+    usage: AnalysisUsage,
+  ): Promise<void> {
+    new ReviewAccountingStore(this.ctx.storage.sql).record(
+      runId,
+      eventId,
+      usage,
+    );
+    return Promise.resolve();
+  }
+
+  public reserveAnalysisToolCall(
+    runId: string,
+    index: number,
+    totalShards: number,
+  ): Promise<boolean> {
+    return Promise.resolve(
+      this.ctx.storage.transactionSync(() =>
+        new ReviewAccountingStore(this.ctx.storage.sql).reserveToolCall(
+          runId,
+          index,
+          totalShards,
+        ),
+      ),
+    );
+  }
+
+  public loadAnalysisAccounting(runId: string): Promise<AnalysisAccounting> {
+    return Promise.resolve(
+      new ReviewAccountingStore(this.ctx.storage.sql).load(runId),
+    );
   }
 
   private async terminateSupersededWorkflow(
@@ -1422,6 +1483,11 @@ export class ReviewLedgerObject
     if (existing && JSON.stringify(existing) !== JSON.stringify(result))
       throw new Error("Identification snapshot already recorded");
     await this.ctx.storage.put(key, result);
+    await this.recordAnalysisUsage(runId, "project-identification", {
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      toolCallsCount: 0,
+    });
   }
 
   public async getSanitizedAdminRunDetailV2(
