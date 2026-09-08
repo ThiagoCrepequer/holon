@@ -27,7 +27,6 @@ describe("run-scoped repository review policy", () => {
     expect(policy).toEqual({
       additionalExcludes: [],
       deniedPaths: ["config.txt"],
-      schemaVersion: 2,
     });
 
     const serialized = serializeReviewScopePolicy(policy);
@@ -41,7 +40,6 @@ describe("run-scoped repository review policy", () => {
       withReviewScopeSearchExclusions(["rg", "--json", "--", "needle", "."], {
         additionalExcludes: ["*.lock", "docs/**"],
         deniedPaths: ["config.txt", "dir/a[1].ts"],
-        schemaVersion: 2,
       }),
     ).toEqual([
       "rg",
@@ -66,7 +64,6 @@ describe("run-scoped repository review policy", () => {
         JSON.stringify({
           additionalExcludes: [],
           deniedPaths: [".env.production"],
-          schemaVersion: 2,
         }),
       ),
     ).toThrow("reviewable destinations");
@@ -76,7 +73,6 @@ describe("run-scoped repository review policy", () => {
     const policy = {
       additionalExcludes: ["vendor/**"],
       deniedPaths: ["secret.txt"],
-      schemaVersion: 2 as const,
     };
 
     expect(() => assertReviewScopePathAllowed(policy, "secret.txt")).toThrow(
@@ -100,7 +96,6 @@ describe("run-scoped repository review policy", () => {
     const policy = {
       additionalExcludes: ["vendor/**"],
       deniedPaths: ["secret.txt"],
-      schemaVersion: 2 as const,
     };
 
     expect(
@@ -123,7 +118,6 @@ describe("run-scoped repository review policy", () => {
     const emptyPolicy = {
       additionalExcludes: [],
       deniedPaths: [],
-      schemaVersion: 2 as const,
     };
     expect(
       withReviewScopeSearchExclusions(["rg", "--", "pattern"], emptyPolicy),
@@ -147,13 +141,12 @@ describe("run-scoped repository review policy", () => {
     );
     expect(() =>
       parseReviewScopePolicy(JSON.stringify({ schemaVersion: 99 })),
-    ).toThrow("unsupported schemaVersion");
+    ).toThrow("invalid shape");
     expect(() =>
       parseReviewScopePolicy(
         JSON.stringify({
           additionalExcludes: [".github/**"],
           deniedPaths: [],
-          schemaVersion: 2,
         }),
       ),
     ).toThrow("protected policy");
@@ -162,7 +155,6 @@ describe("run-scoped repository review policy", () => {
         JSON.stringify({
           additionalExcludes: "not-an-array",
           deniedPaths: [],
-          schemaVersion: 2,
         }),
       ),
     ).toThrow("invalid shape");

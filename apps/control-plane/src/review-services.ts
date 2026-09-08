@@ -11,25 +11,25 @@ import type {
   TelemetryEmitter,
 } from "@holon/application";
 import {
-  projectIdentificationResultV1Schema,
-  type ProjectIdentificationResultV1,
-  type ProjectMetadataRequestV1,
+  projectIdentificationResultSchema,
+  type ProjectIdentificationResult,
+  type ProjectMetadataRequest,
 } from "@holon/contracts";
 import {
-  executorRequestV3Schema,
-  preparedRepositoryV3Schema,
+  executorRequestSchema,
+  preparedRepositorySchema,
   repositoryToolResultSchema,
-  reviewContextV4Schema,
-  type AdminRunProjectionEventV1,
-  type ExecutorRequestV3,
+  reviewContextSchema,
+  type AdminRunProjectionEvent,
+  type ExecutorRequest,
   type GitHubCredentialRequest,
-  type PreparedRepositoryV3,
+  type PreparedRepository,
   type RepositoryPolicy,
   type RepositoryToolCall,
   type RepositoryToolResult,
-  type ReviewContextV4,
+  type ReviewContext,
   type ReviewJob,
-  type RunClaimV2Result,
+  type RunClaimResult,
   type StepExecutionNode,
   type StepPhase,
 } from "@holon/contracts";
@@ -78,16 +78,14 @@ import {
 import type { WorkflowController } from "./workflow-superseding.js";
 
 export interface RepositoryExecutorBinding {
-  discoverProjectMetadataV1?(
-    request: ProjectMetadataRequestV1,
-  ): Promise<ProjectIdentificationResultV1>;
+  discoverProjectMetadata(
+    request: ProjectMetadataRequest,
+  ): Promise<ProjectIdentificationResult>;
   cleanup(runId: string): Promise<void>;
   hasContext(runId: string): Promise<boolean>;
-  loadContextV4?(runId: string): Promise<ReviewContextV4>;
-  prepareRepositoryV3?(
-    request: ExecutorRequestV3,
-  ): Promise<PreparedRepositoryV3>;
-  resolveContainerId?(runId: string): Promise<string> | string;
+  loadContext(runId: string): Promise<ReviewContext>;
+  prepareRepository(request: ExecutorRequest): Promise<PreparedRepository>;
+  resolveContainerId(runId: string): Promise<string> | string;
   runTool(
     runId: string,
     call: RepositoryToolCall,
@@ -122,28 +120,22 @@ export interface WorkflowLedger
   ): Promise<readonly import("@holon/domain").FindingFeedbackRecord[]>;
   saveProjectIdentification?(
     runId: string,
-    result: ProjectIdentificationResultV1,
-  ): Promise<void>;
-  claimRunV2(
-    run: Parameters<PublicationLedger["claimRun"]>[0],
-    workflowInstanceId: string,
-    causalVersion?: string,
-  ): Promise<RunClaimV2Result>;
-  completeWorkflowSupersession(
-    runId: RunId,
-    completedAt: string,
+    result: ProjectIdentificationResult,
   ): Promise<void>;
   claimRun(
     run: Parameters<PublicationLedger["claimRun"]>[0],
     workflowInstanceId: string,
-    causalVersion?: string,
-  ): ReturnType<PublicationLedger["claimRun"]>;
+  ): Promise<RunClaimResult>;
+  completeWorkflowSupersession(
+    runId: RunId,
+    completedAt: string,
+  ): Promise<void>;
   markTerminalAndRequestCleanup(
     runId: RunId,
     occurredAt: string,
     requiresCleanup: boolean,
   ): Promise<boolean>;
-  recordProjectionTask(event: AdminRunProjectionEventV1): Promise<void>;
+  recordProjectionTask(event: AdminRunProjectionEvent): Promise<void>;
   markProjectionTaskCompleted(runId: RunId): Promise<void>;
   scheduleProjectionRetry(runId: RunId, errorKind: string): Promise<void>;
   registerCredentialScope(request: GitHubCredentialRequest): Promise<void>;
@@ -220,14 +212,14 @@ function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
 export interface ReviewServices {
   beginReviewShard?(index: number, totalShards: number): void;
   reviewToolBudgetExceeded?(): boolean;
-  useProjectIdentification?(result: ProjectIdentificationResultV1): void;
-  getProjectIdentification?(): ProjectIdentificationResultV1 | undefined;
+  useProjectIdentification?(result: ProjectIdentificationResult): void;
+  getProjectIdentification?(): ProjectIdentificationResult | undefined;
   identifyProjects?(
     policy: RepositoryPolicy,
-    input?: ProjectIdentificationResultV1,
+    input?: ProjectIdentificationResult,
     discoveryOnly?: boolean,
     deadlineAt?: number,
-  ): Promise<ProjectIdentificationResultV1 | null>;
+  ): Promise<ProjectIdentificationResult | null>;
   readonly adminProjectionQueue?: Queue<unknown> | undefined;
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
@@ -247,11 +239,11 @@ export interface ReviewServices {
     maximumPreparationAttempts: number,
     effectivePolicy?: RepositoryPolicy,
   ): Promise<void>;
-  loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContextV4>;
+  loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContext>;
   prepareRepository(
     maximumAttempts: number,
     effectivePolicy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3>;
+  ): Promise<PreparedRepository>;
   readCurrentHead(): Promise<string>;
   readCurrentRefs(): Promise<{
     readonly baseSha: string;
@@ -333,7 +325,7 @@ export function createReviewServices(
   logger: StructuredLogger,
   logContext: Readonly<Record<string, number | string>>,
 ): ReviewServices {
-  let projectIdentification: ProjectIdentificationResultV1 | undefined;
+  let projectIdentification: ProjectIdentificationResult | undefined;
   let identificationInputTokens = 0,
     identificationOutputTokens = 0;
   const executor: RepositoryExecutorBinding =
@@ -361,7 +353,7 @@ export function createReviewServices(
     });
 
   const resolveCredentialContainerId = async (): Promise<string> => {
-    const containerId = await executor.resolveContainerId!(job.runId);
+    const containerId = await executor.resolveContainerId(job.runId);
     if (!/^[a-f0-9]{64}$/u.test(containerId)) {
       throw new TypeError("Executor returned an invalid container ID");
     }
@@ -370,7 +362,7 @@ export function createReviewServices(
 
   const prepareOnce = async (
     policy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3> => {
+  ): Promise<PreparedRepository> => {
     try {
       const effectivePolicy =
         policy ??
@@ -394,17 +386,16 @@ export function createReviewServices(
         runId: job.runId,
       } as const;
 
-      const requestV3 = executorRequestV3Schema.parse({
+      const request = executorRequestSchema.parse({
         ...commonRequest,
         effectivePolicy,
         installationId: job.envelope.installationId,
         repositoryName: job.envelope.repository.name,
         repositoryOwner: job.envelope.repository.owner,
-        schemaVersion: 3,
       });
 
-      return preparedRepositoryV3Schema.parse(
-        await executor.prepareRepositoryV3!(requestV3),
+      return preparedRepositorySchema.parse(
+        await executor.prepareRepository(request),
       );
     } catch (error) {
       return normalizeRepositoryFailure(error, logger, logContext);
@@ -414,7 +405,7 @@ export function createReviewServices(
   const prepareRepository = async (
     maximumAttempts: number,
     policy?: RepositoryPolicy,
-  ): Promise<PreparedRepositoryV3> => {
+  ): Promise<PreparedRepository> => {
     if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts <= 0) {
       throw new TypeError("maximumAttempts must be a positive safe integer");
     }
@@ -474,7 +465,6 @@ export function createReviewServices(
             pr_number: String(job.envelope.pullRequest.number),
             repository_id: String(job.envelope.repository.id),
             run_id: job.runId,
-            schema_version: String(job.schemaVersion),
             stage: "review",
           },
           model: env.AI_MODEL_ID,
@@ -540,22 +530,11 @@ export function createReviewServices(
         ),
       readCurrentRefs: () =>
         executeGitHubOperation(async () => {
-          if (typeof github.currentPullRequestRefs === "function") {
-            return await github.currentPullRequestRefs(
-              job.envelope.repository.owner,
-              job.envelope.repository.name,
-              job.envelope.pullRequest.number,
-            );
-          }
-          const headSha = await github.currentHeadSha(
+          return await github.currentPullRequestRefs(
             job.envelope.repository.owner,
             job.envelope.repository.name,
             job.envelope.pullRequest.number,
           );
-          return {
-            baseSha: job.envelope.pullRequest.baseSha,
-            headSha,
-          };
         }),
     };
   };
@@ -592,9 +571,7 @@ export function createReviewServices(
     },
     loadContext: async (effectivePolicy) => {
       currentAnalysisPolicy = effectivePolicy;
-      return reviewContextV4Schema.parse(
-        await executor.loadContextV4!(job.runId),
-      );
+      return reviewContextSchema.parse(await executor.loadContext(job.runId));
     },
     useProjectIdentification: (result) => {
       identificationInputTokens = result.usage?.inputTokens ?? 0;
@@ -609,8 +586,7 @@ export function createReviewServices(
       discoveryOnly = false,
       deadlineAt = Date.now() + 120000,
     ) => {
-      const unavailable = (reason: string): ProjectIdentificationResultV1 => ({
-        schemaVersion: 1,
+      const unavailable = (reason: string): ProjectIdentificationResult => ({
         snapshotSha: job.envelope.pullRequest.headSha,
         inventoryDigest: "0".repeat(64),
         detectorRevision,
@@ -618,16 +594,13 @@ export function createReviewServices(
         status: "unavailable",
         limitations: [reason],
       });
-      if (!executor.discoverProjectMetadataV1)
-        return unavailable("executor-capability-unavailable");
       const cacheName = await env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
         String(job.envelope.installationId),
       ).register(job.envelope.installationId, job.envelope.repository.id);
       if (!cacheName) return unavailable("access-revoked");
       if (!input && !(await executor.hasContext(job.runId)))
         await prepareRepository(1, policy);
-      const request: ProjectMetadataRequestV1 = {
-        schemaVersion: 1,
+      const request: ProjectMetadataRequest = {
         runId: job.runId,
         installationId: job.envelope.installationId,
         repositoryId: job.envelope.repository.id,
@@ -642,12 +615,12 @@ export function createReviewServices(
         mode: "affected",
         deadlineAt,
       };
-      let result: ProjectIdentificationResultV1;
+      let result: ProjectIdentificationResult;
       try {
         result =
           input ??
-          projectIdentificationResultV1Schema.parse(
-            await executor.discoverProjectMetadataV1(request),
+          projectIdentificationResultSchema.parse(
+            await executor.discoverProjectMetadata(request),
           );
       } catch (error) {
         if (
@@ -659,8 +632,8 @@ export function createReviewServices(
       }
       if (!input && result.metadataChanged) {
         try {
-          const base = projectIdentificationResultV1Schema.parse(
-            await executor.discoverProjectMetadataV1({
+          const base = projectIdentificationResultSchema.parse(
+            await executor.discoverProjectMetadata({
               ...request,
               snapshotSha: job.envelope.pullRequest.baseSha,
             }),
@@ -708,7 +681,7 @@ export function createReviewServices(
             usage.outputTokens += output;
           },
         );
-      let interpreted: ProjectIdentificationResultV1;
+      let interpreted: ProjectIdentificationResult;
       try {
         interpreted = await interpretProjects(result, {
           cache,
@@ -745,22 +718,11 @@ export function createReviewServices(
     readCurrentRefs: async () => {
       const github = await createSession();
       return await executeGitHubOperation(async () => {
-        if (typeof github.currentPullRequestRefs === "function") {
-          return await github.currentPullRequestRefs(
-            job.envelope.repository.owner,
-            job.envelope.repository.name,
-            job.envelope.pullRequest.number,
-          );
-        }
-        const headSha = await github.currentHeadSha(
+        return await github.currentPullRequestRefs(
           job.envelope.repository.owner,
           job.envelope.repository.name,
           job.envelope.pullRequest.number,
         );
-        return {
-          baseSha: job.envelope.pullRequest.baseSha,
-          headSha,
-        };
       });
     },
     registerCredentialScope: async () => {

@@ -91,7 +91,7 @@ async function publishReplyOnce(
   if (application.replyCommentId !== undefined) return false;
   if (publisher.replyToComment === undefined) return false;
 
-  const marker = `<!-- holon:v1;feedback=${encodeURIComponent(deliveryId)} -->`;
+  const marker = `<!-- holon;feedback=${encodeURIComponent(deliveryId)} -->`;
   const existing = await publisher.findCommentByMarker(marker, "inline");
   const replyCommentId =
     existing ??

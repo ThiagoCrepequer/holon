@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  adminRunDetailV3Schema,
+  adminRunDetailSchema,
   claimRunSanitizedInputSchema,
   claimRunSanitizedOutputSchema,
   prepareRepositorySanitizedInputSchema,
@@ -17,7 +17,7 @@ import {
   sanitizePayloadRecord,
   stepAttemptTelemetrySchema,
   stepExecutionNodeSchema,
-  type AdminRunDetailV3,
+  type AdminRunDetail,
 } from "../src/index.js";
 
 const sha = "a".repeat(40);
@@ -222,12 +222,11 @@ describe("workflow-execution-preview contracts", () => {
     expect(sanitizedCircular?.self).toBe("[Circular]");
   });
 
-  it("validates adminRunDetailV3Schema with in-progress run", () => {
-    const runningDetail: AdminRunDetailV3 = {
+  it("validates adminRunDetailSchema with in-progress run", () => {
+    const runningDetail: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [],
       findingsPerspective: "current_pr_state",
-      graphSchemaVersion: 1,
       historicalRunFindings: [],
       projectIdentification: null,
       run: {
@@ -245,7 +244,6 @@ describe("workflow-execution-preview contracts", () => {
         toolCallsCount: 0,
         verdict: null,
       },
-      schemaVersion: 3,
       stepExecutions: [
         {
           attempts: [
@@ -274,21 +272,21 @@ describe("workflow-execution-preview contracts", () => {
       structuredCi: null,
     };
 
-    const parsed = adminRunDetailV3Schema.parse(runningDetail);
+    const parsed = adminRunDetailSchema.parse(runningDetail);
     expect(parsed.run.runState).toBe("running");
     expect(parsed.run.terminalState).toBeNull();
     expect(parsed.stepExecutions).toHaveLength(1);
-    expect(parsed.schemaVersion).toBe(3);
+    expect(parsed.run.runState).toBe("running");
     expect(
-      adminRunDetailV3Schema.parse({
+      adminRunDetailSchema.parse({
         ...runningDetail,
         historicalRunFindings: null,
       }).historicalRunFindings,
     ).toBeNull();
   });
 
-  it("validates adminRunDetailV3Schema with completed run and cleanup task", () => {
-    const completedDetail: AdminRunDetailV3 = {
+  it("validates adminRunDetailSchema with completed run and cleanup task", () => {
+    const completedDetail: AdminRunDetail = {
       cleanupTask: {
         attempts: 1,
         completedAt: "2026-09-04T12:00:10.000Z",
@@ -298,7 +296,6 @@ describe("workflow-execution-preview contracts", () => {
       },
       currentFindings: [],
       findingsPerspective: "both",
-      graphSchemaVersion: 1,
       historicalRunFindings: [],
       projectIdentification: null,
       run: {
@@ -326,12 +323,11 @@ describe("workflow-execution-preview contracts", () => {
         toolCallsCount: 1,
         verdict: "APPROVE",
       },
-      schemaVersion: 3,
       stepExecutions: [],
       structuredCi: null,
     };
 
-    const parsed = adminRunDetailV3Schema.parse(completedDetail);
+    const parsed = adminRunDetailSchema.parse(completedDetail);
     expect(parsed.cleanupTask?.state).toBe("completed");
     expect(parsed.run.runState).toBe("completed");
   });

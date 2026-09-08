@@ -33,8 +33,6 @@ INSERT INTO admin_runs (
   projected_at,
   projected_at_epoch_ms,
   projection_delivery_lag_ms,
-  schema_version,
-  record_version,
   payload_hash,
   source_event_id
 ) VALUES
@@ -69,8 +67,6 @@ INSERT INTO admin_runs (
   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-24 minutes'),
   (unixepoch('now') - 1440) * 1000,
   450,
-  1,
-  1,
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   'evt-local-001'
 ),
@@ -105,8 +101,6 @@ INSERT INTO admin_runs (
   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-44 minutes'),
   (unixepoch('now') - 2640) * 1000,
   620,
-  1,
-  1,
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b856',
   'evt-local-002'
 ),
@@ -141,8 +135,6 @@ INSERT INTO admin_runs (
   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hours'),
   (unixepoch('now') - 7200) * 1000,
   310,
-  1,
-  1,
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b857',
   'evt-local-003'
 ),
@@ -177,8 +169,6 @@ INSERT INTO admin_runs (
   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 hours'),
   (unixepoch('now') - 14400) * 1000,
   980,
-  1,
-  1,
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b858',
   'evt-local-004'
 ),
@@ -213,8 +203,6 @@ INSERT INTO admin_runs (
   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 hours'),
   (unixepoch('now') - 21600) * 1000,
   410,
-  1,
-  1,
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b859',
   'evt-local-005'
 );

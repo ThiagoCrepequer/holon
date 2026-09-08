@@ -2,11 +2,11 @@ import type {
   ProjectIdentificationCache,
   ProjectIdentificationModel,
 } from "@holon/application";
-import type { ProjectIdentificationResultV1 } from "@holon/contracts";
+import type { ProjectIdentificationResult } from "@holon/contracts";
 
 import { verifyInterpretation } from "./validation.js";
 export async function interpretProjects(
-  input: ProjectIdentificationResultV1,
+  input: ProjectIdentificationResult,
   options: {
     cache: ProjectIdentificationCache;
     model: ProjectIdentificationModel;
@@ -15,11 +15,11 @@ export async function interpretProjects(
     deadlineAt?: number;
     onAttempt?: () => void;
   },
-): Promise<ProjectIdentificationResultV1> {
+): Promise<ProjectIdentificationResult> {
   const now = options.now ?? Date.now;
   const deadline = Math.min(options.deadlineAt ?? Infinity, now() + 120000);
   let calls = 0;
-  const projects: ProjectIdentificationResultV1["projects"] = [];
+  const projects: ProjectIdentificationResult["projects"] = [];
   for (const project of input.projects) {
     if (now() >= deadline) {
       projects.push({

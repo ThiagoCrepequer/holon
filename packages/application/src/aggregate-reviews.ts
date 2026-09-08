@@ -199,7 +199,6 @@ export function aggregateShardReviews(
     {
       changedLines: allChangedLines,
       files: allFiles,
-      schemaVersion: 2,
       surface: plan.shards.flatMap((shard) => shard.surface ?? []),
       truncated: scopeStatus !== "complete",
     },

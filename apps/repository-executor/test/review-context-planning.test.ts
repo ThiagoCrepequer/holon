@@ -1,4 +1,4 @@
-import type { ExecutorRequestV3 } from "@holon/contracts";
+import type { ExecutorRequest } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import { buildReviewArtifacts } from "../src/review-context.js";
@@ -7,7 +7,7 @@ function patch(path: string) {
   return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1 @@\n+${"x".repeat(50_000)}\n`;
 }
 function artifacts(paths: string[]) {
-  const request: ExecutorRequestV3 = {
+  const request: ExecutorRequest = {
     baseSha: "b".repeat(40),
     headSha: "a".repeat(40),
     cloneUrl: "https://github.com/acme/api.git",
@@ -17,10 +17,8 @@ function artifacts(paths: string[]) {
     installationId: 99,
     repositoryName: "api",
     repositoryOwner: "acme",
-    schemaVersion: 3,
     canonicalDiff: paths.map(patch).join(""),
     effectivePolicy: {
-      version: 1,
       baseSha: "b".repeat(40),
       additionalExcludes: [],
       effectivePolicyDigest: "c".repeat(64),

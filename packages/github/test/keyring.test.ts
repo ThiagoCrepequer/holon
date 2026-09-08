@@ -37,17 +37,15 @@ describe("GitHub App Keyring & Rotation", () => {
   });
 
   describe("resolveGitHubAppKeyring", () => {
-    it("resolves from LEGACY only", () => {
-      const keyring = resolveGitHubAppKeyring({
+    it("does not accept the retired private-key alias", () => {
+      const env = {
         GITHUB_APP_ID: 1234,
-        GITHUB_APP_PRIVATE_KEY: samplePem1,
         GITHUB_APP_SLUG: "holon-app",
-      });
-      expect(keyring).toEqual({
-        appId: 1234,
-        appSlug: "holon-app",
-        currentPrivateKey: samplePem1.trim(),
-      });
+        GITHUB_APP_PRIVATE_KEY: samplePem1,
+      };
+      expect(() => resolveGitHubAppKeyring(env)).toThrow(
+        "GITHUB_APP_PRIVATE_KEY_CURRENT",
+      );
     });
 
     it("resolves from CURRENT only", () => {
@@ -66,37 +64,6 @@ describe("GitHub App Keyring & Rotation", () => {
     it("resolves CURRENT + PREVIOUS", () => {
       const keyring = resolveGitHubAppKeyring({
         GITHUB_APP_ID: 1234,
-        GITHUB_APP_PRIVATE_KEY_CURRENT: samplePem1,
-        GITHUB_APP_PRIVATE_KEY_PREVIOUS: samplePem2,
-        GITHUB_APP_SLUG: "holon-app",
-      });
-      expect(keyring).toEqual({
-        appId: 1234,
-        appSlug: "holon-app",
-        currentPrivateKey: samplePem1.trim(),
-        previousPrivateKey: samplePem2.trim(),
-      });
-    });
-
-    it("resolves CURRENT + LEGACY as migration fallback", () => {
-      const keyring = resolveGitHubAppKeyring({
-        GITHUB_APP_ID: 1234,
-        GITHUB_APP_PRIVATE_KEY: samplePem2,
-        GITHUB_APP_PRIVATE_KEY_CURRENT: samplePem1,
-        GITHUB_APP_SLUG: "holon-app",
-      });
-      expect(keyring).toEqual({
-        appId: 1234,
-        appSlug: "holon-app",
-        currentPrivateKey: samplePem1.trim(),
-        previousPrivateKey: samplePem2.trim(),
-      });
-    });
-
-    it("prefers explicit PREVIOUS over LEGACY when both present", () => {
-      const keyring = resolveGitHubAppKeyring({
-        GITHUB_APP_ID: 1234,
-        GITHUB_APP_PRIVATE_KEY: "legacy-key",
         GITHUB_APP_PRIVATE_KEY_CURRENT: samplePem1,
         GITHUB_APP_PRIVATE_KEY_PREVIOUS: samplePem2,
         GITHUB_APP_SLUG: "holon-app",
@@ -529,7 +496,7 @@ describe("GitHub App Keyring & Rotation", () => {
         expect(() =>
           resolveGitHubAppKeyring({
             GITHUB_APP_ID: appId,
-            GITHUB_APP_PRIVATE_KEY: samplePem1,
+            GITHUB_APP_PRIVATE_KEY_CURRENT: samplePem1,
             GITHUB_APP_SLUG: "slug",
           }),
         ).toThrow("GitHub App ID must be a positive safe integer");

@@ -41,7 +41,6 @@ describe("aggregateShardReviews", () => {
 
   const plan = {
     omissionReasons: [],
-    schemaVersion: 2 as const,
     scopeStatus: "complete" as const,
     shards: [shard0, shard1],
     totalEligibleBytes: 400,
@@ -91,7 +90,6 @@ describe("aggregateShardReviews", () => {
   it("handles unsupported review plans", () => {
     const unsupportedPlan = {
       omissionReasons: ["No supported files"],
-      schemaVersion: 2 as const,
       scopeStatus: "unsupported" as const,
       shards: [],
       totalEligibleBytes: 0,

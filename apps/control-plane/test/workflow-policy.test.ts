@@ -1,4 +1,4 @@
-import { reviewJobV1Schema } from "@holon/contracts";
+import { reviewJobSchema } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,7 +7,7 @@ import {
   eventId,
 } from "../src/workflow-policy.js";
 
-const v1Job = reviewJobV1Schema.parse({
+const job = reviewJobSchema.parse({
   envelope: {
     action: "opened",
     deliveryId: "github:policy",
@@ -17,6 +17,7 @@ const v1Job = reviewJobV1Schema.parse({
       baseSha: "b".repeat(40),
       headSha: "a".repeat(40),
       number: 7,
+      updatedAt: "2026-08-29T12:00:00.000Z",
     },
     receivedAt: "2026-08-29T12:00:01.000Z",
     repository: {
@@ -25,15 +26,13 @@ const v1Job = reviewJobV1Schema.parse({
       name: "api",
       owner: "acme",
     },
-    schemaVersion: 1,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 1,
 });
 
 describe("workflow policy", () => {
-  it("uses receipt time as the v1 causal clock", () => {
-    expect(causalVersionForJob(v1Job)).toBe(v1Job.envelope.receivedAt);
+  it("uses the required PR update time as the causal clock", () => {
+    expect(causalVersionForJob(job)).toBe(job.envelope.pullRequest.updatedAt);
   });
 
   it("clamps replay durations and builds event ids with or without a suffix", () => {

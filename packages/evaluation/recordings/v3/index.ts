@@ -65,7 +65,6 @@ export const baselineRecordingsV3 = [
       },
       partial: false,
     }),
-    schemaVersion: 1,
   },
   {
     caseId: "adversarial.repository-instruction-with-real-regression",
@@ -93,7 +92,6 @@ export const baselineRecordingsV3 = [
       },
       partial: false,
     }),
-    schemaVersion: 1,
   },
   {
     caseId: "budget.explicit-partial-review",
@@ -105,6 +103,5 @@ export const baselineRecordingsV3 = [
       },
       partial: true,
     }),
-    schemaVersion: 1,
   },
 ] as const satisfies readonly EvaluationRecording[];

@@ -16,6 +16,7 @@ it("retains usage and completed attempt timings across replay and eviction", asy
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
+      causalVersion: new Date().toISOString(),
       id: runId,
       prKey: "github:42:pr:7",
       createdAt: new Date().toISOString(),
@@ -63,6 +64,7 @@ it("retains usage and completed attempt timings across replay and eviction", asy
 });
 it("checkpoints only a small manifest and round-trips large review evidence after eviction", async () => {
   const findings = Array.from({ length: 40 }, (_, i) => ({
+    evidenceFingerprint: i.toString(16).padStart(64, "0"),
     fingerprint: `fp:${i.toString(16).padStart(64, "0")}` as const,
     status: "new" as const,
     confidence: 0.95,
@@ -79,7 +81,9 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
   }));
   const output: ReconciledReviewOutput = {
     activeFindings: findings,
-    findings: findings.map(({ fingerprint: _f, status: _s, ...f }) => f),
+    findings: findings.map(
+      ({ fingerprint: _f, evidenceFingerprint: _e, status: _s, ...f }) => f,
+    ),
     resolvedFindings: [],
     updatedTrackedFindings: [],
     omissionReasons: [],
@@ -100,6 +104,7 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
+      causalVersion: new Date().toISOString(),
       id: runId,
       prKey: "github:42:pr:7",
       createdAt: new Date().toISOString(),
@@ -147,6 +152,7 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
+      causalVersion: new Date().toISOString(),
       id: runId,
       prKey: "github:42:pr:7",
       createdAt: new Date().toISOString(),

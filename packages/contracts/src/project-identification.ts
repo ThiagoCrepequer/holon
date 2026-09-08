@@ -103,8 +103,7 @@ export const identifiedProjectSchema = z
           });
       }
   });
-export const projectIdentificationResultV1Schema = z.strictObject({
-  schemaVersion: z.literal(1),
+export const projectIdentificationResultSchema = z.strictObject({
   snapshotSha: gitShaSchema,
   metadataChanged: z.boolean().optional(),
   usage: z
@@ -141,8 +140,7 @@ export const projectIdentificationModelOutputSchema = z.strictObject({
     .max(100)
     .optional(),
 });
-export const projectMetadataRequestV1Schema = z.strictObject({
-  schemaVersion: z.literal(1),
+export const projectMetadataRequestSchema = z.strictObject({
   deadlineAt: z
     .number()
     .int()
@@ -159,17 +157,17 @@ export const projectMetadataRequestV1Schema = z.strictObject({
 });
 export type IdentificationFact = z.infer<typeof identificationFactSchema>;
 export type IdentifiedProject = z.infer<typeof identifiedProjectSchema>;
-export type ProjectIdentificationResultV1 = z.infer<
-  typeof projectIdentificationResultV1Schema
+export type ProjectIdentificationResult = z.infer<
+  typeof projectIdentificationResultSchema
 >;
-export type ProjectMetadataRequestV1 = z.infer<
-  typeof projectMetadataRequestV1Schema
+export type ProjectMetadataRequest = z.infer<
+  typeof projectMetadataRequestSchema
 >;
 export type ProjectIdentificationModelOutput = z.infer<
   typeof projectIdentificationModelOutputSchema
 >;
 
-export const projectMetadataAuthoritySchema = projectMetadataRequestV1Schema
+export const projectMetadataAuthoritySchema = projectMetadataRequestSchema
   .omit({
     snapshotSha: true,
     modelRevision: true,

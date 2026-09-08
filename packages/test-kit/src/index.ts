@@ -1,6 +1,6 @@
 import {
   reviewJobSchema,
-  type ReviewContextV2,
+  type ReviewShardContext,
   type ReviewJob,
 } from "@holon/contracts";
 
@@ -26,6 +26,7 @@ export function createReviewJob(
         baseSha: "b".repeat(40),
         headSha,
         number: pullRequestNumber,
+        updatedAt: "2026-08-29T12:00:00.000Z",
       },
       receivedAt: "2026-08-29T12:00:00.000Z",
       repository: {
@@ -34,20 +35,17 @@ export function createReviewJob(
         name: "api",
         owner: "acme",
       },
-      schemaVersion: 1,
     },
     runId: `github:${repositoryId}:pr:${pullRequestNumber}:head:${headSha}`,
-    schemaVersion: 1,
   });
 }
 
-export function createReviewContext(): ReviewContextV2 {
+export function createReviewContext(): ReviewShardContext {
   const patch =
     "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -9,0 +10,1 @@\n+return null;\n";
   return {
     changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
     files: [{ mode: "structural", patch, path: "src/index.ts" }],
-    schemaVersion: 2,
     truncated: false,
   };
 }

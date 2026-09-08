@@ -5,12 +5,12 @@ import {
   renderFinding,
 } from "@holon/application";
 import {
-  buildAdminProjectionEventV1,
+  buildAdminProjectionEvent,
   buildReviewAnalysisCheckpoint,
   reviewAnalysisCheckpointSchema,
-  runClaimV2ResultSchema,
+  runClaimResultSchema,
   reviewJobSchema,
-  type AdminRunProjectionPayloadV1,
+  type AdminRunProjectionPayload,
   type CheckRunConclusion,
   type CheckRunOutput,
   type RepositoryPolicy,
@@ -200,7 +200,7 @@ async function safeRecordStepFailure(
 async function emitAndRecordProjection(
   step: WorkflowStep,
   services: ReviewServices,
-  payloadInput: AdminRunProjectionPayloadV1,
+  payloadInput: AdminRunProjectionPayload,
   emit: (
     event: string,
     fields?: Readonly<Record<string, boolean | number | string | undefined>>,
@@ -218,7 +218,7 @@ async function emitAndRecordProjection(
       `${prefix}-build-admin-projection`,
       stateStep,
       async () => {
-        return await buildAdminProjectionEventV1(payloadInput);
+        return await buildAdminProjectionEvent(payloadInput);
       },
     );
 
@@ -523,13 +523,12 @@ export async function executeReviewWorkflow(
       occurredAt,
       analysisStartedAtIso,
     );
-    const projectionPayload: AdminRunProjectionPayloadV1 = {
+    const projectionPayload: AdminRunProjectionPayload = {
       headSha: job.envelope.pullRequest.headSha,
       prKey,
       projectedFrom: "workflow",
       projectionRequestedAt: now(),
       pullRequestNumber: job.envelope.pullRequest.number,
-      recordVersion: 1,
       repository: {
         id: job.envelope.repository.id,
         name: job.envelope.repository.name,
@@ -537,7 +536,6 @@ export async function executeReviewWorkflow(
       },
       reviewPhaseReached,
       runId: run.id,
-      schemaVersion: 1,
       scopeStatus: null,
       telemetry: {
         estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
@@ -705,12 +703,8 @@ export async function executeReviewWorkflow(
       "admission",
       stateStep,
       async () => {
-        const result = runClaimV2ResultSchema.parse(
-          await services.ledger.claimRunV2(
-            run,
-            workflowInstanceId,
-            causalVersionForJob(job),
-          ),
+        const result = runClaimResultSchema.parse(
+          await services.ledger.claimRun(run, workflowInstanceId),
         );
         emit("review.started", {
           eventTimestamp: rawEvent.timestamp.toISOString(),
@@ -899,7 +893,7 @@ export async function executeReviewWorkflow(
     if (services.identifyProjects && effectivePolicy) {
       const identificationPolicy = effectivePolicy;
       const identificationStarted = await runInstrumentedStep(
-        "start-project-identification-v1",
+        "start-project-identification",
         "preparation",
         stateStep,
         async () => Date.now(),
@@ -907,7 +901,7 @@ export async function executeReviewWorkflow(
         (started) => ({ startedAt: started }),
       );
       const discovered = await runInstrumentedStep(
-        "discover-project-metadata-v1",
+        "discover-project-metadata",
         "preparation",
         repositoryStep,
         async () =>
@@ -951,7 +945,7 @@ export async function executeReviewWorkflow(
             );
           };
           let result = await runInstrumentedStep(
-            `identify-project-v1-${index}`,
+            `identify-project-${index}`,
             "preparation",
             modelStep,
             identifyProject,
@@ -970,17 +964,17 @@ export async function executeReviewWorkflow(
             waiting++
           ) {
             const mayWait = await step.do(
-              `continue-project-identification-v1-${index}-${waiting}`,
+              `continue-project-identification-${index}-${waiting}`,
               stateStep,
               async () => Date.now() - identificationStarted < 90000,
             );
             if (!mayWait) break;
             await step.sleep(
-              `wait-project-identification-v1-${index}-${waiting}`,
+              `wait-project-identification-${index}-${waiting}`,
               "30 seconds",
             );
             result = await runInstrumentedStep(
-              `retry-project-identification-v1-${index}-${waiting}`,
+              `retry-project-identification-${index}-${waiting}`,
               "preparation",
               modelStep,
               identifyProject,
@@ -1017,7 +1011,7 @@ export async function executeReviewWorkflow(
         services.useProjectIdentification?.(identification);
         if (services.ledger.saveProjectIdentification)
           await runInstrumentedStep(
-            "record-project-identification-v1",
+            "record-project-identification",
             "preparation",
             stateStep,
             async () =>
@@ -1489,13 +1483,12 @@ export async function executeReviewWorkflow(
       completedAt,
       analysisStartedAtIso,
     );
-    const completedProjectionPayload: AdminRunProjectionPayloadV1 = {
+    const completedProjectionPayload: AdminRunProjectionPayload = {
       headSha: job.envelope.pullRequest.headSha,
       prKey,
       projectedFrom: "workflow",
       projectionRequestedAt: now(),
       pullRequestNumber: job.envelope.pullRequest.number,
-      recordVersion: 1,
       repository: {
         id: job.envelope.repository.id,
         name: job.envelope.repository.name,
@@ -1503,7 +1496,6 @@ export async function executeReviewWorkflow(
       },
       reviewPhaseReached: "publishing",
       runId: run.id,
-      schemaVersion: 1,
       scopeStatus: output.scopeStatus,
       telemetry: {
         estimatedCostMicroUsd: cost.estimatedCostMicroUsd,
@@ -1668,13 +1660,12 @@ export async function executeReviewWorkflow(
         terminal.occurredAt,
         analysisStartedAtIso,
       );
-      const failedProjectionPayload: AdminRunProjectionPayloadV1 = {
+      const failedProjectionPayload: AdminRunProjectionPayload = {
         headSha: job.envelope.pullRequest.headSha,
         prKey,
         projectedFrom: "workflow",
         projectionRequestedAt: now(),
         pullRequestNumber: job.envelope.pullRequest.number,
-        recordVersion: 1,
         repository: {
           id: job.envelope.repository.id,
           name: job.envelope.repository.name,
@@ -1682,7 +1673,6 @@ export async function executeReviewWorkflow(
         },
         reviewPhaseReached,
         runId: run.id,
-        schemaVersion: 1,
         scopeStatus: "partial_by_failure",
         telemetry: {
           estimatedCostMicroUsd: cost.estimatedCostMicroUsd,

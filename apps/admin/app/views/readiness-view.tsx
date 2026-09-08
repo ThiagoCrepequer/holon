@@ -37,7 +37,7 @@ export const ReadinessView: React.FC<ReadinessViewProps> = ({
     },
     {
       name: "Control Plane RPC",
-      desc: "Service Binding AdminReadEntrypoint (pingV1)",
+      desc: "Service Binding AdminReadEntrypoint (ping)",
       status: report.checks.rpc,
       critical: true,
     },

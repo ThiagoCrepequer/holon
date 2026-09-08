@@ -24,9 +24,7 @@ export const publicationStep = {
 } as const;
 
 export function causalVersionForJob(job: ReviewJob): string {
-  return job.schemaVersion === 2
-    ? job.envelope.pullRequest.updatedAt
-    : job.envelope.receivedAt;
+  return job.envelope.pullRequest.updatedAt;
 }
 
 export function durationFrom(startedAt: Date, completedAt: string): number {

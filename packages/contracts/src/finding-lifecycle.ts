@@ -45,11 +45,8 @@ export type {
 };
 
 export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
-  evidenceFingerprint: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/u)
-    .optional(),
-  confidence: z.number().min(0).max(1).optional(),
+  evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+  confidence: z.number().min(0).max(1),
   diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
@@ -78,10 +75,7 @@ export const reconciliationSummarySchema: z.ZodType<ReconciliationSummary> =
   });
 
 export const reconciledFindingSchema = reviewFindingSchema.extend({
-  evidenceFingerprint: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/u)
-    .optional(),
+  evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
   fingerprint: findingFingerprintSchema,
   firstSeenHeadSha: gitShaSchema.optional(),
   previousCommentId: positiveIntegerSchema.optional(),

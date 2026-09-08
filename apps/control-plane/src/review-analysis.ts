@@ -123,7 +123,6 @@ async function reviewShards(
         : undefined,
       changedLines: shard.changedLines,
       files: shard.files,
-      schemaVersion: 2 as const,
       structuralImpact: structuralImpact
         ? {
             ...structuralImpact,
@@ -364,10 +363,7 @@ export async function analyzeReview(
           ...aggregateShardReviews(plan, [], { verdictPolicy }),
           activeFindings: [],
           contextTruncated: context.truncated,
-          effectivePolicyDigest:
-            context.schemaVersion === 4
-              ? context.effectivePolicyDigest
-              : undefined,
+          effectivePolicyDigest: context.effectivePolicyDigest,
           policySource: context.policySource,
           promptTruncated: context.truncated,
           resolvedFindings: [],
@@ -428,7 +424,7 @@ export async function analyzeReview(
                   return [];
                 const verified = selectFindingsWithCanonicalEvidence(
                   [{ ...resolution, severity: previous.severity }],
-                  { ...context, schemaVersion: 2 },
+                  context,
                 );
                 if (!verified.length) return [];
                 const evidenceFingerprint = await computeEvidenceFingerprint(

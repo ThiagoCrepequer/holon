@@ -7,10 +7,8 @@ import {
 } from "@holon/contracts";
 import {
   buildToolExecution,
-  classifyPullRequestDiffFile,
   classifyReviewPath,
   matchesAnyPathGlob,
-  splitPullRequestDiff,
 } from "@holon/repository-analysis";
 
 import {
@@ -155,12 +153,7 @@ async function resolveReviewablePaths(
 }
 
 function hasStructuralReviewFiles(context: ReviewContext): boolean {
-  if ("files" in context) {
-    return context.files.some((file) => file.mode === "structural");
-  }
-  return splitPullRequestDiff(context.diff).some(
-    (file) => classifyPullRequestDiffFile(file) === "structural",
-  );
+  return context.files.some((file) => file.mode === "structural");
 }
 
 export async function executeRepositoryTool(

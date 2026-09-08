@@ -1,8 +1,4 @@
-import type {
-  AdminRunDetailV2,
-  AdminRunDetailV3,
-  StepExecutionNode,
-} from "@holon/contracts";
+import type { AdminRunDetail, StepExecutionNode } from "@holon/contracts";
 import {
   Badge,
   Card,
@@ -34,7 +30,7 @@ import { formatNumber } from "../utils/format.js";
 export interface RunDetailViewProps {
   readonly userEmail?: string | undefined;
   readonly run: AdminRunRow;
-  readonly rpcDetail: AdminRunDetailV3 | AdminRunDetailV2 | null;
+  readonly rpcDetail: AdminRunDetail | null;
   readonly rpcError?: string | null | undefined;
   readonly embedded?: boolean | undefined;
   readonly isActive?: boolean | undefined;
@@ -66,32 +62,20 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
     initialSelectedStepName ?? null,
   );
 
-  const stepExecutions: readonly StepExecutionNode[] = React.useMemo(() => {
-    if (!rpcDetail) return [];
-    if (
-      "stepExecutions" in rpcDetail &&
-      Array.isArray(rpcDetail.stepExecutions)
-    ) {
-      return rpcDetail.stepExecutions;
-    }
-    return [];
-  }, [rpcDetail]);
+  const stepExecutions: readonly StepExecutionNode[] = React.useMemo(
+    () => rpcDetail?.stepExecutions ?? [],
+    [rpcDetail],
+  );
 
   const selectedStep = React.useMemo(() => {
     if (!selectedStepName) return null;
     return stepExecutions.find((s) => s.stepName === selectedStepName) ?? null;
   }, [selectedStepName, stepExecutions]);
 
-  const historicalFindings = React.useMemo(() => {
-    if (
-      rpcDetail &&
-      "historicalRunFindings" in rpcDetail &&
-      Array.isArray(rpcDetail.historicalRunFindings)
-    ) {
-      return rpcDetail.historicalRunFindings;
-    }
-    return null;
-  }, [rpcDetail]);
+  const historicalFindings = React.useMemo(
+    () => rpcDetail?.historicalRunFindings ?? null,
+    [rpcDetail],
+  );
 
   const currentFindings = React.useMemo(() => {
     return rpcDetail?.currentFindings ?? [];
@@ -183,11 +167,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                 dot
               >
                 {run.terminal_state ??
-                  (rpcDetail &&
-                  "run" in rpcDetail &&
-                  "runState" in rpcDetail.run
-                    ? rpcDetail.run.runState
-                    : "running")}
+                  (rpcDetail ? rpcDetail.run.runState : "running")}
               </Badge>
             </div>
             <CardDescription className="font-mono text-xs text-[var(--text-muted)] mt-1 break-all">
@@ -313,7 +293,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
       </div>
 
       {/* Sandbox Cleanup Task Notification (if available) */}
-      {rpcDetail && "cleanupTask" in rpcDetail && rpcDetail.cleanupTask && (
+      {rpcDetail?.cleanupTask && (
         <div className="mb-4 p-3 bg-purple-950/20 border border-purple-800/40 rounded-lg flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="text-purple-400">⏰</span>
@@ -390,7 +370,7 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
             {findingsTab === "snapshot" && historicalFindings !== null
               ? "Achados capturados no momento em que esta execução foi analisada."
               : "Estado atual dos achados no PR (inclui resoluções ou novos achados de runs subsequentes)."}
-            {rpcDetail && "findingsPerspective" in rpcDetail && (
+            {rpcDetail && (
               <span className="ml-2 font-mono text-[11px] text-[var(--text-muted)]">
                 &bull; Perspectiva: {rpcDetail.findingsPerspective}
               </span>

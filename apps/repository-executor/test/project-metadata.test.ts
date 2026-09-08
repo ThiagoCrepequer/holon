@@ -10,7 +10,6 @@ const sha = "a".repeat(40),
   blob = "b".repeat(40),
   runId = `github:42:pr:7:head:${sha}`;
 const request = {
-  schemaVersion: 1,
   runId,
   repositoryId: 42,
   installationId: 9,
@@ -36,7 +35,6 @@ function sandbox(
   const readFile = vi.fn().mockImplementation(async (filePath: string) =>
     filePath === metadataAuthorityPath
       ? JSON.stringify({
-          schemaVersion: 1,
           runId,
           repositoryId: 42,
           installationId: 9,
@@ -47,7 +45,6 @@ function sandbox(
         })
       : filePath === reviewScopePolicyPath
         ? JSON.stringify({
-            schemaVersion: 2,
             additionalExcludes: [],
             deniedPaths: [],
           })
@@ -106,7 +103,6 @@ describe("project metadata authority and bounded blobs", () => {
     readFile.mockImplementation(async (filePath: string) =>
       filePath === metadataAuthorityPath
         ? JSON.stringify({
-            schemaVersion: 1,
             runId,
             repositoryId: 42,
             installationId: 9,
@@ -115,7 +111,6 @@ describe("project metadata authority and bounded blobs", () => {
             policyDigest: "policy",
           })
         : JSON.stringify({
-            schemaVersion: 2,
             additionalExcludes: ["package-lock.json"],
             deniedPaths: [],
           }),

@@ -1,9 +1,10 @@
-import { reviewJobV2Schema } from "@holon/contracts";
+import { reviewJobSchema } from "@holon/contracts";
 import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { describe, expect, it, vi } from "vitest";
 
 import { createReviewServices } from "../src/review-services.js";
+import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
   "diff --git a/src/index.ts b/src/index.ts",
@@ -13,10 +14,10 @@ const canonicalPatch = [
   "+return null;",
 ].join("\n");
 
-const job = reviewJobV2Schema.parse({
+const job = reviewJobSchema.parse({
   envelope: {
     action: "opened",
-    deliveryId: "github:delivery-rpc-compatibility",
+    deliveryId: "github:delivery-rpc-current",
     event: "pull_request",
     installationId: 99,
     pullRequest: {
@@ -32,10 +33,8 @@ const job = reviewJobV2Schema.parse({
       name: "api",
       owner: "acme",
     },
-    schemaVersion: 2,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 2,
 });
 
 function installationSession() {
@@ -47,6 +46,8 @@ function installationSession() {
       request: () => Promise.resolve({ data: { id: 1 } }),
     },
     currentHeadSha: () => Promise.resolve("a".repeat(40)),
+    currentPullRequestRefs: () =>
+      Promise.resolve({ baseSha: "b".repeat(40), headSha: "a".repeat(40) }),
     expectedAuthorLogin: "holon-reviewer[bot]",
     expiresAt: "2026-08-29T13:00:00.000Z",
     pullRequestDiff: () => Promise.resolve(canonicalPatch),
@@ -63,9 +64,10 @@ describe("current executor RPC contract", () => {
       {
         createSession: () => Promise.resolve(installationSession()),
         executor: {
+          ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          prepareRepositoryV3: () => Promise.reject(permanent),
+          prepareRepository: () => Promise.reject(permanent),
           runTool: () => Promise.resolve({ content: "", truncated: false }),
         },
       },
@@ -78,7 +80,7 @@ describe("current executor RPC contract", () => {
     );
     await expect(services.prepareRepository(1)).rejects.toBe(permanent);
   });
-  it("prepares with the V3 request and reads only V4 context", async () => {
+  it("prepares and reads context using the current RPC contracts", async () => {
     const policy = {
       additionalExcludes: ["vendor/**"],
       baseSha: "b".repeat(40),
@@ -86,19 +88,17 @@ describe("current executor RPC contract", () => {
       source: ".github/holon.yml" as const,
       sourceDigest: "d".repeat(64),
       verdictStrictness: "block_all_confident_medium" as const,
-      version: 1 as const,
     };
-    const prepareRepositoryV3 = vi.fn().mockResolvedValue({
+    const prepareRepository = vi.fn().mockResolvedValue({
       changedLineCount: 1,
       contextBytes: 100,
       effectivePolicyDigest: "c".repeat(64),
       fileCount: 1,
       runId: job.runId,
-      schemaVersion: 3,
       truncated: false,
       waiversCount: 0,
     });
-    const loadContextV4 = vi.fn().mockResolvedValue({
+    const loadContext = vi.fn().mockResolvedValue({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
@@ -109,7 +109,6 @@ describe("current executor RPC contract", () => {
         },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -121,10 +120,11 @@ describe("current executor RPC contract", () => {
       {
         createSession: () => Promise.resolve(installationSession()),
         executor: {
+          ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          loadContextV4,
-          prepareRepositoryV3,
+          loadContext,
+          prepareRepository,
           runTool: () => Promise.resolve({ content: "", truncated: false }),
         },
       },
@@ -133,17 +133,19 @@ describe("current executor RPC contract", () => {
     );
 
     const prepared = await services.prepareRepository(1, policy);
-    expect(prepared).toMatchObject({ schemaVersion: 3 });
-    expect(prepareRepositoryV3).toHaveBeenCalledOnce();
+    expect(prepared).toMatchObject({
+      runId: job.runId,
+      effectivePolicyDigest: policy.effectivePolicyDigest,
+    });
+    expect(prepareRepository).toHaveBeenCalledOnce();
 
     const loaded = await services.loadContext();
     expect(loaded).toMatchObject({
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
     });
-    expect(loadContextV4).toHaveBeenCalledOnce();
+    expect(loadContext).toHaveBeenCalledOnce();
   });
-  it("reads current refs via session or falls back to headSha", async () => {
+  it("reads live refs and rejects sessions without the required method", async () => {
     const sessionWithRefs = {
       ...installationSession(),
       currentPullRequestRefs: () =>
@@ -155,6 +157,7 @@ describe("current executor RPC contract", () => {
       {
         createSession: () => Promise.resolve(sessionWithRefs),
         executor: {
+          ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
           runTool: () => Promise.resolve({ content: "", truncated: false }),
@@ -196,6 +199,7 @@ describe("current executor RPC contract", () => {
             >,
           ),
         executor: {
+          ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
           runTool: () => Promise.resolve({ content: "", truncated: false }),
@@ -204,41 +208,25 @@ describe("current executor RPC contract", () => {
       { emit: () => undefined },
       {},
     );
-    const refs2 = await services2.readCurrentRefs();
-    expect(refs2).toEqual({
-      baseSha: "b".repeat(40),
-      headSha: "a".repeat(40),
-    });
-
+    await expect(services2.readCurrentRefs()).rejects.toThrow();
     const mutation2 = await services2.createMutationContext();
-    const mutationRefs2 = await mutation2.readCurrentRefs();
-    expect(mutationRefs2).toEqual({
-      baseSha: "b".repeat(40),
-      headSha: "a".repeat(40),
-    });
+    await expect(mutation2.readCurrentRefs()).rejects.toThrow();
   });
 
   it("rejects unavailable current RPCs without calling old methods", async () => {
-    const prepare = vi.fn();
-    const prepareRepositoryV2 = vi.fn().mockResolvedValue({ schemaVersion: 2 });
-    const loadContext = vi.fn();
-    const loadContextV2 = vi.fn().mockResolvedValue({ schemaVersion: 2 });
     const executor = {
+      ...unconfiguredExecutor,
       cleanup: async () => {},
       hasContext: async () => true,
       runTool: async () => ({ content: "", truncated: false }),
-      prepare,
-      prepareRepositoryV2,
-      loadContext,
-      loadContextV2,
-      prepareRepositoryV3: async () => {
+      prepareRepository: async () => {
         throw new TypeError(
-          'The RPC receiver does not implement the method "prepareRepositoryV3".',
+          'The RPC receiver does not implement the method "prepareRepository".',
         );
       },
-      loadContextV4: async () => {
+      loadContext: async () => {
         throw new TypeError(
-          'The RPC receiver does not implement the method "loadContextV4".',
+          'The RPC receiver does not implement the method "loadContext".',
         );
       },
     };
@@ -256,13 +244,6 @@ describe("current executor RPC contract", () => {
       NonRetryableError,
     );
     await expect(services.loadContext()).rejects.toBeInstanceOf(TypeError);
-    for (const old of [
-      prepare,
-      prepareRepositoryV2,
-      loadContext,
-      loadContextV2,
-    ])
-      expect(old).not.toHaveBeenCalled();
   });
   it.each([2, 3])(
     "rejects old context V%s from the current endpoint",
@@ -273,18 +254,18 @@ describe("current executor RPC contract", () => {
         {
           createSession: async () => installationSession(),
           executor: {
+            ...unconfiguredExecutor,
             cleanup: async () => {},
             hasContext: async () => true,
             runTool: async () => ({ content: "", truncated: false }),
-            prepareRepositoryV3: vi.fn().mockResolvedValue({
-              schemaVersion: 2,
+            prepareRepository: vi.fn().mockResolvedValue({
               changedLineCount: 0,
               contextBytes: 1,
               fileCount: 0,
               runId: job.runId,
               truncated: false,
             }),
-            loadContextV4: vi.fn().mockResolvedValue({
+            loadContext: vi.fn().mockResolvedValue({
               schemaVersion,
               effectivePolicyDigest: "c".repeat(64),
               policySource: "default",

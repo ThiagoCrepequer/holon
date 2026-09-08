@@ -159,6 +159,8 @@ describe("isDismissalFeedback", () => {
 
 describe("applyFeedbackToFindings", () => {
   const baseFinding: TrackedFinding = {
+    evidenceFingerprint: fp1.slice(3),
+    confidence: 0.95,
     diagnostic: "Potential SQL injection vulnerability in query builder",
     filePath: "src/db.ts",
     fingerprint: fp1,
@@ -227,6 +229,8 @@ describe("applyFeedbackToFindings", () => {
 describe("reconcileFindings with dismissed state", () => {
   it("preserves dismissed status across subsequent commits without adding to active findings", () => {
     const dismissedBaseline: TrackedFinding = {
+      evidenceFingerprint: fp1.slice(3),
+      confidence: 0.95,
       diagnostic: "Potential SQL injection vulnerability in query builder",
       filePath: "src/db.ts",
       fingerprint: fp1,
@@ -243,6 +247,7 @@ describe("reconcileFindings with dismissed state", () => {
     };
 
     const currentFinding = {
+      evidenceFingerprint: fp1.slice(3),
       confidence: 0.95,
       diagnostic: "Potential SQL injection vulnerability in query builder",
       evidence: [

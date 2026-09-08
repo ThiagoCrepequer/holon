@@ -36,7 +36,8 @@ function ledger(
     authorizeMutation: authorize,
     checkRunId: () => undefined,
     claimPublication: claim,
-    claimRun: () => Promise.resolve("claimed" as const),
+    claimRun: () =>
+      Promise.resolve({ outcome: "claimed" as const, supersededWorkflows: [] }),
     completePublication: vi.fn(() => Promise.resolve()),
     isLatestRun: () => Promise.resolve(true),
     recordCheckRunId: () => undefined,

@@ -7,8 +7,8 @@ import type {
 } from "./identity.js";
 
 export interface TrackedFinding {
-  readonly evidenceFingerprint?: string | undefined;
-  readonly confidence?: number | undefined;
+  readonly evidenceFingerprint: string;
+  readonly confidence: number;
   readonly diagnostic: string;
   readonly filePath: string;
   readonly fingerprint: FindingFingerprint;
@@ -25,7 +25,7 @@ export interface TrackedFinding {
 }
 
 export interface ReconciledFinding extends Finding {
-  readonly evidenceFingerprint?: string | undefined;
+  readonly evidenceFingerprint: string;
   readonly fingerprint: FindingFingerprint;
   readonly firstSeenHeadSha?: string | undefined;
   readonly previousCommentId?: number | undefined;
@@ -44,7 +44,7 @@ export interface ReconciliationSummary {
 }
 
 export interface FindingWithFingerprint extends Finding {
-  readonly evidenceFingerprint?: string | undefined;
+  readonly evidenceFingerprint: string;
   readonly fingerprint: FindingFingerprint;
 }
 
@@ -92,14 +92,11 @@ export function reconcileFindings(
 
   // 1. Process current findings against baseline
   for (const candidate of input.currentFindings) {
-    const evidenceMatches =
-      candidate.evidenceFingerprint === undefined
-        ? []
-        : input.baselineFindings.filter(
-            (previous) =>
-              previous.evidenceFingerprint === candidate.evidenceFingerprint &&
-              previous.filePath === candidate.location.path,
-          );
+    const evidenceMatches = input.baselineFindings.filter(
+      (previous) =>
+        previous.evidenceFingerprint === candidate.evidenceFingerprint &&
+        previous.filePath === candidate.location.path,
+    );
     const uniqueCandidate =
       input.currentFindings.filter(
         (f) => f.evidenceFingerprint === candidate.evidenceFingerprint,
@@ -126,8 +123,7 @@ export function reconcileFindings(
       // The issue is still active -> persistent
       const tracked: TrackedFinding = {
         ...existing,
-        evidenceFingerprint:
-          current.evidenceFingerprint ?? existing.evidenceFingerprint,
+        evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
@@ -147,8 +143,7 @@ export function reconcileFindings(
       // The issue was resolved before, but has been reintroduced
       const tracked: TrackedFinding = {
         ...existing,
-        evidenceFingerprint:
-          current.evidenceFingerprint ?? existing.evidenceFingerprint,
+        evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,
@@ -168,8 +163,7 @@ export function reconcileFindings(
       // Previously dismissed issue still matches: preserve dismissal without blocking
       const tracked: TrackedFinding = {
         ...existing,
-        evidenceFingerprint:
-          current.evidenceFingerprint ?? existing.evidenceFingerprint,
+        evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
         lastSeenRunId: input.currentRunId,

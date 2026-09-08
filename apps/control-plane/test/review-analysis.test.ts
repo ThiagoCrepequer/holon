@@ -1,12 +1,13 @@
 import {
-  reviewJobV2Schema,
-  type ReviewContextV2,
-  type ReviewContextV4,
+  reviewJobSchema,
+  type ReviewShardContext,
+  type ReviewContext,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { analyzeReview } from "../src/review-analysis.js";
 import type { ReviewServices } from "../src/review-services.js";
+import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
   "diff --git a/src/index.ts b/src/index.ts",
@@ -16,7 +17,7 @@ const canonicalPatch = [
   "+return null;",
 ].join("\n");
 
-const job = reviewJobV2Schema.parse({
+const job = reviewJobSchema.parse({
   envelope: {
     action: "opened",
     deliveryId: "github:delivery-review-analysis",
@@ -35,10 +36,8 @@ const job = reviewJobV2Schema.parse({
       name: "api",
       owner: "acme",
     },
-    schemaVersion: 2,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 2,
 });
 
 // Confidence 0.80 is confident (>= 0.75) but below high-confidence (0.85)
@@ -58,7 +57,7 @@ const moderateFinding = {
 };
 
 function createMockServices(
-  context: ReviewContextV4 | ReviewContextV2,
+  context: ReviewContext | ReviewShardContext,
   modelReview: Awaited<ReturnType<ReviewServices["model"]["review"]>> = {
     output: {
       findings: [moderateFinding],
@@ -72,6 +71,7 @@ function createMockServices(
     createSession: () => Promise.reject(new Error("unused")),
     ensureContext: () => Promise.resolve(),
     executor: {
+      ...unconfiguredExecutor,
       cleanup: () => Promise.resolve(),
       hasContext: () => Promise.resolve(true),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
@@ -93,7 +93,6 @@ function createMockServices(
         verdictStrictness: "default",
         waiversCount: 0,
         ...context,
-        schemaVersion: 4,
       }),
     model: {
       review: () => Promise.resolve(modelReview),
@@ -118,7 +117,6 @@ describe("analyzeReview", () => {
     async (reason) => {
       const services = createMockServices(
         {
-          schemaVersion: 2,
           changedLines: [],
           files: Array.from({ length: 21 }, (_, index) => ({
             mode: "structural" as const,
@@ -148,7 +146,6 @@ describe("analyzeReview", () => {
 
   it("reports partial coverage when every eligible patch was omitted before planning", async () => {
     const services = createMockServices({
-      schemaVersion: 2,
       changedLines: [],
       files: [],
       truncated: true,
@@ -162,15 +159,14 @@ describe("analyzeReview", () => {
     expect(review).not.toHaveBeenCalled();
   });
 
-  it("applies strictness block_all_confident_medium under V4 context to block on a single medium finding", async () => {
-    const v4Context: ReviewContextV4 = {
+  it("applies strictness block_all_confident_medium under complete context to block on a single medium finding", async () => {
+    const policyContext: ReviewContext = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -178,7 +174,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v4Context);
+    const services = createMockServices(policyContext);
     const result = await analyzeReview(job, services, emit);
 
     expect(result.verdict).toBe("REQUEST_CHANGES");
@@ -187,15 +183,14 @@ describe("analyzeReview", () => {
     expect(result.waiversCount).toBe(0);
   });
 
-  it("applies default strictness under V4 context approving a single moderate finding", async () => {
-    const v4Context: ReviewContextV4 = {
+  it("applies default strictness under complete context approving a single moderate finding", async () => {
+    const policyContext: ReviewContext = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: "default",
-      schemaVersion: 4,
       sourceDigest: null,
       truncated: false,
       verdictStrictness: "default",
@@ -203,7 +198,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v4Context);
+    const services = createMockServices(policyContext);
     const result = await analyzeReview(job, services, emit);
 
     expect(result.verdict).toBe("APPROVE");
@@ -213,14 +208,13 @@ describe("analyzeReview", () => {
   });
 
   it("marks partial_by_policy when waiversCount > 0 resulting in COMMENT verdict", async () => {
-    const v4Context: ReviewContextV4 = {
+    const policyContext: ReviewContext = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "block_all_confident_medium",
@@ -228,7 +222,7 @@ describe("analyzeReview", () => {
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v4Context);
+    const services = createMockServices(policyContext);
     const modelReview = vi.spyOn(services.model, "review");
     const result = await analyzeReview(job, services, emit);
 
@@ -242,14 +236,13 @@ describe("analyzeReview", () => {
   });
 
   it("passes the durable policy into context reconstruction", async () => {
-    const v4Context: ReviewContextV4 = {
+    const policyContext: ReviewContext = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
       sourceDigest: "d".repeat(64),
       truncated: false,
       verdictStrictness: "default",
@@ -262,9 +255,8 @@ describe("analyzeReview", () => {
       source: ".github/holon.yml" as const,
       sourceDigest: "d".repeat(64),
       verdictStrictness: "default" as const,
-      version: 1 as const,
     };
-    const services = createMockServices(v4Context);
+    const services = createMockServices(policyContext);
     const ensureContext = vi.fn(() => Promise.resolve());
 
     await analyzeReview(
@@ -283,7 +275,7 @@ describe("analyzeReview", () => {
       const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
       const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
 
-      const v2Context: ReviewContextV2 = {
+      const shardContext: ReviewShardContext = {
         changedLines: [
           { line: 1, path: "src/a.ts", side: "RIGHT" },
           { line: 1, path: "src/b.ts", side: "RIGHT" },
@@ -292,12 +284,11 @@ describe("analyzeReview", () => {
           { mode: "structural", patch: largePatch1, path: "src/a.ts" },
           { mode: "structural", patch: largePatch2, path: "src/b.ts" },
         ],
-        schemaVersion: 2,
         truncated: false,
       };
 
       const emit = vi.fn();
-      const services = createMockServices(v2Context, {
+      const services = createMockServices(shardContext, {
         output: { findings: [], summary: "Review summary" },
         promptTruncated: false,
       });
@@ -325,8 +316,7 @@ describe("analyzeReview", () => {
   it.each([true, false])(
     "keeps loss diagnostics and structural leads without automatic findings (input omitted=%s)",
     async (inputOmitted) => {
-      const context: ReviewContextV2 = {
-        schemaVersion: 2,
+      const context: ReviewShardContext = {
         truncated: inputOmitted,
         files: [
           { mode: "structural", path: "src/index.ts", patch: canonicalPatch },
@@ -412,7 +402,7 @@ describe("analyzeReview", () => {
     const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
     const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
 
-    const v2Context: ReviewContextV2 = {
+    const shardContext: ReviewShardContext = {
       changedLines: [
         { line: 1, path: "src/a.ts", side: "RIGHT" },
         { line: 1, path: "src/b.ts", side: "RIGHT" },
@@ -421,12 +411,11 @@ describe("analyzeReview", () => {
         { mode: "structural", patch: largePatch1, path: "src/a.ts" },
         { mode: "structural", patch: largePatch2, path: "src/b.ts" },
       ],
-      schemaVersion: 2,
       truncated: false,
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v2Context, {
+    const services = createMockServices(shardContext, {
       output: { findings: [], summary: "Review summary" },
       promptTruncated: false,
     });
@@ -440,17 +429,16 @@ describe("analyzeReview", () => {
   });
 
   it("converts non-retryable model error to NonRetryableError", async () => {
-    const v2Context: ReviewContextV2 = {
+    const shardContext: ReviewShardContext = {
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         { mode: "structural", patch: canonicalPatch, path: "src/index.ts" },
       ],
-      schemaVersion: 2,
       truncated: false,
     };
 
     const emit = vi.fn();
-    const services = createMockServices(v2Context, {
+    const services = createMockServices(shardContext, {
       output: { findings: [], summary: "Review summary" },
       promptTruncated: false,
     });
@@ -464,9 +452,8 @@ describe("analyzeReview", () => {
   });
 });
 
-function revalidationContext(): ReviewContextV2 {
+function revalidationContext(): ReviewShardContext {
   return {
-    schemaVersion: 2,
     changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
     files: [
       { mode: "structural", path: "src/index.ts", patch: canonicalPatch },
@@ -610,7 +597,6 @@ it("retries a failed shard without spending another model call on its successful
     patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,1600 @@\n${`+${name};\n`.repeat(1600)}`,
   }));
   const services = createMockServices({
-    schemaVersion: 2,
     files,
     changedLines: files.map((f) => ({
       path: f.path,

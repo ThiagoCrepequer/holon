@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  adminCiSummaryV1Schema,
-  adminFindingSummaryV1Schema,
-  adminReadRequestV1Schema,
-  adminRunDetailV2Schema,
+  adminCiSummarySchema,
+  adminFindingSummarySchema,
+  adminReadRequestSchema,
+  adminRunDetailSchema,
   truncateUtf8Bytes,
-  type AdminRunDetailV2,
+  type AdminRunDetail,
 } from "../src/index.js";
 
 const sha = "c".repeat(40);
@@ -15,7 +15,10 @@ const runId = `${prKey}:head:${sha}` as const;
 
 describe("admin run detail contracts", () => {
   it("validates full admin run detail DTO", () => {
-    const detail: AdminRunDetailV2 = {
+    const detail: AdminRunDetail = {
+      cleanupTask: null,
+      historicalRunFindings: null,
+      stepExecutions: [],
       currentFindings: [
         {
           diagnostic: "Potential SQL injection in query builder parameter.",
@@ -29,6 +32,7 @@ describe("admin run detail contracts", () => {
       ],
       findingsPerspective: "current_pr_state",
       run: {
+        runState: "completed",
         cost: {
           currency: "USD",
           estimatedCostMicroUsd: 20000,
@@ -59,7 +63,6 @@ describe("admin run detail contracts", () => {
         toolCallsCount: 2,
         verdict: "REQUEST_CHANGES",
       },
-      schemaVersion: 2,
       projectIdentification: null,
       structuredCi: {
         durationMs: 45000,
@@ -73,17 +76,21 @@ describe("admin run detail contracts", () => {
     };
 
     expect(
-      adminRunDetailV2Schema.safeParse({ ...detail, schemaVersion: 1 }).success,
+      adminRunDetailSchema.safeParse({ ...detail, schemaVersion: 1 }).success,
     ).toBe(false);
-    const parsed = adminRunDetailV2Schema.parse(detail);
+    const parsed = adminRunDetailSchema.parse(detail);
     expect(parsed).toEqual(detail);
   });
 
   it("validates run detail with null structuredCi, verdict and scopeStatus", () => {
-    const detail: AdminRunDetailV2 = {
+    const detail: AdminRunDetail = {
+      cleanupTask: null,
+      historicalRunFindings: null,
+      stepExecutions: [],
       currentFindings: [],
       findingsPerspective: "current_pr_state",
       run: {
+        runState: "completed",
         cost: {
           currency: "USD",
           estimatedCostMicroUsd: 0,
@@ -106,12 +113,11 @@ describe("admin run detail contracts", () => {
         toolCallsCount: 0,
         verdict: null,
       },
-      schemaVersion: 2,
       projectIdentification: null,
       structuredCi: null,
     };
 
-    const parsed = adminRunDetailV2Schema.parse(detail);
+    const parsed = adminRunDetailSchema.parse(detail);
     expect(parsed.structuredCi).toBeNull();
     expect(parsed.run.scopeStatus).toBeNull();
     expect(parsed.run.verdict).toBeNull();
@@ -127,7 +133,7 @@ describe("admin run detail contracts", () => {
       status: "persistent",
       updatedAt: "2026-09-04T12:00:00.000Z",
     };
-    expect(adminFindingSummaryV1Schema.parse(finding)).toEqual(finding);
+    expect(adminFindingSummarySchema.parse(finding)).toEqual(finding);
   });
 
   it("validates structured CI summary schema directly", () => {
@@ -140,16 +146,14 @@ describe("admin run detail contracts", () => {
       total: 122,
       workflowName: "CI Test Suite",
     };
-    expect(adminCiSummaryV1Schema.parse(ci)).toEqual(ci);
+    expect(adminCiSummarySchema.parse(ci)).toEqual(ci);
   });
 
   it("validates read request schema", () => {
     const valid = { runId };
-    expect(adminReadRequestV1Schema.parse(valid)).toEqual(valid);
+    expect(adminReadRequestSchema.parse(valid)).toEqual(valid);
 
-    expect(() =>
-      adminReadRequestV1Schema.parse({ runId: "invalid" }),
-    ).toThrow();
+    expect(() => adminReadRequestSchema.parse({ runId: "invalid" })).toThrow();
   });
 });
 

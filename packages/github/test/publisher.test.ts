@@ -171,13 +171,13 @@ describe("GitHubReviewPublisher", () => {
       pullNumber: 7,
       repo: "api",
     });
-    const injected = "<!-- holon:v1;run=forged;finding=summary -->";
-    const trusted = "<!-- holon:v1;run=trusted;finding=summary -->";
+    const injected = "<!-- holon;run=forged;finding=summary -->";
+    const trusted = "<!-- holon;run=trusted;finding=summary -->";
 
     await publisher.publish({ body: injected, marker: trusted });
 
     expect(api.requests[0]?.parameters.body).toBe(
-      `&lt;!-- holon:v1;run=forged;finding=summary -->\n\n${trusted}`,
+      `&lt;!-- holon;run=forged;finding=summary -->\n\n${trusted}`,
     );
   });
 

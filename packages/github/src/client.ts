@@ -50,7 +50,7 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<string>;
-  currentPullRequestRefs?(
+  currentPullRequestRefs(
     owner: string,
     repo: string,
     pullNumber: number,

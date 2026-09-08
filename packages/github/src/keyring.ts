@@ -15,7 +15,6 @@ export interface GitHubAppKeyring {
 export interface GitHubAppKeyringEnv {
   readonly GITHUB_APP_ID: number | string;
   readonly GITHUB_APP_SLUG: string;
-  readonly GITHUB_APP_PRIVATE_KEY?: string | undefined;
   readonly GITHUB_APP_PRIVATE_KEY_CURRENT?: string | undefined;
   readonly GITHUB_APP_PRIVATE_KEY_PREVIOUS?: string | undefined;
 }
@@ -157,44 +156,20 @@ function parseAppId(value: number | string): number {
   return parsed;
 }
 
-/**
- * Resolves a GitHubAppKeyring from environment variables following the normative precedence rules:
- * - CURRENT + PREVIOUS + LEGACY: current = CURRENT, previous = PREVIOUS (LEGACY left for N-1 worker rollback).
- * - CURRENT + LEGACY: current = CURRENT, previous = LEGACY (during active migration).
- * - CURRENT only: current = CURRENT.
- * - LEGACY only: current = LEGACY.
- * - PREVIOUS only: throws TypeError (invalid standalone configuration).
- * - Missing all: throws TypeError.
- * - Identical keys: previous is safely discarded to avoid duplicate requests.
- */
 export function resolveGitHubAppKeyring(
   env: GitHubAppKeyringEnv,
 ): GitHubAppKeyring {
   const current = env.GITHUB_APP_PRIVATE_KEY_CURRENT?.trim();
   const previous = env.GITHUB_APP_PRIVATE_KEY_PREVIOUS?.trim();
-  const legacy = env.GITHUB_APP_PRIVATE_KEY?.trim();
-
-  let resolvedCurrent: string | undefined;
-  let resolvedPrevious: string | undefined;
-
-  if (current) {
-    resolvedCurrent = current;
-    if (previous) {
-      resolvedPrevious = previous;
-    } else if (legacy && legacy !== current) {
-      resolvedPrevious = legacy;
-    }
-  } else if (legacy) {
-    resolvedCurrent = legacy;
-  } else if (previous) {
+  if (!current) {
     throw new TypeError(
-      "Invalid GitHub App configuration: GITHUB_APP_PRIVATE_KEY_PREVIOUS cannot be configured without a CURRENT key",
-    );
-  } else {
-    throw new TypeError(
-      "Missing GitHub App private key: configure GITHUB_APP_PRIVATE_KEY_CURRENT or GITHUB_APP_PRIVATE_KEY",
+      previous
+        ? "GITHUB_APP_PRIVATE_KEY_PREVIOUS cannot be configured without a CURRENT key"
+        : "Missing GitHub App private key: configure GITHUB_APP_PRIVATE_KEY_CURRENT",
     );
   }
+  const resolvedCurrent = current;
+  let resolvedPrevious = previous;
 
   // Deduplicate if identical
   if (

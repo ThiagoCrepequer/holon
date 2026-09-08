@@ -180,7 +180,7 @@ describe("downstream-tracer", () => {
     const repoFiles = [
       {
         content:
-          "import { calculateTotals } from './billing';\nconst res = calculateTotals(cart);\n",
+          "import { calculateTotals ,} from './billing';\nconst res = calculateTotals(cart);\n",
         path: "src/checkout.ts",
       },
       {
@@ -283,7 +283,7 @@ describe("contract-break-detector", () => {
       {
         callerLine: 5,
         callerPath: "apps/control-plane/src/worker.ts",
-        excerpt: "import { internalHelper } from './review-context'",
+        excerpt: "import { internalHelper ,} from './review-context'",
         symbolName: "internalHelper",
         targetPath: "apps/repository-executor/src/review-context.ts",
       },
@@ -486,7 +486,7 @@ describe("analyzeStructuralImpact", () => {
 
     const repositoryFiles = [
       {
-        content: "import { compute } from './core';\ncompute();\n",
+        content: "import { compute ,} from './core';\ncompute();\n",
         path: "src/app.ts",
       },
     ];

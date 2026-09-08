@@ -45,17 +45,7 @@ const envelopeShape = {
   repository: repositorySchema,
 } as const;
 
-export const webhookEnvelopeV1Schema = z.strictObject({
-  ...envelopeShape,
-  pullRequest: z.strictObject({
-    baseSha: gitShaSchema,
-    headSha: gitShaSchema,
-    number: positiveIntegerSchema,
-  }),
-  schemaVersion: z.literal(1),
-});
-
-export const webhookEnvelopeV2Schema = z.strictObject({
+export const webhookEnvelopeSchema = z.strictObject({
   ...envelopeShape,
   pullRequest: z.strictObject({
     baseSha: gitShaSchema,
@@ -63,27 +53,12 @@ export const webhookEnvelopeV2Schema = z.strictObject({
     number: positiveIntegerSchema,
     updatedAt: z.iso.datetime({ offset: true }),
   }),
-  schemaVersion: z.literal(2),
 });
 
-export const webhookEnvelopeSchema = z.union([
-  webhookEnvelopeV2Schema,
-  webhookEnvelopeV1Schema,
-]);
-
-export const reviewJobV1Schema = z
+export const reviewJobSchema = z
   .strictObject({
-    envelope: webhookEnvelopeV1Schema,
+    envelope: webhookEnvelopeSchema,
     runId: runIdSchema,
-    schemaVersion: z.literal(1),
-  })
-  .superRefine(validateReviewJobIdentity);
-
-export const reviewJobV2Schema = z
-  .strictObject({
-    envelope: webhookEnvelopeV2Schema,
-    runId: runIdSchema,
-    schemaVersion: z.literal(2),
   })
   .superRefine(validateReviewJobIdentity);
 
@@ -111,11 +86,6 @@ function validateReviewJobIdentity(
   }
 }
 
-export const reviewJobSchema = z.union([reviewJobV2Schema, reviewJobV1Schema]);
-
-export type WebhookEnvelopeV1 = z.infer<typeof webhookEnvelopeV1Schema>;
-export type WebhookEnvelopeV2 = z.infer<typeof webhookEnvelopeV2Schema>;
 export type WebhookEnvelope = z.infer<typeof webhookEnvelopeSchema>;
-export type ReviewJobV1 = z.infer<typeof reviewJobV1Schema>;
-export type ReviewJobV2 = z.infer<typeof reviewJobV2Schema>;
+
 export type ReviewJob = z.infer<typeof reviewJobSchema>;

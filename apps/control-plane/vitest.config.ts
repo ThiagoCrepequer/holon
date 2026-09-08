@@ -18,8 +18,8 @@ export default defineConfig({
               export default class RepositoryExecutorCurrent extends WorkerEntrypoint {
                 cleanup() {}
                 hasContext() { return false; }
-                loadContextV4() { throw new Error("unused"); }
-                prepareRepositoryV3() { throw new Error("unused"); }
+                loadContext() { throw new Error("unused"); }
+                prepareRepository() { throw new Error("unused"); }
                 runTool() { throw new Error("unused"); }
               }
             `,

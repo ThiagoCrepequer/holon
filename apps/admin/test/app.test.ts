@@ -1,4 +1,4 @@
-import type { AdminRunProjectionEventV1 } from "@holon/contracts";
+import type { AdminRunProjectionEvent } from "@holon/contracts";
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,14 +50,14 @@ describe("apps/admin worker composition", () => {
       messages: [
         {
           ack: ackMock,
-          body: {} as AdminRunProjectionEventV1,
+          body: {} as AdminRunProjectionEvent,
           id: "msg-1",
           retry: vi.fn(),
           timestamp: new Date(),
         },
       ],
       queue: "holon-admin-projections",
-    } as unknown as MessageBatch<AdminRunProjectionEventV1>;
+    } as unknown as MessageBatch<AdminRunProjectionEvent>;
 
     const ctx = {
       waitUntil: vi.fn(),

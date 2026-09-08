@@ -8,7 +8,7 @@ import {
 
 const fakeEnv = {
   GITHUB_APP_ID: "12345",
-  GITHUB_APP_PRIVATE_KEY: "fake-key",
+  GITHUB_APP_PRIVATE_KEY_CURRENT: "fake-key",
   GITHUB_APP_SLUG: "holon-reviewer",
 } as unknown as Cloudflare.Env;
 
@@ -252,7 +252,7 @@ describe("CI Enrichment Service", () => {
       iterate: async function* () {
         yield [
           {
-            body: "Original summary\n\n<!-- holon:v1;run=github%3A42%3Apr%3A7%3Ahead%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;finding=summary -->",
+            body: "Original summary\n\n<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;finding=summary -->",
             id: 999,
             user: { login: "holon-reviewer[bot]", type: "Bot" },
           },

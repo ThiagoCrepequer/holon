@@ -1,7 +1,7 @@
 import { createReviewRun } from "@holon/application";
 import {
-  reviewJobV2Schema,
-  type ReviewContextV2,
+  reviewJobSchema,
+  type ReviewShardContext,
   type ReviewJob,
   type ModelReviewOutput,
 } from "@holon/contracts";
@@ -18,10 +18,11 @@ import {
   parseAppId,
   type ReviewRuntime,
 } from "../src/review-workflow.js";
+import { unconfiguredExecutor } from "./executor-fixture.js";
 
 afterEach(() => reset());
 
-const job = reviewJobV2Schema.parse({
+const job = reviewJobSchema.parse({
   envelope: {
     action: "opened",
     deliveryId: "github:delivery-123",
@@ -40,10 +41,8 @@ const job = reviewJobV2Schema.parse({
       name: "api",
       owner: "acme",
     },
-    schemaVersion: 2,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 2,
 });
 
 const canonicalPatch = [
@@ -54,10 +53,9 @@ const canonicalPatch = [
   "+return null;",
 ].join("\n");
 
-const context: ReviewContextV2 = {
+const context: ReviewShardContext = {
   changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
   files: [{ mode: "structural", patch: canonicalPatch, path: "src/index.ts" }],
-  schemaVersion: 2,
   truncated: false,
 };
 
@@ -133,6 +131,7 @@ it("publishes the latest human severity even when feedback arrives after analysi
   await ledger.savePrFindings("github:42:pr:7", [
     {
       fingerprint,
+      evidenceFingerprint: fingerprint.slice(3),
       diagnostic: finding.diagnostic,
       filePath: finding.location.path,
       line: 10,
@@ -192,17 +191,19 @@ it("reconstructs persisted versions, usage and start time when callbacks are rep
     ],
   });
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-  const review = vi.fn(async (_job: ReviewJob, _context: ReviewContextV2) => {
-    await ledger.recordAnalysisUsage(job.runId, "test-model-call", {
-      inputTokens: 100,
-      outputTokens: 20,
-      toolCallsCount: 0,
-    });
-    return {
-      output: { findings: [], summary: "No issues." },
-      promptTruncated: false,
-    };
-  });
+  const review = vi.fn(
+    async (_job: ReviewJob, _context: ReviewShardContext) => {
+      await ledger.recordAnalysisUsage(job.runId, "test-model-call", {
+        inputTokens: 100,
+        outputTokens: 20,
+        toolCallsCount: 0,
+      });
+      return {
+        output: { findings: [], summary: "No issues." },
+        promptTruncated: false,
+      };
+    },
+  );
   const setup = runtime({
     model: () => ({ review }),
     now: () => new Date(Date.now()).toISOString(),
@@ -217,8 +218,9 @@ it("reconstructs persisted versions, usage and start time when callbacks are rep
       identify: async () => ({ selectedFactIds: ["fact-0"] }),
     },
     executor: {
+      ...unconfiguredExecutor,
       ...setup.value.executor!,
-      discoverProjectMetadataV1: async () => identification,
+      discoverProjectMetadata: async () => identification,
     },
   };
   const cache = new Map<string, unknown>();
@@ -270,6 +272,8 @@ function session(
       },
     },
     currentHeadSha: () => Promise.resolve(readHead()),
+    currentPullRequestRefs: () =>
+      Promise.resolve({ baseSha: "b".repeat(40), headSha: readHead() }),
     expectedAuthorLogin: "holon-reviewer[bot]",
     expiresAt: "2026-08-29T13:00:00.000Z",
     pullRequestDiff: () => Promise.resolve(canonicalPatch),
@@ -280,7 +284,7 @@ function session(
 function runtime(
   options: {
     readonly containerId?: string | null;
-    readonly context?: ReviewContextV2;
+    readonly context?: ReviewShardContext;
     readonly head?: () => string;
     readonly logger?: ReviewRuntime["logger"];
     readonly model?: ReviewRuntime["createModel"];
@@ -297,13 +301,12 @@ function runtime(
   const cleanup = vi.fn(() => Promise.resolve());
   const resolvedContainerId = options.containerId ?? "f".repeat(64);
   const resolveContainerId = vi.fn(() => Promise.resolve(resolvedContainerId));
-  const prepareRepositoryV3 = vi.fn(() =>
+  const prepareRepository = vi.fn(() =>
     Promise.resolve({
       changedLineCount: (options.context ?? context).changedLines.length,
       contextBytes: 100,
       fileCount: (options.context ?? context).files.length,
       runId: job.runId,
-      schemaVersion: 3 as const,
       effectivePolicyDigest: "c".repeat(64),
       waiversCount: 0,
       truncated: false,
@@ -321,19 +324,19 @@ function runtime(
       })),
     createSession: () => Promise.resolve(session(posts, options.head)),
     executor: {
+      ...unconfiguredExecutor,
       cleanup,
       hasContext: () => Promise.resolve(true),
-      loadContextV4: () =>
+      loadContext: () =>
         Promise.resolve({
           ...(options.context ?? context),
-          schemaVersion: 4,
           effectivePolicyDigest: "c".repeat(64),
           policySource: "default",
           sourceDigest: null,
           verdictStrictness: "default",
           waiversCount: 0,
         }),
-      prepareRepositoryV3,
+      prepareRepository,
       ...(options.containerId === null ? {} : { resolveContainerId }),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
     },
@@ -342,7 +345,7 @@ function runtime(
     wait: () => Promise.resolve(),
     ...(options.workflow === undefined ? {} : { workflow: options.workflow }),
   };
-  return { cleanup, posts, prepareRepositoryV3, resolveContainerId, value };
+  return { cleanup, posts, prepareRepository, resolveContainerId, value };
 }
 
 function event(instanceId: string, customJob: ReviewJob = job) {
@@ -393,7 +396,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).rejects.toBeInstanceOf(TypeError);
-    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
+    expect(setup.prepareRepository).not.toHaveBeenCalled();
   });
 
   it("fails closed when the executor returns a malformed platform ID", async () => {
@@ -407,7 +410,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).rejects.toThrow("Executor returned an invalid container ID");
-    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
+    expect(setup.prepareRepository).not.toHaveBeenCalled();
   });
 
   it("publishes with fresh ledger and head authorization before each mutation", async () => {
@@ -578,7 +581,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
-    expect(setup.prepareRepositoryV3).not.toHaveBeenCalled();
+    expect(setup.prepareRepository).not.toHaveBeenCalled();
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await runInDurableObject(ledger, (_object, state) => {
       expect(
@@ -612,7 +615,7 @@ describe("ReviewWorkflow", () => {
       runId: oldRun.id,
     });
 
-    const newerJob = reviewJobV2Schema.parse({
+    const newerJob = reviewJobSchema.parse({
       ...job,
       envelope: {
         ...job.envelope,
@@ -684,7 +687,7 @@ describe("ReviewWorkflow", () => {
       runId: oldRun.id,
     });
 
-    const newerJob = reviewJobV2Schema.parse({
+    const newerJob = reviewJobSchema.parse({
       ...job,
       envelope: {
         ...job.envelope,
@@ -851,7 +854,6 @@ describe("ReviewWorkflow", () => {
       context: {
         changedLines: [],
         files: [],
-        schemaVersion: 2,
         truncated: false,
       },
       model: () => ({ review }),
@@ -890,7 +892,7 @@ describe("ReviewWorkflow", () => {
         duplicate.value,
       ),
     ).resolves.toEqual({ findingsPublished: 0, outcome: "duplicate" });
-    expect(duplicate.prepareRepositoryV3).not.toHaveBeenCalled();
+    expect(duplicate.prepareRepository).not.toHaveBeenCalled();
   });
 
   it("reprepares lost model context with fresh sessions and a bounded retry", async () => {
@@ -922,9 +924,10 @@ describe("ReviewWorkflow", () => {
         return Promise.resolve(session(posts));
       },
       executor: {
+        ...unconfiguredExecutor,
         ...setup.value.executor!,
         hasContext: () => Promise.resolve(contextExists),
-        prepareRepositoryV3: () => {
+        prepareRepository: () => {
           preparations += 1;
           if (preparations === 2) {
             const error = new Error(
@@ -939,7 +942,6 @@ describe("ReviewWorkflow", () => {
             contextBytes: 100,
             fileCount: 1,
             runId: job.runId,
-            schemaVersion: 3 as const,
             effectivePolicyDigest: "c".repeat(64),
             waiversCount: 0,
             truncated: false,
@@ -1149,9 +1151,8 @@ describe("ReviewWorkflow", () => {
     };
     const testRun = createReviewRun(jobWithCachedRun);
     await ledger.claimRun(
-      testRun,
+      { ...testRun, causalVersion: "2026-08-29T12:00:00.000Z" },
       "workflow-cached",
-      "2026-08-29T12:00:00.000Z",
     );
     await ledger.recordCheckRunId(cachedRunId, 555);
 
@@ -1170,6 +1171,11 @@ describe("ReviewWorkflow", () => {
             },
           },
           currentHeadSha: () => Promise.resolve("b".repeat(40)),
+          currentPullRequestRefs: () =>
+            Promise.resolve({
+              baseSha: "b".repeat(40),
+              headSha: "b".repeat(40),
+            }),
         });
       },
     };
@@ -1356,7 +1362,6 @@ describe("ReviewWorkflow", () => {
       context: {
         changedLines,
         files,
-        schemaVersion: 2,
         truncated: false,
       },
       model: () => ({
@@ -1408,7 +1413,6 @@ describe("ReviewWorkflow", () => {
       context: {
         changedLines,
         files,
-        schemaVersion: 2,
         truncated: false,
       },
       model: () => ({
@@ -1452,7 +1456,6 @@ describe("ReviewWorkflow", () => {
       context: {
         changedLines: [],
         files: [],
-        schemaVersion: 2,
         truncated: false,
       },
     });
@@ -1528,7 +1531,7 @@ describe("ReviewWorkflow", () => {
     let resolutions: NonNullable<ModelReviewOutput["resolutions"]> = [];
 
     const createJobForSha = (sha: string): ReviewJob =>
-      reviewJobV2Schema.parse({
+      reviewJobSchema.parse({
         ...job,
         envelope: {
           ...job.envelope,
@@ -1679,7 +1682,7 @@ describe("ReviewWorkflow", () => {
     const sha1 = "1".repeat(40);
     const sha2 = "2".repeat(40);
     const createJobForSha = (sha: string): ReviewJob =>
-      reviewJobV2Schema.parse({
+      reviewJobSchema.parse({
         ...job,
         envelope: {
           ...job.envelope,
@@ -1800,7 +1803,7 @@ describe("ReviewWorkflow", () => {
       posts,
     });
 
-    const targetJob: ReviewJob = reviewJobV2Schema.parse({
+    const targetJob: ReviewJob = reviewJobSchema.parse({
       ...job,
       envelope: {
         ...job.envelope,
@@ -1905,7 +1908,7 @@ describe("ReviewWorkflow", () => {
         },
       },
     });
-    setup.prepareRepositoryV3.mockImplementation(() => {
+    setup.prepareRepository.mockImplementation(() => {
       const error = new Error(
         "HOLON_REPOSITORY_PERMANENT:fetch:command-failed",
       );
@@ -1948,7 +1951,6 @@ describe("ReviewWorkflow", () => {
       context: {
         changedLines,
         files,
-        schemaVersion: 2,
         truncated: false,
       },
       model: () => ({
@@ -2072,10 +2074,12 @@ it("records identified versions and supplies them to the review only in enrich m
       { path: "package.json", content: '{"dependencies":{"react":"19.0.0"}}' },
     ],
   });
-  const review = vi.fn(async (_job: ReviewJob, _context: ReviewContextV2) => ({
-    output: { findings: [], summary: "No issues." },
-    promptTruncated: false,
-  }));
+  const review = vi.fn(
+    async (_job: ReviewJob, _context: ReviewShardContext) => ({
+      output: { findings: [], summary: "No issues." },
+      promptTruncated: false,
+    }),
+  );
   const setup = runtime({ model: () => ({ review }) });
   const settings: Record<string, string> = {
     PROJECT_IDENTIFICATION_MODE: "enrich",
@@ -2092,14 +2096,15 @@ it("records identified versions and supplies them to the review only in enrich m
         identify: async () => ({ selectedFactIds: ["fact-0"] }),
       },
       executor: {
+        ...unconfiguredExecutor,
         ...setup.value.executor!,
-        discoverProjectMetadataV1: async () => result,
+        discoverProjectMetadata: async () => result,
       },
     },
   );
-  expect(names).toContain("discover-project-metadata-v1");
-  expect(names).toContain("identify-project-v1-0");
-  expect(names).toContain("record-project-identification-v1");
+  expect(names).toContain("discover-project-metadata");
+  expect(names).toContain("identify-project-0");
+  expect(names).toContain("record-project-identification");
   expect(review.mock.calls[0]?.[1]).toMatchObject({
     projectIdentification: {
       projects: [{ root: ".", technologies: [{ name: "react" }] }],
@@ -2150,11 +2155,12 @@ it("waits durably for an existing cache owner then reuses its result", async () 
       ...setup.value,
       identificationModel: { identify },
       executor: {
+        ...unconfiguredExecutor,
         ...setup.value.executor!,
-        discoverProjectMetadataV1: async () => result,
+        discoverProjectMetadata: async () => result,
       },
     },
   );
-  expect(names).toContain("wait-project-identification-v1-0-0");
+  expect(names).toContain("wait-project-identification-0-0");
   expect(identify).not.toHaveBeenCalled();
 });

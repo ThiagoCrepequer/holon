@@ -100,7 +100,6 @@ describe("D1AdminStorage", () => {
         observedRunId: "run-bad-1",
         payloadBytes: 128,
         computedPayloadHash: "a".repeat(64),
-        observedSchemaVersion: 1,
         errorCode: "INVALID_EVENT_SCHEMA",
         nowEpochMs: 1772582450000,
       });

@@ -9,7 +9,7 @@ export async function computeEvidenceFingerprint(
   evidence: readonly FindingEvidence[],
 ): Promise<string> {
   const canonical = JSON.stringify([
-    "evidence-v1",
+    "evidence",
     anchorPath,
     [
       ...new Set(

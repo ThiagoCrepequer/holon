@@ -7,22 +7,21 @@ import type {
   ReviewLedger,
 } from "@holon/application";
 import {
-  projectIdentificationResultV1Schema,
-  type ProjectIdentificationResultV1,
+  projectIdentificationResultSchema,
+  type ProjectIdentificationResult,
 } from "@holon/contracts";
 import {
-  adminCiSummaryV1Schema,
-  adminCleanupTaskSummaryV1Schema,
-  adminFindingSummaryV1Schema,
-  adminRunDetailV2Schema,
-  adminRunDetailV3Schema,
-  adminRunProjectionEventV1Schema,
+  adminCiSummarySchema,
+  adminCleanupTaskSummarySchema,
+  adminFindingSummarySchema,
+  adminRunDetailSchema,
+  adminRunProjectionEventSchema,
   githubCredentialRequestSchema,
   positiveIntegerSchema,
   publicationIdSchema,
   publicationRecordSchema,
   runClaimSchema,
-  runClaimV2ResultSchema,
+  runClaimResultSchema,
   runIdSchema,
   runStateSchema,
   runTelemetrySchema,
@@ -33,15 +32,14 @@ import {
   timestampSchema,
   limitReviewText,
   reviewTextLimits,
-  type AdminCiSummaryV1,
-  type AdminFindingSummaryV1,
-  type AdminRunDetailV2,
-  type AdminRunDetailV3,
-  type AdminRunProjectionEventV1,
+  type AdminCiSummary,
+  type AdminFindingSummary,
+  type AdminRunDetail,
+  type AdminRunProjectionEvent,
   type FindingFeedbackRecord,
   type GitHubCredentialRequest,
   type RunTelemetry,
-  type RunClaimV2Result,
+  type RunClaimResult,
   type StepAttemptTelemetry,
   type StepExecutionNode,
   type SupersededWorkflow,
@@ -211,26 +209,9 @@ export class ReviewLedgerObject
   public async claimRun(
     rawRun: ReviewRun,
     rawWorkflowInstanceId: string,
-    rawCausalVersion?: string,
-  ): Promise<"claimed" | "duplicate" | "resume"> {
-    const result = this.claimRunInternal(
-      rawRun,
-      rawWorkflowInstanceId,
-      rawCausalVersion,
-    );
-    if (result.supersededWorkflows.length > 0) {
-      await this.ensureMaintenanceAlarm();
-    }
-    return result.outcome;
-  }
-
-  public async claimRunV2(
-    rawRun: ReviewRun,
-    rawWorkflowInstanceId: string,
-    rawCausalVersion?: string,
-  ): Promise<RunClaimV2Result> {
-    const result = runClaimV2ResultSchema.parse(
-      this.claimRunInternal(rawRun, rawWorkflowInstanceId, rawCausalVersion),
+  ): Promise<RunClaimResult> {
+    const result = runClaimResultSchema.parse(
+      this.claimRunInternal(rawRun, rawWorkflowInstanceId),
     );
     if (result.supersededWorkflows.length > 0) {
       await this.ensureMaintenanceAlarm();
@@ -241,15 +222,12 @@ export class ReviewLedgerObject
   private claimRunInternal(
     rawRun: ReviewRun,
     rawWorkflowInstanceId: string,
-    rawCausalVersion?: string,
-  ): RunClaimV2Result {
+  ): RunClaimResult {
     const { run, workflowInstanceId } = runClaimSchema.parse({
       run: rawRun,
       workflowInstanceId: rawWorkflowInstanceId,
     });
-    const causalVersion = normalizedTimestamp(
-      rawCausalVersion ?? run.causalVersion ?? run.createdAt,
-    );
+    const causalVersion = normalizedTimestamp(run.causalVersion);
     const receivedAt = normalizedTimestamp(run.createdAt);
     const sql = this.ctx.storage.sql;
     const existing = sql
@@ -491,9 +469,6 @@ export class ReviewLedgerObject
 
   public registerCredentialScope(raw: GitHubCredentialRequest): Promise<void> {
     const request = githubCredentialRequestSchema.parse(raw);
-    if (request.installationId === undefined) {
-      throw new TypeError("Credential scope is invalid");
-    }
     if (
       this.latestRunId() !== request.runId ||
       !["running", "publishing"].includes(
@@ -513,55 +488,6 @@ export class ReviewLedgerObject
     return Promise.resolve();
   }
 
-  public bootstrapCredentialScope(
-    raw: GitHubCredentialRequest,
-  ): Promise<boolean> {
-    const request = githubCredentialRequestSchema.parse(raw);
-    if (request.installationId === undefined) {
-      return Promise.resolve(false);
-    }
-    const installationId = request.installationId;
-    let authorized = false;
-    this.ctx.storage.transactionSync(() => {
-      authorized =
-        this.latestRunId() === request.runId &&
-        ["running", "publishing"].includes(
-          this.runState(request.runId as RunId) ?? "",
-        ) &&
-        this.insertCredentialScope({
-          ...request,
-          installationId,
-        });
-    });
-    return Promise.resolve(authorized);
-  }
-
-  public canBootstrapCredentialScope(
-    raw: GitHubCredentialRequest,
-  ): Promise<boolean> {
-    const parsed = githubCredentialRequestSchema.safeParse(raw);
-    if (!parsed.success) return Promise.resolve(false);
-    const request = parsed.data;
-    if (
-      this.latestRunId() !== request.runId ||
-      !["running", "publishing"].includes(
-        this.runState(request.runId as RunId) ?? "",
-      )
-    ) {
-      return Promise.resolve(false);
-    }
-    const existing = this.credentialScope(request.runId);
-    return Promise.resolve(
-      existing === undefined ||
-        (existing.container_id === request.containerId &&
-          (request.installationId === undefined ||
-            existing.installation_id === request.installationId) &&
-          existing.repository_id === request.repositoryId &&
-          existing.repository_name === request.repositoryName &&
-          existing.repository_owner === request.repositoryOwner),
-    );
-  }
-
   public authorizeCredential(raw: GitHubCredentialRequest): Promise<boolean> {
     const parsed = githubCredentialRequestSchema.safeParse(raw);
     if (!parsed.success) return Promise.resolve(false);
@@ -578,8 +504,7 @@ export class ReviewLedgerObject
     return Promise.resolve(
       scope !== undefined &&
         scope.container_id === request.containerId &&
-        (request.installationId === undefined ||
-          scope.installation_id === request.installationId) &&
+        scope.installation_id === request.installationId &&
         scope.repository_id === request.repositoryId &&
         scope.repository_name === request.repositoryName &&
         scope.repository_owner === request.repositoryOwner,
@@ -1244,7 +1169,7 @@ export class ReviewLedgerObject
     evidence: {
       readonly markdown: string;
       readonly workflowRunId?: number;
-      readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+      readonly structuredCi?: AdminCiSummary | null | undefined;
     },
   ): Promise<void> {
     const structuredCiJson =
@@ -1273,7 +1198,7 @@ export class ReviewLedgerObject
     | {
         readonly markdown: string;
         readonly workflowRunId?: number | undefined;
-        readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+        readonly structuredCi?: AdminCiSummary | null | undefined;
       }
     | undefined
   > {
@@ -1290,10 +1215,10 @@ export class ReviewLedgerObject
       .toArray();
     const first = rows[0];
     if (!first) return Promise.resolve(undefined);
-    let structuredCi: AdminCiSummaryV1 | null = null;
+    let structuredCi: AdminCiSummary | null = null;
     if (first.structured_ci_json) {
       try {
-        structuredCi = adminCiSummaryV1Schema.parse(
+        structuredCi = adminCiSummarySchema.parse(
           JSON.parse(first.structured_ci_json),
         );
       } catch {
@@ -1361,9 +1286,9 @@ export class ReviewLedgerObject
   }
 
   public async recordProjectionTask(
-    rawEvent: AdminRunProjectionEventV1,
+    rawEvent: AdminRunProjectionEvent,
   ): Promise<void> {
-    const event = adminRunProjectionEventV1Schema.parse(rawEvent);
+    const event = adminRunProjectionEventSchema.parse(rawEvent);
     const requestedAt = event.payload.projectionRequestedAt;
 
     this.ctx.storage.sql.exec(
@@ -1468,9 +1393,9 @@ export class ReviewLedgerObject
 
   public async saveProjectIdentification(
     runId: string,
-    raw: ProjectIdentificationResultV1,
+    raw: ProjectIdentificationResult,
   ): Promise<void> {
-    const result = projectIdentificationResultV1Schema.parse(raw);
+    const result = projectIdentificationResultSchema.parse(raw);
     if (!runIdSchema.parse(runId).endsWith(":head:" + result.snapshotSha))
       throw new Error("Identification snapshot mismatch");
     const exists = this.ctx.storage.sql
@@ -1479,7 +1404,7 @@ export class ReviewLedgerObject
     if (!exists) throw new Error("Identification run unavailable");
     const key = "project-identification:" + runId;
     const existing =
-      await this.ctx.storage.get<ProjectIdentificationResultV1>(key);
+      await this.ctx.storage.get<ProjectIdentificationResult>(key);
     if (existing && JSON.stringify(existing) !== JSON.stringify(result))
       throw new Error("Identification snapshot already recorded");
     await this.ctx.storage.put(key, result);
@@ -1487,78 +1412,6 @@ export class ReviewLedgerObject
       inputTokens: result.usage?.inputTokens ?? 0,
       outputTokens: result.usage?.outputTokens ?? 0,
       toolCallsCount: 0,
-    });
-  }
-
-  public async getSanitizedAdminRunDetailV2(
-    rawRunId: string,
-  ): Promise<AdminRunDetailV2 | null> {
-    const runId = runIdSchema.parse(rawRunId);
-    const telemetry = await this.loadRunTelemetry(runId);
-    if (telemetry === undefined) return null;
-
-    const prKey = derivePrKeyFromRunId(runId);
-    const findingRows = this.ctx.storage.sql
-      .exec<{
-        diagnostic: string;
-        file_path: string;
-        fingerprint: string;
-        line: number;
-        severity: "critical" | "high" | "medium" | "low";
-        status:
-          | "new"
-          | "persistent"
-          | "resolved"
-          | "obsolete"
-          | "reintroduced"
-          | "dismissed";
-        updated_at: string;
-      }>(
-        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
-         FROM pr_findings
-         WHERE pr_key = ?
-         ORDER BY updated_at DESC, fingerprint ASC
-         LIMIT 100`,
-        prKey,
-      )
-      .toArray();
-
-    const currentFindings = findingRows.map((row) =>
-      adminFindingSummaryV1Schema.parse({
-        diagnostic: sanitizeDiagnostic(row.diagnostic),
-        filePath: row.file_path,
-        fingerprint: row.fingerprint,
-        line: row.line,
-        severity: row.severity,
-        status: row.status,
-        updatedAt: row.updated_at,
-      }),
-    );
-
-    const ciEvidence = await this.loadCiEvidence(prKey, telemetry.headSha);
-    const structuredCi = ciEvidence?.structuredCi ?? null;
-
-    return adminRunDetailV2Schema.parse({
-      currentFindings,
-      findingsPerspective: "current_pr_state",
-      projectIdentification:
-        (await this.ctx.storage.get("project-identification:" + runId)) ?? null,
-      run: {
-        cost: telemetry.cost,
-        headSha: telemetry.headSha,
-        isDegraded: telemetry.isDegraded,
-        prKey: telemetry.prKey,
-        runId: telemetry.runId,
-        scopeStatus: telemetry.scopeStatus,
-        shardsCount: telemetry.shardsCount,
-        stepTimings: telemetry.stepTimings,
-        terminalState: telemetry.terminalState,
-        tokens: telemetry.tokens,
-        toolCallsCount: telemetry.toolCallsCount,
-        verdict: telemetry.verdict ?? null,
-      },
-      schemaVersion: 2,
-      structuredCi,
     });
   }
 
@@ -1925,9 +1778,9 @@ export class ReviewLedgerObject
     );
   }
 
-  public async getSanitizedAdminRunDetailV3(
+  public async getSanitizedAdminRunDetail(
     rawRunId: string,
-  ): Promise<AdminRunDetailV3 | null> {
+  ): Promise<AdminRunDetail | null> {
     const runId = runIdSchema.parse(rawRunId);
     const prKey = derivePrKeyFromRunId(runId);
 
@@ -1993,7 +1846,7 @@ export class ReviewLedgerObject
       .toArray();
 
     const currentFindings = currentFindingRows.map((row) =>
-      adminFindingSummaryV1Schema.parse({
+      adminFindingSummarySchema.parse({
         diagnostic: sanitizeDiagnostic(row.diagnostic),
         filePath: row.file_path,
         fingerprint: row.fingerprint,
@@ -2011,18 +1864,18 @@ export class ReviewLedgerObject
       )
       .toArray()[0];
 
-    let historicalRunFindings: AdminFindingSummaryV1[] | null = null;
+    let historicalRunFindings: AdminFindingSummary[] | null = null;
     const parsedOutput = safeJsonParse(
       analyzeStepRow?.sanitized_output_json ?? null,
     );
     if (parsedOutput && Array.isArray(parsedOutput.historicalFindings)) {
       historicalRunFindings = parsedOutput.historicalFindings
         .map((item: unknown) => {
-          const res = adminFindingSummaryV1Schema.safeParse(item);
+          const res = adminFindingSummarySchema.safeParse(item);
           return res.success ? res.data : null;
         })
         .filter(
-          (item: AdminFindingSummaryV1 | null): item is AdminFindingSummaryV1 =>
+          (item: AdminFindingSummary | null): item is AdminFindingSummary =>
             item !== null,
         );
     }
@@ -2034,7 +1887,7 @@ export class ReviewLedgerObject
       : null;
     const structuredCi = ciEvidence?.structuredCi ?? null;
     const projectIdentification =
-      (await this.ctx.storage.get<ProjectIdentificationResultV1>(
+      (await this.ctx.storage.get<ProjectIdentificationResult>(
         "project-identification:" + runId,
       )) ?? null;
 
@@ -2055,7 +1908,7 @@ export class ReviewLedgerObject
 
     const cleanupTask =
       cleanupRows.length > 0
-        ? adminCleanupTaskSummaryV1Schema.parse({
+        ? adminCleanupTaskSummarySchema.parse({
             attempts: cleanupRows[0]!.attempts,
             completedAt: cleanupRows[0]!.completed_at,
             nextAttemptAt: cleanupRows[0]!.next_attempt_at,
@@ -2082,11 +1935,11 @@ export class ReviewLedgerObject
           : "historical_run"
         : "current_pr_state";
 
-    return adminRunDetailV3Schema.parse({
+    return adminRunDetailSchema.parse({
       cleanupTask,
       currentFindings,
       findingsPerspective,
-      graphSchemaVersion: 1,
+
       historicalRunFindings,
       projectIdentification,
       run: {
@@ -2112,7 +1965,6 @@ export class ReviewLedgerObject
         updatedAt: runRow.updated_at,
         verdict: telemetry?.verdict ?? null,
       },
-      schemaVersion: 3,
       stepExecutions: [...stepExecutions],
       structuredCi,
     });

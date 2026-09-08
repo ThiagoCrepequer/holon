@@ -34,7 +34,6 @@ export const reviewShardSchema = z.strictObject({
 
 export const reviewPlanSchema = z.strictObject({
   omissionReasons: z.array(z.string().min(1).max(300)),
-  schemaVersion: z.literal(2),
   scopeStatus: reviewScopeStatusSchema,
   shards: z.array(reviewShardSchema).max(20),
   totalEligibleBytes: z.number().int().nonnegative(),

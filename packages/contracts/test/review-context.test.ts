@@ -1,12 +1,8 @@
 import { expect, it } from "vitest";
 
-import {
-  reviewContextV3Schema,
-  reviewContextV4Schema,
-} from "../src/executor.js";
+import { reviewContextSchema } from "../src/executor.js";
 
 const context = {
-  schemaVersion: 4,
   changedLines: [],
   files: Array.from({ length: 5 }, (_, i) => ({
     path: `src/module${i}.ts`,
@@ -20,18 +16,15 @@ const context = {
   waiversCount: 0,
   truncated: false,
 };
-it("accepts 300 kB of complete planned patches only under context V4", () => {
-  expect(reviewContextV4Schema.safeParse(context).success).toBe(true);
+it("accepts 300 kB of complete planned patches and rejects retired transport fields", () => {
+  expect(reviewContextSchema.safeParse(context).success).toBe(true);
   expect(
-    reviewContextV3Schema.safeParse({ ...context, schemaVersion: 3 }).success,
-  ).toBe(false);
-  expect(
-    reviewContextV4Schema.safeParse({ ...context, schemaVersion: 3 }).success,
+    reviewContextSchema.safeParse({ ...context, schemaVersion: 3 }).success,
   ).toBe(false);
 });
 it("counts UTF-8 bytes for aggregate and individual patch limits", () => {
   expect(
-    reviewContextV4Schema.safeParse({
+    reviewContextSchema.safeParse({
       ...context,
       files: [
         ...context.files,
@@ -40,7 +33,7 @@ it("counts UTF-8 bytes for aggregate and individual patch limits", () => {
     }).success,
   ).toBe(false);
   expect(
-    reviewContextV4Schema.safeParse({
+    reviewContextSchema.safeParse({
       ...context,
       files: [{ ...context.files[0], patch: "語".repeat(20_000) + "x" }],
     }).success,

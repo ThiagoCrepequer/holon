@@ -23,7 +23,7 @@ function sandbox(searchResult: {
   const readFile = vi.fn((path: string) =>
     Promise.resolve(
       path.endsWith("consumer.ts")
-        ? "import { loadUser } from './service';\nloadUser('42');"
+        ? "import { loadUser ,} from './service';\nloadUser('42');"
         : "loadUser('duplicate');",
     ),
   );
@@ -63,7 +63,7 @@ describe("structural repository inventory", () => {
     expect(inventory).toEqual({
       files: [
         {
-          content: "import { loadUser } from './service';\nloadUser('42');",
+          content: "import { loadUser ,} from './service';\nloadUser('42');",
           path: "src/consumer.ts",
         },
       ],

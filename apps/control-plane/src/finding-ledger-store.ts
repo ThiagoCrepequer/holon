@@ -21,7 +21,7 @@ import {
 } from "@holon/domain";
 
 interface PrFindingRow extends Record<string, SqlStorageValue> {
-  evidence_fingerprint: string | null;
+  evidence_fingerprint: string;
   confidence: number;
   diagnostic: string;
   file_path: string;
@@ -65,9 +65,7 @@ interface ReviewDecisionRow extends Record<string, SqlStorageValue> {
 
 function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
   return trackedFindingSchema.parse({
-    ...(row.evidence_fingerprint == null
-      ? {}
-      : { evidenceFingerprint: row.evidence_fingerprint }),
+    evidenceFingerprint: row.evidence_fingerprint,
     confidence: row.confidence,
     diagnostic: row.diagnostic,
     filePath: row.file_path,
@@ -160,7 +158,7 @@ export class FindingLedgerStore {
              github_comment_id = COALESCE(excluded.github_comment_id, pr_findings.github_comment_id),
              updated_at = MAX(excluded.updated_at, pr_findings.updated_at),
              confidence = excluded.confidence,
-             evidence_fingerprint = COALESCE(excluded.evidence_fingerprint, pr_findings.evidence_fingerprint)`,
+             evidence_fingerprint = excluded.evidence_fingerprint`,
           prKey,
           finding.fingerprint,
           finding.firstSeenRunId,
@@ -174,8 +172,8 @@ export class FindingLedgerStore {
           finding.diagnostic,
           finding.githubCommentId ?? null,
           finding.updatedAt,
-          finding.confidence ?? 1,
-          finding.evidenceFingerprint ?? null,
+          finding.confidence,
+          finding.evidenceFingerprint,
         );
       }
     });

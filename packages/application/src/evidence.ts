@@ -1,4 +1,4 @@
-import type { ReviewContextV2 } from "@holon/contracts";
+import type { ReviewShardContext } from "@holon/contracts";
 import {
   createFinding,
   type Finding,
@@ -36,7 +36,7 @@ function normalizeEvidenceText(value: string): string {
 
 function evidenceAppearsInPatch(
   evidence: FindingEvidence,
-  context: ReviewContextV2,
+  context: ReviewShardContext,
 ): boolean {
   const file = context.files.find(
     (candidate) => candidate.path === evidence.path,
@@ -60,7 +60,7 @@ function evidenceAppearsInPatch(
 
 export function selectFindingsWithCanonicalEvidence(
   candidates: readonly FindingCandidate[],
-  context: ReviewContextV2,
+  context: ReviewShardContext,
 ): readonly Finding[] {
   return candidates.flatMap((candidate) => {
     if (

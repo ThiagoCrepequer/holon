@@ -9,7 +9,6 @@ import {
 export interface ReviewScopePolicy {
   readonly additionalExcludes: readonly string[];
   readonly deniedPaths: readonly string[];
-  readonly schemaVersion: 2;
 }
 
 const maximumPolicyBytes = 500_000;
@@ -58,7 +57,6 @@ export function createReviewScopePolicy(
   return {
     additionalExcludes: canonicalExcludes,
     deniedPaths: canonicalDeniedPaths(deniedPaths),
-    schemaVersion: 2,
   };
 }
 
@@ -68,7 +66,6 @@ export function serializeReviewScopePolicy(policy: ReviewScopePolicy): string {
       ...new Set(policy.additionalExcludes),
     ]),
     deniedPaths: canonicalDeniedPaths(policy.deniedPaths),
-    schemaVersion: 2,
   });
   if (new TextEncoder().encode(serialized).byteLength > maximumPolicyBytes) {
     throw new RangeError("Review-scope policy exceeds its byte limit");
@@ -85,31 +82,13 @@ export function parseReviewScopePolicy(serialized: string): ReviewScopePolicy {
     throw new TypeError("Review-scope policy must be an object");
   }
   const candidate = value as Record<string, unknown>;
-  const schemaVersion = candidate.schemaVersion;
-
-  if (schemaVersion === 1) {
-    const rawDeniedPaths = candidate.deniedPaths;
-    if (
-      !Array.isArray(rawDeniedPaths) ||
-      rawDeniedPaths.some((path) => typeof path !== "string")
-    ) {
-      throw new TypeError("Review-scope policy has an invalid shape");
-    }
-    return {
-      additionalExcludes: [],
-      deniedPaths: canonicalDeniedPaths(rawDeniedPaths as readonly string[]),
-      schemaVersion: 2,
-    };
-  }
-
-  if (schemaVersion !== 2) {
-    throw new TypeError("Review-scope policy has an unsupported schemaVersion");
-  }
-
   const rawDeniedPaths = candidate.deniedPaths;
   const rawAdditionalExcludes = candidate.additionalExcludes;
 
   if (
+    Object.keys(candidate).some(
+      (key) => key !== "deniedPaths" && key !== "additionalExcludes",
+    ) ||
     !Array.isArray(rawDeniedPaths) ||
     rawDeniedPaths.some((path) => typeof path !== "string") ||
     !Array.isArray(rawAdditionalExcludes) ||
@@ -126,7 +105,6 @@ export function parseReviewScopePolicy(serialized: string): ReviewScopePolicy {
   return {
     additionalExcludes,
     deniedPaths,
-    schemaVersion: 2,
   };
 }
 

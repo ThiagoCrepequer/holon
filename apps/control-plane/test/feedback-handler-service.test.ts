@@ -65,6 +65,7 @@ function session(permission = "write") {
   const value: GitHubInstallationSession = {
     api: {} as never,
     currentHeadSha: vi.fn(),
+    currentPullRequestRefs: vi.fn(),
     expectedAuthorLogin: "holon-reviewer[bot]",
     expiresAt: "2026-09-02T11:00:00.000Z",
     pullRequestDiff: vi.fn(),
@@ -105,7 +106,7 @@ const threadEvent: ReviewThreadWebhookEvent = {
 
 const fakeEnv = {
   GITHUB_APP_ID: "123",
-  GITHUB_APP_PRIVATE_KEY: "private-key",
+  GITHUB_APP_PRIVATE_KEY_CURRENT: "private-key",
   GITHUB_APP_SLUG: "holon-reviewer",
 } as Cloudflare.Env;
 

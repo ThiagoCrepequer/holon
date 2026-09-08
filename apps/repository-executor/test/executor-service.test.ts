@@ -1,9 +1,8 @@
 import {
   executorRequestSchema,
-  executorRequestV3Schema,
   repositoryToolCallSchema,
-  reviewContextV4Schema,
-  type ReviewContextV4,
+  reviewContextSchema,
+  type ReviewContext,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,7 +13,7 @@ import {
   type SandboxPort,
 } from "../src/executor-service.js";
 
-const request = executorRequestV3Schema.parse({
+const request = executorRequestSchema.parse({
   baseSha: "b".repeat(40),
   canonicalDiff: [
     "diff --git a/src/index.ts b/src/index.ts",
@@ -28,7 +27,6 @@ const request = executorRequestV3Schema.parse({
   pullRequestNumber: 7,
   repositoryId: 42,
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 3,
   installationId: 99,
   repositoryName: "api",
   repositoryOwner: "acme",
@@ -39,7 +37,6 @@ const request = executorRequestV3Schema.parse({
     source: "default",
     sourceDigest: null,
     verdictStrictness: "default",
-    version: 1,
   },
 });
 const legacyInstallationToken = "installation-token-value";
@@ -60,7 +57,7 @@ class FakeSandbox implements SandboxPort {
   public readonly files = new Map<string, string>([
     [
       "/workspace/holon-review-scope.json",
-      JSON.stringify({ deniedPaths: [], schemaVersion: 1 }),
+      JSON.stringify({ deniedPaths: [], additionalExcludes: [] }),
     ],
   ]);
   public readonly readPaths: string[] = [];
@@ -179,10 +176,8 @@ class FakeSandbox implements SandboxPort {
 
 async function loadCurrentContext(
   service: RepositoryExecutorService,
-): Promise<ReviewContextV4> {
-  return reviewContextV4Schema.parse(
-    await service.loadContextV4(request.runId),
-  );
+): Promise<ReviewContext> {
+  return reviewContextSchema.parse(await service.loadContext(request.runId));
 }
 
 describe("RepositoryExecutorService", () => {
@@ -190,23 +185,20 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    for (const method of [
-      "prepare",
-      "prepareRepositoryV2",
-      "loadContext",
-      "loadContextV2",
-      "loadContextV3",
-    ])
-      expect(service).not.toHaveProperty(method);
+    expect(
+      Object.getOwnPropertyNames(Object.getPrototypeOf(service)).some((name) =>
+        /V\d/u.test(name),
+      ),
+    ).toBe(false);
     await expect(
-      service.prepareRepositoryV3({
+      service.prepareRepository({
         ...request,
-        schemaVersion: 2,
-      } as unknown as typeof request),
+        effectivePolicy: undefined,
+      }),
     ).rejects.toThrow();
     expect(sandbox.configured).toBeUndefined();
     await expect(service.hasContext(request.runId)).resolves.toBe(false);
-    await service.prepareRepositoryV3(request);
+    await service.prepareRepository(request);
     await expect(service.hasContext(request.runId)).resolves.toBe(true);
   });
 
@@ -217,14 +209,13 @@ describe("RepositoryExecutorService", () => {
       ["debug", "error", "info", "log", "warn"] as const
     ).map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
 
-    await expect(service.prepareRepositoryV3(request)).resolves.toMatchObject({
+    await expect(service.prepareRepository(request)).resolves.toMatchObject({
       changedLineCount: 1,
       fileCount: 1,
       runId: request.runId,
-      schemaVersion: 3,
       truncated: false,
     });
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         {
@@ -312,17 +303,14 @@ describe("RepositoryExecutorService", () => {
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 3,
     });
-    if (currentRequest.schemaVersion !== 3) throw new TypeError("Expected v3");
 
     await expect(
-      service.prepareRepositoryV3(currentRequest),
+      service.prepareRepository(currentRequest),
     ).resolves.toMatchObject({
       fileCount: 1,
-      schemaVersion: 3,
     });
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
       files: [
         {
@@ -331,7 +319,6 @@ describe("RepositoryExecutorService", () => {
           path: "src/index.ts",
         },
       ],
-      schemaVersion: 4,
       truncated: false,
     });
     expect(sandbox.configured).toMatchObject({
@@ -342,7 +329,7 @@ describe("RepositoryExecutorService", () => {
     });
   });
 
-  it("prepares repository and loads context under v3 protocol with policy enforcement", async () => {
+  it("prepares repository and loads context under the current contract with policy enforcement", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const policy = {
@@ -352,7 +339,6 @@ describe("RepositoryExecutorService", () => {
       source: ".github/holon.yml" as const,
       sourceDigest: "d".repeat(64),
       verdictStrictness: "block_all_confident_medium" as const,
-      version: 1 as const,
     };
     const canonicalDiff = [
       "diff --git a/src/index.ts b/src/index.ts",
@@ -362,25 +348,23 @@ describe("RepositoryExecutorService", () => {
       "-export function changed() { return 1; }",
       "+export function changed() { return 2; }",
     ].join("\n");
-    const requestV3 = executorRequestV3Schema.parse({
+    const policyRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff,
       effectivePolicy: policy,
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 3,
     });
 
-    await expect(service.prepareRepositoryV3(requestV3)).resolves.toMatchObject(
-      {
-        effectivePolicyDigest: "c".repeat(64),
-        fileCount: 1,
-        schemaVersion: 3,
-        waiversCount: 0,
-      },
-    );
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(
+      service.prepareRepository(policyRequest),
+    ).resolves.toMatchObject({
+      effectivePolicyDigest: "c".repeat(64),
+      fileCount: 1,
+      waiversCount: 0,
+    });
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
       effectivePolicyDigest: "c".repeat(64),
       files: [
@@ -391,7 +375,6 @@ describe("RepositoryExecutorService", () => {
         },
       ],
       policySource: ".github/holon.yml",
-      schemaVersion: 4,
       verdictStrictness: "block_all_confident_medium",
       waiversCount: 0,
     });
@@ -419,24 +402,21 @@ describe("RepositoryExecutorService", () => {
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 3,
     });
-    if (currentRequest.schemaVersion !== 3) throw new TypeError("Expected v3");
 
     await expect(
-      service.prepareRepositoryV3(currentRequest),
+      service.prepareRepository(currentRequest),
     ).resolves.toMatchObject({
       fileCount: 0,
-      schemaVersion: 3,
     });
-    const context = await service.loadContextV4(request.runId);
+    const context = await service.loadContext(request.runId);
     expect(context.files).toEqual([]);
     expect(JSON.stringify(context)).not.toMatch(
       /\.env\.production|super-secret|rotated-secret/u,
     );
     const policy = sandbox.files.get("/workspace/holon-review-scope.json");
     expect(policy).toBe(
-      '{"additionalExcludes":[],"deniedPaths":["config.txt"],"schemaVersion":2}',
+      '{"additionalExcludes":[],"deniedPaths":["config.txt"]}',
     );
     expect(policy).not.toMatch(/\.env\.production|secret/u);
 
@@ -485,7 +465,7 @@ describe("RepositoryExecutorService", () => {
   it("includes safe textual patches while ignoring binary, lock, generated, vendored and minified files", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const textualRequest = executorRequestV3Schema.parse({
+    const textualRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/README.md b/README.md",
@@ -526,9 +506,9 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepositoryV3(textualRequest),
+      service.prepareRepository(textualRequest),
     ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
       surface: [],
     });
@@ -552,7 +532,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "initialize",
@@ -572,7 +552,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "initialize",
@@ -594,7 +574,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -615,7 +595,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -637,7 +617,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -659,7 +639,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "fetch",
@@ -673,7 +653,7 @@ describe("RepositoryExecutorService", () => {
       Promise.reject(new SandboxRuntimeError(true, "timed-out"));
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
     });
@@ -692,7 +672,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
       retryable: true,
@@ -704,7 +684,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     await expect(
-      service.prepareRepositoryV3({ ...request, installationId: 0 }),
+      service.prepareRepository({ ...request, installationId: 0 }),
     ).rejects.toThrow("installationId");
     expect(sandbox.configured).toBeUndefined();
   });
@@ -765,7 +745,7 @@ describe("RepositoryExecutorService", () => {
   it("reviews deletion-only patches instead of treating them as an empty scope", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const deletionRequest = executorRequestV3Schema.parse({
+    const deletionRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/policy.ts b/src/policy.ts",
@@ -777,9 +757,9 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepositoryV3(deletionRequest),
+      service.prepareRepository(deletionRequest),
     ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [],
     });
     expect(
@@ -794,7 +774,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const largeLine = "x".repeat(58_000);
     const documentationLine = "d".repeat(5_000);
-    const mixedRequest = executorRequestV3Schema.parse({
+    const mixedRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/a.ts b/src/a.ts",
@@ -816,7 +796,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepositoryV3(mixedRequest),
+      service.prepareRepository(mixedRequest),
     ).resolves.toMatchObject({ fileCount: 3, truncated: false });
     const context = await loadCurrentContext(service);
     expect(context.files.map((file) => file.patch).join("\n")).toContain(
@@ -836,14 +816,26 @@ describe("RepositoryExecutorService", () => {
     sandbox.files.set(
       "/workspace/holon-review-context.json",
       JSON.stringify({
+        effectivePolicyDigest: "c".repeat(64),
+        policySource: "default",
+        sourceDigest: null,
+        verdictStrictness: "default",
+        waiversCount: 0,
+        truncated: false,
         changedLines: [{ line: 1, path: "README.md", side: "RIGHT" }],
-        diff: [
-          "diff --git a/README.md b/README.md",
-          "--- a/README.md",
-          "+++ b/README.md",
-          "@@ -0,0 +1 @@",
-          "+documentation",
-        ].join("\n"),
+        files: [
+          {
+            path: "README.md",
+            mode: "textual",
+            patch: [
+              "diff --git a/README.md b/README.md",
+              "--- a/README.md",
+              "+++ b/README.md",
+              "@@ -0,0 +1 @@",
+              "+documentation",
+            ].join("\n"),
+          },
+        ],
       }),
     );
 
@@ -901,14 +893,26 @@ describe("RepositoryExecutorService", () => {
     sandbox.files.set(
       "/workspace/holon-review-context.json",
       JSON.stringify({
+        effectivePolicyDigest: "c".repeat(64),
+        policySource: "default",
+        sourceDigest: null,
+        verdictStrictness: "default",
+        waiversCount: 0,
+        truncated: false,
         changedLines: [{ line: 1, path: "src/index.ts", side: "RIGHT" }],
-        diff: [
-          "diff --git a/src/index.ts b/src/index.ts",
-          "--- a/src/index.ts",
-          "+++ b/src/index.ts",
-          "@@ -0,0 +1 @@",
-          "+export const value = 1;",
-        ].join("\n"),
+        files: [
+          {
+            path: "src/index.ts",
+            mode: "structural",
+            patch: [
+              "diff --git a/src/index.ts b/src/index.ts",
+              "--- a/src/index.ts",
+              "+++ b/src/index.ts",
+              "@@ -0,0 +1 @@",
+              "+export const value = 1;",
+            ].join("\n"),
+          },
+        ],
       }),
     );
     const allowed = JSON.stringify({ file: "src/index.ts", text: "value" });
@@ -953,7 +957,7 @@ describe("RepositoryExecutorService", () => {
         : original(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepositoryV3(request)).rejects.toMatchObject({
+    await expect(service.prepareRepository(request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       stage: "prepare-context",
     });
@@ -1020,7 +1024,7 @@ describe("RepositoryExecutorService", () => {
   it("marks oversized diffs and file reads as truncated", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const oversizedRequest = executorRequestV3Schema.parse({
+    const oversizedRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/huge.ts b/src/huge.ts",
@@ -1031,7 +1035,7 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepareRepositoryV3(oversizedRequest);
+    const prepared = await service.prepareRepository(oversizedRequest);
     const context = await loadCurrentContext(service);
     expect(prepared.truncated).toBe(true);
     expect(prepared.fileCount).toBe(0);
@@ -1087,7 +1091,7 @@ describe("RepositoryExecutorService", () => {
   it("bounds changed-line coordinate amplification before persisting context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const amplifiedRequest = executorRequestV3Schema.parse({
+    const amplifiedRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         "diff --git a/src/index.ts b/src/index.ts",
@@ -1099,12 +1103,12 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepositoryV3(amplifiedRequest),
+      service.prepareRepository(amplifiedRequest),
     ).resolves.toMatchObject({
       changedLineCount: 5_000,
       truncated: true,
     });
-    await expect(service.loadContextV4(request.runId)).resolves.toMatchObject({
+    await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: expect.arrayContaining([
         { line: 5_000, path: "src/index.ts", side: "RIGHT" },
       ]),
@@ -1116,7 +1120,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const longPath = `src/${"coordinate".repeat(10)}.ts`;
-    const amplifiedRequest = executorRequestV3Schema.parse({
+    const amplifiedRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         `diff --git a/${longPath} b/${longPath}`,
@@ -1127,8 +1131,8 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepareRepositoryV3(amplifiedRequest);
-    const context = await service.loadContextV4(request.runId);
+    const prepared = await service.prepareRepository(amplifiedRequest);
+    const context = await service.loadContext(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
     expect(prepared.changedLineCount).toBeLessThan(5_000);

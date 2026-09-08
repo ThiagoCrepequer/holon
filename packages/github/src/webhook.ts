@@ -81,7 +81,6 @@ export function mapPullRequestWebhook(
       name: repository.name,
       owner: owner.login,
     },
-    schemaVersion: 2,
   });
 }
 

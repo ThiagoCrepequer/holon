@@ -1,8 +1,4 @@
-import type {
-  AdminRunDetailV2,
-  AdminRunDetailV3,
-  StepExecutionNode,
-} from "@holon/contracts";
+import type { AdminRunDetail, StepExecutionNode } from "@holon/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StaticRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -45,7 +41,6 @@ const baseRun: AdminRunRow = {
   projected_at_epoch_ms: 1_788_519_606_000,
   projection_delivery_lag_ms: 1_000,
   projection_requested_at: "2026-09-04T11:00:05.000Z",
-  record_version: 1,
   repository_id: 42,
   repository_name: "holon",
   repository_owner: "acme",
@@ -53,7 +48,6 @@ const baseRun: AdminRunRow = {
   review_phase_reached: "publishing",
   reasoning_tokens: 2,
   run_id: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schema_version: 1,
   scope_status: "complete",
   shards_count: 1,
   source_event_id: "event-1",
@@ -104,7 +98,7 @@ const baseSummary: AdminSummaryMetrics = {
   verdictDistribution: { approve: 8, comment: 1, requestChanges: 1 },
 };
 
-const detail: AdminRunDetailV2 = {
+const detail: AdminRunDetail = {
   currentFindings: [
     {
       diagnostic: "Critical diagnostic",
@@ -134,8 +128,12 @@ const detail: AdminRunDetailV2 = {
       updatedAt: "2026-09-04T11:00:05.000Z",
     },
   ],
+  cleanupTask: null,
+  historicalRunFindings: null,
+  stepExecutions: [],
   findingsPerspective: "current_pr_state",
   run: {
+    runState: "completed",
     cost: {
       currency: "USD",
       estimatedCostMicroUsd: 1234,
@@ -145,7 +143,7 @@ const detail: AdminRunDetailV2 = {
     headSha: "a".repeat(40),
     isDegraded: false,
     prKey: "github:42:pr:7",
-    runId: baseRun.run_id as AdminRunDetailV2["run"]["runId"],
+    runId: baseRun.run_id as AdminRunDetail["run"]["runId"],
     scopeStatus: "complete",
     shardsCount: 1,
     stepTimings: [],
@@ -159,7 +157,6 @@ const detail: AdminRunDetailV2 = {
     toolCallsCount: 1,
     verdict: "APPROVE",
   },
-  schemaVersion: 2,
   projectIdentification: null,
   structuredCi: {
     durationMs: 1_000,
@@ -331,8 +328,8 @@ describe("admin views", () => {
     expect(ciWithoutName).toContain("not_available");
   });
 
-  it("renders run detail with AdminRunDetailV3 execution graph and cleanup task", () => {
-    const v3Detail: AdminRunDetailV3 = {
+  it("renders run detail with AdminRunDetail execution graph and cleanup task", () => {
+    const executionDetail: AdminRunDetail = {
       cleanupTask: {
         attempts: 1,
         completedAt: "2026-09-04T11:00:06.000Z",
@@ -342,14 +339,12 @@ describe("admin views", () => {
       },
       currentFindings: detail.currentFindings,
       findingsPerspective: "current_pr_state",
-      graphSchemaVersion: 1,
       historicalRunFindings: [],
       projectIdentification: null,
       run: {
         ...detail.run,
         runState: "completed",
       },
-      schemaVersion: 3,
       stepExecutions: [
         {
           attempts: [
@@ -379,7 +374,7 @@ describe("admin views", () => {
     };
 
     const html = render(
-      <RunDetailView rpcDetail={v3Detail} run={baseRun} />,
+      <RunDetailView rpcDetail={executionDetail} run={baseRun} />,
       "/runs/x",
     );
     expect(html).toContain("Workflow DAG &amp; Telemetria");
@@ -416,7 +411,7 @@ describe("admin views", () => {
   });
 
   it("renders RunDetailView with selected step drawer open and cleanup badge", () => {
-    const v3Detail: AdminRunDetailV3 = {
+    const executionDetail: AdminRunDetail = {
       cleanupTask: {
         attempts: 2,
         completedAt: null,
@@ -436,7 +431,6 @@ describe("admin views", () => {
         },
       ],
       findingsPerspective: "both",
-      graphSchemaVersion: 1,
       historicalRunFindings: [],
       projectIdentification: null,
       run: {
@@ -456,7 +450,6 @@ describe("admin views", () => {
         updatedAt: "2026-09-04T11:00:05.000Z",
         verdict: null,
       },
-      schemaVersion: 3,
       stepExecutions: [
         {
           attempts: [
@@ -487,7 +480,7 @@ describe("admin views", () => {
 
     const html = render(
       <RunDetailView
-        rpcDetail={v3Detail}
+        rpcDetail={executionDetail}
         run={baseRun}
         initialSelectedStepName="claim-run"
         isActive={false}
@@ -518,7 +511,7 @@ describe("admin views", () => {
   });
 
   it("renders RunDetailView with both snapshot and current findings perspective tabs", () => {
-    const v3WithHistorical: AdminRunDetailV3 = {
+    const detailWithHistorical: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [
         {
@@ -532,7 +525,6 @@ describe("admin views", () => {
         },
       ],
       findingsPerspective: "both",
-      graphSchemaVersion: 1,
       historicalRunFindings: [
         {
           diagnostic: "Historical snapshot bug",
@@ -549,13 +541,12 @@ describe("admin views", () => {
         ...detail.run,
         runState: "completed",
       },
-      schemaVersion: 3,
       stepExecutions: [],
       structuredCi: null,
     };
 
     const html = render(
-      <RunDetailView rpcDetail={v3WithHistorical} run={baseRun} />,
+      <RunDetailView rpcDetail={detailWithHistorical} run={baseRun} />,
       "/runs/x",
     );
     expect(html).toContain("Achados desta Execução (Snapshot) (1)");
@@ -569,11 +560,10 @@ describe("admin views", () => {
       ...baseRun,
       terminal_state: null,
     };
-    const v3Active: AdminRunDetailV3 = {
+    const activeDetail: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [],
       findingsPerspective: "current_pr_state",
-      graphSchemaVersion: 1,
       historicalRunFindings: null,
       projectIdentification: null,
       run: {
@@ -581,13 +571,16 @@ describe("admin views", () => {
         runState: "running",
         terminalState: null,
       },
-      schemaVersion: 3,
       stepExecutions: [],
       structuredCi: null,
     };
 
     const html = render(
-      <RunDetailView rpcDetail={v3Active} run={activeRun} isActive={true} />,
+      <RunDetailView
+        rpcDetail={activeDetail}
+        run={activeRun}
+        isActive={true}
+      />,
       "/runs/x",
     );
     expect(html).toContain("Snapshot da execução indisponível");

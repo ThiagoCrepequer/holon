@@ -109,7 +109,6 @@ export function buildReviewPlan(
         omissionReasons: [
           `All ${policyExcludedFilesCount} eligible file(s) in this pull request were excluded by repository policy.`,
         ],
-        schemaVersion: 2,
         scopeStatus: "partial_by_policy",
         shards: [],
         totalEligibleBytes: 0,
@@ -122,7 +121,6 @@ export function buildReviewPlan(
       omissionReasons: [
         "No supported or non-binary files found in the pull request diff.",
       ],
-      schemaVersion: 2,
       scopeStatus: "unsupported",
       shards: [],
       totalEligibleBytes: 0,
@@ -300,7 +298,7 @@ export function buildReviewPlan(
 
   return reviewPlanSchema.parse({
     omissionReasons,
-    schemaVersion: 2,
+
     scopeStatus,
     shards,
     totalEligibleBytes,

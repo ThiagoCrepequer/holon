@@ -1,7 +1,7 @@
 import {
-  reviewContextV4Schema,
-  type ExecutorRequestV3,
-  type ReviewContextV4,
+  reviewContextSchema,
+  type ExecutorRequest,
+  type ReviewContext,
   type ReviewPlan,
 } from "@holon/contracts";
 import {
@@ -23,7 +23,7 @@ const maximumChangedLines = 5_000;
 const maximumContextBytes = 500_000;
 
 export interface ReviewArtifacts {
-  readonly context: ReviewContextV4;
+  readonly context: ReviewContext;
   readonly contextBytes: number;
   readonly fileCount: number;
   readonly plan: ReviewPlan;
@@ -31,12 +31,12 @@ export interface ReviewArtifacts {
   readonly serializedContext: string;
 }
 
-function serializeBoundedContext(context: ReviewContextV4): {
-  readonly context: ReviewContextV4;
+function serializeBoundedContext(context: ReviewContext): {
+  readonly context: ReviewContext;
   readonly serialized: string;
 } {
   const encode = (changedLineCount: number) => {
-    const candidate = reviewContextV4Schema.parse({
+    const candidate = reviewContextSchema.parse({
       ...context,
       changedLines: context.changedLines.slice(0, changedLineCount),
       truncated:
@@ -74,7 +74,7 @@ function serializeBoundedContext(context: ReviewContextV4): {
 }
 
 export function buildReviewArtifacts(
-  request: ExecutorRequestV3,
+  request: ExecutorRequest,
   repositoryFiles: readonly {
     readonly content: string;
     readonly path: string;
@@ -123,12 +123,11 @@ export function buildReviewArtifacts(
     repositoryScanTruncated,
   });
 
-  const unboundedContext = reviewContextV4Schema.parse({
+  const unboundedContext = reviewContextSchema.parse({
     changedLines,
     effectivePolicyDigest: request.effectivePolicy.effectivePolicyDigest,
     files: reviewFiles,
     policySource: request.effectivePolicy.source,
-    schemaVersion: 4,
     sourceDigest: request.effectivePolicy.sourceDigest,
     structuralImpact,
     surface,

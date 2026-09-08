@@ -1,5 +1,5 @@
 export interface GitHubEgressAuthorization {
-  readonly installationId?: number;
+  readonly installationId: number;
   readonly repositoryId: number;
   readonly repositoryName: string;
   readonly repositoryOwner: string;
@@ -40,12 +40,8 @@ export function parseGitHubEgressAuthorization(
   if (typeof value !== "object" || value === null) return undefined;
   const candidate = value as Record<string, unknown>;
   const actualKeys = Object.keys(candidate).toSorted();
-  const expectedKeys = [...authorizationKeys].toSorted();
-  const expectedV2Keys = [...authorizationKeys, "installationId"].toSorted();
-  if (
-    actualKeys.join("\0") !== expectedKeys.join("\0") &&
-    actualKeys.join("\0") !== expectedV2Keys.join("\0")
-  ) {
+  const expectedKeys = [...authorizationKeys, "installationId"].toSorted();
+  if (actualKeys.join("\0") !== expectedKeys.join("\0")) {
     return undefined;
   }
   const installationId = candidate.installationId;
@@ -55,7 +51,7 @@ export function parseGitHubEgressAuthorization(
   const repositoryPath = candidate.repositoryPath;
   const runId = candidate.runId;
   if (
-    (installationId !== undefined && !isPositiveSafeInteger(installationId)) ||
+    !isPositiveSafeInteger(installationId) ||
     !isPositiveSafeInteger(repositoryId) ||
     typeof repositoryName !== "string" ||
     typeof repositoryOwner !== "string" ||
@@ -80,7 +76,7 @@ export function parseGitHubEgressAuthorization(
     return undefined;
   }
   return {
-    ...(installationId === undefined ? {} : { installationId }),
+    installationId,
     repositoryId,
     repositoryName,
     repositoryOwner,

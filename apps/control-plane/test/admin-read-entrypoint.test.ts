@@ -10,26 +10,24 @@ describe("AdminReadEntrypoint", () => {
   const validSha = "a".repeat(40);
   const validRunId = `github:42:pr:7:head:${validSha}` as RunId;
 
-  it("responds to pingV1 with schemaVersion 1", async () => {
+  it("responds to ping with readiness", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    const ping = await entrypoint.pingV1();
-    expect(ping).toEqual({ schemaVersion: 1 });
-    expect(entrypoint).not.toHaveProperty("getRunDetailV1");
+    const ping = await entrypoint.ping();
+    expect(ping).toEqual({ ok: true });
   });
 
   it("fails fast with strict error if request is invalid", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    await expect(entrypoint.getRunDetailV2({})).rejects.toThrow();
+    await expect(entrypoint.getRunDetail({})).rejects.toThrow();
     await expect(
-      entrypoint.getRunDetailV2({ runId: "not-a-valid-run-id" }),
+      entrypoint.getRunDetail({ runId: "not-a-valid-run-id" }),
     ).rejects.toThrow();
   });
 
   it("returns null if the run does not exist in the ledger", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    const detail = await entrypoint.getRunDetailV2({ runId: validRunId });
+    const detail = await entrypoint.getRunDetail({ runId: validRunId });
     expect(detail).toBeNull();
-    expect(await entrypoint.getRunDetailV2({ runId: validRunId })).toBeNull();
   });
 
   it("returns sanitized DTO when the run exists in the ledger", async () => {
@@ -74,6 +72,7 @@ describe("AdminReadEntrypoint", () => {
     await ledger.saveRunTelemetry(telemetry);
     await ledger.claimRun(
       {
+        causalVersion: telemetry.createdAt,
         id: validRunId,
         prKey: "github:42:pr:7",
         state: "queued",
@@ -95,44 +94,36 @@ describe("AdminReadEntrypoint", () => {
     });
     await ledger.saveProjectIdentification(validRunId, versions);
 
-    const detail = await entrypoint.getRunDetailV2({ runId: validRunId });
+    const detail = await entrypoint.getRunDetail({ runId: validRunId });
     expect(detail).not.toBeNull();
-    expect(detail?.schemaVersion).toBe(2);
     expect(detail?.run.runId).toBe(validRunId);
     expect(detail?.run.headSha).toBe(validSha);
     expect(detail?.run.verdict).toBe("APPROVE");
     expect(detail?.currentFindings).toEqual([]);
     expect(detail?.structuredCi).toBeNull();
     expect(detail?.projectIdentification).toEqual(versions);
-    expect(
-      await entrypoint.getRunDetailV2({ runId: validRunId }),
-    ).toMatchObject({
-      schemaVersion: 2,
+    expect(await entrypoint.getRunDetail({ runId: validRunId })).toMatchObject({
       projectIdentification: {
         projects: [{ technologies: [{ name: "react" }] }],
       },
     });
 
-    // Test getRunDetailV3
-    const detailV3 = await entrypoint.getRunDetailV3({ runId: validRunId });
-    expect(detailV3).not.toBeNull();
-    expect(detailV3?.schemaVersion).toBe(3);
-    expect(detailV3?.run.runId).toBe(validRunId);
-    expect(detailV3?.run.runState).toBe("completed");
-    expect(detailV3?.run.terminalState).toBe("completed");
-    expect(detailV3?.projectIdentification).toEqual(versions);
-    expect(Array.isArray(detailV3?.stepExecutions)).toBe(true);
+    // Test getRunDetail
+    expect(detail?.run.runState).toBe("completed");
+    expect(detail?.run.terminalState).toBe("completed");
+    expect(detail?.projectIdentification).toEqual(versions);
+    expect(Array.isArray(detail?.stepExecutions)).toBe(true);
   });
 
-  it("handles getRunDetailV3 validations and missing runs", async () => {
+  it("handles getRunDetail validations and missing runs", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
-    await expect(entrypoint.getRunDetailV3({})).rejects.toThrow();
+    await expect(entrypoint.getRunDetail({})).rejects.toThrow();
     await expect(
-      entrypoint.getRunDetailV3({ runId: "bad-id" }),
+      entrypoint.getRunDetail({ runId: "bad-id" }),
     ).rejects.toThrow();
 
     const missingSha = "9".repeat(40);
     const missingRunId = `github:42:pr:7:head:${missingSha}` as RunId;
-    expect(await entrypoint.getRunDetailV3({ runId: missingRunId })).toBeNull();
+    expect(await entrypoint.getRunDetail({ runId: missingRunId })).toBeNull();
   });
 });

@@ -20,6 +20,7 @@ const fingerprint: FindingFingerprint =
   "fp:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const finding: TrackedFinding = {
+  evidenceFingerprint: fingerprint.slice(3),
   confidence: 0.8,
   diagnostic: "Critical vulnerability in authentication layer",
   filePath: "src/auth.ts",
@@ -221,7 +222,7 @@ describe("feedback-service", () => {
     expect(result.actionTaken).toBe("recorded");
     expect(reviewPublisher.replyToComment).toHaveBeenCalledWith(
       202,
-      expect.stringContaining("<!-- holon:v1;feedback=github%3Adelivery-1 -->"),
+      expect.stringContaining("<!-- holon;feedback=github%3Adelivery-1 -->"),
     );
     expect(feedbackLedger.completeFeedbackReply).toHaveBeenCalledWith(
       "github:delivery-1",

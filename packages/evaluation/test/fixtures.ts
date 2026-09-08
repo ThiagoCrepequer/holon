@@ -35,7 +35,6 @@ export function createEvalCase(overrides: Partial<EvalCase> = {}): EvalCase {
       job: createReviewJob(),
     },
     partition: "development",
-    schemaVersion: 1,
     source: { kind: "synthetic", reviewedAt: "2026-08-31" },
     tags: ["typescript", "control-flow"],
     title: "Reports a changed return value",

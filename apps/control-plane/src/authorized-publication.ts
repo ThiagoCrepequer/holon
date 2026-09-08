@@ -142,7 +142,7 @@ export async function publishFailureNoticeAuthorized(
   authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
   customBody?: string,
 ): Promise<boolean> {
-  const marker = `<!-- holon:v1;run=${runId};finding=system-failure -->`;
+  const marker = `<!-- holon;run=${runId};finding=system-failure -->`;
   if ((await publisher.findCommentByMarker(marker, "summary")) !== undefined) {
     return false;
   }

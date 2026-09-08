@@ -120,5 +120,5 @@ export function buildPublicationMarker(
   runId: RunId,
   findingId: FindingId | "summary",
 ): string {
-  return `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`;
+  return `<!-- holon;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`;
 }

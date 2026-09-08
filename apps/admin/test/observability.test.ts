@@ -495,8 +495,8 @@ describe("Observability clients and readiness probe", () => {
       } as unknown as D1Database;
 
       const mockRpc: AdminReadRpcClient = {
-        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockResolvedValue({ ok: true }),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
 
       const mockFetch = vi.fn().mockImplementation((url: string) => {
@@ -548,8 +548,8 @@ describe("Observability clients and readiness probe", () => {
       } as unknown as D1Database;
 
       const mockRpc: AdminReadRpcClient = {
-        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockResolvedValue({ ok: true }),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -573,8 +573,8 @@ describe("Observability clients and readiness probe", () => {
       } as unknown as D1Database;
 
       const mockRpc: AdminReadRpcClient = {
-        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockResolvedValue({ ok: true }),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -601,8 +601,8 @@ describe("Observability clients and readiness probe", () => {
       } as unknown as D1Database;
 
       const mockRpcFail = {
-        pingV1: vi.fn().mockRejectedValue(new Error("RPC failed")),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockRejectedValue(new Error("RPC failed")),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
 
       const env = {
@@ -615,8 +615,8 @@ describe("Observability clients and readiness probe", () => {
       expect(report.status).toBe("degraded");
 
       const mockRpcWrongVersion = {
-        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 99 }),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockResolvedValue({ ok: false }),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
       const envWrong = {
         DB: mockDb,
@@ -636,8 +636,8 @@ describe("Observability clients and readiness probe", () => {
           }),
         } as unknown as D1Database;
         const mockRpc: AdminReadRpcClient = {
-          pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-          getRunDetailV2: vi.fn().mockResolvedValue(null),
+          ping: vi.fn().mockResolvedValue({ ok: true }),
+          getRunDetail: vi.fn().mockResolvedValue(null),
         };
         const env = {
           DB: mockDb,
@@ -662,8 +662,8 @@ describe("Observability clients and readiness probe", () => {
           }),
         } as unknown as D1Database;
         const mockRpc: AdminReadRpcClient = {
-          pingV1: vi.fn().mockReturnValue(new Promise(() => {})),
-          getRunDetailV2: vi.fn().mockResolvedValue(null),
+          ping: vi.fn().mockReturnValue(new Promise(() => {})),
+          getRunDetail: vi.fn().mockResolvedValue(null),
         };
         const env = {
           DB: mockDb,
@@ -686,8 +686,8 @@ describe("Observability clients and readiness probe", () => {
         }),
       } as unknown as D1Database;
       const mockRpc: AdminReadRpcClient = {
-        pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-        getRunDetailV2: vi.fn().mockResolvedValue(null),
+        ping: vi.fn().mockResolvedValue({ ok: true }),
+        getRunDetail: vi.fn().mockResolvedValue(null),
       };
       const oldTimestamp = Date.now() - 10 * 60 * 1000;
       const mockFetch = vi.fn().mockImplementation((url: string) => {

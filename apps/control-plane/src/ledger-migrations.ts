@@ -3,13 +3,6 @@ interface LedgerMigration {
   readonly version: number;
 }
 
-const baselineTableNames = [
-  "metadata",
-  "publications",
-  "runs",
-  "transition_operations",
-] as const;
-
 const ledgerMigrations: readonly LedgerMigration[] = [
   {
     statements: `
@@ -301,7 +294,7 @@ const ledgerMigrations: readonly LedgerMigration[] = [
   {
     version: 13,
     statements: `
-      ALTER TABLE pr_findings ADD COLUMN evidence_fingerprint TEXT;
+      ALTER TABLE pr_findings ADD COLUMN evidence_fingerprint TEXT NOT NULL;
       CREATE TABLE review_analysis_artifacts (
         run_id TEXT NOT NULL,
         part INTEGER NOT NULL,
@@ -320,18 +313,6 @@ const ledgerMigrations: readonly LedgerMigration[] = [
   },
 ] as const;
 
-function baselineTables(sql: SqlStorage): readonly string[] {
-  return sql
-    .exec<{ name: string }>(
-      `SELECT name FROM sqlite_schema
-       WHERE type = 'table' AND name IN (?, ?, ?, ?)
-       ORDER BY name`,
-      ...baselineTableNames,
-    )
-    .toArray()
-    .map((row) => row.name);
-}
-
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {
   const sql = storage.sql;
   storage.transactionSync(() => {
@@ -343,7 +324,7 @@ export function applyLedgerMigrations(storage: DurableObjectStorage): void {
     `);
   });
 
-  let applied = new Set(
+  const applied = new Set(
     sql
       .exec<{ version: number }>(
         "SELECT version FROM schema_migrations ORDER BY version",
@@ -351,26 +332,6 @@ export function applyLedgerMigrations(storage: DurableObjectStorage): void {
       .toArray()
       .map((row) => row.version),
   );
-  if (applied.size === 0) {
-    const existingBaseline = baselineTables(sql);
-    if (existingBaseline.length > 0) {
-      if (
-        existingBaseline.length !== baselineTableNames.length ||
-        existingBaseline.some(
-          (name, index) => name !== [...baselineTableNames].toSorted()[index],
-        )
-      ) {
-        throw new Error("Ledger legacy schema is incomplete");
-      }
-      storage.transactionSync(() => {
-        sql.exec(
-          "INSERT INTO schema_migrations (version, applied_at) VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-        );
-      });
-      applied = new Set([1]);
-    }
-  }
-
   for (const migration of ledgerMigrations) {
     if (applied.has(migration.version)) continue;
     storage.transactionSync(() => {

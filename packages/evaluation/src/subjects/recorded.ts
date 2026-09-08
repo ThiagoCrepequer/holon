@@ -7,7 +7,6 @@ import type { EvaluationSubject } from "../runner.js";
 export interface EvaluationRecording {
   readonly caseId: string;
   readonly output: EvalSubjectOutput;
-  readonly schemaVersion: 1;
 }
 
 export function createRecordedSubject(
@@ -15,9 +14,6 @@ export function createRecordedSubject(
 ): EvaluationSubject {
   const byCaseId = new Map<string, EvalSubjectOutput>();
   for (const recording of recordings) {
-    if (recording.schemaVersion !== 1) {
-      throw new TypeError("evaluation recording schema version is unsupported");
-    }
     if (byCaseId.has(recording.caseId)) {
       throw new TypeError("evaluation recording case ids must be unique");
     }

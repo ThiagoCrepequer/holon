@@ -1,4 +1,4 @@
-import { reviewJobV2Schema } from "@holon/contracts";
+import { reviewJobSchema } from "@holon/contracts";
 import { identifySnapshot } from "@holon/project-identification";
 import { reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
@@ -9,14 +9,13 @@ import {
   createReviewServices,
   type RepositoryExecutorBinding,
 } from "../src/review-services.js";
+import { unconfiguredExecutor } from "./executor-fixture.js";
 afterEach(() => reset());
 const sha = "a".repeat(40),
   base = "b".repeat(40);
-const job = reviewJobV2Schema.parse({
-  schemaVersion: 2,
+const job = reviewJobSchema.parse({
   runId: `github:42:pr:7:head:${sha}`,
   envelope: {
-    schemaVersion: 2,
     event: "pull_request",
     action: "opened",
     deliveryId: "github:identification",
@@ -41,7 +40,7 @@ const snapshot = () =>
     ],
   });
 function setup(
-  discover?: RepositoryExecutorBinding["discoverProjectMetadataV1"],
+  discover: RepositoryExecutorBinding["discoverProjectMetadata"],
   mode = "enrich",
 ) {
   const identify = vi.fn(async () => ({ selectedFactIds: ["fact-0"] }));
@@ -54,10 +53,11 @@ function setup(
     {
       identificationModel: { identify },
       executor: {
+        ...unconfiguredExecutor,
         hasContext: async () => true,
         cleanup: async () => {},
         runTool: async () => ({ content: "", truncated: false }),
-        ...(discover ? { discoverProjectMetadataV1: discover } : {}),
+        discoverProjectMetadata: discover,
       },
     },
     { emit: () => {} },
@@ -65,13 +65,6 @@ function setup(
   );
   return { service, identify };
 }
-it("reports absent capability without an activation setting", async () => {
-  const policy = await createDefaultRepositoryPolicy(base);
-  expect(await setup().service.identifyProjects!(policy)).toMatchObject({
-    status: "unavailable",
-    limitations: ["executor-capability-unavailable"],
-  });
-});
 it("discovers both immutable snapshots then reuses a verified cache entry", async () => {
   const result = { ...(await snapshot()), metadataChanged: true };
   const discover = vi.fn(async (request) => ({
@@ -144,5 +137,48 @@ it("prevents discovery and inference after repository access removal", async () 
     await service.identifyProjects!(await createDefaultRepositoryPolicy(base)),
   ).toMatchObject({ limitations: ["access-revoked"] });
   expect(discover).not.toHaveBeenCalled();
+  expect(identify).not.toHaveBeenCalled();
+});
+
+it("propagates revoked authority during baseline discovery without model inference", async () => {
+  const head = { ...(await snapshot()), metadataChanged: true };
+  const discover = vi.fn(async (request) => {
+    if (request.snapshotSha === base)
+      throw new Error("PROJECT_METADATA_AUTHORITY");
+    return head;
+  });
+  const { service, identify } = setup(discover);
+  await expect(
+    service.identifyProjects!(await createDefaultRepositoryPolicy(base)),
+  ).rejects.toThrow("PROJECT_METADATA_AUTHORITY");
+  expect(discover).toHaveBeenCalledTimes(2);
+  expect(identify).not.toHaveBeenCalled();
+});
+
+it("preserves partial baseline status and limitations alongside complete head metadata", async () => {
+  const head = { ...(await snapshot()), metadataChanged: true };
+  const { service, identify } = setup(async (request) =>
+    request.snapshotSha === base
+      ? {
+          ...head,
+          snapshotSha: base,
+          status: "partial",
+          limitations: ["metadata-file-budget"],
+        }
+      : head,
+  );
+  const result = await service.identifyProjects!(
+    await createDefaultRepositoryPolicy(base),
+    undefined,
+    true,
+  );
+  expect(result).toMatchObject({
+    status: "complete",
+    baseline: {
+      snapshotSha: base,
+      status: "partial",
+      limitations: ["metadata-file-budget"],
+    },
+  });
   expect(identify).not.toHaveBeenCalled();
 });

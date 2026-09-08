@@ -1,7 +1,7 @@
 import {
-  adminRunDetailV3Schema,
+  adminRunDetailSchema,
   runIdSchema,
-  type AdminRunDetailV3,
+  type AdminRunDetail,
 } from "@holon/contracts";
 import * as React from "react";
 import {
@@ -17,15 +17,15 @@ import type { AdminRunRow } from "../../workers/types.js";
 import { adminRequestContext } from "../server/request-context.js";
 import { RunDetailView } from "../views/run-detail-view.js";
 
-export function parseRpcRunDetail(value: unknown): AdminRunDetailV3 | null {
+export function parseRpcRunDetail(value: unknown): AdminRunDetail | null {
   if (value === null) return null;
-  const parsedV3 = adminRunDetailV3Schema.safeParse(value);
-  if (parsedV3.success) return parsedV3.data;
+  const parsed = adminRunDetailSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
   throw new Error("Invalid RPC run detail response");
 }
 
 export function createSyntheticAdminRunRow(
-  detail: AdminRunDetailV3,
+  detail: AdminRunDetail,
   repoInfo?: { repository_owner: string; repository_name: string } | null,
 ): AdminRunRow {
   const prParts = detail.run.prKey.split(":");
@@ -88,8 +88,6 @@ export function createSyntheticAdminRunRow(
     projected_at: createdAt,
     projected_at_epoch_ms: Date.now(),
     projection_delivery_lag_ms: 0,
-    schema_version: 3,
-    record_version: 1,
     payload_hash: "",
     source_event_id: `synthetic:${detail.run.runId}`,
   };
@@ -102,18 +100,18 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
   const storage = new D1AdminStorage(env.DB);
   let run = await storage.getRunById(parsedRunId.data);
 
-  let rpcDetail: AdminRunDetailV3 | null = null;
+  let rpcDetail: AdminRunDetail | null = null;
   let rpcError: string | null = null;
   const rpc = env.ADMIN_READ_API as unknown as AdminReadRpcClient | undefined;
 
   if (!rpc) {
     rpcError = "Control plane RPC binding not configured";
-  } else if (!rpc.getRunDetailV3) {
-    rpcError = "RPC getRunDetailV3 contract unavailable";
+  } else if (!rpc.getRunDetail) {
+    rpcError = "RPC getRunDetail contract unavailable";
   } else {
     try {
       const candidate = await Promise.race([
-        rpc.getRunDetailV3({ runId: parsedRunId.data }),
+        rpc.getRunDetail({ runId: parsedRunId.data }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), 5_000),
         ),

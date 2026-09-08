@@ -29,8 +29,6 @@ CREATE TABLE admin_runs (
   projected_at TEXT NOT NULL,
   projected_at_epoch_ms INTEGER NOT NULL CHECK (projected_at_epoch_ms > 0),
   projection_delivery_lag_ms INTEGER NOT NULL CHECK (projection_delivery_lag_ms >= 0),
-  schema_version INTEGER NOT NULL CHECK (schema_version = 1),
-  record_version INTEGER NOT NULL CHECK (record_version = 1),
   payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
   source_event_id TEXT NOT NULL UNIQUE
 );
@@ -65,7 +63,6 @@ CREATE TABLE admin_projection_quarantine (
   observed_run_id_hash TEXT,
   computed_payload_hash TEXT NOT NULL CHECK (length(computed_payload_hash) = 64),
   payload_bytes INTEGER NOT NULL CHECK (payload_bytes >= 0),
-  observed_schema_version INTEGER,
   error_code TEXT NOT NULL CHECK (length(error_code) BETWEEN 1 AND 100),
   created_at_epoch_ms INTEGER NOT NULL CHECK (created_at_epoch_ms > 0)
 );
