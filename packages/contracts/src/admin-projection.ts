@@ -24,14 +24,13 @@ export const reviewPhaseReachedSchema = z.enum([
 
 export type ReviewPhaseReached = z.infer<typeof reviewPhaseReachedSchema>;
 
-export const adminRunProjectionPayloadV1Schema = z
+export const adminRunProjectionPayloadSchema = z
   .strictObject({
     headSha: gitShaSchema,
     prKey: prKeySchema,
     projectedFrom: z.literal("workflow"),
     projectionRequestedAt: timestampSchema,
     pullRequestNumber: positiveIntegerSchema,
-    recordVersion: z.literal(1),
     repository: z.strictObject({
       id: positiveIntegerSchema,
       name: z.string().trim().min(1).max(100),
@@ -39,7 +38,6 @@ export const adminRunProjectionPayloadV1Schema = z
     }),
     reviewPhaseReached: reviewPhaseReachedSchema,
     runId: runIdSchema as z.ZodType<RunId>,
-    schemaVersion: z.literal(1),
     scopeStatus: reviewScopeStatusSchema.nullable(),
     telemetry: z.strictObject({
       estimatedCostMicroUsd: nonNegativeSafeIntegerSchema,
@@ -120,14 +118,14 @@ export const adminRunProjectionPayloadV1Schema = z
     }
   });
 
-export type AdminRunProjectionPayloadV1 = z.infer<
-  typeof adminRunProjectionPayloadV1Schema
+export type AdminRunProjectionPayload = z.infer<
+  typeof adminRunProjectionPayloadSchema
 >;
 
-export const adminRunProjectionEventV1Schema = z
+export const adminRunProjectionEventSchema = z
   .strictObject({
-    eventId: z.string().regex(/^proj:v1:[a-f0-9]{64}:1$/u),
-    payload: adminRunProjectionPayloadV1Schema,
+    eventId: z.string().regex(/^proj:[a-f0-9]{64}$/u),
+    payload: adminRunProjectionPayloadSchema,
     payloadHash: sha256Schema,
   })
   .superRefine((event, context) => {
@@ -147,8 +145,8 @@ export const adminRunProjectionEventV1Schema = z
     }
   });
 
-export type AdminRunProjectionEventV1 = z.infer<
-  typeof adminRunProjectionEventV1Schema
+export type AdminRunProjectionEvent = z.infer<
+  typeof adminRunProjectionEventSchema
 >;
 
 /**
@@ -233,18 +231,18 @@ export async function computeSha256Hex(
 }
 
 /**
- * Builds and validates an immutable AdminRunProjectionEventV1.
+ * Builds and validates an immutable AdminRunProjectionEvent.
  */
-export async function buildAdminProjectionEventV1(
+export async function buildAdminProjectionEvent(
   payloadInput: unknown,
-): Promise<AdminRunProjectionEventV1> {
-  const payload = adminRunProjectionPayloadV1Schema.parse(payloadInput);
+): Promise<AdminRunProjectionEvent> {
+  const payload = adminRunProjectionPayloadSchema.parse(payloadInput);
   const canonicalPayload = canonicalizeJson(payload);
   const payloadHash = await computeSha256Hex(canonicalPayload);
   const runIdHash = await computeSha256Hex(payload.runId);
-  const eventId = `proj:v1:${runIdHash}:1`;
+  const eventId = `proj:${runIdHash}`;
 
-  return adminRunProjectionEventV1Schema.parse({
+  return adminRunProjectionEventSchema.parse({
     eventId,
     payload,
     payloadHash,

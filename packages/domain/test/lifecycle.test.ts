@@ -23,6 +23,10 @@ describe("lifecycle", () => {
   const sha1 = "1111111111111111111111111111111111111111";
   const sha2 = "2222222222222222222222222222222222222222";
   const finding1: FindingWithFingerprint = {
+    evidenceFingerprint:
+      "fp:1111111111111111111111111111111111111111111111111111111111111111".slice(
+        3,
+      ),
     confidence: 0.95,
     diagnostic: "SQL injection vulnerability in query builder.",
     evidence: [
@@ -44,6 +48,10 @@ describe("lifecycle", () => {
   };
 
   const finding2: FindingWithFingerprint = {
+    evidenceFingerprint:
+      "fp:2222222222222222222222222222222222222222222222222222222222222222".slice(
+        3,
+      ),
     confidence: 0.9,
     diagnostic: "Missing authentication check on protected route.",
     evidence: [
@@ -98,6 +106,8 @@ describe("lifecycle", () => {
 
   it("classifies unfixed finding as PERSISTENT on subsequent commit and preserves commentId", () => {
     const tracked1: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
       fingerprint: finding1.fingerprint,
@@ -150,8 +160,10 @@ describe("lifecycle", () => {
     expect(result.updatedTrackedFindings[0]?.githubCommentId).toBe(9999);
   });
 
-  it("classifies missing finding as RESOLVED if file is still touched by PR", () => {
+  it("classifies a host-confirmed correction as RESOLVED in a reviewed file", () => {
     const tracked1: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
       fingerprint: finding1.fingerprint,
@@ -170,7 +182,10 @@ describe("lifecycle", () => {
     // On commit 2, finding1 is fixed (no current findings), but src/db.ts is still modified in PR
     const result = reconcileFindings({
       baselineFindings: [tracked1],
-      coverage: completeCoverage("src/db.ts"),
+      coverage: {
+        ...completeCoverage("src/db.ts"),
+        confirmedResolvedFingerprints: [finding1.fingerprint],
+      },
       currentFindings: [],
       currentHeadSha: sha2,
       currentRunId: runId2,
@@ -197,6 +212,8 @@ describe("lifecycle", () => {
 
   it("classifies missing finding as OBSOLETE if file is no longer touched by PR", () => {
     const tracked1: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
       fingerprint: finding1.fingerprint,
@@ -239,6 +256,8 @@ describe("lifecycle", () => {
 
   it("classifies previously RESOLVED finding as REINTRODUCED when it reappears", () => {
     const trackedResolved: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
       fingerprint: finding1.fingerprint,
@@ -281,6 +300,8 @@ describe("lifecycle", () => {
 
   it("handles complex mixed batch: persistent, new, and resolved findings simultaneously", () => {
     const tracked1: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,
       fingerprint: finding1.fingerprint,
@@ -299,6 +320,8 @@ describe("lifecycle", () => {
     const oldFindingFingerprint =
       "fp:9999999999999999999999999999999999999999999999999999999999999999";
     const trackedOldFixed: TrackedFinding = {
+      evidenceFingerprint: oldFindingFingerprint.slice(3),
+      confidence: 0.95,
       diagnostic: "Hardcoded credential in secret.ts.",
       filePath: "src/secret.ts",
       fingerprint: oldFindingFingerprint,
@@ -320,7 +343,10 @@ describe("lifecycle", () => {
     // and trackedOldFixed is fixed in src/secret.ts (which is still in prFiles)
     const result = reconcileFindings({
       baselineFindings: [tracked1, trackedOldFixed],
-      coverage: completeCoverage("src/db.ts", "src/admin.ts", "src/secret.ts"),
+      coverage: {
+        ...completeCoverage("src/db.ts", "src/admin.ts", "src/secret.ts"),
+        confirmedResolvedFingerprints: [oldFindingFingerprint],
+      },
       currentFindings: [finding1, finding2],
       currentHeadSha: sha2,
       currentRunId: runId2,
@@ -356,6 +382,7 @@ describe("lifecycle", () => {
 
   it("preserves active findings outside the successfully reviewed files of a partial run", () => {
     const tracked: TrackedFinding = {
+      evidenceFingerprint: finding1.fingerprint.slice(3),
       confidence: finding1.confidence,
       diagnostic: finding1.diagnostic,
       filePath: finding1.location.path,

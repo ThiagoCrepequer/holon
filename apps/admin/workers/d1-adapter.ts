@@ -1,5 +1,5 @@
 import {
-  type AdminRunProjectionEventV1,
+  type AdminRunProjectionEvent,
   type AdminRunsFilterParams,
   computeFilterHash,
   computeSha256Hex,
@@ -26,7 +26,6 @@ export interface QuarantineParams {
   observedRunId?: string | null | undefined;
   payloadBytes: number;
   computedPayloadHash: string;
-  observedSchemaVersion?: number | null | undefined;
   errorCode: string;
   nowEpochMs?: number | undefined;
 }
@@ -35,7 +34,7 @@ export class D1AdminStorage {
   constructor(private readonly db: D1Database) {}
 
   async insertProjection(
-    event: AdminRunProjectionEventV1,
+    event: AdminRunProjectionEvent,
     nowEpochMs?: number,
   ): Promise<InsertProjectionResult> {
     const now = nowEpochMs ?? Date.now();
@@ -83,12 +82,10 @@ export class D1AdminStorage {
         projected_at,
         projected_at_epoch_ms,
         projection_delivery_lag_ms,
-        schema_version,
-        record_version,
         payload_hash,
         source_event_id
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
       ON CONFLICT(run_id) DO NOTHING;
     `;
@@ -127,8 +124,6 @@ export class D1AdminStorage {
           projectedAt,
           projectedAtEpochMs,
           projectionDeliveryLagMs,
-          payload.schemaVersion,
-          payload.recordVersion,
           event.payloadHash,
           event.eventId,
         )
@@ -150,14 +145,12 @@ export class D1AdminStorage {
       // Check existing row
       const existing = await this.db
         .prepare(
-          `SELECT payload_hash, source_event_id, schema_version, record_version FROM admin_runs WHERE run_id = ?`,
+          `SELECT payload_hash, source_event_id FROM admin_runs WHERE run_id = ?`,
         )
         .bind(payload.runId)
         .first<{
           payload_hash: string;
           source_event_id: string;
-          schema_version: number;
-          record_version: number;
         }>();
 
       if (
@@ -204,17 +197,15 @@ export class D1AdminStorage {
           observed_run_id_hash,
           computed_payload_hash,
           payload_bytes,
-          observed_schema_version,
           error_code,
           created_at_epoch_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        ) VALUES (?, ?, ?, ?, ?, ?);`,
       )
       .bind(
         eventIdHash,
         runIdHash,
         params.computedPayloadHash,
         params.payloadBytes,
-        params.observedSchemaVersion ?? null,
         params.errorCode,
         now,
       )

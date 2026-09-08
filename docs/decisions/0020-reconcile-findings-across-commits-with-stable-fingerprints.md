@@ -1,7 +1,8 @@
 ---
 id: ADR-0020
 kind: decision
-status: accepted
+superseded-by: 0034-make-review-checkpoints-and-revalidation-durable.md
+status: superseded
 date: 2026-09-02
 owners:
   - core-team

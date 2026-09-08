@@ -66,6 +66,11 @@ export function formatReconciliationSection(
   summary: ReconciliationSummary,
 ): string {
   const parts: string[] = [];
+  if ((summary.unverifiedCount ?? 0) > 0) {
+    parts.push(
+      `- 🔎 **${summary.unverifiedCount}** previous issue(s) await verified correction; absence from this review does not confirm resolution.`,
+    );
+  }
   if (summary.resolvedCount > 0) {
     parts.push(
       `- ✅ **${summary.resolvedCount}** issue(s) resolved from previous commits.`,
@@ -194,7 +199,6 @@ export function aggregateShardReviews(
     {
       changedLines: allChangedLines,
       files: allFiles,
-      schemaVersion: 2,
       surface: plan.shards.flatMap((shard) => shard.surface ?? []),
       truncated: scopeStatus !== "complete",
     },
@@ -204,9 +208,9 @@ export function aggregateShardReviews(
     options.canonicalFindings ?? verifiedFindings
   ).toSorted(compareFindings);
 
-  const isAnyShardDegraded = shardResults.some(
-    (result) => result.isDegraded === true,
-  );
+  const isAnyShardDegraded =
+    (options.reconciliation?.unverifiedCount ?? 0) > 0 ||
+    shardResults.some((result) => result.isDegraded === true);
 
   const verdictDetails = determineReviewVerdict({
     findings: sortedFindings,
@@ -227,11 +231,13 @@ export function aggregateShardReviews(
 
   const prefix = summarySections.join("\n\n");
   summarySections.length = 0;
-  const narrative =
-    options.unifiedSummary?.trim() ||
-    (shardSummaries.length
-      ? shardSummaries.join("\n\n")
-      : "No narrative summary is available; refer to the verified findings and review coverage.");
+  const incomplete = scopeStatus !== "complete" || isAnyShardDegraded;
+  const narrative = incomplete
+    ? `This review is incomplete. ${sortedFindings.length} verified finding(s) were retained from ${shardsAnalyzed} of ${plan.shards.length} planned shards. No conclusion is made about omitted changes or unfinished investigation.`
+    : options.unifiedSummary?.trim() ||
+      (shardSummaries.length
+        ? shardSummaries.join("\n\n")
+        : "No narrative summary is available; refer to the verified findings and review coverage.");
 
   if (scopeStatus === "partial_by_policy") {
     summarySections.push(

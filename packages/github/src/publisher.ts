@@ -60,7 +60,7 @@ export interface PullRequestTarget {
 }
 
 function withMarker(body: string, marker: string): string {
-  const safeBody = body.replaceAll("<!-- holon:", "&lt;!-- holon:");
+  const safeBody = body.replaceAll("<!-- holon;", "&lt;!-- holon;");
   return `${safeBody}\n\n${marker}`;
 }
 

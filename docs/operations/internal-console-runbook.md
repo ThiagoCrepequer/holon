@@ -61,7 +61,7 @@ Exemplo de resposta de diagnóstico:
 | Subsistema            | Sintoma                               | Causa Provável                                                                             | Ação Operacional                                                                                                                         |
 | :-------------------- | :------------------------------------ | :----------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- |
 | **D1 Database**       | `checks.d1 == "degraded"`             | Timeout na query `SELECT 1` ou indisponibilidade regional D1.                              | Verificar status da Cloudflare. Confirmar binding `DB` em `wrangler.jsonc`.                                                              |
-| **Control Plane RPC** | `checks.rpc == "degraded"`            | Binding `ADMIN_READ_API` desconectado ou versão de schema incompatível.                    | Verificar se o Worker `apps/control-plane` está deployado e se o método `pingV1()` responde com schema version 1.                        |
+| **Control Plane RPC** | `checks.rpc == "degraded"`            | Binding `ADMIN_READ_API` desconectado ou contrato de resposta inválido.                    | Verificar se o Worker `apps/control-plane` está deployado e se o método `ping()` responde com `{ ok: true }`.                            |
 | **Queue Metrics**     | `checks.queueMetrics == "degraded"`   | A mensagem mais antiga da fila principal ultrapassou o SLO configurado (300 s por padrão). | Inspecionar a fila principal e a DLQ usando métricas e o CLI de replay. Avaliar erros no consumer de projeções.                          |
 | **Queue Metrics**     | `checks.queueMetrics == "unknown"`    | Token `CF_QUEUES_READ_TOKEN` ausente/inválido ou Metrics API indisponível.                 | Confirmar o secret com permissão `Queues Read`; buscar o evento estruturado sem tratar o painel como saudável.                           |
 | **Analytics Engine**  | `checks.analyticsEngine == "unknown"` | Token `CF_ANALYTICS_API_TOKEN` ausente/inválido ou SQL API indisponível.                   | O console continuará operando normalmente exibindo apenas métricas do D1. Configure o segredo se desejar tendências de latência p50/p95. |
@@ -109,7 +109,7 @@ compartilhadas ou registros operacionais.
 
 Mensagens chegam à fila `holon-admin-projections-dlq` quando:
 
-1. O payload do evento não passa na validação Zod do `AdminRunProjectionEventV1`;
+1. O payload do evento não passa na validação Zod do `AdminRunProjectionEvent`;
 2. O `payloadHash` SHA-256 não corresponde ao payload canônico recebido;
 3. Ocorreram 5 falhas consecutivas de inserção no banco D1.
 

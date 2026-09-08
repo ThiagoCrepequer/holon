@@ -1,13 +1,13 @@
 import {
-  projectMetadataRequestV1Schema,
-  executorRequestV3Schema,
-  preparedRepositoryV3Schema,
-  reviewContextV3Schema,
+  projectMetadataRequestSchema,
+  executorRequestSchema,
+  preparedRepositorySchema,
+  reviewContextSchema,
   runIdSchema,
-  type ExecutorRequestV3,
-  type PreparedRepositoryV3,
+  type ExecutorRequest,
+  type PreparedRepository,
   type RepositoryToolCall,
-  type ReviewContextV3,
+  type ReviewContext,
 } from "@holon/contracts";
 import { isMetadataPath } from "@holon/project-identification";
 import {
@@ -92,7 +92,7 @@ function assertPreparationSuccessful(
 }
 
 function githubEgressAuthorization(
-  request: ExecutorRequestV3,
+  request: ExecutorRequest,
 ): GitHubEgressAuthorization {
   return {
     installationId: request.installationId,
@@ -107,19 +107,17 @@ function githubEgressAuthorization(
 export class RepositoryExecutorService {
   public constructor(private readonly sandboxes: SandboxProvider) {}
 
-  public async prepareRepositoryV3(
-    rawRequest: ExecutorRequestV3,
-  ): Promise<PreparedRepositoryV3> {
-    const request = executorRequestV3Schema.parse(rawRequest);
-    return preparedRepositoryV3Schema.parse(
-      await this.prepareInternal(request),
-    );
+  public async prepareRepository(
+    rawRequest: unknown,
+  ): Promise<PreparedRepository> {
+    const request = executorRequestSchema.parse(rawRequest);
+    return preparedRepositorySchema.parse(await this.prepareInternal(request));
   }
 
   private async prepareInternal(
-    rawRequest: ExecutorRequestV3,
-  ): Promise<PreparedRepositoryV3> {
-    const request = executorRequestV3Schema.parse(rawRequest);
+    rawRequest: unknown,
+  ): Promise<PreparedRepository> {
+    const request = executorRequestSchema.parse(rawRequest);
     const authorization = githubEgressAuthorization(request);
     const sandbox = this.sandboxes.get(request.runId);
     let stage: RepositoryPreparationStage = "configure-egress";
@@ -190,7 +188,6 @@ export class RepositoryExecutorService {
       await sandbox.writeFile(
         metadataAuthorityPath,
         JSON.stringify({
-          schemaVersion: 1,
           runId: request.runId,
           installationId: request.installationId,
           repositoryId: request.repositoryId,
@@ -205,13 +202,12 @@ export class RepositoryExecutorService {
           ),
         }),
       );
-      return preparedRepositoryV3Schema.parse({
+      return preparedRepositorySchema.parse({
         changedLineCount: artifacts.context.changedLines.length,
         contextBytes: artifacts.contextBytes,
         effectivePolicyDigest: artifacts.context.effectivePolicyDigest,
         fileCount: artifacts.fileCount,
         runId: request.runId,
-        schemaVersion: 3,
         truncated: artifacts.context.truncated,
         waiversCount: artifacts.context.waiversCount,
       });
@@ -221,21 +217,21 @@ export class RepositoryExecutorService {
     }
   }
 
-  public async discoverProjectMetadataV1(raw: unknown) {
-    const request = projectMetadataRequestV1Schema.parse(raw);
+  public async discoverProjectMetadata(raw: unknown) {
+    const request = projectMetadataRequestSchema.parse(raw);
     return collectProjectMetadata(this.sandboxes.get(request.runId), request);
   }
 
-  private async loadAnyContext(runId: string): Promise<ReviewContextV3> {
+  private async loadAnyContext(runId: string): Promise<ReviewContext> {
     const requestRunId = runIdSchema.parse(runId);
     const serialized = await this.sandboxes
       .get(requestRunId)
       .readFile(contextPath);
-    return reviewContextV3Schema.parse(JSON.parse(serialized) as unknown);
+    return reviewContextSchema.parse(JSON.parse(serialized) as unknown);
   }
 
-  public async loadContextV3(runId: string): Promise<ReviewContextV3> {
-    return reviewContextV3Schema.parse(await this.loadAnyContext(runId));
+  public async loadContext(runId: string): Promise<ReviewContext> {
+    return reviewContextSchema.parse(await this.loadAnyContext(runId));
   }
 
   public async hasContext(runId: string): Promise<boolean> {

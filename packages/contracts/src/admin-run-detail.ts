@@ -6,7 +6,7 @@ import {
   findingFingerprintSchema,
   findingStatusSchema,
 } from "./finding-lifecycle.js";
-import { projectIdentificationResultV1Schema } from "./project-identification.js";
+import { projectIdentificationResultSchema } from "./project-identification.js";
 import { reviewTextLimits } from "./review-limits.js";
 import { reviewScopeStatusSchema } from "./review-plan.js";
 import { reviewVerdictSchema } from "./review-verdict.js";
@@ -27,7 +27,7 @@ import { stepExecutionNodeSchema } from "./workflow-execution-preview.js";
 
 const nonNegativeSafeIntegerSchema = z.number().int().nonnegative().safe();
 
-export const adminFindingSummaryV1Schema = z.strictObject({
+export const adminFindingSummarySchema = z.strictObject({
   diagnostic: z.string().min(1).max(reviewTextLimits.diagnostic),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
@@ -37,7 +37,7 @@ export const adminFindingSummaryV1Schema = z.strictObject({
   updatedAt: timestampSchema,
 });
 
-export const adminCiSummaryV1Schema = z.strictObject({
+export const adminCiSummarySchema = z.strictObject({
   durationMs: nonNegativeSafeIntegerSchema.nullable(),
   failed: nonNegativeSafeIntegerSchema,
   passed: nonNegativeSafeIntegerSchema,
@@ -47,33 +47,11 @@ export const adminCiSummaryV1Schema = z.strictObject({
   workflowName: z.string().trim().min(1).max(100).nullable(),
 });
 
-export const adminRunDetailV2Schema = z.strictObject({
-  projectIdentification: projectIdentificationResultV1Schema.nullable(),
-  currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
-  findingsPerspective: z.literal("current_pr_state"),
-  run: z.strictObject({
-    cost: costAccountingSchema,
-    headSha: gitShaSchema,
-    isDegraded: z.boolean(),
-    prKey: prKeySchema,
-    runId: runIdSchema as z.ZodType<RunId>,
-    scopeStatus: reviewScopeStatusSchema.nullable(),
-    shardsCount: nonNegativeSafeIntegerSchema,
-    stepTimings: z.array(stepTimingSchema).max(100),
-    terminalState: z.enum(["completed", "failed_terminal", "obsolete"]),
-    tokens: tokenAccountingSchema,
-    toolCallsCount: nonNegativeSafeIntegerSchema,
-    verdict: reviewVerdictSchema.nullable(),
-  }),
-  schemaVersion: z.literal(2),
-  structuredCi: adminCiSummaryV1Schema.nullable(),
-});
-
-export const adminReadRequestV1Schema = z.strictObject({
+export const adminReadRequestSchema = z.strictObject({
   runId: runIdSchema as z.ZodType<RunId>,
 });
 
-export const adminCleanupTaskSummaryV1Schema = z.strictObject({
+export const adminCleanupTaskSummarySchema = z.strictObject({
   attempts: nonNegativeSafeIntegerSchema,
   completedAt: timestampSchema.nullable(),
   nextAttemptAt: timestampSchema.nullable(),
@@ -81,16 +59,12 @@ export const adminCleanupTaskSummaryV1Schema = z.strictObject({
   state: z.enum(["pending", "completed"]),
 });
 
-export const adminRunDetailV3Schema = z.strictObject({
-  cleanupTask: adminCleanupTaskSummaryV1Schema.nullable(),
-  currentFindings: z.array(adminFindingSummaryV1Schema).max(100),
+export const adminRunDetailSchema = z.strictObject({
+  cleanupTask: adminCleanupTaskSummarySchema.nullable(),
+  currentFindings: z.array(adminFindingSummarySchema).max(100),
   findingsPerspective: z.enum(["current_pr_state", "historical_run", "both"]),
-  graphSchemaVersion: z.literal(1),
-  historicalRunFindings: z
-    .array(adminFindingSummaryV1Schema)
-    .max(100)
-    .nullable(),
-  projectIdentification: projectIdentificationResultV1Schema.nullable(),
+  historicalRunFindings: z.array(adminFindingSummarySchema).max(100).nullable(),
+  projectIdentification: projectIdentificationResultSchema.nullable(),
   run: z.strictObject({
     cost: costAccountingSchema.nullable(),
     createdAt: timestampSchema.optional(),
@@ -117,19 +91,18 @@ export const adminRunDetailV3Schema = z.strictObject({
     updatedAt: timestampSchema.nullable().optional(),
     verdict: reviewVerdictSchema.nullable(),
   }),
-  schemaVersion: z.literal(3),
   stepExecutions: z.array(stepExecutionNodeSchema).max(100),
-  structuredCi: adminCiSummaryV1Schema.nullable(),
+  structuredCi: adminCiSummarySchema.nullable(),
 });
 
-export type AdminFindingSummaryV1 = z.infer<typeof adminFindingSummaryV1Schema>;
-export type AdminCiSummaryV1 = z.infer<typeof adminCiSummaryV1Schema>;
-export type AdminRunDetailV2 = z.infer<typeof adminRunDetailV2Schema>;
-export type AdminRunDetailV3 = z.infer<typeof adminRunDetailV3Schema>;
-export type AdminCleanupTaskSummaryV1 = z.infer<
-  typeof adminCleanupTaskSummaryV1Schema
+export type AdminFindingSummary = z.infer<typeof adminFindingSummarySchema>;
+export type AdminCiSummary = z.infer<typeof adminCiSummarySchema>;
+
+export type AdminRunDetail = z.infer<typeof adminRunDetailSchema>;
+export type AdminCleanupTaskSummary = z.infer<
+  typeof adminCleanupTaskSummarySchema
 >;
-export type AdminReadRequestV1 = z.infer<typeof adminReadRequestV1Schema>;
+export type AdminReadRequest = z.infer<typeof adminReadRequestSchema>;
 
 /**
  * Truncates a string to at most maxBytes in UTF-8, preserving code point

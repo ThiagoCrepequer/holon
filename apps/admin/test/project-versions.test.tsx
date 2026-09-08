@@ -1,10 +1,9 @@
-import type { ProjectIdentificationResultV1 } from "@holon/contracts";
+import type { ProjectIdentificationResult } from "@holon/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect } from "vitest";
 
 import { ProjectVersions } from "../app/components/project-versions.js";
-const result: ProjectIdentificationResultV1 = {
-  schemaVersion: 1,
+const result: ProjectIdentificationResult = {
   snapshotSha: "a".repeat(40),
   inventoryDigest: "b".repeat(64),
   detectorRevision: "v1",
@@ -74,7 +73,7 @@ describe("run project versions", () => {
     ])
       expect(html).toContain(text);
   });
-  it("distinguishes legacy absence from an empty identified scope", () => {
+  it("distinguishes absent identification from an empty identified scope", () => {
     expect(renderToStaticMarkup(<ProjectVersions result={null} />)).toContain(
       "not recorded",
     );

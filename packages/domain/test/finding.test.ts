@@ -104,7 +104,7 @@ describe("review findings", () => {
     );
 
     expect(marker).toBe(
-      `<!-- holon:v1;run=github%3A42%3Apr%3A7%3Ahead%3A${"a".repeat(40)};finding=finding%3A${"b".repeat(64)} -->`,
+      `<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3A${"a".repeat(40)};finding=finding%3A${"b".repeat(64)} -->`,
     );
   });
 

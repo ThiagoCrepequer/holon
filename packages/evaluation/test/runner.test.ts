@@ -49,7 +49,6 @@ describe("runEvaluationSuite", () => {
       },
       passedCases: 2,
       subjectErrors: 0,
-      schemaVersion: 1,
       totalCases: 2,
     });
     expect(result.caseRuns.map((run) => run.caseId)).toEqual([

@@ -13,9 +13,15 @@ import {
   type FindingFeedbackRecord,
   type TrackedFinding,
 } from "@holon/contracts";
-import type { FindingFingerprint, PrKey, RunId } from "@holon/domain";
+import {
+  applyFeedbackToFindings,
+  type FindingFingerprint,
+  type PrKey,
+  type RunId,
+} from "@holon/domain";
 
 interface PrFindingRow extends Record<string, SqlStorageValue> {
+  evidence_fingerprint: string;
   confidence: number;
   diagnostic: string;
   file_path: string;
@@ -59,6 +65,7 @@ interface ReviewDecisionRow extends Record<string, SqlStorageValue> {
 
 function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
   return trackedFindingSchema.parse({
+    evidenceFingerprint: row.evidence_fingerprint,
     confidence: row.confidence,
     diagnostic: row.diagnostic,
     filePath: row.file_path,
@@ -126,14 +133,20 @@ export class FindingLedgerStore {
     findings: readonly TrackedFinding[],
   ): void {
     this.storage.transactionSync(() => {
-      for (const finding of findings) {
+      // Feedback and machine updates share this transaction. A baseline loaded
+      // before a human response must never overwrite that response on replay.
+      for (const candidate of findings) {
+        const finding = applyFeedbackToFindings(
+          [trackedFindingSchema.parse(candidate)],
+          this.loadFindingFeedbacks(prKey, candidate.fingerprint),
+        )[0]!;
         this.storage.sql.exec(
           `INSERT INTO pr_findings (
              pr_key, fingerprint, first_seen_run_id, last_seen_run_id,
              first_seen_head_sha, last_seen_head_sha, status, severity,
              file_path, line, diagnostic, github_comment_id, updated_at,
-             confidence
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             confidence, evidence_fingerprint
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(pr_key, fingerprint) DO UPDATE SET
              last_seen_run_id = excluded.last_seen_run_id,
              last_seen_head_sha = excluded.last_seen_head_sha,
@@ -143,8 +156,9 @@ export class FindingLedgerStore {
              line = excluded.line,
              diagnostic = excluded.diagnostic,
              github_comment_id = COALESCE(excluded.github_comment_id, pr_findings.github_comment_id),
-             updated_at = excluded.updated_at,
-             confidence = excluded.confidence`,
+             updated_at = MAX(excluded.updated_at, pr_findings.updated_at),
+             confidence = excluded.confidence,
+             evidence_fingerprint = excluded.evidence_fingerprint`,
           prKey,
           finding.fingerprint,
           finding.firstSeenRunId,
@@ -158,7 +172,8 @@ export class FindingLedgerStore {
           finding.diagnostic,
           finding.githubCommentId ?? null,
           finding.updatedAt,
-          finding.confidence ?? 1,
+          finding.confidence,
+          finding.evidenceFingerprint,
         );
       }
     });

@@ -9,6 +9,7 @@ import {
 } from "../src/index.js";
 
 const run: ReviewRun = {
+  causalVersion: "2026-08-29T12:00:00.000Z",
   attempt: 0,
   createdAt: "2026-08-29T12:00:00.000Z",
   id: `github:42:pr:7:head:${"a".repeat(40)}`,

@@ -14,10 +14,10 @@
  */
 
 import {
-  adminRunProjectionEventV1Schema,
+  adminRunProjectionEventSchema,
   canonicalizeJson,
   computeSha256Hex,
-  type AdminRunProjectionEventV1,
+  type AdminRunProjectionEvent,
 } from "@holon/contracts";
 import { z } from "zod";
 
@@ -277,8 +277,8 @@ export class QueuesHttpClient {
 
 async function validateProjectionMessage(
   body: unknown,
-): Promise<AdminRunProjectionEventV1 | null> {
-  const parsed = adminRunProjectionEventV1Schema.safeParse(body);
+): Promise<AdminRunProjectionEvent | null> {
+  const parsed = adminRunProjectionEventSchema.safeParse(body);
   if (!parsed.success) return null;
   const expectedHash = await computeSha256Hex(
     canonicalizeJson(parsed.data.payload),

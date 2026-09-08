@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { projectIdentificationResultV1Schema } from "./project-identification.js";
+import { projectIdentificationResultSchema } from "./project-identification.js";
 import {
   repositoryPolicySchema,
   repositoryPolicySourceSchema,
@@ -140,15 +140,6 @@ export const reviewSurfaceSchema = z
   .max(50)
   .optional();
 
-/** The exact context shape deployed before the tiered-review RPC change. */
-export const reviewContextV1Schema = z.strictObject({
-  changedLines: changedLinesSchema,
-  diff: z.string().max(120_000),
-  structuralImpact: structuralImpactReportSchema.optional(),
-  surface: reviewSurfaceSchema,
-  truncated: z.boolean().optional(),
-});
-
 export const reviewContextFileSchema = z.strictObject({
   mode: reviewFileModeSchema,
   patch: z.string().min(1).max(120_000),
@@ -156,15 +147,14 @@ export const reviewContextFileSchema = z.strictObject({
 });
 
 /**
- * V2 keeps complete per-file patches so downstream prompt construction can omit
+ * Shard context keeps complete per-file patches so downstream prompt construction can omit
  * a whole patch instead of slicing a canonical Git hunk.
  */
-export const reviewContextV2Schema = z
+export const reviewShardContextSchema = z
   .strictObject({
-    projectIdentification: projectIdentificationResultV1Schema.optional(),
+    projectIdentification: projectIdentificationResultSchema.optional(),
     changedLines: changedLinesSchema,
     files: z.array(reviewContextFileSchema).max(50),
-    schemaVersion: z.literal(2),
     structuralImpact: structuralImpactReportSchema.optional(),
     surface: reviewSurfaceSchema,
     truncated: z.boolean(),
@@ -212,14 +202,13 @@ export const reviewContextV2Schema = z
     }
   });
 
-export const reviewContextV3Schema = z
+export const reviewContextSchema = z
   .strictObject({
-    projectIdentification: projectIdentificationResultV1Schema.optional(),
+    projectIdentification: projectIdentificationResultSchema.optional(),
     changedLines: changedLinesSchema,
     effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     files: z.array(reviewContextFileSchema).max(50),
     policySource: repositoryPolicySourceSchema,
-    schemaVersion: z.literal(3),
     sourceDigest: z
       .string()
       .regex(/^[a-f0-9]{64}$/u)
@@ -246,12 +235,20 @@ export const reviewContextV3Schema = z
       (total, file) => total + utf8ByteLength(file.patch),
       0,
     );
-    if (patchBytes > 120_000) {
+    if (patchBytes > 300_000) {
       refinement.addIssue({
         code: "custom",
-        message: "review context patches exceed the 120000-byte budget",
+        message: "review context patches exceed the 300000-byte budget",
         path: ["files"],
       });
+    }
+    for (const [index, file] of context.files.entries()) {
+      if (utf8ByteLength(file.patch) > 60_000)
+        refinement.addIssue({
+          code: "custom",
+          message: "review context file exceeds the 60000-byte budget",
+          path: ["files", index, "patch"],
+        });
     }
     for (const [index, changedLine] of context.changedLines.entries()) {
       if (!paths.has(changedLine.path)) {
@@ -272,13 +269,6 @@ export const reviewContextV3Schema = z
       }
     }
   });
-
-export const reviewContextSchema = z.union([
-  reviewContextV3Schema,
-  reviewContextV2Schema,
-  reviewContextV1Schema,
-]);
-
 const preparedRepositoryShape = {
   changedLineCount: z.number().int().nonnegative().max(5_000),
   contextBytes: positiveIntegerSchema.max(500_000),
@@ -287,28 +277,11 @@ const preparedRepositoryShape = {
   truncated: z.boolean(),
 } as const;
 
-export const preparedRepositoryV1Schema = z.strictObject({
-  ...preparedRepositoryShape,
-  schemaVersion: z.literal(1),
-});
-
-export const preparedRepositoryV2Schema = z.strictObject({
-  ...preparedRepositoryShape,
-  schemaVersion: z.literal(2),
-});
-
-export const preparedRepositoryV3Schema = z.strictObject({
+export const preparedRepositorySchema = z.strictObject({
   ...preparedRepositoryShape,
   effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  schemaVersion: z.literal(3),
   waiversCount: z.number().int().nonnegative(),
 });
-
-export const preparedRepositorySchema = z.union([
-  preparedRepositoryV3Schema,
-  preparedRepositoryV2Schema,
-  preparedRepositoryV1Schema,
-]);
 
 const githubCloneUrlSchema = z
   .url({ protocol: /^https$/u, hostname: /^github\.com$/iu })
@@ -351,13 +324,6 @@ function validateRunCoordinates(
   }
 }
 
-export const executorRequestV1Schema = z
-  .strictObject({
-    ...executorRequestShape,
-    schemaVersion: z.literal(1),
-  })
-  .superRefine(validateRunCoordinates);
-
 const repositoryOwnerSchema = z
   .string()
   .min(1)
@@ -370,41 +336,13 @@ const repositoryNameSchema = z
   .regex(/^[A-Za-z0-9_.-]+$/u)
   .refine((name) => name !== "." && name !== "..");
 
-export const executorRequestV2Schema = z
-  .strictObject({
-    ...executorRequestShape,
-    installationId: positiveIntegerSchema,
-    repositoryName: repositoryNameSchema,
-    repositoryOwner: repositoryOwnerSchema,
-    schemaVersion: z.literal(2),
-  })
-  .superRefine((request, context) => {
-    validateRunCoordinates(request, context);
-    if (utf8ByteLength(request.canonicalDiff) > 2_000_000) {
-      context.addIssue({
-        code: "custom",
-        message: "canonicalDiff exceeds the 2000000-byte budget",
-        path: ["canonicalDiff"],
-      });
-    }
-    const expectedCloneUrl = `https://github.com/${request.repositoryOwner}/${request.repositoryName}.git`;
-    if (request.cloneUrl !== expectedCloneUrl) {
-      context.addIssue({
-        code: "custom",
-        message: "cloneUrl does not match repositoryOwner and repositoryName",
-        path: ["cloneUrl"],
-      });
-    }
-  });
-
-export const executorRequestV3Schema = z
+export const executorRequestSchema = z
   .strictObject({
     ...executorRequestShape,
     effectivePolicy: repositoryPolicySchema,
     installationId: positiveIntegerSchema,
     repositoryName: repositoryNameSchema,
     repositoryOwner: repositoryOwnerSchema,
-    schemaVersion: z.literal(3),
   })
   .superRefine((request, context) => {
     validateRunCoordinates(request, context);
@@ -424,12 +362,6 @@ export const executorRequestV3Schema = z
       });
     }
   });
-
-export const executorRequestSchema = z.union([
-  executorRequestV3Schema,
-  executorRequestV2Schema,
-  executorRequestV1Schema,
-]);
 
 export const githubCredentialRequestSchema = z
   .strictObject({
@@ -438,7 +370,7 @@ export const githubCredentialRequestSchema = z
       .min(1)
       .max(200)
       .regex(/^[A-Za-z0-9._:-]+$/u),
-    installationId: positiveIntegerSchema.optional(),
+    installationId: positiveIntegerSchema,
     repositoryId: positiveIntegerSchema,
     repositoryName: repositoryNameSchema,
     repositoryOwner: repositoryOwnerSchema,
@@ -466,18 +398,15 @@ export type ReviewContextFile = z.infer<typeof reviewContextFileSchema>;
 export type ReviewSurfaceSignal = NonNullable<
   z.infer<typeof reviewSurfaceSchema>
 >[number];
-export type ReviewContextV1 = z.infer<typeof reviewContextV1Schema>;
-export type ReviewContextV2 = z.infer<typeof reviewContextV2Schema>;
-export type ReviewContextV3 = z.infer<typeof reviewContextV3Schema>;
+
+export type ReviewShardContext = z.infer<typeof reviewShardContextSchema>;
+
 export type ReviewContext = z.infer<typeof reviewContextSchema>;
-export type PreparedRepositoryV1 = z.infer<typeof preparedRepositoryV1Schema>;
-export type PreparedRepositoryV2 = z.infer<typeof preparedRepositoryV2Schema>;
-export type PreparedRepositoryV3 = z.infer<typeof preparedRepositoryV3Schema>;
+
 export type PreparedRepository = z.infer<typeof preparedRepositorySchema>;
-export type ExecutorRequestV1 = z.infer<typeof executorRequestV1Schema>;
-export type ExecutorRequestV2 = z.infer<typeof executorRequestV2Schema>;
-export type ExecutorRequestV3 = z.infer<typeof executorRequestV3Schema>;
+
 export type ExecutorRequest = z.infer<typeof executorRequestSchema>;
+
 export type GitHubCredentialRequest = z.infer<
   typeof githubCredentialRequestSchema
 >;

@@ -31,7 +31,6 @@ export async function createDefaultRepositoryPolicy(
   const canonicalObj = {
     additionalExcludes: [],
     verdictStrictness: "default",
-    version: 1,
   };
   const canonicalJson = JSON.stringify(canonicalObj);
   const effectivePolicyDigest = await computeSha256Hex(canonicalJson);
@@ -42,7 +41,6 @@ export async function createDefaultRepositoryPolicy(
     source: "default",
     sourceDigest: null,
     verdictStrictness: "default",
-    version: 1,
   });
 }
 
@@ -168,7 +166,6 @@ export async function parseAndValidatePolicy(
   const canonicalObj = {
     additionalExcludes,
     verdictStrictness,
-    version: 1,
   };
   const canonicalJson = JSON.stringify(canonicalObj);
   const effectivePolicyDigest = await computeSha256Hex(canonicalJson);
@@ -181,7 +178,6 @@ export async function parseAndValidatePolicy(
     source,
     sourceDigest,
     verdictStrictness,
-    version: 1,
   });
 }
 

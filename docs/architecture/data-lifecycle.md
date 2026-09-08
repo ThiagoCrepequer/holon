@@ -4,7 +4,7 @@ kind: architecture
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-08
 related:
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
@@ -76,7 +76,8 @@ definir:
 
 - Prazo de retenção de delivery IDs, ledger e comentários publicados além da
   retenção de Workflow já definida no ADR-0015.
-- Se evidências textuais precisam ser persistidas ou podem ser reconstruídas.
+- Prazo de retenção das evidências individuais no histórico do Workflow além
+  da remoção do artefato agregado temporário definida na ADR-0034.
 - Configuração de logging e retenção no AI Gateway.
 - Requisitos contratuais para provedores de modelo em repositórios privados.
 - Processo verificável de deleção após desinstalação.
@@ -84,3 +85,14 @@ definir:
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+## Artefato temporário de análise — 2026-09-08
+
+A [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
+autoriza persistir a saída agregada privada no SQLite do DO do PR em chunks de
+64.000 bytes. O cleanup terminal a remove após o executor confirmar destruição,
+inclusive em falha e obsolescência. Falha de cleanup mantém a obrigação e o
+artefato até nova tentativa bem-sucedida. Essa exclusão não remove os resultados
+individuais dos shards retidos pela plataforma Workflows nem comentários GitHub.
+`analysis_usage` guarda apenas IDs e contadores de uso; não contém prompts,
+patches ou respostas livres. O prazo geral do ledger permanece pendente.

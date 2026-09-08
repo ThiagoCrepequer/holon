@@ -1,25 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  adminRunProjectionEventV1Schema,
-  adminRunProjectionPayloadV1Schema,
-  buildAdminProjectionEventV1,
+  adminRunProjectionEventSchema,
+  adminRunProjectionPayloadSchema,
+  buildAdminProjectionEvent,
   canonicalizeJson,
   computeSha256Hex,
-  type AdminRunProjectionPayloadV1,
+  type AdminRunProjectionPayload,
 } from "../src/index.js";
 
 const sha = "a".repeat(40);
 const prKey = "github:42:pr:7" as const;
 const runId = `${prKey}:head:${sha}` as const;
 
-const validPayload: AdminRunProjectionPayloadV1 = {
+const validPayload: AdminRunProjectionPayload = {
   headSha: sha,
   prKey,
   projectedFrom: "workflow",
   projectionRequestedAt: "2026-09-04T12:00:10.000Z",
   pullRequestNumber: 7,
-  recordVersion: 1,
   repository: {
     id: 42,
     name: "holon",
@@ -27,7 +26,6 @@ const validPayload: AdminRunProjectionPayloadV1 = {
   },
   reviewPhaseReached: "publishing",
   runId,
-  schemaVersion: 1,
   scopeStatus: "complete",
   telemetry: {
     estimatedCostMicroUsd: 12500,
@@ -51,14 +49,14 @@ const validPayload: AdminRunProjectionPayloadV1 = {
   verdict: "APPROVE",
 };
 
-describe("admin projection v1 contract", () => {
+describe("admin projection contract", () => {
   it("validates a complete valid payload", () => {
-    const parsed = adminRunProjectionPayloadV1Schema.parse(validPayload);
+    const parsed = adminRunProjectionPayloadSchema.parse(validPayload);
     expect(parsed).toEqual(validPayload);
   });
 
   it("accepts early obsolete run with null scopeStatus, verdict and analysisStartedAt", () => {
-    const obsoletePayload: AdminRunProjectionPayloadV1 = {
+    const obsoletePayload: AdminRunProjectionPayload = {
       ...validPayload,
       reviewPhaseReached: "admitted",
       scopeStatus: null,
@@ -69,7 +67,7 @@ describe("admin projection v1 contract", () => {
       },
       verdict: null,
     };
-    const parsed = adminRunProjectionPayloadV1Schema.parse(obsoletePayload);
+    const parsed = adminRunProjectionPayloadSchema.parse(obsoletePayload);
     expect(parsed.scopeStatus).toBeNull();
     expect(parsed.verdict).toBeNull();
     expect(parsed.timestamps.analysisStartedAt).toBeNull();
@@ -80,7 +78,7 @@ describe("admin projection v1 contract", () => {
       ...validPayload,
       runId: `github:99:pr:7:head:${sha}`,
     };
-    expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+    expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
       /runId does not belong to prKey/u,
     );
   });
@@ -91,7 +89,7 @@ describe("admin projection v1 contract", () => {
       ...validPayload,
       headSha: otherSha,
     };
-    expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+    expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
       /runId does not match headSha/u,
     );
   });
@@ -106,7 +104,7 @@ describe("admin projection v1 contract", () => {
           workflowStartedAt: "2026-09-04T12:00:01.000Z",
         },
       };
-      expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+      expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
         /webhookReceivedAt must be <= workflowStartedAt/u,
       );
     });
@@ -120,7 +118,7 @@ describe("admin projection v1 contract", () => {
           workflowStartedAt: "2026-09-04T12:00:01.000Z",
         },
       };
-      expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+      expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
         /workflowStartedAt must be <= terminalAt/u,
       );
     });
@@ -134,7 +132,7 @@ describe("admin projection v1 contract", () => {
           workflowStartedAt: "2026-09-04T12:00:01.000Z",
         },
       };
-      expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+      expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
         /analysisStartedAt must be between workflowStartedAt and terminalAt/u,
       );
     });
@@ -148,7 +146,7 @@ describe("admin projection v1 contract", () => {
           terminalAt: "2026-09-04T12:00:08.000Z",
         },
       };
-      expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+      expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
         /analysisStartedAt must be between workflowStartedAt and terminalAt/u,
       );
     });
@@ -162,14 +160,14 @@ describe("admin projection v1 contract", () => {
           terminalAt: "2026-09-04T12:00:08.000Z",
         },
       };
-      expect(() => adminRunProjectionPayloadV1Schema.parse(invalid)).toThrow(
+      expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
         /projectionRequestedAt must be >= terminalAt/u,
       );
     });
   });
 });
 
-describe("canonicalizeJson and buildAdminProjectionEventV1", () => {
+describe("canonicalizeJson and buildAdminProjectionEvent", () => {
   it("canonicalizes JSON with sorted keys independent of insertion order", () => {
     const objA = { z: 1, a: 2, m: { y: "test", b: false } };
     const objB = { m: { b: false, y: "test" }, a: 2, z: 1 };
@@ -200,16 +198,16 @@ describe("canonicalizeJson and buildAdminProjectionEventV1", () => {
   });
 
   it("builds a canonical event with deterministic eventId and payloadHash", async () => {
-    const event = await buildAdminProjectionEventV1(validPayload);
+    const event = await buildAdminProjectionEvent(validPayload);
     const expectedRunIdHash = await computeSha256Hex(validPayload.runId);
-    expect(event.eventId).toBe(`proj:v1:${expectedRunIdHash}:1`);
+    expect(event.eventId).toBe(`proj:${expectedRunIdHash}`);
 
     const canonicalPayload = canonicalizeJson(validPayload);
     const expectedPayloadHash = await computeSha256Hex(canonicalPayload);
     expect(event.payloadHash).toBe(expectedPayloadHash);
 
     // Envelope validates under schema
-    const parsedEnvelope = adminRunProjectionEventV1Schema.parse(event);
+    const parsedEnvelope = adminRunProjectionEventSchema.parse(event);
     expect(parsedEnvelope.eventId).toBe(event.eventId);
     expect(parsedEnvelope.payloadHash).toBe(event.payloadHash);
   });
@@ -222,8 +220,8 @@ describe("canonicalizeJson and buildAdminProjectionEventV1", () => {
       reordered[key] = permutedPayload[key];
     }
 
-    const event1 = await buildAdminProjectionEventV1(validPayload);
-    const event2 = await buildAdminProjectionEventV1(reordered);
+    const event1 = await buildAdminProjectionEvent(validPayload);
+    const event2 = await buildAdminProjectionEvent(reordered);
     expect(event1.eventId).toBe(event2.eventId);
     expect(event1.payloadHash).toBe(event2.payloadHash);
   });

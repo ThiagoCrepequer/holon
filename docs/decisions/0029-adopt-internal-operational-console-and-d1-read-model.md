@@ -1,7 +1,8 @@
 ---
 id: ADR-0029
 kind: decision
-status: accepted
+superseded-by: 0036-use-single-current-development-contracts.md
+status: superseded
 date: 2026-09-04
 owners:
   - core-team

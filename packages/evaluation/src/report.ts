@@ -3,7 +3,6 @@ import type { EvalSuiteResult } from "./runner.js";
 export interface EvaluationReport {
   readonly sourceRevision: string;
   readonly suite: EvalSuiteResult;
-  readonly schemaVersion: 1;
 }
 
 export function createEvaluationReport(
@@ -13,7 +12,7 @@ export function createEvaluationReport(
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(sourceRevision)) {
     throw new TypeError("evaluation source revision is invalid");
   }
-  return { schemaVersion: 1, sourceRevision, suite };
+  return { sourceRevision, suite };
 }
 
 function percentage(value: number | null): string {

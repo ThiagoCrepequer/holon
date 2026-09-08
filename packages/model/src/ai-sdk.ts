@@ -16,6 +16,7 @@ import {
 } from "@holon/contracts";
 import { APICallError, Output, generateText, stepCountIs } from "ai";
 
+import { generationTimeout } from "./review-budgets.js";
 import type {
   RepositoryToolRunner,
   ReviewGenerationRequest,
@@ -214,6 +215,7 @@ export const finalizationInstructions = [
   "Provide a coherent summary of verified findings and review coverage, not a transcript of investigation. Preserve useful technical detail within the schema limits.",
   "If no regression was proven or evidence is insufficient, return an empty findings array with an informative summary.",
   "Every evidence excerpt must appear in the canonical patch at the stated line range.",
+  "Preserve explicitly proven resolutions of prior findings with their exact fingerprint and correction evidence. Never infer a resolution merely because a finding is absent from the investigation.",
   "CRITICAL: Output MUST be raw, valid JSON only. Do NOT output markdown code blocks (```json), thinking tags, introductory text or explanations. Do NOT re-investigate.",
 ].join("\n");
 
@@ -265,11 +267,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public constructor(
     private readonly config: CloudflareGatewayModelConfig,
     private readonly toolsRunner: RepositoryToolRunner,
-    private readonly onUsage?: (usage: ModelUsage) => void,
+    private readonly onUsage?: (usage: ModelUsage) => unknown,
     private readonly outputContract: ModelOutputContract = "portable",
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
+    const deadlineAt = request.deadlineAt ?? Date.now() + 150_000;
     const model = createGatewayLanguageModel(this.config);
     const tools = createRepositoryModelTools(this.toolsRunner);
 
@@ -281,6 +284,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     try {
       const investigationResult = await generateText({
         instructions: request.instructions,
+        timeout: generationTimeout(deadlineAt, "investigation"),
         maxOutputTokens: 4_000,
         maxRetries: 0,
         model,
@@ -289,8 +293,8 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         stopWhen: stepCountIs(maximumInvestigationSteps),
         temperature: 0,
         tools,
-      }).catch((error: unknown) => {
-        this.onUsage?.(failedGenerationUsage(error, "investigation"));
+      }).catch(async (error: unknown) => {
+        await this.onUsage?.(failedGenerationUsage(error, "investigation"));
         throw error;
       });
 
@@ -300,7 +304,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         generationLimits.push("investigation_incomplete");
       const investigationUsage =
         investigationResult.totalUsage ?? investigationResult.usage;
-      this.onUsage?.({
+      await this.onUsage?.({
         attempt: "investigation",
         finishReason: investigationResult.finishReason,
         inputTokens: investigationUsage?.inputTokens,
@@ -363,6 +367,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
 
       const finalizationResult = await generateText({
         instructions,
+        timeout: generationTimeout(deadlineAt, attempt),
         maxOutputTokens: 8_192,
         maxRetries: 0,
         model,
@@ -371,15 +376,15 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         providerOptions: gatewayModelProviderOptions,
         stopWhen: stepCountIs(1),
         temperature: 0,
-      }).catch((error: unknown) => {
+      }).catch(async (error: unknown) => {
         const usage = failedGenerationUsage(error, attempt);
-        this.onUsage?.(usage);
+        await this.onUsage?.(usage);
         if (usage.finishReason === "length")
           generationLimits.push("generation_length");
         throw error;
       });
 
-      this.onUsage?.({
+      await this.onUsage?.({
         attempt,
         finishReason: finalizationResult.finishReason,
         inputTokens: finalizationResult.usage?.inputTokens,
@@ -554,11 +559,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         maxRetries: 0,
         model,
         prompt: synthesisPrompt,
+        timeout: { totalMs: 30_000, stepMs: 30_000 },
         providerOptions: gatewayModelProviderOptions,
         temperature: 0,
       });
 
-      this.onUsage?.({
+      await this.onUsage?.({
         attempt: "synthesis",
         finishReason: result.finishReason,
         inputTokens: result.usage?.inputTokens,

@@ -67,6 +67,8 @@ describe("calibration metrics", () => {
 
   it("promotes feedback to a calibration candidate case", () => {
     const finding: TrackedFinding = {
+      evidenceFingerprint: fp1.slice(3),
+      confidence: 0.95,
       diagnostic: "Possible SQL injection detected in raw query",
       filePath: "src/database.ts",
       fingerprint: fp1,

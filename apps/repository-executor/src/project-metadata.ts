@@ -1,8 +1,8 @@
 import {
-  projectMetadataRequestV1Schema,
+  projectMetadataRequestSchema,
   projectMetadataAuthoritySchema,
   repositoryPathSchema,
-  type ProjectIdentificationResultV1,
+  type ProjectIdentificationResult,
 } from "@holon/contracts";
 import {
   identifySnapshot,
@@ -18,8 +18,8 @@ export const metadataAuthorityPath = "/workspace/holon-metadata-authority.json";
 export async function collectProjectMetadata(
   sandbox: SandboxPort,
   raw: unknown,
-): Promise<ProjectIdentificationResultV1> {
-  const request = projectMetadataRequestV1Schema.parse(raw);
+): Promise<ProjectIdentificationResult> {
+  const request = projectMetadataRequestSchema.parse(raw);
   const authority = projectMetadataAuthoritySchema.parse(
     JSON.parse(await sandbox.readFile(metadataAuthorityPath)) as unknown,
   );

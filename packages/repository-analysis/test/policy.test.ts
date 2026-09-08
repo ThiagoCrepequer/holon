@@ -17,6 +17,17 @@ import {
 } from "../src/index.js";
 
 const request = executorRequestSchema.parse({
+  installationId: 99,
+  repositoryOwner: "acme",
+  repositoryName: "api",
+  effectivePolicy: {
+    additionalExcludes: [],
+    baseSha: "b".repeat(40),
+    effectivePolicyDigest: "c".repeat(64),
+    source: "default",
+    sourceDigest: null,
+    verdictStrictness: "default",
+  },
   baseSha: "b".repeat(40),
   canonicalDiff: "",
   cloneUrl: "https://github.com/acme/api.git",
@@ -24,7 +35,6 @@ const request = executorRequestSchema.parse({
   pullRequestNumber: 7,
   repositoryId: 42,
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 1,
 });
 
 function buildTool(call: unknown) {

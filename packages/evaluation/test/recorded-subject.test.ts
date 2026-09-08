@@ -11,7 +11,6 @@ const evalCase = createEvalCase();
 const recording = {
   caseId: evalCase.id,
   output: evalSubjectOutputSchema.parse(createPassingOutput()),
-  schemaVersion: 1,
 } as const satisfies EvaluationRecording;
 
 describe("createRecordedSubject", () => {

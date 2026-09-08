@@ -11,10 +11,14 @@ const envelope = {
   deliveryId: "github:delivery-123",
   event: "pull_request",
   installationId: 99,
-  pullRequest: { baseSha: "b".repeat(40), headSha: "a".repeat(40), number: 7 },
+  pullRequest: {
+    baseSha: "b".repeat(40),
+    headSha: "a".repeat(40),
+    number: 7,
+    updatedAt: "2026-08-29T12:00:00.000Z",
+  },
   receivedAt: "2026-08-29T12:00:00.000Z",
   repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-  schemaVersion: 1,
 };
 
 function message(body: unknown) {

@@ -39,7 +39,6 @@ describe("repository-policy-resolver", () => {
         source: "default",
         sourceDigest: null,
         verdictStrictness: "default",
-        version: 1,
       });
     });
   });
@@ -47,7 +46,6 @@ describe("repository-policy-resolver", () => {
   describe("parseAndValidatePolicy", () => {
     it("parses valid policy with additional_excludes and strictness", async () => {
       const yaml = [
-        "version: 1",
         "review:",
         "  additional_excludes:",
         "    - 'generated/**'",
@@ -63,7 +61,7 @@ describe("repository-policy-resolver", () => {
         sampleBaseSha,
       );
 
-      expect(policy.version).toBe(1);
+      expect(policy).not.toHaveProperty("version");
       expect(policy.source).toBe(".github/holon.yml");
       expect(policy.baseSha).toBe(sampleBaseSha);
       expect(policy.verdictStrictness).toBe("block_all_confident_medium");
@@ -74,7 +72,7 @@ describe("repository-policy-resolver", () => {
     });
 
     it("defaults verdict strictness to default if omitted", async () => {
-      const yaml = ["version: 1"].join("\n");
+      const yaml = ["{}"].join("\n");
       const rawBytes = new TextEncoder().encode(yaml);
       const policy = await parseAndValidatePolicy(
         yaml,
@@ -87,7 +85,7 @@ describe("repository-policy-resolver", () => {
     });
 
     it("rejects invalid YAML syntax with RepositoryPolicySyntaxError", async () => {
-      const yaml = "version: 1\nreview: [unclosed bracket";
+      const yaml = "review: [unclosed bracket";
       const rawBytes = new TextEncoder().encode(yaml);
       await expect(
         parseAndValidatePolicy(
@@ -167,7 +165,7 @@ describe("repository-policy-resolver", () => {
     it("rejects forbidden keys starting with ! or << in YAML objects with RepositoryPolicySyntaxError", async () => {
       const invalidKeys = ['"!forbidden": 1', '"<<": { "a": 1 }'];
       for (const entry of invalidKeys) {
-        const yaml = `version: 1\n${entry}`;
+        const yaml = entry;
         const rawBytes = new TextEncoder().encode(yaml);
         await expect(
           parseAndValidatePolicy(
@@ -198,7 +196,6 @@ describe("repository-policy-resolver", () => {
       const universalGlobs = ["*", "**", "**/*", "*.*", ".*"];
       for (const glob of universalGlobs) {
         const yaml = [
-          "version: 1",
           "review:",
           "  additional_excludes:",
           `    - '${glob}'`,
@@ -219,7 +216,6 @@ describe("repository-policy-resolver", () => {
       const nonRelativeGlobs = ["/", "/*", "/**", "/**/*"];
       for (const glob of nonRelativeGlobs) {
         const yaml = [
-          "version: 1",
           "review:",
           "  additional_excludes:",
           `    - '${glob}'`,
@@ -246,7 +242,6 @@ describe("repository-policy-resolver", () => {
       ];
       for (const path of protectedPaths) {
         const yaml = [
-          "version: 1",
           "review:",
           "  additional_excludes:",
           `    - '${path}'`,
@@ -265,7 +260,6 @@ describe("repository-policy-resolver", () => {
 
     it("rejects directory traversal in globs with RepositoryPolicySchemaError", async () => {
       const yaml = [
-        "version: 1",
         "review:",
         "  additional_excludes:",
         "    - '../secrets.yml'",
@@ -282,7 +276,7 @@ describe("repository-policy-resolver", () => {
     });
 
     it("rejects unknown fields with RepositoryPolicySchemaError", async () => {
-      const yaml = ["version: 1", "rulesets:", "  - name: extra"].join("\n");
+      const yaml = ["rulesets:", "  - name: extra"].join("\n");
       const rawBytes = new TextEncoder().encode(yaml);
       await expect(
         parseAndValidatePolicy(
@@ -302,6 +296,10 @@ describe("repository-policy-resolver", () => {
       return {
         api: {} as unknown as GitHubInstallationSession["api"],
         currentHeadSha: async () => sampleBaseSha,
+        currentPullRequestRefs: async () => ({
+          baseSha: sampleBaseSha,
+          headSha: sampleBaseSha,
+        }),
         expectedAuthorLogin: "test-bot",
         expiresAt: "2099-01-01T00:00:00Z",
         pullRequestDiff: async () => "",
@@ -313,8 +311,7 @@ describe("repository-policy-resolver", () => {
     };
 
     it("resolves primary policy from .github/holon.yml", async () => {
-      const yaml =
-        "version: 1\nreview:\n  additional_excludes:\n    - 'generated/**'";
+      const yaml = "review:\n  additional_excludes:\n    - 'generated/**'";
       const session = mockSession({
         ".github/holon.yml": {
           content: yaml,
@@ -333,8 +330,7 @@ describe("repository-policy-resolver", () => {
     });
 
     it("resolves fallback policy from .holon.yml when .github/holon.yml is absent", async () => {
-      const yaml =
-        "version: 1\nverdict:\n  strictness: block_all_confident_medium";
+      const yaml = "verdict:\n  strictness: block_all_confident_medium";
       const session = mockSession({
         ".holon.yml": {
           content: yaml,
@@ -353,8 +349,8 @@ describe("repository-policy-resolver", () => {
     });
 
     it("throws RepositoryPolicyConflictError when both policy files are present", async () => {
-      const yaml1 = "version: 1";
-      const yaml2 = "version: 1";
+      const yaml1 = "{}";
+      const yaml2 = "{}";
       const session = mockSession({
         ".github/holon.yml": {
           content: yaml1,
@@ -388,6 +384,10 @@ describe("repository-policy-resolver", () => {
       const session: GitHubInstallationSession = {
         api: {} as unknown as GitHubInstallationSession["api"],
         currentHeadSha: async () => sampleBaseSha,
+        currentPullRequestRefs: async () => ({
+          baseSha: sampleBaseSha,
+          headSha: sampleBaseSha,
+        }),
         expectedAuthorLogin: "test-bot",
         expiresAt: "2099-01-01T00:00:00Z",
         pullRequestDiff: async () => "",

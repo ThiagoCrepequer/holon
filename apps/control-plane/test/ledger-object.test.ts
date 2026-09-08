@@ -1,5 +1,5 @@
 import {
-  buildAdminProjectionEventV1,
+  buildAdminProjectionEvent,
   type StepExecutionNode,
 } from "@holon/contracts";
 import {
@@ -33,6 +33,7 @@ afterEach(() => reset());
 
 const runId = `github:42:pr:7:head:${"a".repeat(40)}` as RunId;
 const run: ReviewRun = {
+  causalVersion: "2026-08-29T12:00:00.000Z",
   attempt: 0,
   createdAt: "2026-08-29T12:00:00.000Z",
   id: runId,
@@ -52,9 +53,15 @@ describe("ReviewLedgerObject", () => {
 
   it("atomically claims runs and tracks only the latest head", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    await expect(ledger.claimRun(run, "workflow-1")).resolves.toBe("claimed");
-    await expect(ledger.claimRun(run, "workflow-1")).resolves.toBe("resume");
-    await expect(ledger.claimRun(run, "workflow-2")).resolves.toBe("duplicate");
+    await expect(ledger.claimRun(run, "workflow-1")).resolves.toMatchObject({
+      outcome: "claimed",
+    });
+    await expect(ledger.claimRun(run, "workflow-1")).resolves.toMatchObject({
+      outcome: "resume",
+    });
+    await expect(ledger.claimRun(run, "workflow-2")).resolves.toMatchObject({
+      outcome: "duplicate",
+    });
     await expect(ledger.isLatestRun(runId)).resolves.toBe(true);
     await expect(ledger.runState(runId)).resolves.toBe("queued");
 
@@ -84,14 +91,14 @@ describe("ReviewLedgerObject", () => {
     });
 
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
-    const claim = await ledger.claimRunV2(
+    const claim = await ledger.claimRun(
       {
         ...run,
         createdAt: "2026-08-29T12:01:01.000Z",
         id: newerId,
+        causalVersion: "2026-08-29T12:01:00.000Z",
       },
       "workflow-new",
-      "2026-08-29T12:01:00.000Z",
     );
 
     expect(claim).toEqual({
@@ -125,14 +132,14 @@ describe("ReviewLedgerObject", () => {
     );
 
     const middleId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
-    await ledger.claimRunV2(
+    await ledger.claimRun(
       {
         ...run,
         createdAt: "2026-08-29T12:01:01.000Z",
         id: middleId,
+        causalVersion: "2026-08-29T12:01:00.000Z",
       },
       "workflow-b",
-      "2026-08-29T12:01:00.000Z",
     );
     await ledger.transition(
       middleId,
@@ -143,14 +150,14 @@ describe("ReviewLedgerObject", () => {
     );
 
     const newestId = `github:42:pr:7:head:${"c".repeat(40)}` as RunId;
-    const claim = await ledger.claimRunV2(
+    const claim = await ledger.claimRun(
       {
         ...run,
         createdAt: "2026-08-29T12:02:01.000Z",
         id: newestId,
+        causalVersion: "2026-08-29T12:02:00.000Z",
       },
       "workflow-c",
-      "2026-08-29T12:02:00.000Z",
     );
 
     expect(claim).toEqual({
@@ -184,14 +191,14 @@ describe("ReviewLedgerObject", () => {
 
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await expect(
-      ledger.claimRunV2(
+      ledger.claimRun(
         {
           ...run,
           createdAt: "2026-08-29T12:01:01.000Z",
           id: newerId,
+          causalVersion: "2026-08-29T12:01:00.000Z",
         },
         "workflow-new-after-retry",
-        "2026-08-29T12:01:00.000Z",
       ),
     ).resolves.toMatchObject({ outcome: "claimed" });
     await expect(ledger.runState(runId)).resolves.toBe("obsolete");
@@ -201,14 +208,17 @@ describe("ReviewLedgerObject", () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await ledger.claimRun(
-      { ...run, createdAt: "2026-08-29T12:02:00.000Z", id: newerId },
+      {
+        ...run,
+        createdAt: "2026-08-29T12:02:00.000Z",
+        id: newerId,
+        causalVersion: "2026-08-29T12:02:00.000Z",
+      },
       "workflow-newer",
-      "2026-08-29T12:02:00.000Z",
     );
-    const delayed = await ledger.claimRunV2(
-      run,
+    const delayed = await ledger.claimRun(
+      { ...run, causalVersion: "2026-08-29T12:00:00.000Z" },
       "workflow-delayed",
-      "2026-08-29T12:00:00.000Z",
     );
 
     expect(delayed).toEqual({
@@ -224,14 +234,22 @@ describe("ReviewLedgerObject", () => {
     const smallerId = `github:42:pr:7:head:${"a".repeat(40)}` as RunId;
     const largerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await ledger.claimRun(
-      { ...run, createdAt: "2026-08-29T12:00:01.000Z", id: largerId },
+      {
+        ...run,
+        createdAt: "2026-08-29T12:00:01.000Z",
+        id: largerId,
+        causalVersion: run.createdAt,
+      },
       "workflow-larger",
-      run.createdAt,
     );
     await ledger.claimRun(
-      { ...run, createdAt: "2026-08-29T12:00:02.000Z", id: smallerId },
+      {
+        ...run,
+        createdAt: "2026-08-29T12:00:02.000Z",
+        id: smallerId,
+        causalVersion: run.createdAt,
+      },
       "workflow-smaller",
-      run.createdAt,
     );
 
     await expect(ledger.isLatestRun(largerId)).resolves.toBe(false);
@@ -243,52 +261,21 @@ describe("ReviewLedgerObject", () => {
     const smallerId = `github:42:pr:7:head:${"a".repeat(40)}` as RunId;
     const largerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await ledger.claimRun(
-      { ...run, id: smallerId },
+      { ...run, id: smallerId, causalVersion: run.createdAt },
       "workflow-smaller",
-      run.createdAt,
     );
     await ledger.claimRun(
-      { ...run, id: largerId },
+      { ...run, id: largerId, causalVersion: run.createdAt },
       "workflow-larger",
-      run.createdAt,
     );
 
     await expect(ledger.isLatestRun(largerId)).resolves.toBe(true);
     await expect(ledger.isLatestRun(smallerId)).resolves.toBe(false);
   });
 
-  it("upgrades the executable MVP ledger schema through versioned migrations", async () => {
+  it("preserves the current schema and run state across eviction", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
     await ledger.claimRun(run, "workflow-before-upgrade");
-    await runInDurableObject(ledger, (_object, state) => {
-      state.storage.sql.exec(`
-        DROP TABLE schema_migrations;
-        DROP TABLE cleanup_tasks;
-        DROP TABLE credential_scopes;
-        DROP TABLE IF EXISTS pr_findings;
-        DROP TABLE IF EXISTS ci_evidences;
-        DROP TABLE IF EXISTS finding_feedbacks;
-        DROP TABLE IF EXISTS workflow_supersessions;
-        DROP TABLE IF EXISTS run_telemetry;
-        DROP TABLE IF EXISTS projection_tasks;
-        ALTER TABLE runs RENAME TO runs_v2;
-        CREATE TABLE runs (
-          id TEXT PRIMARY KEY,
-          pr_key TEXT NOT NULL,
-          state TEXT NOT NULL,
-          attempt INTEGER NOT NULL,
-          created_at TEXT NOT NULL,
-          workflow_instance_id TEXT NOT NULL,
-          updated_at TEXT
-        );
-        INSERT INTO runs (
-          id, pr_key, state, attempt, created_at, workflow_instance_id, updated_at
-        ) SELECT
-          id, pr_key, state, attempt, created_at, workflow_instance_id, updated_at
-        FROM runs_v2;
-        DROP TABLE runs_v2;
-      `);
-    });
     await evictDurableObject(ledger);
 
     await expect(ledger.isLatestRun(runId)).resolves.toBe(true);
@@ -312,6 +299,7 @@ describe("ReviewLedgerObject", () => {
         { version: 10 },
         { version: 11 },
         { version: 12 },
+        { version: 13 },
       ]);
       expect(
         state.storage.sql
@@ -362,7 +350,9 @@ describe("ReviewLedgerObject", () => {
       "2026-08-29T12:00:03.000Z",
       "fail",
     );
-    await expect(ledger.claimRun(run, "workflow-1")).resolves.toBe("resume");
+    await expect(ledger.claimRun(run, "workflow-1")).resolves.toMatchObject({
+      outcome: "resume",
+    });
     await expect(
       ledger.markTerminalAndRequestCleanup(
         runId,
@@ -377,7 +367,9 @@ describe("ReviewLedgerObject", () => {
         false,
       ),
     ).resolves.toBe(false);
-    await expect(ledger.claimRun(run, "workflow-1")).resolves.toBe("duplicate");
+    await expect(ledger.claimRun(run, "workflow-1")).resolves.toMatchObject({
+      outcome: "duplicate",
+    });
     await runInDurableObject(ledger, async (object) => {
       await expect(
         object.transition(
@@ -393,17 +385,15 @@ describe("ReviewLedgerObject", () => {
 
   it("schedules recovery for a projection whose processing lease expires after eviction", async () => {
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    const event = await buildAdminProjectionEventV1({
+    const event = await buildAdminProjectionEvent({
       headSha: "a".repeat(40),
       prKey: "github:42:pr:7",
       projectedFrom: "workflow",
       projectionRequestedAt: new Date().toISOString(),
       pullRequestNumber: 7,
-      recordVersion: 1,
       repository: { id: 42, name: "api", owner: "acme" },
       reviewPhaseReached: "publishing",
       runId,
-      schemaVersion: 1,
       scopeStatus: "complete",
       telemetry: {
         estimatedCostMicroUsd: 0,
@@ -508,7 +498,7 @@ describe("ReviewLedgerObject", () => {
       findingId,
       id,
       kind: "inline",
-      marker: `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`,
+      marker: `<!-- holon;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`,
       runId,
       state: "publishing",
     };
@@ -572,9 +562,13 @@ describe("ReviewLedgerObject", () => {
 
     const newerId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
     await ledger.claimRun(
-      { ...run, createdAt: "2026-08-29T12:01:00.000Z", id: newerId },
+      {
+        ...run,
+        createdAt: "2026-08-29T12:01:00.000Z",
+        id: newerId,
+        causalVersion: "2026-08-29T12:01:00.000Z",
+      },
       "workflow-newer",
-      "2026-08-29T12:01:00.000Z",
     );
     await expect(ledger.authorizeMutation(runId, "review")).resolves.toBe(
       false,
@@ -587,62 +581,6 @@ describe("ReviewLedgerObject", () => {
         repositoryName: "api",
         repositoryOwner: "acme",
         runId,
-      }),
-    ).resolves.toBe(false);
-  });
-
-  it("atomically bootstraps an exact v1 credential scope once", async () => {
-    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    await ledger.claimRun(run, "workflow-v1-bootstrap");
-    await ledger.transition(
-      runId,
-      "queued",
-      "running",
-      "2026-08-29T12:00:01.000Z",
-      "workflow-v1-bootstrap:start",
-    );
-    const v1Request = {
-      containerId: `r-16-7-${"a".repeat(40)}`,
-      repositoryId: 42,
-      repositoryName: "api",
-      repositoryOwner: "acme",
-      runId,
-    };
-    await expect(ledger.canBootstrapCredentialScope(v1Request)).resolves.toBe(
-      true,
-    );
-    await expect(
-      ledger.bootstrapCredentialScope({ ...v1Request, installationId: 99 }),
-    ).resolves.toBe(true);
-    await expect(
-      ledger.bootstrapCredentialScope({ ...v1Request, installationId: 99 }),
-    ).resolves.toBe(true);
-    await expect(
-      ledger.bootstrapCredentialScope({
-        ...v1Request,
-        installationId: 99,
-        repositoryOwner: "other",
-      }),
-    ).resolves.toBe(false);
-    await expect(
-      ledger.canBootstrapCredentialScope({
-        ...v1Request,
-        containerId: "different",
-      }),
-    ).resolves.toBe(false);
-    await expect(ledger.bootstrapCredentialScope(v1Request)).resolves.toBe(
-      false,
-    );
-    await expect(
-      ledger.canBootstrapCredentialScope({
-        ...v1Request,
-        runId: "github:42:pr:7:head:0000000000000000000000000000000000000000",
-      }),
-    ).resolves.toBe(false);
-    await expect(
-      ledger.canBootstrapCredentialScope({
-        ...v1Request,
-        containerId: "",
       }),
     ).resolves.toBe(false);
   });
@@ -739,6 +677,7 @@ describe("ReviewLedgerObject", () => {
       diagnostic: "SQL injection vulnerability in query builder.",
       filePath: "src/db/query.ts",
       fingerprint,
+      evidenceFingerprint: fingerprint.slice(3),
       firstSeenHeadSha: "a".repeat(40),
       firstSeenRunId: runId,
       githubCommentId: 101,
@@ -856,6 +795,7 @@ describe("ReviewLedgerObject", () => {
         diagnostic: "A persisted finding with enough detail.",
         filePath: "src/example.ts",
         fingerprint,
+        evidenceFingerprint: fingerprint.slice(3),
         firstSeenHeadSha: "a".repeat(40),
         firstSeenRunId: runId,
         githubCommentId: 202,
@@ -904,6 +844,28 @@ describe("ReviewLedgerObject", () => {
     await expect(ledger.loadFindingFeedbacks(prKey)).resolves.toHaveLength(1);
     await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
       { confidence: 0.62, status: "dismissed" },
+    ]);
+
+    // The review loaded its baseline before the human response arrived.
+    const dismissed = (await ledger.loadPrFindings(prKey))[0]!;
+    await ledger.savePrFindings(prKey, [
+      { ...dismissed, status: "persistent" },
+    ]);
+    await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
+      { status: "dismissed" },
+    ]);
+    await ledger.applyFindingFeedback({
+      ...input,
+      deliveryId: "github:severity-feedback",
+      label: "wrong_severity",
+      targetSeverity: "low",
+      update: { severity: "low" },
+    });
+    await ledger.savePrFindings(prKey, [
+      { ...dismissed, severity: "critical", status: "persistent" },
+    ]);
+    await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
+      { status: "dismissed", severity: "low" },
     ]);
   });
 
@@ -1049,17 +1011,15 @@ describe("ReviewLedgerObject", () => {
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const testRunId = `github:42:pr:7:head:${"c".repeat(40)}` as RunId;
 
-    const event = await buildAdminProjectionEventV1({
+    const event = await buildAdminProjectionEvent({
       headSha: "c".repeat(40),
       prKey: testPrKey,
       projectedFrom: "workflow",
       projectionRequestedAt: "2026-08-29T12:00:15.000Z",
       pullRequestNumber: 7,
-      recordVersion: 1,
       repository: { id: 42, name: "api", owner: "acme" },
       reviewPhaseReached: "publishing",
       runId: testRunId,
-      schemaVersion: 1,
       scopeStatus: "complete",
       telemetry: {
         estimatedCostMicroUsd: 1500,
@@ -1106,17 +1066,15 @@ describe("ReviewLedgerObject", () => {
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const testRunId = `github:42:pr:7:head:${"d".repeat(40)}` as RunId;
 
-    const event = await buildAdminProjectionEventV1({
+    const event = await buildAdminProjectionEvent({
       headSha: "d".repeat(40),
       prKey: testPrKey,
       projectedFrom: "workflow",
       projectionRequestedAt: "2026-08-29T12:00:15.000Z",
       pullRequestNumber: 7,
-      recordVersion: 1,
       repository: { id: 42, name: "api", owner: "acme" },
       reviewPhaseReached: "publishing",
       runId: testRunId,
-      schemaVersion: 1,
       scopeStatus: "complete",
       telemetry: {
         estimatedCostMicroUsd: 1500,
@@ -1156,17 +1114,15 @@ describe("ReviewLedgerObject", () => {
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const testRunId = `github:42:pr:701:head:${"e".repeat(40)}` as RunId;
 
-    const event = await buildAdminProjectionEventV1({
+    const event = await buildAdminProjectionEvent({
       headSha: "e".repeat(40),
       prKey: testPrKey,
       projectedFrom: "workflow",
       projectionRequestedAt: "2026-08-29T12:00:15.000Z",
       pullRequestNumber: 701,
-      recordVersion: 1,
       repository: { id: 42, name: "api", owner: "acme" },
       reviewPhaseReached: "publishing",
       runId: testRunId,
-      schemaVersion: 1,
       scopeStatus: "complete",
       telemetry: {
         estimatedCostMicroUsd: 1500,
@@ -1206,10 +1162,14 @@ describe("ReviewLedgerObject", () => {
     expect(proj?.state).toMatch(/^(completed|pending|processing)$/);
   });
 
-  it("sanitizes diagnostic in getSanitizedAdminRunDetailV2", async () => {
+  it("sanitizes diagnostic in getSanitizedAdminRunDetail", async () => {
     const testPrKey = "github:42:pr:7" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const testRunId = `github:42:pr:7:head:${"f".repeat(40)}` as RunId;
+    await ledger.claimRun(
+      { ...run, id: testRunId, prKey: testPrKey },
+      "admin-detail-fixture",
+    );
 
     const telemetry = {
       cost: {
@@ -1237,6 +1197,11 @@ describe("ReviewLedgerObject", () => {
 
     await ledger.savePrFindings(testPrKey, [
       {
+        evidenceFingerprint:
+          "fp:1111111111111111111111111111111111111111111111111111111111111111".slice(
+            3,
+          ),
+        confidence: 0.95,
         diagnostic:
           "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890 " +
           "界".repeat(1500),
@@ -1255,7 +1220,7 @@ describe("ReviewLedgerObject", () => {
       },
     ]);
 
-    const detail = await ledger.getSanitizedAdminRunDetailV2(testRunId);
+    const detail = await ledger.getSanitizedAdminRunDetail(testRunId);
     expect(detail).not.toBeNull();
     expect(detail?.run.runId).toBe(testRunId);
     expect(detail?.currentFindings).toHaveLength(1);
@@ -1265,20 +1230,24 @@ describe("ReviewLedgerObject", () => {
     expect(firstFinding?.diagnostic).toContain("界".repeat(1500));
   });
 
-  it("returns null in getSanitizedAdminRunDetailV2 when run telemetry does not exist", async () => {
+  it("returns null in getSanitizedAdminRunDetail when run telemetry does not exist", async () => {
     const testPrKey = "github:42:pr:7" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const missingRunId = `github:42:pr:7:head:${"0".repeat(40)}` as RunId;
 
-    const detail = await ledger.getSanitizedAdminRunDetailV2(missingRunId);
+    const detail = await ledger.getSanitizedAdminRunDetail(missingRunId);
     expect(detail).toBeNull();
   });
 
-  it("loads and exposes structuredCi in getSanitizedAdminRunDetailV2 and handles corrupted JSON safely", async () => {
+  it("loads and exposes structuredCi in getSanitizedAdminRunDetail and handles corrupted JSON safely", async () => {
     const testPrKey = "github:42:pr:101" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
     const headSha1 = "1".repeat(40);
     const runId1 = `github:42:pr:101:head:${headSha1}` as RunId;
+    await ledger.claimRun(
+      { ...run, id: runId1, prKey: testPrKey },
+      "admin-ci-fixture",
+    );
 
     await ledger.saveCiEvidence(testPrKey, headSha1, {
       markdown: "CI run completed",
@@ -1317,7 +1286,7 @@ describe("ReviewLedgerObject", () => {
       verdict: "APPROVE",
     });
 
-    const detail = await ledger.getSanitizedAdminRunDetailV2(runId1);
+    const detail = await ledger.getSanitizedAdminRunDetail(runId1);
     expect(detail?.structuredCi?.status).toBe("available");
     expect(detail?.structuredCi?.failed).toBe(1);
 
@@ -1354,17 +1323,15 @@ describe("ReviewLedgerObject", () => {
         ADMIN_PROJECTION_QUEUE: failingQueue,
       };
 
-      const event = await buildAdminProjectionEventV1({
+      const event = await buildAdminProjectionEvent({
         headSha: headSha3,
         prKey: testPrKey,
         projectedFrom: "workflow",
         projectionRequestedAt: new Date().toISOString(),
         pullRequestNumber: 102,
-        recordVersion: 1,
         repository: { id: 42, name: "api", owner: "acme" },
         reviewPhaseReached: "publishing",
         runId: runId3,
-        schemaVersion: 1,
         scopeStatus: "complete",
         telemetry: {
           estimatedCostMicroUsd: 100,
@@ -1469,6 +1436,7 @@ describe("Migration 12 and step executions telemetry", () => {
   const v12PrKey = "github:42:pr:99" as const;
   const v12RunId = `github:42:pr:99:head:${"e".repeat(40)}` as RunId;
   const v12Run: ReviewRun = {
+    causalVersion: "2026-09-04T12:00:00.000Z",
     attempt: 0,
     createdAt: "2026-09-04T12:00:00.000Z",
     id: v12RunId,
@@ -1707,7 +1675,7 @@ describe("Migration 12 and step executions telemetry", () => {
     });
   });
 
-  it("getSanitizedAdminRunDetailV3 returns detail for in-progress run and historical vs current findings", async () => {
+  it("getSanitizedAdminRunDetail returns detail for in-progress run and historical vs current findings", async () => {
     const prKey = "github:42:pr:120" as const;
     const ledger = env.REVIEW_LEDGERS.getByName(prKey);
     const runId1 = `github:42:pr:120:head:${"1".repeat(40)}` as RunId;
@@ -1716,6 +1684,7 @@ describe("Migration 12 and step executions telemetry", () => {
     // Run 1: completed
     await ledger.claimRun(
       {
+        causalVersion: "2026-09-04T10:00:00.000Z",
         attempt: 0,
         createdAt: "2026-09-04T10:00:00.000Z",
         id: runId1,
@@ -1749,7 +1718,9 @@ describe("Migration 12 and step executions telemetry", () => {
     // Add findings: one produced by run 1, one updated later by run 2
     await ledger.savePrFindings(prKey, [
       {
-        diagnostic: "Bug in old code",
+        evidenceFingerprint: `fp:${"1".repeat(64)}`.slice(3),
+        confidence: 0.95,
+        diagnostic: "A concrete functional defect in the old code.",
         filePath: "src/old.ts",
         fingerprint: `fp:${"1".repeat(64)}`,
         firstSeenHeadSha: "1".repeat(40),
@@ -1763,7 +1734,9 @@ describe("Migration 12 and step executions telemetry", () => {
         updatedAt: "2026-09-04T10:00:05.000Z",
       },
       {
-        diagnostic: "Bug introduced in new code",
+        evidenceFingerprint: `fp:${"2".repeat(64)}`.slice(3),
+        confidence: 0.95,
+        diagnostic: "A concrete functional defect introduced in new code.",
         filePath: "src/new.ts",
         fingerprint: `fp:${"2".repeat(64)}`,
         firstSeenHeadSha: "2".repeat(40),
@@ -1796,7 +1769,7 @@ describe("Migration 12 and step executions telemetry", () => {
         findingsCount: 1,
         historicalFindings: [
           {
-            diagnostic: "Bug in old code",
+            diagnostic: "A concrete functional defect in the old code.",
             filePath: "src/old.ts",
             fingerprint: `fp:${"1".repeat(64)}`,
             line: 10,
@@ -1810,7 +1783,7 @@ describe("Migration 12 and step executions telemetry", () => {
       },
     );
 
-    const detail1 = await ledger.getSanitizedAdminRunDetailV3(runId1);
+    const detail1 = await ledger.getSanitizedAdminRunDetail(runId1);
     expect(detail1).not.toBeNull();
     expect(detail1?.run.runId).toBe(runId1);
     expect(detail1?.run.runState).toBe("completed");
@@ -1825,6 +1798,7 @@ describe("Migration 12 and step executions telemetry", () => {
     // Run 2: currently running with analyze-review output snapshot
     await ledger.claimRun(
       {
+        causalVersion: "2026-09-04T11:00:00.000Z",
         attempt: 0,
         createdAt: "2026-09-04T11:00:00.000Z",
         id: runId2,
@@ -1857,7 +1831,7 @@ describe("Migration 12 and step executions telemetry", () => {
         findingsCount: 1,
         historicalFindings: [
           {
-            diagnostic: "Bug introduced in new code",
+            diagnostic: "A concrete functional defect introduced in new code.",
             filePath: "src/new.ts",
             fingerprint: `fp:${"2".repeat(64)}`,
             line: 20,
@@ -1871,7 +1845,7 @@ describe("Migration 12 and step executions telemetry", () => {
       },
     );
 
-    const detail2 = await ledger.getSanitizedAdminRunDetailV3(runId2);
+    const detail2 = await ledger.getSanitizedAdminRunDetail(runId2);
     expect(detail2).not.toBeNull();
     expect(detail2?.run.runId).toBe(runId2);
     expect(detail2?.run.runState).toBe("running");
@@ -1883,6 +1857,7 @@ describe("Migration 12 and step executions telemetry", () => {
     const runId3 = `github:42:pr:120:head:${"3".repeat(40)}` as RunId;
     await ledger.claimRun(
       {
+        causalVersion: "2026-09-04T12:00:00.000Z",
         attempt: 0,
         createdAt: "2026-09-04T12:00:00.000Z",
         id: runId3,
@@ -1891,7 +1866,7 @@ describe("Migration 12 and step executions telemetry", () => {
       },
       "workflow-3",
     );
-    const detail3 = await ledger.getSanitizedAdminRunDetailV3(runId3);
+    const detail3 = await ledger.getSanitizedAdminRunDetail(runId3);
     expect(detail3).not.toBeNull();
     expect(detail3?.historicalRunFindings).toBeNull();
     expect(detail3?.findingsPerspective).toBe("current_pr_state");
@@ -1902,6 +1877,7 @@ describe("Migration 12 and step executions telemetry", () => {
     const runId4 = `github:42:pr:121:head:${"4".repeat(40)}` as RunId;
     await ledger4.claimRun(
       {
+        causalVersion: "2026-09-04T12:00:00.000Z",
         attempt: 0,
         createdAt: "2026-09-04T12:00:00.000Z",
         id: runId4,
@@ -1941,7 +1917,7 @@ describe("Migration 12 and step executions telemetry", () => {
         summary: "Run 4 summary",
       },
     );
-    const detail4 = await ledger4.getSanitizedAdminRunDetailV3(runId4);
+    const detail4 = await ledger4.getSanitizedAdminRunDetail(runId4);
     expect(detail4).not.toBeNull();
     expect(detail4?.historicalRunFindings).toHaveLength(1);
     expect(detail4?.currentFindings).toHaveLength(0);
@@ -1951,6 +1927,7 @@ describe("Migration 12 and step executions telemetry", () => {
     const runId5 = `github:42:pr:121:head:${"5".repeat(40)}` as RunId;
     await ledger4.claimRun(
       {
+        causalVersion: "2026-09-04T13:00:00.000Z",
         attempt: 0,
         createdAt: "2026-09-04T13:00:00.000Z",
         id: runId5,
@@ -1972,12 +1949,12 @@ describe("Migration 12 and step executions telemetry", () => {
         runId5,
       );
     });
-    const detail5 = await ledger4.getSanitizedAdminRunDetailV3(runId5);
+    const detail5 = await ledger4.getSanitizedAdminRunDetail(runId5);
     expect(detail5).not.toBeNull();
     expect(detail5?.historicalRunFindings).toBeNull();
 
     // Non-existent run returns null
-    const missing = await ledger.getSanitizedAdminRunDetailV3(
+    const missing = await ledger.getSanitizedAdminRunDetail(
       `github:42:pr:120:head:${"9".repeat(40)}`,
     );
     expect(missing).toBeNull();

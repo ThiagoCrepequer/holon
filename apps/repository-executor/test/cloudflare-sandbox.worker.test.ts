@@ -87,7 +87,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
     });
   });
 
-  it("supports the N-1 identity by asking the broker to resolve the installation", async () => {
+  it("returns unavailable when the credential broker fails", async () => {
     const legacyToken = "legacy-installation-token-value";
     const setOutboundCalls: unknown[][] = [];
     const port = new CloudflareSandboxPort({
@@ -100,6 +100,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
       GitHubCredentialBroker["getInstallationToken"]
     >(() => Promise.reject(new Error("broker unavailable")));
     const authorization = {
+      installationId: 99,
       repositoryId: 42,
       repositoryName: "api",
       repositoryOwner: "acme",
@@ -131,14 +132,12 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
     expect(response.status).toBe(503);
     expect(getInstallationToken).toHaveBeenCalledWith({
       containerId: platformContainerId,
+      installationId: 99,
       repositoryId: 42,
       repositoryName: "api",
       repositoryOwner: "acme",
       runId: authorization.runId,
     });
-    expect(getInstallationToken.mock.calls[0]?.[0]).not.toHaveProperty(
-      "installationId",
-    );
     expect(JSON.stringify(getInstallationToken.mock.calls)).not.toContain(
       legacyToken,
     );

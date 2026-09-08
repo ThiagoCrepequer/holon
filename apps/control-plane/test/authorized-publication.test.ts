@@ -12,6 +12,7 @@ import {
   isReviewMutationNotAuthorizedError,
   publishAuthorized,
   publishFailureNoticeAuthorized,
+  publishResolutionAuthorized,
   ReviewMutationNotAuthorizedError,
   type PublicationLedger,
 } from "../src/authorized-publication.js";
@@ -35,7 +36,8 @@ function ledger(
     authorizeMutation: authorize,
     checkRunId: () => undefined,
     claimPublication: claim,
-    claimRun: () => Promise.resolve("claimed" as const),
+    claimRun: () =>
+      Promise.resolve({ outcome: "claimed" as const, supersededWorkflows: [] }),
     completePublication: vi.fn(() => Promise.resolve()),
     isLatestRun: () => Promise.resolve(true),
     recordCheckRunId: () => undefined,
@@ -53,6 +55,53 @@ function publisher(
 }
 
 describe("authorized publication", () => {
+  it("reconciles a resolution reply accepted before the ledger completion failed", async () => {
+    let persisted: PublicationRecord | undefined;
+    const state = ledger(async (next) => {
+      const previous = persisted;
+      persisted = next;
+      return {
+        outcome: previous ? "reconcile" : "claimed",
+        record: previous ?? next,
+      };
+    });
+    state.completePublication.mockRejectedValueOnce(
+      new Error("lost ledger acknowledgement"),
+    );
+    const bodies: string[] = [];
+    const github: ReviewPublisher = {
+      publish: vi.fn(),
+      findCommentByMarker: async (marker) =>
+        bodies.some((body) => body.includes(marker)) ? 87 : undefined,
+      replyToComment: vi.fn(async (_id, body) => {
+        bodies.push(body);
+        return 87;
+      }),
+    };
+    const resolved = {
+      fingerprint: `fp:${"c".repeat(64)}` as const,
+      githubCommentId: 77,
+    };
+    await expect(
+      publishResolutionAuthorized(
+        state,
+        github,
+        runId,
+        resolved,
+        "a".repeat(40),
+        async () => true,
+      ),
+    ).rejects.toThrow("lost ledger");
+    await publishResolutionAuthorized(
+      state,
+      github,
+      runId,
+      resolved,
+      "a".repeat(40),
+      async () => true,
+    );
+    expect(bodies).toHaveLength(1);
+  });
   it("recognizes only the local or serialized authorization error", () => {
     expect(
       isReviewMutationNotAuthorizedError(

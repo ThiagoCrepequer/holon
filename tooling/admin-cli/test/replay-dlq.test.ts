@@ -1,4 +1,4 @@
-import { buildAdminProjectionEventV1 } from "@holon/contracts";
+import { buildAdminProjectionEvent } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,17 +11,15 @@ import {
 async function createProjectionEvent(runNumber: number) {
   const headSha = runNumber.toString(16).padStart(40, "0");
   const terminalAt = "2026-09-04T12:00:00.000Z";
-  return buildAdminProjectionEventV1({
+  return buildAdminProjectionEvent({
     headSha,
     prKey: `github:101:pr:${runNumber}`,
     projectedFrom: "workflow",
     projectionRequestedAt: "2026-09-04T12:00:01.000Z",
     pullRequestNumber: runNumber,
-    recordVersion: 1,
     repository: { id: 101, name: "holon", owner: "example" },
     reviewPhaseReached: "analyzed",
     runId: `github:101:pr:${runNumber}:head:${headSha}`,
-    schemaVersion: 1,
     scopeStatus: "complete",
     telemetry: {
       estimatedCostMicroUsd: 1,

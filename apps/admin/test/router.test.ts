@@ -243,8 +243,8 @@ describe("apps/admin router and server-side rendered views", () => {
     );
 
     const mockRpcFail = {
-      pingV1: vi.fn(),
-      getRunDetailV3: vi.fn().mockRejectedValue(new Error("RPC timeout")),
+      ping: vi.fn(),
+      getRunDetail: vi.fn().mockRejectedValue(new Error("RPC timeout")),
     };
 
     const envWithRpc = {
@@ -291,7 +291,7 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(html).toContain("Control plane RPC binding not configured");
   });
 
-  it("handles run detail when getRunDetailV3 succeeds with V3 detail", async () => {
+  it("handles run detail when getRunDetail succeeds with the current detail", async () => {
     const event = await createSampleProjectionEvent({
       terminalAtEpochMs: Date.now() - 5000,
     });
@@ -303,13 +303,12 @@ describe("apps/admin router and server-side rendered views", () => {
       { headers },
     );
 
-    const mockV3 = {
-      pingV1: vi.fn(),
-      getRunDetailV3: vi.fn().mockResolvedValue({
+    const mock = {
+      ping: vi.fn(),
+      getRunDetail: vi.fn().mockResolvedValue({
         cleanupTask: null,
         currentFindings: [],
         findingsPerspective: "both",
-        graphSchemaVersion: 1,
         historicalRunFindings: [],
         projectIdentification: null,
         run: {
@@ -329,7 +328,6 @@ describe("apps/admin router and server-side rendered views", () => {
           updatedAt: "2026-09-04T11:00:05.000Z",
           verdict: null,
         },
-        schemaVersion: 3,
         stepExecutions: [
           {
             attempts: [],
@@ -347,17 +345,16 @@ describe("apps/admin router and server-side rendered views", () => {
         ],
         structuredCi: null,
       }),
-      getRunDetailV2: vi.fn(),
     };
 
-    const envWithV3 = {
+    const envWith = {
       ...env,
-      ADMIN_READ_API: mockV3 as unknown as Fetcher,
+      ADMIN_READ_API: mock as unknown as Fetcher,
     } as unknown as AdminEnv;
 
     const resp = await handleConsoleRequest(
       req,
-      envWithV3,
+      envWith,
       mockCtx,
       authConfig(),
     );
@@ -367,7 +364,7 @@ describe("apps/admin router and server-side rendered views", () => {
     expect(html).toContain("claim-run");
   });
 
-  it("sets rpcError without falling back to V2 when getRunDetailV3 fails (ADR-0032)", async () => {
+  it("sets rpcError when getRunDetail fails", async () => {
     const event = await createSampleProjectionEvent({
       terminalAtEpochMs: Date.now() - 5000,
     });
@@ -379,15 +376,14 @@ describe("apps/admin router and server-side rendered views", () => {
       { headers },
     );
 
-    const mockV3Fail = {
-      pingV1: vi.fn(),
-      getRunDetailV3: vi.fn().mockRejectedValue(new Error("V3 RPC failed")),
-      getRunDetailV2: vi.fn(),
+    const mockFail = {
+      ping: vi.fn(),
+      getRunDetail: vi.fn().mockRejectedValue(new Error("RPC failed")),
     };
 
     const envWithFail = {
       ...env,
-      ADMIN_READ_API: mockV3Fail as unknown as Fetcher,
+      ADMIN_READ_API: mockFail as unknown as Fetcher,
     } as unknown as AdminEnv;
 
     const resp = await handleConsoleRequest(
@@ -397,8 +393,8 @@ describe("apps/admin router and server-side rendered views", () => {
       authConfig(),
     );
     expect(resp.status).toBe(200);
-    expect(mockV3Fail.getRunDetailV3).toHaveBeenCalled();
-    expect(mockV3Fail.getRunDetailV2).not.toHaveBeenCalled();
+    expect(mockFail.getRunDetail).toHaveBeenCalled();
+    expect(mockFail.getRunDetail).toHaveBeenCalledOnce();
     const html = await resp.text();
     expect(html).toContain("RPC drill-down unavailable");
   });
@@ -412,13 +408,12 @@ describe("apps/admin router and server-side rendered views", () => {
       { headers },
     );
 
-    const mockActiveV3 = {
-      pingV1: vi.fn(),
-      getRunDetailV3: vi.fn().mockResolvedValue({
+    const mockActive = {
+      ping: vi.fn(),
+      getRunDetail: vi.fn().mockResolvedValue({
         cleanupTask: null,
         currentFindings: [],
         findingsPerspective: "current_pr_state",
-        graphSchemaVersion: 1,
         historicalRunFindings: [],
         projectIdentification: null,
         run: {
@@ -438,7 +433,6 @@ describe("apps/admin router and server-side rendered views", () => {
           updatedAt: "2026-09-04T11:00:05.000Z",
           verdict: null,
         },
-        schemaVersion: 3,
         stepExecutions: [
           {
             attempts: [],
@@ -474,12 +468,11 @@ describe("apps/admin router and server-side rendered views", () => {
         ],
         structuredCi: null,
       }),
-      getRunDetailV2: vi.fn(),
     };
 
     const envWithActive = {
       ...env,
-      ADMIN_READ_API: mockActiveV3 as unknown as Fetcher,
+      ADMIN_READ_API: mockActive as unknown as Fetcher,
     } as unknown as AdminEnv;
 
     const resp = await handleConsoleRequest(
@@ -489,7 +482,7 @@ describe("apps/admin router and server-side rendered views", () => {
       authConfig(),
     );
     expect(resp.status).toBe(200);
-    expect(mockActiveV3.getRunDetailV3).toHaveBeenCalled();
+    expect(mockActive.getRunDetail).toHaveBeenCalled();
     const html = await resp.text();
     expect(html).toContain(activeRunId);
     expect(html).toContain("acme/cool-project #120");
@@ -503,8 +496,8 @@ describe("apps/admin router and server-side rendered views", () => {
     await storage.insertProjection(event);
 
     const mockRpcSuccess: AdminReadRpcClient = {
-      pingV1: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
-      getRunDetailV3: vi.fn().mockResolvedValue({
+      ping: vi.fn().mockResolvedValue({ schemaVersion: 1 }),
+      getRunDetail: vi.fn().mockResolvedValue({
         cleanupTask: null,
         currentFindings: [
           {
@@ -519,7 +512,6 @@ describe("apps/admin router and server-side rendered views", () => {
           },
         ],
         findingsPerspective: "current_pr_state",
-        graphSchemaVersion: 1,
         historicalRunFindings: null,
         projectIdentification: null,
         run: {
@@ -547,7 +539,6 @@ describe("apps/admin router and server-side rendered views", () => {
           toolCallsCount: 1,
           verdict: "APPROVE",
         },
-        schemaVersion: 3,
         stepExecutions: [],
         structuredCi: {
           durationMs: 1000,
@@ -561,14 +552,14 @@ describe("apps/admin router and server-side rendered views", () => {
       }),
     };
 
-    const candidate = await mockRpcSuccess.getRunDetailV3!({
+    const candidate = await mockRpcSuccess.getRunDetail!({
       runId: event.payload.runId,
     });
     expect(candidate).not.toBeNull();
     if (!candidate) throw new Error("candidate is null");
     const parsed = parseRpcRunDetail(candidate);
     expect(parsed?.currentFindings[0]?.filePath).toBe("src/auth.ts");
-    expect(parsed?.schemaVersion).toBe(3);
+    expect(parsed?.run.runState).toBe("completed");
     expect(parsed?.stepExecutions).toEqual([]);
     expect(() => parseRpcRunDetail({ schemaVersion: 2 })).toThrow(
       "Invalid RPC run detail response",

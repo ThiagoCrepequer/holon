@@ -6,3 +6,4 @@ export * from "./execute-review.js";
 export * from "./feedback-service.js";
 export * from "./ports.js";
 export * from "./project-identification.js";
+export * from "./publication-summary.js";

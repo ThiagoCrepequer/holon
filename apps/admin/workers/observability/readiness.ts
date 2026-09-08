@@ -1,4 +1,4 @@
-import type { AdminRunDetailV2, AdminRunDetailV3 } from "@holon/contracts";
+import type { AdminRunDetail } from "@holon/contracts";
 import { z } from "zod";
 
 import type { AdminEnv } from "../app.js";
@@ -8,9 +8,8 @@ import { queryQueueHealth } from "./queue-metrics-client.js";
 export type ComponentHealth = "healthy" | "degraded" | "unknown";
 
 export interface AdminReadRpcClient {
-  pingV1(): Promise<{ schemaVersion: 1 }>;
-  getRunDetailV2?(request: { runId: string }): Promise<AdminRunDetailV2 | null>;
-  getRunDetailV3?(request: { runId: string }): Promise<AdminRunDetailV3 | null>;
+  ping(): Promise<{ ok: true }>;
+  getRunDetail?(request: { runId: string }): Promise<AdminRunDetail | null>;
 }
 
 export interface ReadinessReport {
@@ -24,7 +23,7 @@ export interface ReadinessReport {
   };
 }
 
-const rpcPingResponseSchema = z.object({ schemaVersion: z.literal(1) });
+const rpcPingResponseSchema = z.strictObject({ ok: z.literal(true) });
 
 export async function checkReadiness(
   env: AdminEnv,
@@ -49,7 +48,7 @@ export async function checkReadiness(
     }
   };
 
-  // Probe 2: RPC entrypoint pingV1 (2s timeout)
+  // Probe 2: RPC entrypoint ping (2s timeout)
   const probeRpc = async (): Promise<ComponentHealth> => {
     try {
       const rpcClient = env.ADMIN_READ_API as unknown as
@@ -57,7 +56,7 @@ export async function checkReadiness(
         | undefined;
       if (!rpcClient) return "degraded";
       const res = await Promise.race([
-        rpcClient.pingV1(),
+        rpcClient.ping(),
         new Promise<null>((_, reject) =>
           setTimeout(() => reject(new Error("RPC timeout")), 2000),
         ),

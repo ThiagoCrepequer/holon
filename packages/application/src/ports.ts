@@ -1,9 +1,10 @@
 import type {
-  AdminCiSummaryV1,
+  AdminCiSummary,
   CreateCheckRunInput,
   ModelReviewOutput,
-  ReviewContextV2,
+  ReviewShardContext,
   ReviewJob,
+  RunClaimResult,
   RunTelemetry,
   StepTiming,
   TrackedFinding,
@@ -22,9 +23,17 @@ import type {
   RunState,
 } from "@holon/domain";
 
+export type ReviewContext = ReviewShardContext & {
+  readonly deadlineAt?: number | undefined;
+  readonly priorFindings?:
+    | readonly Pick<
+        TrackedFinding,
+        "fingerprint" | "diagnostic" | "filePath" | "severity"
+      >[]
+    | undefined;
+};
 export type {
   CreateCheckRunInput,
-  ReviewContextV2 as ReviewContext,
   UpdateCheckRunInput,
 } from "@holon/contracts";
 
@@ -34,7 +43,7 @@ export interface ModelReviewResult {
 }
 
 export interface ModelReviewer {
-  review(job: ReviewJob, context: ReviewContextV2): Promise<ModelReviewResult>;
+  review(job: ReviewJob, context: ReviewContext): Promise<ModelReviewResult>;
   synthesizeReviewSummary?(
     job: ReviewJob,
     input: {
@@ -54,10 +63,7 @@ export type ClaimedPublication =
   | { readonly outcome: "reconcile"; readonly record: PublicationRecord };
 
 export interface ReviewLedger {
-  claimRun(
-    run: ReviewRun,
-    workflowInstanceId: string,
-  ): Promise<"claimed" | "duplicate" | "resume">;
+  claimRun(run: ReviewRun, workflowInstanceId: string): Promise<RunClaimResult>;
   isLatestRun(runId: RunId): Promise<boolean>;
   transition(
     runId: RunId,
@@ -81,7 +87,7 @@ export interface CiEvidenceLedger {
     | {
         readonly markdown: string;
         readonly workflowRunId?: number | undefined;
-        readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+        readonly structuredCi?: AdminCiSummary | null | undefined;
       }
     | undefined
   >;
@@ -91,7 +97,7 @@ export interface CiEvidenceLedger {
     evidence: {
       readonly markdown: string;
       readonly workflowRunId?: number | undefined;
-      readonly structuredCi?: AdminCiSummaryV1 | null | undefined;
+      readonly structuredCi?: AdminCiSummary | null | undefined;
     },
   ): Promise<void>;
 }

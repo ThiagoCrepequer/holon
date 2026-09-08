@@ -1,5 +1,5 @@
 import {
-  adminRunProjectionEventV1Schema,
+  adminRunProjectionEventSchema,
   canonicalizeJson,
   computeSha256Hex,
 } from "@holon/contracts";
@@ -23,9 +23,7 @@ export async function processAdminProjectionBatch(
 
   for (const message of batch.messages) {
     try {
-      const parseResult = adminRunProjectionEventV1Schema.safeParse(
-        message.body,
-      );
+      const parseResult = adminRunProjectionEventSchema.safeParse(message.body);
       if (!parseResult.success) {
         const rawString =
           typeof message.body === "string"
@@ -46,17 +44,12 @@ export async function processAdminProjectionBatch(
             : {};
         const observedRunId =
           typeof payloadObj.runId === "string" ? payloadObj.runId : null;
-        const observedSchemaVersion =
-          typeof bodyObj.schemaVersion === "number"
-            ? bodyObj.schemaVersion
-            : null;
 
         await storage.quarantine({
           observedEventId,
           observedRunId,
           computedPayloadHash: payloadHash,
           payloadBytes: bytes,
-          observedSchemaVersion,
           errorCode: "INVALID_EVENT_SCHEMA",
           nowEpochMs: options?.now?.(),
         });
@@ -77,7 +70,6 @@ export async function processAdminProjectionBatch(
           nowEpochMs: options?.now?.(),
           observedEventId: event.eventId,
           observedRunId: event.payload.runId,
-          observedSchemaVersion: event.payload.schemaVersion,
           payloadBytes: bytes,
           computedPayloadHash: computedHash,
         });
@@ -107,7 +99,6 @@ export async function processAdminProjectionBatch(
           nowEpochMs: options?.now?.(),
           observedEventId: event.eventId,
           observedRunId: event.payload.runId,
-          observedSchemaVersion: event.payload.schemaVersion,
           payloadBytes: bytes,
           computedPayloadHash: event.payloadHash,
         });
@@ -124,7 +115,6 @@ export async function processAdminProjectionBatch(
           nowEpochMs: options?.now?.(),
           observedEventId: event.eventId,
           observedRunId: event.payload.runId,
-          observedSchemaVersion: event.payload.schemaVersion,
           payloadBytes: bytes,
           computedPayloadHash: event.payloadHash,
         });

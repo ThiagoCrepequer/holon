@@ -61,7 +61,7 @@ sequenceDiagram
         CO->>AN: step prepare-repository
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
-        CO->>RE: step analyze-review + tool handles
+        CO->>RE: steps analyze-shard-N + tool handles
         loop at most six investigation steps
             RE->>AN: read/search/parse allowed content
             AN-->>RE: evidence with provenance
@@ -90,7 +90,7 @@ sequenceDiagram
 ## Etapas e invariantes
 
 1. **Authenticate:** nenhuma informação do payload é confiável antes do HMAC.
-2. **Normalize:** a fila recebe um envelope pequeno, versionado e sem token.
+2. **Normalize:** a fila recebe um envelope pequeno, estrito e sem token.
 3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica; a
    promoção persiste obsolescência, cleanup aplicável e supersession antes de
    qualquer cancelamento externo.
@@ -109,9 +109,12 @@ sequenceDiagram
 Na ordem normal, o Workflow executa `claim-run`, zero ou mais
 `terminate-superseded-workflow-N`, `start-run`,
 `revalidate-initial-refs`, `start-check-run`, `resolve-repository-policy`,
-`prepare-repository`, `analyze-review`, `begin-publication`,
+`prepare-repository`, identificação por projeto, `plan-review`,
+`analyze-shard-N`, `analyze-review`, `begin-publication`,
 `revalidate-current-refs`, zero ou mais `publish-inline-N`,
-`publish-summary`, `save-pr-findings`, `record-review-decision`, `complete-check-run`,
+respostas de resolução, `publish-summary`, `save-pr-findings`,
+`format-check-run-output`, `record-review-decision`, `complete-check-run`,
+`completed-snapshot-accounting`,
 `complete-run-and-schedule-cleanup` e o
 registro durável de cleanup.
 
@@ -145,7 +148,7 @@ O control-plane obtém do GitHub o diff canônico bruto e o transporta no reques
 do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
 checkpoint: o executor o divide em patches completos, sem executar
 `git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto V3. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+contexto completo. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -170,7 +173,7 @@ Antes da preparação, o control plane lê a política exclusivamente no
 `baseSha`. O resultado validado é output durável de
 `resolve-repository-policy` e acompanha toda reconstrução do Sandbox; não
 depende de estado em memória entre callbacks. Uma política customizada exige
-`prepareRepositoryV3` e `loadContextV3`, sem downgrade. Exclusões adicionais
+`prepareRepository` e `loadContext`, sem downgrade. Exclusões adicionais
 produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
 restantes; paths protegidos têm precedência sobre essas exclusões.
 
@@ -210,11 +213,11 @@ Antes da leitura e de cada tool call, o control-plane verifica a existência do
 artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.
 
-O request V3 leva apenas identidades não secretas e a política validada ao executor. No outbound
+O request leva apenas identidades não secretas e a política validada ao executor. No outbound
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
-Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente RPC V3.
+Sandbox. O host usa somente contratos atuais conforme ADR-0036.
 
 ## Falhas esperadas
 
@@ -248,3 +251,32 @@ Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa somente
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+## Checkpoints e revalidação — 2026-09-08
+
+A [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
+define checkpoints por shard, manifesto limitado e artefato privado temporário
+no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
+feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
+relógio da identificação ficam dentro de steps, preservando resultados em replay.
+
+A análise distribui 600 segundos entre shards restantes e reserva tempo para
+finalização/recuperação; síntese tem 30 segundos adicionais. As 12 tools têm
+quotas por shard e reserva durável antes da chamada. Erro de evidência ou
+orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
+correção: exige resolução explícita com evidência atual verificada; pendências
+sem revalidação impedem aprovação. Respostas de resolução têm marcador e
+reconciliação idempotente. O cleanup terminal apaga o artefato agregado após
+confirmar destruição do executor.
+
+## Seleção e narrativa — ADR-0035
+
+O planner recebe o diff canônico elegível antes de limitar os shards; o executor
+persiste os patches inteiros selecionados no contexto completo (até 300 kB em cinco shards de
+60 kB, 50 arquivos, 5.000 coordenadas e 500 kB de JSON). Toda omissão marca cobertura
+parcial. Mesmo sem arquivos selecionados, `truncated` impede classificar a execução
+como ausência de mudanças elegíveis. A publicação de revisão parcial, degradada ou
+com revalidação pendente usa narrativa determinística de incompletude e mantém os
+findings verificados; não solicita síntese adicional ao modelo.
+
+A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.

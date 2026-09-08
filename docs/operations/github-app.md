@@ -53,8 +53,7 @@ brutos antes de fazer parsing. A entrega vira um envelope mínimo sem token.
 Guarde App ID, App slug, chave privada e webhook secret em bindings externos ao
 código. O desenho do Holon permite rotação sem downtime de chaves privadas (até
 25 ativas no GitHub) através das variáveis `GITHUB_APP_PRIVATE_KEY_CURRENT` e
-`GITHUB_APP_PRIVATE_KEY_PREVIOUS` (com fallback retrocompatível para
-`GITHUB_APP_PRIVATE_KEY`). A propriedade ainda deve ser confirmada em rollout
+`GITHUB_APP_PRIVATE_KEY_PREVIOUS`. A propriedade ainda deve ser confirmada em rollout
 controlado; siga o [runbook de rotação de chaves](github-app-key-rotation-runbook.md).
 
 Tokens de instalação são emitidos sob demanda e restritos ao repository

@@ -3,6 +3,8 @@ import type { PublishCommentInput } from "@holon/application";
 import {
   buildPublicationMarker,
   createPublicationId,
+  createFindingId,
+  type FindingFingerprint,
   type FindingId,
   type PublicationRecord,
   type RunId,
@@ -69,7 +71,11 @@ export async function publishAuthorized(
     }
     throw error;
   }
-  if (claim.outcome === "published") return false;
+  if (claim.outcome === "published") {
+    if (claim.record.githubCommentId !== undefined)
+      onPublished?.(claim.record.githubCommentId);
+    return false;
+  }
   if (claim.outcome === "reconcile") {
     const existingId = await publisher.findCommentByMarker(
       claim.record.marker,
@@ -92,13 +98,51 @@ export async function publishAuthorized(
   return true;
 }
 
+export async function publishResolutionAuthorized(
+  ledger: PublicationLedger,
+  publisher: ReviewPublisher,
+  runId: RunId,
+  resolved: {
+    readonly fingerprint: FindingFingerprint;
+    readonly githubCommentId?: number | undefined;
+  },
+  headSha: string,
+  authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
+): Promise<boolean> {
+  const commentId = resolved.githubCommentId;
+  if (commentId === undefined) return false;
+  const reply = publisher.replyToComment?.bind(publisher);
+  if (reply === undefined)
+    throw new TypeError("Resolution publisher is unavailable");
+  const findingId = await createFindingId(runId, {
+    diagnostic: `resolution:${resolved.fingerprint}:${headSha}`,
+    path: "holon-resolution",
+    startLine: 1,
+    endLine: 1,
+  });
+  return publishAuthorized(
+    ledger,
+    {
+      findCommentByMarker: (marker, kind) =>
+        publisher.findCommentByMarker(marker, kind),
+      publish: ({ body, marker }) => reply(commentId, `${body}\n\n${marker}`),
+    },
+    runId,
+    findingId,
+    "inline",
+    `✅ Defeito resolvido no commit \`${headSha.slice(0, 7)}\`.`,
+    {},
+    authorizeImmediatelyBeforeMutation,
+  );
+}
+
 export async function publishFailureNoticeAuthorized(
   publisher: ReviewPublisher,
   runId: RunId,
   authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
   customBody?: string,
 ): Promise<boolean> {
-  const marker = `<!-- holon:v1;run=${runId};finding=system-failure -->`;
+  const marker = `<!-- holon;run=${runId};finding=system-failure -->`;
   if ((await publisher.findCommentByMarker(marker, "summary")) !== undefined) {
     return false;
   }

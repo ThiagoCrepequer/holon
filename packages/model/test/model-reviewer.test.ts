@@ -86,13 +86,12 @@ const job = reviewJobSchema.parse({
       baseSha: "b".repeat(40),
       headSha: "a".repeat(40),
       number: 7,
+      updatedAt: "2026-08-29T12:00:00.000Z",
     },
     receivedAt: "2026-08-29T12:00:00.000Z",
     repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-    schemaVersion: 1,
   },
   runId: `github:42:pr:7:head:${"a".repeat(40)}`,
-  schemaVersion: 1,
 });
 
 const context = {
@@ -105,7 +104,6 @@ const context = {
       path: "src/index.ts",
     },
   ],
-  schemaVersion: 2 as const,
   truncated: false,
 };
 
@@ -141,7 +139,6 @@ describe("model review boundary", () => {
           path: "README.md",
         },
       ],
-      schemaVersion: 2,
       surface: [],
       truncated: false,
     });

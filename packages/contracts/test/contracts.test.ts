@@ -13,16 +13,12 @@ import {
   lineCoverageSchema,
   parsedFeedbackCommandSchema,
   testExecutionReportSchema,
-  executorRequestV1Schema,
-  executorRequestV2Schema,
-  executorRequestV3Schema,
   githubCredentialRequestSchema,
   isProtectedPath,
   modelReviewOutputSchema,
   modelReviewTransportSchema,
   parseModelReviewTransport,
   preparedRepositorySchema,
-  preparedRepositoryV3Schema,
   publicationRecordSchema,
   rawRepositoryPolicySchema,
   reconciledFindingSchema,
@@ -32,12 +28,10 @@ import {
   repositoryToolCallSchema,
   repositoryToolResultSchema,
   reviewContextSchema,
-  reviewContextV1Schema,
-  reviewContextV2Schema,
-  reviewContextV3Schema,
+  reviewShardContextSchema,
   reviewJobSchema,
   reviewPlanSchema,
-  runClaimV2ResultSchema,
+  runClaimResultSchema,
   reviewShardSchema,
   reviewVerdictDetailsSchema,
   reviewVerdictPolicyOptionsSchema,
@@ -64,7 +58,7 @@ const runId = `github:42:pr:7:head:${sha}`;
 const canonicalDiff =
   "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
-describe("run claim V2", () => {
+describe("run claim", () => {
   const claim = {
     outcome: "claimed",
     supersededWorkflows: [
@@ -76,7 +70,7 @@ describe("run claim V2", () => {
   } as const;
 
   it("accepts a bounded list of superseded workflow identities", () => {
-    expect(runClaimV2ResultSchema.parse(claim)).toEqual(claim);
+    expect(runClaimResultSchema.parse(claim)).toEqual(claim);
   });
 
   it.each([
@@ -93,20 +87,24 @@ describe("run claim V2", () => {
       supersededWorkflows: [{ runId: "invalid", workflowInstanceId: "" }],
     },
   ])("rejects an invalid supersession boundary", (invalid) => {
-    expect(runClaimV2ResultSchema.safeParse(invalid).success).toBe(false);
+    expect(runClaimResultSchema.safeParse(invalid).success).toBe(false);
   });
 });
 
-describe("webhook envelope v1", () => {
+describe("webhook envelope", () => {
   const envelope = {
     action: "synchronize",
     deliveryId: "github:delivery-123",
     event: "pull_request",
     installationId: 99,
-    pullRequest: { baseSha: "b".repeat(40), headSha: sha, number: 7 },
+    pullRequest: {
+      baseSha: "b".repeat(40),
+      headSha: sha,
+      number: 7,
+      updatedAt: "2026-08-29T12:00:00.000Z",
+    },
     receivedAt: "2026-08-29T12:00:00.000Z",
     repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-    schemaVersion: 1,
   } as const;
 
   it("accepts and serializes the minimal provider-independent message", () => {
@@ -139,7 +137,7 @@ describe("webhook envelope v1", () => {
   );
 });
 
-describe("webhook envelope and review job v2", () => {
+describe("webhook envelope and review job", () => {
   const envelope = {
     action: "synchronize",
     deliveryId: "github:delivery-newer",
@@ -158,14 +156,11 @@ describe("webhook envelope and review job v2", () => {
       name: "api",
       owner: "acme",
     },
-    schemaVersion: 2,
   } as const;
 
-  it("carries a provider causal timestamp without invalidating drainable v1 messages", () => {
+  it("carries a provider causal timestamp and rejects retired version tags", () => {
     expect(webhookEnvelopeSchema.parse(envelope)).toEqual(envelope);
-    expect(
-      reviewJobSchema.parse({ envelope, runId, schemaVersion: 2 }),
-    ).toMatchObject({ schemaVersion: 2 });
+    expect(reviewJobSchema.parse({ envelope, runId })).toMatchObject({ runId });
     expect(
       reviewJobSchema.safeParse({ envelope, runId, schemaVersion: 1 }).success,
     ).toBe(false);
@@ -179,13 +174,16 @@ describe("review job and executor contracts", () => {
       deliveryId: "github:delivery-123",
       event: "pull_request",
       installationId: 99,
-      pullRequest: { baseSha: "b".repeat(40), headSha: sha, number: 7 },
+      pullRequest: {
+        baseSha: "b".repeat(40),
+        headSha: sha,
+        number: 7,
+        updatedAt: "2026-08-29T12:00:00.000Z",
+      },
       receivedAt: "2026-08-29T12:00:00.000Z",
       repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
-      schemaVersion: 1,
     },
     runId,
-    schemaVersion: 1,
   } as const;
 
   it("requires the run identity to match the webhook coordinates", () => {
@@ -199,6 +197,17 @@ describe("review job and executor contracts", () => {
   it("accepts an exact-SHA, read-only executor request without credentials", () => {
     expect(
       executorRequestSchema.parse({
+        effectivePolicy: {
+          additionalExcludes: [],
+          baseSha: "b".repeat(40),
+          effectivePolicyDigest: "c".repeat(64),
+          source: "default",
+          sourceDigest: null,
+          verdictStrictness: "default",
+        },
+        installationId: 99,
+        repositoryOwner: "acme",
+        repositoryName: "api",
         baseSha: "b".repeat(40),
         canonicalDiff,
         cloneUrl: "https://github.com/acme/api.git",
@@ -206,13 +215,12 @@ describe("review job and executor contracts", () => {
         pullRequestNumber: 7,
         repositoryId: 42,
         runId,
-        schemaVersion: 1,
       }),
     ).not.toHaveProperty("token");
   });
 
-  it("keeps the deployed v1 RPC shapes valid while introducing an explicit v2", () => {
-    const v1 = {
+  it("requires installation coordinates and effective policy in executor requests", () => {
+    const withoutInstallation = {
       baseSha: "b".repeat(40),
       canonicalDiff,
       cloneUrl: "https://github.com/acme/api.git",
@@ -220,14 +228,12 @@ describe("review job and executor contracts", () => {
       pullRequestNumber: 7,
       repositoryId: 42,
       runId,
-      schemaVersion: 1,
     } as const;
-    const v2 = {
-      ...v1,
+    const withoutPolicy = {
+      ...withoutInstallation,
       installationId: 99,
       repositoryName: "api",
       repositoryOwner: "acme",
-      schemaVersion: 2,
     } as const;
     const policy = {
       additionalExcludes: ["vendor/**", "dist/**"],
@@ -236,72 +242,49 @@ describe("review job and executor contracts", () => {
       source: ".github/holon.yml" as const,
       sourceDigest: "d".repeat(64),
       verdictStrictness: "block_all_confident_medium" as const,
-      version: 1 as const,
     };
-    const v3 = {
-      ...v2,
+    const currentRequest = {
+      ...withoutPolicy,
       effectivePolicy: policy,
-      schemaVersion: 3,
     } as const;
 
-    expect(executorRequestV1Schema.parse(v1)).toEqual(v1);
-    expect(executorRequestV2Schema.parse(v2)).toEqual(v2);
-    expect(executorRequestV3Schema.parse(v3)).toEqual(v3);
-    expect(executorRequestSchema.parse(v1)).toEqual(v1);
-    expect(executorRequestSchema.parse(v2)).toEqual(v2);
-    expect(executorRequestSchema.parse(v3)).toEqual(v3);
+    expect(executorRequestSchema.safeParse(withoutInstallation).success).toBe(
+      false,
+    );
+    expect(executorRequestSchema.safeParse(withoutPolicy).success).toBe(false);
+    expect(executorRequestSchema.parse(currentRequest)).toEqual(currentRequest);
     expect(
-      executorRequestV2Schema.safeParse({ ...v2, repositoryName: "other" })
-        .success,
-    ).toBe(false);
-    expect(
-      executorRequestV3Schema.safeParse({ ...v3, repositoryName: "other" })
-        .success,
+      executorRequestSchema.safeParse({
+        ...currentRequest,
+        repositoryName: "other",
+      }).success,
     ).toBe(false);
     expect(
       preparedRepositorySchema.parse({
+        effectivePolicyDigest: "c".repeat(64),
+        waiversCount: 0,
         changedLineCount: 1,
         contextBytes: 100,
         fileCount: 1,
         runId,
-        schemaVersion: 2,
         truncated: false,
       }),
-    ).toMatchObject({ schemaVersion: 2 });
+    ).toMatchObject({ runId });
     expect(
-      preparedRepositoryV3Schema.parse({
+      preparedRepositorySchema.parse({
         changedLineCount: 1,
         contextBytes: 100,
         effectivePolicyDigest: "c".repeat(64),
         fileCount: 1,
         runId,
-        schemaVersion: 3,
         truncated: false,
         waiversCount: 3,
       }),
-    ).toMatchObject({ schemaVersion: 3, waiversCount: 3 });
+    ).toMatchObject({ waiversCount: 3 });
   });
 
-  it("enforces the v2 canonical diff budget in UTF-8 bytes", () => {
-    expect(
-      executorRequestV2Schema.safeParse({
-        baseSha: "b".repeat(40),
-        canonicalDiff: "😀".repeat(500_001),
-        cloneUrl: "https://github.com/acme/api.git",
-        headSha: sha,
-        installationId: 99,
-        pullRequestNumber: 7,
-        repositoryId: 42,
-        repositoryName: "api",
-        repositoryOwner: "acme",
-        runId,
-        schemaVersion: 2,
-      }).success,
-    ).toBe(false);
-  });
-
-  it("enforces the v3 canonical diff budget and clone URL matching", () => {
-    const validV3 = {
+  it("enforces the canonical diff byte budget and clone URL matching", () => {
+    const valid = {
       baseSha: "b".repeat(40),
       canonicalDiff: canonicalDiff,
       cloneUrl: "https://github.com/acme/api.git",
@@ -312,7 +295,6 @@ describe("review job and executor contracts", () => {
         source: "default" as const,
         sourceDigest: null,
         verdictStrictness: "default" as const,
-        version: 1 as const,
       },
       headSha: sha,
       installationId: 99,
@@ -321,20 +303,19 @@ describe("review job and executor contracts", () => {
       repositoryName: "api",
       repositoryOwner: "acme",
       runId,
-      schemaVersion: 3 as const,
     };
-    expect(executorRequestV3Schema.parse(validV3)).toEqual(validV3);
+    expect(executorRequestSchema.parse(valid)).toEqual(valid);
 
     expect(
-      executorRequestV3Schema.safeParse({
-        ...validV3,
+      executorRequestSchema.safeParse({
+        ...valid,
         canonicalDiff: "😀".repeat(500_001),
       }).success,
     ).toBe(false);
 
     expect(
-      executorRequestV3Schema.safeParse({
-        ...validV3,
+      executorRequestSchema.safeParse({
+        ...valid,
         cloneUrl: "https://github.com/acme/other.git",
       }).success,
     ).toBe(false);
@@ -351,8 +332,8 @@ describe("review job and executor contracts", () => {
     } as const;
     expect(githubCredentialRequestSchema.parse(request)).toEqual(request);
     const { installationId: _installationId, ...legacyRequest } = request;
-    expect(githubCredentialRequestSchema.parse(legacyRequest)).toEqual(
-      legacyRequest,
+    expect(githubCredentialRequestSchema.safeParse(legacyRequest).success).toBe(
+      false,
     );
     expect(
       githubCredentialRequestSchema.safeParse({
@@ -372,7 +353,6 @@ describe("review job and executor contracts", () => {
         pullRequestNumber: 7,
         repositoryId: 43,
         runId,
-        schemaVersion: 1,
       }).success,
     ).toBe(false);
   });
@@ -392,7 +372,6 @@ describe("review job and executor contracts", () => {
         pullRequestNumber: 7,
         repositoryId: 42,
         runId,
-        schemaVersion: 1,
       }).success,
     ).toBe(false);
   });
@@ -458,18 +437,17 @@ describe("bounded repository tools", () => {
           path: "src/index.ts",
         },
       ],
-      schemaVersion: 2,
       truncated: false,
     } as const;
-    expect(reviewContextV2Schema.parse(context)).toEqual(context);
-    expect(reviewContextSchema.parse(context)).toEqual(context);
+    expect(reviewShardContextSchema.parse(context)).toEqual(context);
+    expect(reviewShardContextSchema.parse(context)).toEqual(context);
     expect(
-      reviewContextV1Schema.parse({
+      reviewShardContextSchema.safeParse({
         changedLines: context.changedLines,
         diff: context.files[0].patch,
         truncated: false,
-      }),
-    ).toMatchObject({ diff: context.files[0].patch });
+      }).success,
+    ).toBe(false);
     expect(
       repositoryToolResultSchema.parse({ content: "match", truncated: false }),
     ).toEqual({
@@ -477,7 +455,7 @@ describe("bounded repository tools", () => {
       truncated: false,
     });
     expect(
-      reviewContextSchema.safeParse({
+      reviewShardContextSchema.safeParse({
         ...context,
         surface: [
           {
@@ -491,7 +469,7 @@ describe("bounded repository tools", () => {
       }).success,
     ).toBe(false);
     expect(
-      reviewContextSchema.safeParse({
+      reviewShardContextSchema.safeParse({
         ...context,
         changedLines: [{ line: 10, path: "README.md", side: "RIGHT" }],
         files: [{ mode: "textual", patch: "+heading\n", path: "README.md" }],
@@ -507,13 +485,13 @@ describe("bounded repository tools", () => {
       }).success,
     ).toBe(false);
     expect(
-      reviewContextSchema.safeParse({
+      reviewShardContextSchema.safeParse({
         ...context,
         files: [{ mode: "textual", patch: "+heading\n", path: "README.md" }],
       }).success,
     ).toBe(false);
     expect(
-      reviewContextSchema.safeParse({
+      reviewShardContextSchema.safeParse({
         ...context,
         files: [
           { mode: "structural", patch: "+a\n", path: "src/index.ts" },
@@ -522,7 +500,7 @@ describe("bounded repository tools", () => {
       }).success,
     ).toBe(false);
     expect(
-      reviewContextV2Schema.safeParse({
+      reviewShardContextSchema.safeParse({
         ...context,
         files: [
           {
@@ -533,40 +511,38 @@ describe("bounded repository tools", () => {
       }).success,
     ).toBe(false);
 
-    const v3Context = {
+    const policyContext = {
       ...context,
       effectivePolicyDigest: "e".repeat(64),
       policySource: ".github/holon.yml" as const,
-      schemaVersion: 3,
       sourceDigest: "f".repeat(64),
       verdictStrictness: "default" as const,
       waiversCount: 2,
     } as const;
-    expect(reviewContextV3Schema.parse(v3Context)).toEqual(v3Context);
-    expect(reviewContextSchema.parse(v3Context)).toEqual(v3Context);
+    expect(reviewContextSchema.parse(policyContext)).toEqual(policyContext);
     expect(
-      reviewContextV3Schema.safeParse({
-        ...v3Context,
+      reviewContextSchema.safeParse({
+        ...policyContext,
         policySource: "unsupported" as never,
       }).success,
     ).toBe(false);
 
     expect(
-      reviewContextV3Schema.safeParse({
-        ...v3Context,
+      reviewContextSchema.safeParse({
+        ...policyContext,
         files: [
-          ...v3Context.files,
+          ...policyContext.files,
           { mode: "textual", patch: "+extra\n", path: "src/index.ts" },
         ],
       }).success,
     ).toBe(false);
 
     expect(
-      reviewContextV3Schema.safeParse({
-        ...v3Context,
+      reviewContextSchema.safeParse({
+        ...policyContext,
         files: [
           {
-            ...v3Context.files[0],
+            ...policyContext.files[0],
             patch: "x".repeat(120_001),
           },
         ],
@@ -574,15 +550,15 @@ describe("bounded repository tools", () => {
     ).toBe(false);
 
     expect(
-      reviewContextV3Schema.safeParse({
-        ...v3Context,
+      reviewContextSchema.safeParse({
+        ...policyContext,
         changedLines: [{ line: 1, path: "unknown.ts", side: "RIGHT" }],
       }).success,
     ).toBe(false);
 
     expect(
-      reviewContextV3Schema.safeParse({
-        ...v3Context,
+      reviewContextSchema.safeParse({
+        ...policyContext,
         files: [
           {
             mode: "textual",
@@ -690,7 +666,7 @@ describe("declarative repository policy contracts", () => {
   });
 
   it("validates raw repository policy schemas with strict parsing", () => {
-    const minimal = { version: 1 as const };
+    const minimal = {};
     expect(rawRepositoryPolicySchema.parse(minimal)).toEqual(minimal);
 
     const full = {
@@ -700,7 +676,6 @@ describe("declarative repository policy contracts", () => {
       verdict: {
         strictness: "block_all_confident_medium" as const,
       },
-      version: 1 as const,
     };
     expect(rawRepositoryPolicySchema.parse(full)).toEqual(full);
 
@@ -724,7 +699,6 @@ describe("declarative repository policy contracts", () => {
     expect(
       rawRepositoryPolicySchema.safeParse({
         verdict: { strictness: "invalid" },
-        version: 1,
       }).success,
     ).toBe(false);
   });
@@ -737,7 +711,6 @@ describe("declarative repository policy contracts", () => {
       source: ".github/holon.yml" as const,
       sourceDigest: "c".repeat(64),
       verdictStrictness: "block_all_confident_medium" as const,
-      version: 1 as const,
     };
     expect(repositoryPolicySchema.parse(policy)).toEqual(policy);
 
@@ -935,7 +908,7 @@ describe("model output and publication ledger", () => {
         findingId,
         githubCommentId: 1234,
         kind: "inline",
-        marker: `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`,
+        marker: `<!-- holon;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(findingId)} -->`,
         id: `${runId}:publication:${findingId}`,
         runId,
         state: "published",
@@ -968,7 +941,7 @@ describe("model output and publication ledger", () => {
     expect(
       publicationRecordSchema.safeParse({
         ...record,
-        marker: `<!-- holon:v1;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(record.findingId)} -->`,
+        marker: `<!-- holon;run=${encodeURIComponent(runId)};finding=${encodeURIComponent(record.findingId)} -->`,
         runId,
       }).success,
     ).toBe(false);
@@ -1086,7 +1059,6 @@ describe("check run contracts", () => {
 
     const plan = {
       omissionReasons: [],
-      schemaVersion: 2,
       scopeStatus: "complete",
       shards: [shard],
       totalEligibleBytes: 250,
@@ -1247,6 +1219,8 @@ describe("check run contracts", () => {
 
     it("validates trackedFindingSchema", () => {
       const tracked = {
+        evidenceFingerprint: validFingerprint.slice(3),
+        confidence: 0.95,
         diagnostic: "Security vulnerability in authentication handler.",
         filePath: "src/auth/jwt.ts",
         fingerprint: validFingerprint,
@@ -1289,6 +1263,7 @@ describe("check run contracts", () => {
 
     it("validates reconciledFindingSchema", () => {
       const reconciled = {
+        evidenceFingerprint: validFingerprint.slice(3),
         confidence: 0.95,
         diagnostic: "SQL injection in query builder method.",
         evidence: [

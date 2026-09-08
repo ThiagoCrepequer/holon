@@ -12,7 +12,7 @@ Autoridade: [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot
 
 ## Fluxo e contratos
 
-Após preparar o checkout exato, o executor grava autoridade de run, instalação, repositório, head/base e digest da política. O RPC `discoverProjectMetadataV1` valida essa autoridade antes de `git ls-tree`/`git cat-file`. Apenas arquivos de metadados permitidos são lidos; a exceção para lockfiles não remove exclusões de secrets, diretórios gerados ou política do repositório. Symlinks e ponteiros LFS não são seguidos.
+Após preparar o checkout exato, o executor grava autoridade de run, instalação, repositório, head/base e digest da política. O RPC `discoverProjectMetadata` valida essa autoridade antes de `git ls-tree`/`git cat-file`. Apenas arquivos de metadados permitidos são lidos; a exceção para lockfiles não remove exclusões de secrets, diretórios gerados ou política do repositório. Symlinks e ponteiros LFS não são seguidos.
 
 `identifySnapshot` é a API reutilizável: recebe arquivos e digests de política/perfil, e opcionalmente caminhos alterados. Sem `changedPaths`, identifica todos os projetos suportados, até o limite. IDs são `ecossistema:raiz`; um diretório pode conter Node e Maven. Mudanças em fontes ancestrais/local parents/tsconfig compartilhado invalidam consumidores. O fingerprint inclui paths, conteúdos, inventário relevante, limitações, detector, perfil e política; o SHA fica na proveniência, permitindo reutilização entre commits com as mesmas entradas.
 
@@ -39,6 +39,6 @@ Leases de 90 segundos, cooldown de cinco minutos, fencing monotônico mesmo apó
 
 ## Admin e operação
 
-Run detail mostra raízes, tecnologias, valores, tipo de declaração e seletor/arquivo de origem, além dos estados parcial/indisponível/sem registro. Dados são escapados como texto React. O RPC V2 é o único contrato de detalhe; o admin não aceita respostas V1 nem tenta métodos antigos.
+Run detail mostra raízes, tecnologias, valores, tipo de declaração e seletor/arquivo de origem, além dos estados parcial/indisponível/sem registro. Dados são escapados como texto React. `getRunDetail` é o único contrato de detalhe; o admin valida o DTO atual e não tenta métodos antigos.
 
 [Operação e avaliação](../operations/project-version-identification.md) descrevem ativação, invalidação e validação. Não há serviço de documentação, novo endpoint público de escrita ou valores de onboarding nesta etapa.

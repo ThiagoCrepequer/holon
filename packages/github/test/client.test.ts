@@ -355,7 +355,7 @@ describe("GitHub installation client", () => {
     );
   });
 
-  it("resolves the installation from repository identity for the v1 drain path", async () => {
+  it("resolves the installation from repository identity through the GitHub API", async () => {
     sdk.auth.mockResolvedValueOnce({ token: "app-jwt", type: "app" });
     sdk.request.mockResolvedValueOnce({ data: { id: 99 } });
 
@@ -436,7 +436,7 @@ describe("GitHub installation client", () => {
       },
     });
 
-    const refs = await session.currentPullRequestRefs!("acme", "api", 7);
+    const refs = await session.currentPullRequestRefs("acme", "api", 7);
     expect(refs).toEqual({
       baseSha: "b".repeat(40),
       headSha: "a".repeat(40),

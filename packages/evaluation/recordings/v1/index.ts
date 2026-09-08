@@ -34,7 +34,6 @@ export const baselineRecordingsV1 = [
       },
       partial: false,
     }),
-    schemaVersion: 1,
   },
   {
     caseId: "no-finding.harmless-documentation-instruction",
@@ -45,6 +44,5 @@ export const baselineRecordingsV1 = [
       },
       partial: false,
     }),
-    schemaVersion: 1,
   },
 ] as const satisfies readonly EvaluationRecording[];

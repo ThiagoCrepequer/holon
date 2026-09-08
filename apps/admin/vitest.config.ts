@@ -26,13 +26,10 @@ export default defineConfig({
             script: `
               import { WorkerEntrypoint } from "cloudflare:workers";
               export default class AdminReadMock extends WorkerEntrypoint {
-                async pingV1() {
-                  return { schemaVersion: 1 };
+                async ping() {
+                  return { ok: true };
                 }
-                async getRunDetailV2() {
-                  return null;
-                }
-                async getRunDetailV3(args) {
+                async getRunDetail(args) {
                   if (!args?.runId || args.runId.includes("999999") || args.runId.includes("missing")) {
                     return null;
                   }
@@ -41,7 +38,6 @@ export default defineConfig({
                     cleanupTask: null,
                     currentFindings: [],
                     findingsPerspective: "both",
-                    graphSchemaVersion: 1,
                     historicalRunFindings: [],
                     projectIdentification: null,
                     run: {
@@ -61,7 +57,6 @@ export default defineConfig({
                       updatedAt: "2026-09-04T11:00:05.000Z",
                       verdict: "APPROVE",
                     },
-                    schemaVersion: 3,
                     stepExecutions: [
                       {
                         attempts: [

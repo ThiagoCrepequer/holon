@@ -51,7 +51,6 @@ export const rawRepositoryPolicySchema = z.strictObject({
       strictness: repositoryVerdictStrictnessSchema.optional(),
     })
     .optional(),
-  version: z.literal(1),
 });
 
 export type RawRepositoryPolicy = z.infer<typeof rawRepositoryPolicySchema>;
@@ -76,7 +75,6 @@ export const repositoryPolicySchema = z.strictObject({
     .regex(/^[a-f0-9]{64}$/u)
     .nullable(),
   verdictStrictness: repositoryVerdictStrictnessSchema,
-  version: z.literal(1),
 });
 
 export type RepositoryPolicy = z.infer<typeof repositoryPolicySchema>;

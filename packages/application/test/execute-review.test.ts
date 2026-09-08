@@ -1,8 +1,7 @@
 import {
-  reviewJobV1Schema,
-  reviewJobV2Schema,
+  reviewJobSchema,
   type ModelReviewOutput,
-  type ReviewContextV2,
+  type ReviewShardContext,
 } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -25,16 +24,7 @@ const envelope = {
   repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
 } as const;
 const runId = `github:42:pr:7:head:${sha}`;
-const jobV1 = reviewJobV1Schema.parse({
-  envelope: {
-    ...envelope,
-    pullRequest: { baseSha: "b".repeat(40), headSha: sha, number: 7 },
-    schemaVersion: 1,
-  },
-  runId,
-  schemaVersion: 1,
-});
-const jobV2 = reviewJobV2Schema.parse({
+const job = reviewJobSchema.parse({
   envelope: {
     ...envelope,
     pullRequest: {
@@ -43,12 +33,10 @@ const jobV2 = reviewJobV2Schema.parse({
       number: 7,
       updatedAt,
     },
-    schemaVersion: 2,
   },
   runId,
-  schemaVersion: 2,
 });
-const context: ReviewContextV2 = {
+const context: ReviewShardContext = {
   changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
   files: [
     {
@@ -64,7 +52,6 @@ const context: ReviewContextV2 = {
       path: "src/index.ts",
     },
   ],
-  schemaVersion: 2,
   truncated: false,
 };
 const output: ModelReviewOutput = {
@@ -89,9 +76,8 @@ const output: ModelReviewOutput = {
 };
 
 describe("review application policies", () => {
-  it("uses GitHub causal time in V2 and keeps the V1 receipt-time fallback", () => {
-    expect(createReviewRun(jobV1).causalVersion).toBe(receivedAt);
-    expect(createReviewRun(jobV2).causalVersion).toBe(updatedAt);
+  it("uses the required GitHub causal timestamp", () => {
+    expect(createReviewRun(job).causalVersion).toBe(updatedAt);
   });
 
   it("renders the diagnostic, suggestion and host-verified evidence", () => {

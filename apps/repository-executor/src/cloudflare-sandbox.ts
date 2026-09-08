@@ -12,12 +12,12 @@ import {
   isPlatformTransientError,
 } from "@cloudflare/sandbox";
 import type {
-  ExecutorRequestV3,
+  ExecutorRequest,
   GitHubCredentialRequest,
   GitHubCredentialResponse,
-  PreparedRepositoryV3,
+  PreparedRepository,
   RepositoryToolCall,
-  ReviewContextV3,
+  ReviewContext,
 } from "@holon/contracts";
 import {
   githubCredentialRequestSchema,
@@ -97,9 +97,7 @@ async function authenticatedGithubHandler(
   }
   const credentialRequest = githubCredentialRequestSchema.safeParse({
     containerId: context.containerId,
-    ...(authorization.installationId === undefined
-      ? {}
-      : { installationId: authorization.installationId }),
+    installationId: authorization.installationId,
     repositoryId: authorization.repositoryId,
     repositoryName: authorization.repositoryName,
     repositoryOwner: authorization.repositoryOwner,
@@ -243,26 +241,26 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     );
   }
 
-  public prepareRepositoryV3(
-    request: ExecutorRequestV3,
-  ): Promise<PreparedRepositoryV3> {
-    return this.service().prepareRepositoryV3(request);
+  public prepareRepository(
+    request: ExecutorRequest,
+  ): Promise<PreparedRepository> {
+    return this.service().prepareRepository(request);
   }
 
   public resolveContainerId(runId: string): string {
     return resolveContainerId(this.env.SANDBOXES, runId);
   }
 
-  public loadContextV3(runId: string): Promise<ReviewContextV3> {
-    return this.service().loadContextV3(runId);
+  public loadContext(runId: string): Promise<ReviewContext> {
+    return this.service().loadContext(runId);
   }
 
   public hasContext(runId: string): Promise<boolean> {
     return this.service().hasContext(runId);
   }
 
-  public discoverProjectMetadataV1(request: unknown) {
-    return this.service().discoverProjectMetadataV1(request);
+  public discoverProjectMetadata(request: unknown) {
+    return this.service().discoverProjectMetadata(request);
   }
 
   public runTool(runId: string, call: RepositoryToolCall) {

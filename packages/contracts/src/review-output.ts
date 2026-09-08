@@ -69,7 +69,13 @@ export const reviewFindingSchema = z.strictObject({
     .optional(),
 });
 
+export const reviewResolutionSchema = reviewFindingSchema
+  .omit({ severity: true, suggestion: true })
+  .extend({
+    fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
+  });
 export const modelReviewOutputSchema = z.strictObject({
+  resolutions: z.array(reviewResolutionSchema).max(8).optional(),
   findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
   isDegraded: z.boolean().optional(),
   summary: z.string().trim().min(1).max(reviewTextLimits.summary),
@@ -147,6 +153,7 @@ const resilientSeverity = z.preprocess(
  */
 const reviewTransportFields = z
   .object({
+    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
     findings: z.preprocess(
       (val) =>
         Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : [],
@@ -213,6 +220,9 @@ export function modelReviewOutputFromTransport(
 ): ModelReviewOutput {
   const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
+    ...(transport.resolutions !== undefined
+      ? { resolutions: transport.resolutions }
+      : {}),
     findings: transport.findings.map((finding) => ({
       ...finding,
       evidence: finding.evidence.map((evidence) => ({
@@ -251,7 +261,7 @@ export const runStateSchema = z.enum([
 export const reviewRunSchema = z
   .strictObject({
     attempt: z.number().int().nonnegative().safe(),
-    causalVersion: timestampSchema.optional(),
+    causalVersion: timestampSchema,
     createdAt: timestampSchema,
     id: runIdSchema,
     prKey: prKeySchema,
@@ -275,7 +285,7 @@ export const supersededWorkflowSchema = z.strictObject({
   workflowInstanceId: workflowInstanceIdSchema,
 });
 
-export const runClaimV2ResultSchema = z.strictObject({
+export const runClaimResultSchema = z.strictObject({
   outcome: z.enum(["claimed", "duplicate", "resume"]),
   supersededWorkflows: z.array(supersededWorkflowSchema).max(100),
 });
@@ -293,7 +303,7 @@ export const publicationRecordSchema = z
     findingId: z.union([findingIdSchema, z.literal("summary")]),
     githubCommentId: positiveIntegerSchema.optional(),
     kind: z.enum(["inline", "summary"]),
-    marker: z.string().regex(/^<!-- holon:v1;run=[^;]+;finding=[^ ]+ -->$/u),
+    marker: z.string().regex(/^<!-- holon;run=[^;]+;finding=[^ ]+ -->$/u),
     id: publicationIdSchema,
     runId: runIdSchema,
     state: z.enum(["publishing", "published"]),
@@ -330,6 +340,6 @@ export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
 export type ModelReviewOutput = z.infer<typeof modelReviewOutputSchema>;
 export type PublicationRecord = z.infer<typeof publicationRecordSchema>;
 export type ReviewRun = z.infer<typeof reviewRunSchema>;
-export type RunClaimV2Result = z.infer<typeof runClaimV2ResultSchema>;
+export type RunClaimResult = z.infer<typeof runClaimResultSchema>;
 export type SupersededWorkflow = z.infer<typeof supersededWorkflowSchema>;
 export type RunTransition = z.infer<typeof runTransitionSchema>;

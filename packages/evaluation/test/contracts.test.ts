@@ -29,7 +29,7 @@ describe("evalRunConfigurationSchema", () => {
 
 describe("evalCaseSchema", () => {
   it("accepts a reviewed synthetic case", () => {
-    expect(evalCaseSchema.parse(createEvalCase()).schemaVersion).toBe(1);
+    expect(evalCaseSchema.parse(createEvalCase()).id).toBe(createEvalCase().id);
   });
 
   it("requires license and HTTPS provenance for public cases", () => {

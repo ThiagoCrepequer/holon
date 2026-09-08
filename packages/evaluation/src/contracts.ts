@@ -1,6 +1,6 @@
 import {
   modelReviewOutputSchema,
-  reviewContextV2Schema,
+  reviewShardContextSchema,
   reviewFindingSchema,
   reviewJobSchema,
 } from "@holon/contracts";
@@ -105,10 +105,9 @@ export const evalCaseSchema = z
     }),
     id: evalIdentifierSchema,
     input: z.strictObject({
-      context: reviewContextV2Schema,
+      context: reviewShardContextSchema,
       job: reviewJobSchema,
     }),
-    schemaVersion: z.literal(1),
     partition: z.enum(["development", "holdout"]),
     source: z.discriminatedUnion("kind", [
       syntheticSourceSchema,

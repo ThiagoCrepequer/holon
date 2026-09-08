@@ -8,7 +8,6 @@ declare global {
       AI_GATEWAY_ID: string;
       AI_MODEL_ID: string;
       GITHUB_APP_ID: string;
-      GITHUB_APP_PRIVATE_KEY?: string;
       GITHUB_APP_PRIVATE_KEY_CURRENT?: string;
       GITHUB_APP_PRIVATE_KEY_PREVIOUS?: string;
       GITHUB_APP_SLUG: string;

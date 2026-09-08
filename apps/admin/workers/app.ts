@@ -1,4 +1,4 @@
-import type { AdminRunProjectionEventV1 } from "@holon/contracts";
+import type { AdminRunProjectionEvent } from "@holon/contracts";
 
 import { D1AdminStorage } from "./d1-adapter.js";
 import { processAdminProjectionBatch } from "./queue-consumer.js";
@@ -21,7 +21,7 @@ export async function handleAdminFetch(
 }
 
 export async function handleAdminQueue(
-  batch: MessageBatch<AdminRunProjectionEventV1>,
+  batch: MessageBatch<AdminRunProjectionEvent>,
   env: AdminEnv,
   _ctx: ExecutionContext,
 ): Promise<void> {
@@ -42,4 +42,4 @@ export default {
   fetch: handleAdminFetch,
   queue: handleAdminQueue,
   scheduled: handleAdminScheduled,
-} satisfies ExportedHandler<AdminEnv, AdminRunProjectionEventV1>;
+} satisfies ExportedHandler<AdminEnv, AdminRunProjectionEvent>;

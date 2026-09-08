@@ -14,10 +14,7 @@ import { fitPublicationSummary } from "./publication-summary.js";
 export function createReviewRun(job: ReviewJob): ReviewRun {
   return {
     attempt: 0,
-    causalVersion:
-      job.schemaVersion === 2
-        ? job.envelope.pullRequest.updatedAt
-        : job.envelope.receivedAt,
+    causalVersion: job.envelope.pullRequest.updatedAt,
     createdAt: job.envelope.receivedAt,
     id: job.runId as RunId,
     prKey: createPrKey({

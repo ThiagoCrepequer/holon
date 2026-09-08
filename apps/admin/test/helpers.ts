@@ -1,7 +1,7 @@
 import {
-  type AdminRunProjectionEventV1,
-  type AdminRunProjectionPayloadV1,
-  buildAdminProjectionEventV1,
+  type AdminRunProjectionEvent,
+  type AdminRunProjectionPayload,
+  buildAdminProjectionEvent,
   type CursorKeyring,
   type RunId,
 } from "@holon/contracts";
@@ -55,8 +55,6 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
       projected_at TEXT NOT NULL,
       projected_at_epoch_ms INTEGER NOT NULL CHECK (projected_at_epoch_ms > 0),
       projection_delivery_lag_ms INTEGER NOT NULL CHECK (projection_delivery_lag_ms >= 0),
-      schema_version INTEGER NOT NULL CHECK (schema_version = 1),
-      record_version INTEGER NOT NULL CHECK (record_version = 1),
       payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
       source_event_id TEXT NOT NULL UNIQUE
     )`,
@@ -76,7 +74,6 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
       observed_run_id_hash TEXT,
       computed_payload_hash TEXT NOT NULL CHECK (length(computed_payload_hash) = 64),
       payload_bytes INTEGER NOT NULL CHECK (payload_bytes >= 0),
-      observed_schema_version INTEGER,
       error_code TEXT NOT NULL CHECK (length(error_code) BETWEEN 1 AND 100),
       created_at_epoch_ms INTEGER NOT NULL CHECK (created_at_epoch_ms > 0)
     )`,
@@ -90,7 +87,7 @@ export async function setupTestDatabase(db: D1Database): Promise<void> {
 
 export function createSampleProjectionPayload(
   overrides?: Record<string, unknown>,
-): AdminRunProjectionPayloadV1 {
+): AdminRunProjectionPayload {
   const sha =
     (overrides?.headSha as string) ??
     "0123456789abcdef0123456789abcdef01234567";
@@ -220,7 +217,6 @@ export function createSampleProjectionPayload(
     projectedFrom: "workflow",
     projectionRequestedAt,
     pullRequestNumber: prNum,
-    recordVersion: 1,
     repository: {
       id: repoId,
       name: repoName,
@@ -228,7 +224,7 @@ export function createSampleProjectionPayload(
     },
     reviewPhaseReached,
     runId,
-    schemaVersion: 1,
+
     scopeStatus,
     telemetry: {
       estimatedCostMicroUsd,
@@ -256,9 +252,9 @@ export function createSampleProjectionPayload(
 export async function createSampleProjectionEvent(
   payloadOverrides?: Record<string, unknown>,
   eventIdOverride?: string,
-): Promise<AdminRunProjectionEventV1> {
+): Promise<AdminRunProjectionEvent> {
   const payload = createSampleProjectionPayload(payloadOverrides);
-  const event = await buildAdminProjectionEventV1(payload);
+  const event = await buildAdminProjectionEvent(payload);
   if (eventIdOverride) {
     return {
       ...event,

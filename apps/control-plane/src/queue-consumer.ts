@@ -118,7 +118,6 @@ export async function dispatchReviewMessages(
       job = reviewJobSchema.parse({
         envelope,
         runId: createRunId(prKey, envelope.pullRequest.headSha),
-        schemaVersion: envelope.schemaVersion,
       });
     } catch {
       // Invalid messages cannot become valid through redelivery. Acknowledge

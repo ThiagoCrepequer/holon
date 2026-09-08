@@ -61,7 +61,7 @@ async function request(
     {
       PROJECT_IDENTIFICATION_REGISTRY: env.PROJECT_IDENTIFICATION_REGISTRY,
       GITHUB_APP_ID: "123",
-      GITHUB_APP_PRIVATE_KEY: "fake-key",
+      GITHUB_APP_PRIVATE_KEY_CURRENT: "fake-key",
       GITHUB_APP_SLUG: "holon-reviewer",
       GITHUB_WEBHOOK_SECRET: "secret",
       REVIEW_QUEUE: {
@@ -83,7 +83,6 @@ describe("GitHub webhook HTTP boundary", () => {
     expect(result.sent).toHaveLength(1);
     expect(result.sent[0]).toMatchObject({
       deliveryId: "github:delivery-123",
-      schemaVersion: 2,
     });
   });
 

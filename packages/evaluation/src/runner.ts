@@ -1,7 +1,7 @@
 import { selectValidFindings } from "@holon/application";
 import {
   modelReviewOutputSchema,
-  type ReviewContextV2,
+  type ReviewShardContext,
   type ReviewJob,
 } from "@holon/contracts";
 
@@ -18,7 +18,7 @@ import { gradeEvaluationCase, type EvalGrade } from "./grader.js";
 
 export interface EvaluationSubjectInput {
   readonly caseId: string;
-  readonly context: ReviewContextV2;
+  readonly context: ReviewShardContext;
   readonly job: ReviewJob;
 }
 
@@ -66,7 +66,7 @@ export interface EvalSuiteResult {
   };
   readonly passedCases: number;
   readonly subjectErrors: number;
-  readonly schemaVersion: 1;
+
   readonly totalCases: number;
 }
 
@@ -193,7 +193,6 @@ export async function runEvaluationSuite(
             : metrics.matchedFindings / metrics.expectedFindings,
     },
     passedCases,
-    schemaVersion: 1,
     subjectErrors: caseRuns.filter(
       (caseRun) => caseRun.outcome === "subject_error",
     ).length,

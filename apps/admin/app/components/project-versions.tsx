@@ -1,4 +1,4 @@
-import type { ProjectIdentificationResultV1 } from "@holon/contracts";
+import type { ProjectIdentificationResult } from "@holon/contracts";
 import { Badge, Card, CardHeader, CardTitle, CardContent } from "@holon/ui";
 const kinds: Record<string, string> = {
   "declared-exact": "Declared",
@@ -12,7 +12,7 @@ const kinds: Record<string, string> = {
 export function ProjectVersions({
   result,
 }: {
-  readonly result: ProjectIdentificationResultV1 | null | undefined;
+  readonly result: ProjectIdentificationResult | null | undefined;
 }) {
   return (
     <Card className="section-gap">

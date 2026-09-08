@@ -39,8 +39,6 @@ export interface AdminRunRow {
   projected_at: string;
   projected_at_epoch_ms: number;
   projection_delivery_lag_ms: number;
-  schema_version: number;
-  record_version: number;
   payload_hash: string;
   source_event_id: string;
 }
@@ -51,7 +49,6 @@ export interface AdminQuarantineRow {
   observed_run_id_hash: string | null;
   computed_payload_hash: string;
   payload_bytes: number;
-  observed_schema_version: number | null;
   error_code: string;
   created_at_epoch_ms: number;
 }

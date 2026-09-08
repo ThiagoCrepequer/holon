@@ -1,8 +1,8 @@
 import {
-  projectIdentificationResultV1Schema,
+  projectIdentificationResultSchema,
   type IdentificationFact,
   type IdentifiedProject,
-  type ProjectIdentificationResultV1,
+  type ProjectIdentificationResult,
 } from "@holon/contracts";
 
 import { extractFacts, type ParsedSource } from "./facts.js";
@@ -130,7 +130,7 @@ function mavenParents(
 }
 export async function identifySnapshot(
   input: SnapshotInput,
-): Promise<ProjectIdentificationResultV1> {
+): Promise<ProjectIdentificationResult> {
   const limitations = [...(input.limitations ?? [])];
   const parsed: ParsedSource[] = [];
   const files = input.files
@@ -338,8 +338,7 @@ export async function identifySnapshot(
     projects.pop();
     limitations.push("result-size-limit");
   }
-  return projectIdentificationResultV1Schema.parse({
-    schemaVersion: 1,
+  return projectIdentificationResultSchema.parse({
     snapshotSha: input.snapshotSha,
     inventoryDigest,
     detectorRevision,
