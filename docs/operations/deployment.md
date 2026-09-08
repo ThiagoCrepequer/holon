@@ -38,7 +38,7 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 5. Configure no control plane os nomes externos listados em
    [desenvolvimento local](local-development.md#secrets-locais). Use
    `wrangler secret put` para credenciais (`GITHUB_APP_PRIVATE_KEY_CURRENT`,
-   `GITHUB_APP_PRIVATE_KEY_PREVIOUS` ou legado `GITHUB_APP_PRIVATE_KEY`, seguindo o
+   `GITHUB_APP_PRIVATE_KEY_PREVIOUS`, seguindo o
    [runbook de rotação de chave](github-app-key-rotation-runbook.md)); App, account e gateway IDs podem ser
    variáveis por ambiente. Configure o binding existente como
    `AI_MODEL_ID=dynamic/pr-review`; o token Cloudflare precisa de
@@ -143,8 +143,7 @@ Fontes verificadas em 2026-08-30:
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
 16. Publique executor, control-plane e admin da mesma revisão, admitindo indisponibilidade
-    durante a atualização. Preparação exige RPC V3 e leitura de contexto exige RPC V4 e o detalhe admin exige
-    V2; não há downgrade para Workers antigos. Confirme uso do broker sem token
+    durante a atualização. Preparação, contexto e detalhe admin exigem os contratos atuais; não há downgrade. Confirme uso do broker sem token
     em parâmetros do executor. Não retome Workflows antigos como forma de validar
     o novo contrato; inicie uma execução nova após concluir os deploys.
 17. Entregue eventos sintéticos B e depois A para o mesmo PR, com `updatedAt`
@@ -206,11 +205,28 @@ de uso/versões, feedback durante publicação e cleanup de artefatos em sucesso
 falha e obsolescência. A prova local não substitui esse smoke. Referência:
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md).
 
-## Transição do contexto — ADR-0035
+## Contratos únicos de desenvolvimento — ADR-0036
 
-Além da drenagem prevista na ADR-0034, atualizar executor e control-plane para a
-mesma revisão antes de admitir novas runs. A preparação e os metadados continuam
-V3; `loadContextV4` exige artefato V4. Não há leitura negociada de V3 nem conversão
-ou retentativa automática de runs antigas. Manter também o admin na mesma revisão,
-conforme a política vigente de deploy coordenado. Validar uma nova execução somente
-após concluir o deploy; a reprodução local do diff não comprova esse rollout.
+Antes de um deploy autorizado, parar a admissão e concluir ou terminalizar as
+runs existentes, confirmando cleanup dos containers com o código que as criou.
+Atualizar control-plane, executor e admin para a mesma revisão. Não retomar
+checkpoints, artefatos de análise ou mensagens de fila do formato anterior.
+
+A política YAML passa a omitir o campo de versão. O único nome aceito para a
+chave principal do App é `GITHUB_APP_PRIVATE_KEY_CURRENT`. Contextos, jobs,
+projeções e detalhes admin seguem os schemas atuais, sem aliases ou conversão.
+Findings persistidos exigem identidade de evidência e confiança; runs exigem
+relógio causal explícito. Marcadores/event IDs novos não reconciliam publicações
+no formato antigo: validar com novas runs/PRs sintéticos.
+
+Se o estado de desenvolvimento foi criado sob os contratos anteriores, preparar
+um reset explícito de ledger, cache, filas e read model D1 antes da validação.
+O schema inicial D1 remove colunas de versão de formato. Não aplicar o seed
+atual sobre um schema antigo nem assumir que reaplicar uma migration já marcada
+refará o banco. A decisão entre preservar uma cópia de diagnóstico e descartar
+o estado, e a execução desse reset, exigem autorização específica. Esta mudança
+não apaga bancos, caches, filas ou namespaces automaticamente.
+
+Após a atualização e eventual reset autorizado, validar uma nova run completa,
+incluindo policy, credencial JIT, contexto, publicação, projeção e cleanup.
+Ver [ADR-0036](../decisions/0036-use-single-current-development-contracts.md).

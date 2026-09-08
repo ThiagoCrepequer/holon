@@ -79,10 +79,10 @@ stateDiagram-v2
 Caso a API não ofereça idempotency key, o corpo pode conter marcador invisível:
 
 ```html
-<!-- holon:v1;run=<run-id>;finding=<finding-id> -->
+<!-- holon;run=<run-id>;finding=<finding-id> -->
 ```
 
-O formato é versionado e o conteúdo visível não depende do marcador.
+O formato é único e determinístico; o conteúdo visível não depende do marcador.
 
 ## Implementação do ledger
 
@@ -127,7 +127,7 @@ verificada em seu arquivo revisado, e só vira `obsolete` quando
 uma análise completa prova que o arquivo deixou o PR. Falha de shard, resposta
 degradada ou escopo parcial preservam findings fora da cobertura observada.
 
-`workflow_supersessions` mantém uma obrigação por run substituída. A claim V2
+`workflow_supersessions` mantém uma obrigação por run substituída. A claim atual
 devolve as pendências à instância causalmente mais nova para cancelamento
 imediato; o alarm assume pendências com mais de 30 segundos. Os relógios de
 retry de supersession e cleanup são independentes, portanto uma API de Workflow

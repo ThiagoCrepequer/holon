@@ -29,8 +29,8 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0011](0011-centralize-model-fallback-in-dynamic-route.md)                        | Centralizar fallback de modelo na Dynamic Route                            | `superseded` | 2026-08-30 |
 | [ADR-0012](0012-use-canonical-diff-and-bounded-semantic-recovery.md)                  | Usar diff canônico e recuperação semântica limitada                        | `superseded` | 2026-08-30 |
 | [ADR-0013](0013-use-tiered-structural-and-textual-review.md)                          | Usar diff canônico, review estrutural JS/TS e textual elegível             | `superseded` | 2026-08-30 |
-| [ADR-0014](0014-version-executor-rpc-and-broker-github-credentials.md)                | Versionar RPC e emitir credenciais GitHub por broker                       | `accepted`   | 2026-08-30 |
-| [ADR-0015](0015-use-causal-admission-and-durable-terminal-cleanup.md)                 | Usar admissão causal e cleanup terminal durável                            | `accepted`   | 2026-08-30 |
+| [ADR-0014](0014-version-executor-rpc-and-broker-github-credentials.md)                | Versionar RPC e emitir credenciais GitHub por broker                       | `superseded` | 2026-08-30 |
+| [ADR-0015](0015-use-causal-admission-and-durable-terminal-cleanup.md)                 | Usar admissão causal e cleanup terminal durável                            | `superseded` | 2026-08-30 |
 | [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md)             | Exigir patches completos e evidência verificável pelo host                 | `superseded` | 2026-08-30 |
 | [ADR-0017](0017-select-review-output-harness-from-evidence.md)                        | Selecionar harness de saída por avaliação comparativa                      | `superseded` | 2026-08-31 |
 | [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                        | Adotar gerador desacoplado em duas fases com gate no host                  | `accepted`   | 2026-09-01 |
@@ -41,12 +41,12 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 | [ADR-0023](0023-adopt-cloudflare-native-operational-reliability-and-observability.md) | Adotar confiabilidade operacional e observabilidade nativa Cloudflare      | `accepted`   | 2026-09-03 |
 | [ADR-0024](0024-persist-canonical-review-decision-for-feedback.md)                    | Persistir a decisão canônica da review para feedback                       | `accepted`   | 2026-09-03 |
 | [ADR-0025](0025-bound-structural-analysis-and-promote-verifiable-findings.md)         | Limitar análise estrutural e promover findings verificáveis                | `superseded` | 2026-09-03 |
-| [ADR-0026](0026-centralize-github-app-keyring-and-enable-zero-downtime-rotation.md)   | Centralizar keyring do GitHub App e habilitar rotação de chave             | `accepted`   | 2026-09-03 |
+| [ADR-0026](0026-centralize-github-app-keyring-and-enable-zero-downtime-rotation.md)   | Centralizar keyring do GitHub App e habilitar rotação de chave             | `superseded` | 2026-09-03 |
 | [ADR-0027](0027-actively-supersede-obsolete-review-workflows.md)                      | Cancelar ativamente Workflows de review causalmente obsoletos              | `accepted`   | 2026-09-03 |
-| [ADR-0028](0028-adopt-declarative-repository-policy.md)                               | Adotar configuração declarativa por repositório com ancoragem na base      | `accepted`   | 2026-09-03 |
-| [ADR-0029](0029-adopt-internal-operational-console-and-d1-read-model.md)              | Adotar console operacional interno com read model D1 e projeção assíncrona | `accepted`   | 2026-09-04 |
+| [ADR-0028](0028-adopt-declarative-repository-policy.md)                               | Adotar configuração declarativa por repositório com ancoragem na base      | `superseded` | 2026-09-03 |
+| [ADR-0029](0029-adopt-internal-operational-console-and-d1-read-model.md)              | Adotar console operacional interno com read model D1 e projeção assíncrona | `superseded` | 2026-09-04 |
 
-| [ADR-0030](0030-identify-project-versions-from-snapshot-evidence.md) | Identificar versões por projeto com evidências do snapshot | `accepted` | 2026-09-05 |
+| [ADR-0030](0030-identify-project-versions-from-snapshot-evidence.md) | Identificar versões por projeto com evidências do snapshot | `superseded` | 2026-09-05 |
 
 ## Regras
 
@@ -67,3 +67,5 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - [ADR-0034 — Checkpoints duráveis e revalidação conservadora](0034-make-review-checkpoints-and-revalidation-durable.md)
 
 - [ADR-0035 — Planejar o contexto completo antes dos limites de shards](0035-plan-complete-context-before-sharding.md)
+
+- [ADR-0036 — Manter um único contrato atual durante o desenvolvimento](0036-use-single-current-development-contracts.md) — decisão vigente para contratos internos.

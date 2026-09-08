@@ -106,4 +106,4 @@ Fontes verificadas em 2026-08-31:
 
 ## Identificação de versões (2026-09-05)
 
-Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout V2/V1, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
+Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout coordenado dos contratos atuais, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.

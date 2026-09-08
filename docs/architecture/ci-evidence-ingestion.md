@@ -54,7 +54,7 @@ sequenceDiagram
 6. Descompacta o zip com proteções de cota e extrai relatórios LCOV e JUnit XML válidos.
 7. Consulta o diff do Pull Request para isolar exatamente as linhas modificadas/adicionadas no lado `RIGHT`.
 8. Cruza as linhas alteradas com os registros do LCOV, calculando a métrica exata de cobertura das linhas do PR.
-9. Localiza o comentário de review emitido pelo Holon através do marcador unificado `<!-- holon:v1;run=...;finding=summary -->`.
+9. Localiza o comentário de review emitido pelo Holon através do marcador unificado `<!-- holon;run=...;finding=summary -->`.
 10. Substitui ou anexa deterministicamente o bloco delimitado `<!-- holon:ci-evidence:start -->...<!-- holon:ci-evidence:end -->` no comentário de review existente via `PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}`.
 
 ### 2.1 Resiliência à Ordem de Execução (Bidirectional Handshake via Ledger)

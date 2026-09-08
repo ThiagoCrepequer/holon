@@ -90,7 +90,7 @@ sequenceDiagram
 ## Etapas e invariantes
 
 1. **Authenticate:** nenhuma informação do payload é confiável antes do HMAC.
-2. **Normalize:** a fila recebe um envelope pequeno, versionado e sem token.
+2. **Normalize:** a fila recebe um envelope pequeno, estrito e sem token.
 3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica; a
    promoção persiste obsolescência, cleanup aplicável e supersession antes de
    qualquer cancelamento externo.
@@ -148,7 +148,7 @@ O control-plane obtém do GitHub o diff canônico bruto e o transporta no reques
 do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
 checkpoint: o executor o divide em patches completos, sem executar
 `git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto V4. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+contexto completo. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -173,7 +173,7 @@ Antes da preparação, o control plane lê a política exclusivamente no
 `baseSha`. O resultado validado é output durável de
 `resolve-repository-policy` e acompanha toda reconstrução do Sandbox; não
 depende de estado em memória entre callbacks. Uma política customizada exige
-`prepareRepositoryV3` e `loadContextV4`, sem downgrade. Exclusões adicionais
+`prepareRepository` e `loadContext`, sem downgrade. Exclusões adicionais
 produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
 restantes; paths protegidos têm precedência sobre essas exclusões.
 
@@ -213,11 +213,11 @@ Antes da leitura e de cada tool call, o control-plane verifica a existência do
 artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.
 
-O request V3 leva apenas identidades não secretas e a política validada ao executor. No outbound
+O request leva apenas identidades não secretas e a política validada ao executor. No outbound
 handler, o `containerId` fornecido pela plataforma e o scope registrado no
 ledger autorizam uma credencial JIT no broker do control plane. O token é
 restrito ao repository ID e não entra em parâmetros, filesystem ou storage do
-Sandbox. Os métodos V1/V2 foram removidos conforme ADR-0032; o host usa preparação V3 e leitura V4 conforme ADR-0035.
+Sandbox. O host usa somente contratos atuais conforme ADR-0036.
 
 ## Falhas esperadas
 
@@ -272,9 +272,11 @@ confirmar destruição do executor.
 ## Seleção e narrativa — ADR-0035
 
 O planner recebe o diff canônico elegível antes de limitar os shards; o executor
-persiste os patches inteiros selecionados em V4 (até 300 kB em cinco shards de
+persiste os patches inteiros selecionados no contexto completo (até 300 kB em cinco shards de
 60 kB, 50 arquivos, 5.000 coordenadas e 500 kB de JSON). Toda omissão marca cobertura
 parcial. Mesmo sem arquivos selecionados, `truncated` impede classificar a execução
 como ausência de mudanças elegíveis. A publicação de revisão parcial, degradada ou
 com revalidação pendente usa narrativa determinística de incompletude e mantém os
 findings verificados; não solicita síntese adicional ao modelo.
+
+A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.

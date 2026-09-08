@@ -101,17 +101,14 @@ GITHUB_APP_ID
 GITHUB_APP_SLUG
 GITHUB_APP_PRIVATE_KEY_CURRENT
 GITHUB_APP_PRIVATE_KEY_PREVIOUS
-GITHUB_APP_PRIVATE_KEY
 AI_GATEWAY_ACCOUNT_ID
 AI_GATEWAY_ID
 AI_GATEWAY_API_TOKEN
 AI_MODEL_ID
 ```
 
-`GITHUB_APP_PRIVATE_KEY_CURRENT` é o nome preferencial;
-`GITHUB_APP_PRIVATE_KEY_PREVIOUS` é opcional durante rotação. O nome legado
-`GITHUB_APP_PRIVATE_KEY` permanece como alternativa ao atual para compatibilidade
-com versões N-1.
+`GITHUB_APP_PRIVATE_KEY_CURRENT` é obrigatório;
+`GITHUB_APP_PRIVATE_KEY_PREVIOUS` é opcional durante rotação.
 
 O control plane espera a rota de review neste binding:
 
@@ -128,11 +125,10 @@ obrigatório: o adapter usa `/compat` e envia o identificador completo no campo
 chave OpenRouter não entra em `.dev.vars` nem no Worker quando BYOK estiver
 configurado; o gateway a injeta depois que a rota seleciona o provider.
 
-O executor V2 recebe somente identidades não secretas. O outbound handler pede
+O executor recebe somente identidades não secretas. O outbound handler pede
 um token repo-scoped JIT ao broker nomeado do control plane usando o
 `containerId` da plataforma; o token não entra em parâmetros ou filesystem do
-Sandbox. O argumento token de V1 existe apenas para N-1 e é ignorado pelo
-executor dual-stack. O executor não recebe segredo de webhook, chave do App ou
+Sandbox. O executor não recebe segredo de webhook, chave do App ou
 credencial do modelo.
 
 ## Limites da prova local

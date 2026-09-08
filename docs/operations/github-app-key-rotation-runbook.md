@@ -14,8 +14,7 @@ related:
 # Runbook: Rotação de Chave Privada do GitHub App
 
 Este runbook define o procedimento operacional para rotacionar a chave privada
-do GitHub App utilizado pelo Holon com uma janela de compatibilidade para o
-Worker N-1. O fluxo foi verificado localmente, mas ainda precisa ser confirmado
+do GitHub App utilizado pelo Holon com as chaves atual e anterior. O fluxo foi verificado localmente, mas ainda precisa ser confirmado
 por um primeiro rollout controlado contra GitHub e Cloudflare reais antes de ser
 tratado como garantia de _zero downtime_.
 
@@ -57,7 +56,6 @@ atualize as variáveis em conjunto ou via deploy versionado:
 
 - `GITHUB_APP_PRIVATE_KEY_CURRENT`: Conteúdo PEM da **chave nova**.
 - `GITHUB_APP_PRIVATE_KEY_PREVIOUS`: Conteúdo PEM da **chave antiga**.
-- `GITHUB_APP_PRIVATE_KEY`: Conteúdo PEM da **chave nova** (garante que, se houver rollback do Worker para uma versão N-1 que lê apenas a variável legada, ela continue funcionando).
 
 O repositório fixa Wrangler 4.127.1, que suporta atualização de múltiplos
 secrets em uma única requisição. O comando abaixo lê os PEMs sem colocá-los nos
@@ -69,8 +67,7 @@ jq -n \
   --rawfile previous antiga-chave.pem \
   '{
     GITHUB_APP_PRIVATE_KEY_CURRENT: $current,
-    GITHUB_APP_PRIVATE_KEY_PREVIOUS: $previous,
-    GITHUB_APP_PRIVATE_KEY: $current
+    GITHUB_APP_PRIVATE_KEY_PREVIOUS: $previous
   }' \
   | pnpm --filter @holon/control-plane exec wrangler secret bulk
 ```
@@ -101,7 +98,7 @@ intermediários.
 pnpm --filter @holon/control-plane exec wrangler secret delete GITHUB_APP_PRIVATE_KEY_PREVIOUS
 ```
 
-2. A variável legada `GITHUB_APP_PRIVATE_KEY` deve ser mantida com o valor da nova chave enquanto houver possibilidade de rollback para versões de código que não suportavam as variáveis do Keyring.
+2. O Worker atual exige somente os nomes CURRENT/PREVIOUS, conforme ADR-0036.
 
 ---
 
@@ -116,9 +113,7 @@ Se durante a Etapa 3 (Janela de Observação) a nova chave falhar ou apresentar 
    jq -n \
      --rawfile previous antiga-chave.pem \
      '{
-       GITHUB_APP_PRIVATE_KEY_CURRENT: $previous,
-       GITHUB_APP_PRIVATE_KEY_PREVIOUS: null,
-       GITHUB_APP_PRIVATE_KEY: $previous
+       GITHUB_APP_PRIVATE_KEY_CURRENT: $previous
      }' \
      | pnpm --filter @holon/control-plane exec wrangler secret bulk
    ```

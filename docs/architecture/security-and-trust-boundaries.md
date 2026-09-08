@@ -56,7 +56,7 @@ SQLite, filesystem ou parâmetros persistidos do Sandbox.
 ## Segredos
 
 - Chaves privadas do GitHub App (`GITHUB_APP_PRIVATE_KEY_CURRENT`,
-  `GITHUB_APP_PRIVATE_KEY_PREVIOUS` ou legado `GITHUB_APP_PRIVATE_KEY`), webhook
+  `GITHUB_APP_PRIVATE_KEY_PREVIOUS`), webhook
   secret e credenciais de modelo ficam em Workers Secrets ou Secrets Store.
   O desenho de rotação sem downtime utiliza o Keyring centralizado com circuit
   breaker (ADR-0026) e segue o runbook operacional correspondente; a propriedade
@@ -79,7 +79,7 @@ estrito. Configurações inválidas falham sem retry e nunca iniciam o Sandbox.
 Exclusões universais e padrões capazes de atingir política, workflows,
 `SECURITY.md` ou `CODEOWNERS` são rejeitados. Além disso, a autorização de
 contexto e tools dá precedência aos paths protegidos, como defesa em
-profundidade. Toda política exige preparação V3 e leitura de contexto V4; não existe fallback para V2/V1. O par de digests registra os bytes da
+profundidade. Toda política exige o contrato atual de preparação e contexto, sem fallback. O par de digests registra os bytes da
 fonte e a política canônica sem persistir o conteúdo do arquivo.
 
 O executor implementado não executa scripts do repositório:

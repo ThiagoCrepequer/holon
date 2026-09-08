@@ -15,16 +15,16 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 ## Contratos implementados
 
-| Modulo                 | Contratos principais                                                                |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `webhook.ts`           | Envelopes V1/V2; V2 preserva `pull_request.updated_at`                              |
-| `executor.ts`          | Preparação V3/contexto V4 exact-SHA, política de escopo, broker, tools e resultados |
-| `repository-policy.ts` | YAML v1 normalizado, digests, exclusões e rigor de veredito                         |
-| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação                  |
-| `admin-projection.ts`  | Envelopes V1 de projeção assíncrona, hash RFC 8785 e validação temporal             |
-| `admin-run-detail.ts`  | DTO V2 de detalhe read-only para o console operacional via RPC                      |
-| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1              |
-| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados         |
+| Modulo                 | Contratos principais                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| `webhook.ts`           | Envelope atual preserva `pull_request.updated_at`                             |
+| `executor.ts`          | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados |
+| `repository-policy.ts` | YAML normalizado, digests, exclusões e rigor de veredito                      |
+| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação            |
+| `admin-projection.ts`  | Eventos de projeção assíncrona, hash RFC 8785 e validação temporal            |
+| `admin-run-detail.ts`  | DTO de detalhe read-only para o console operacional via RPC                   |
+| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1        |
+| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados   |
 
 ## Regras
 
@@ -34,16 +34,16 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 - Campos desconhecidos são rejeitados nas fronteiras de segurança, salvo decisão
   explícita em contrário.
 - Exemplos válidos e inválidos acompanham cada schema.
-- Testes de contrato devem provar serialização, validação e compatibilidade.
+- Testes de contrato devem provar serialização, validação e rejeição de formatos retirados.
 
-O pedido V3 do executor aceita no máximo 2 MB UTF-8 de diff canônico bruto;
+O pedido do executor aceita no máximo 2 MB UTF-8 de diff canônico bruto;
 portanto, o request precede a classificação e pode conter seções que serão
 excluídas. O contexto persistido seleciona até 50 patches textuais elegíveis,
 60 kB por arquivo, 300 kB agregados em até cinco shards e 5.000 linhas alteradas,
 com teto adicional de 500 kB de JSON serializado. Cada arquivo registra modo `structural` para
 JS/TS ou `textual` para os demais formatos. Binários, lockfiles, artefatos
 gerados e caminhos potencialmente sensíveis reconhecidos pelas heurísticas não
-entram nesse contexto nem são enviados ao modelo. O contexto V4 preserva cada
+entram nesse contexto nem são enviados ao modelo. O contexto preserva cada
 patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
 paths e resultados das tools. A saída por shard contém até oito findings, quatro evidências
 por finding e resumo de até 10.000 unidades UTF-16 (ADR-0033).
@@ -55,15 +55,14 @@ e informa truncamento; o Worker não lê nem materializa o arquivo completo.
 
 O credential request contém somente container, run, instalação e identidade do
 repositório. `containerId` vem do contexto da plataforma; resposta com token e
-expiração existe apenas no broker/outbound handler. Antes da preparação V3, o
+expiração existe apenas no broker/outbound handler. Antes da preparação, o
 control plane obtém do executor esse mesmo Durable Object ID opaco por RPC e o
 registra no scope; o nome determinístico passado a `idFromName` não é o
-`containerId`. APIs de preparação/contexto V1 e V2 foram removidas.
+`containerId`. Installation ID é obrigatório e exige escopo previamente autorizado.
 
-O pedido V3 adiciona a política efetiva e o executor persiste
-`ReviewContextV4` com `ReviewScopePolicyV2`. Preparação e metadados permanecem V3;
-a leitura exige `loadContextV4` para toda política, sem downgrade. O schema histórico
-V3 continua limitado a 120 kB; contextos por shard permanecem V2.
+O pedido adiciona a política efetiva e o executor persiste
+`ReviewContext` com `ReviewScopePolicy`. A leitura usa `loadContext` para toda
+política. O modelo recebe `ReviewShardContext`; nenhum deles aceita formatos antigos.
 A seleção ocorre no planner antes da persistência, conforme
 [ADR-0035](../decisions/0035-plan-complete-context-before-sharding.md). `sourceDigest` identifica os bytes UTF-8 originais;
 `effectivePolicyDigest` identifica o JSON canônico aplicado. Ambos são hashes
@@ -72,7 +71,7 @@ configuração.
 
 ## Identificação de versões — 2026-09-05
 
-`packages/contracts/src/project-identification.ts` define requests por SHA, evidências, resultados, cache e output restrito do modelo. Declarações exigem IDs existentes com valor/nome/tipo coincidentes. `AdminRunDetailV2` adiciona o snapshot ao drill-down; `getRunDetailV2` é o único RPC de detalhe, sem fallback V1. Consulte a [arquitetura](../architecture/project-version-identification.md) e a [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md).
+`packages/contracts/src/project-identification.ts` define requests por SHA, evidências, resultados, cache e output restrito do modelo. Declarações exigem IDs existentes com valor/nome/tipo coincidentes. `AdminRunDetail` adiciona o snapshot ao drill-down; `getRunDetail` é o único RPC de detalhe, sem métodos alternativos. Consulte a [arquitetura](../architecture/project-version-identification.md) e a [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md).
 
 ## Manifesto, contabilidade e resoluções — 2026-09-08
 
@@ -86,5 +85,7 @@ texto validado integral. `analysisUsageSchema` valida contadores não negativos;
 fingerprint, confiança, localização, diagnóstico e evidências. A aceitação
 semântica exige o gate do host descrito na
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md).
-`finding-lifecycle.ts` aceita hash secundário opcional para compatibilidade dos
-registros antigos; ausência não autoriza inferir um match de identidade.
+`finding-lifecycle.ts` exige hash secundário e confiança explícita em findings
+persistidos; registros incompletos são rejeitados.
+
+A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.

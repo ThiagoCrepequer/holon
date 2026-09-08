@@ -69,6 +69,19 @@ their status.
 
 ## Engineering rules
 
+- Holon is unpublished and under active development. Maintain one current
+  contract for each internal API, RPC, event and persisted application payload.
+  Change producers and consumers together; remove superseded schemas, methods,
+  adapters, aliases and fallback paths in the same change.
+- Do not add version suffixes such as `V1`, `V2` or `V3`, transport
+  `schemaVersion` discriminators, version negotiation or backward-compatibility
+  APIs. Name distinct payloads by their responsibility, not their chronology.
+  Do not preserve obsolete code just to read old development data. Document
+  incompatible changes and the required development-state reset instead.
+- This rule concerns Holon's application contracts. Dependency versions,
+  external protocols, Cloudflare compatibility settings, database migration
+  ordering and causal/concurrency revisions serve separate purposes and must
+  retain their required semantics. Never reset local or remote data implicitly.
 - Consult applicable skills and current primary documentation before complex or
   unstable platform decisions. Do not treat model memory or old research as
   current evidence.

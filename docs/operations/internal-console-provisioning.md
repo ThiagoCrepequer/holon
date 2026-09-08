@@ -23,7 +23,7 @@ flowchart LR
     Browser["Navegador Staff"] -->|"HTTPS + CF Access"| Access["Cloudflare Access"]
     Access -->|"JWT RS256 Assertion"| AdminWorker["Worker: apps/admin"]
     AdminWorker -->|"SQL (Read-Only UI)"| D1[("D1: holon-admin")]
-    AdminWorker -.->|"RPC (pingV1, getRunDetailV1)"| ControlPlane["Worker: apps/control-plane"]
+    AdminWorker -.->|"RPC (ping, getRunDetail)"| ControlPlane["Worker: apps/control-plane"]
     ControlPlane -->|"Push Event"| Queue["Queue: holon-admin-projections"]
     Queue -->|"Queue Consumer"| AdminWorker
     AdminWorker -.->|"Dead Letter"| DLQ["Queue: holon-admin-projections-dlq"]

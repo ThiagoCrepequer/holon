@@ -132,7 +132,7 @@ subpasta interna.
 - `queue`: consome o envelope normalizado e inicia ou reconcilia uma run;
 - classe `ReviewWorkflow` com checkpoints granulares, retries e terminalização
   após esgotamento;
-- classe `AdminReadEntrypoint`: RPC versionado `pingV1` e `getRunDetailV2` para consulta administrativa;
+- classe `AdminReadEntrypoint`: RPC interno `ping` e `getRunDetail` para consulta administrativa;
 - composicao dos adapters reais por bindings e secrets gerados pelo Wrangler.
 
 `apps/admin` exporta um único módulo Workers (`workers/app.ts`) compondo:
@@ -162,9 +162,9 @@ dependência de pacote do executor sobre adapters do control plane.
 
 | Entrada           | Validacao obrigatoria                                  | Saida interna              |
 | ----------------- | ------------------------------------------------------ | -------------------------- |
-| Webhook GitHub    | HMAC do body bruto, headers, tamanho, evento e schema  | `WebhookEnvelopeV2`        |
+| Webhook GitHub    | HMAC do body bruto, headers, tamanho, evento e schema  | `WebhookEnvelope`          |
 | Queue             | Versao do envelope e tipos runtime                     | comando de caso de uso     |
-| Workflow          | Schema V1/V2 de params em cada entrada externa         | tipos de aplicacao         |
+| Workflow          | Schema atual de params em cada entrada externa         | tipos de aplicacao         |
 | Credential RPC    | container, run, repo, instalação e ledger              | token JIT repo-scoped      |
 | Ferramenta        | Schema, autorizacao, path normalizado e budget         | evidencia com proveniencia |
 | Modelo            | Schema estrutural, policy e coordenadas no diff        | candidatos a `Finding`     |

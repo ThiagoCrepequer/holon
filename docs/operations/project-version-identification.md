@@ -14,7 +14,7 @@ A identificação faz parte do workflow padrão, sem flag de habilitação. No c
 
 `observe` identifica e registra para inspeção, mas não enriquece o prompt. `enrich` entrega a identificação à investigação. Runs anteriores mostram “not recorded”; não há backfill implícito.
 
-Deploy autorizado: executor com nova capacidade, control-plane com as duas novas classes DO/migration acrescentada após `v1` sem flag de habilitação, admin com cliente V2 obrigatório. Depois smoke sintético, observe e avaliação antes de enrich. Não remover migration/namespace para rollback. Deploy, recursos remotos e chamadas live não foram executados pela implementação local.
+Deploy autorizado: executor com nova capacidade, control-plane com as duas novas classes DO/migration acrescentada após `v1` sem flag de habilitação, admin com contrato atual obrigatório. Depois smoke sintético, observe e avaliação antes de enrich. Não remover migration/namespace para rollback. Deploy, recursos remotos e chamadas live não foram executados pela implementação local.
 
 ## Verificação
 

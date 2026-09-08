@@ -1,7 +1,8 @@
 ---
 id: ADR-0030
 kind: decision
-status: accepted
+superseded-by: 0036-use-single-current-development-contracts.md
+status: superseded
 owners: [core-team]
 last-reviewed: 2026-09-05
 ---
