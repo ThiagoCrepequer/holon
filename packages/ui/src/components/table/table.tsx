@@ -19,7 +19,7 @@ export const Table = React.forwardRef<HTMLTableElement, TableProps>(
       <table
         ref={ref}
         className={cn(
-          "w-full caption-bottom text-sm text-[var(--text-primary)]",
+          "border-separate border-spacing-y-1 w-full caption-bottom text-sm text-[var(--text-primary)]",
           className,
         )}
         {...props}
@@ -35,10 +35,7 @@ export const TableHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn(
-      "bg-[var(--surface-muted)] border-b border-[var(--border)] text-xs text-[var(--text-muted)] uppercase font-medium",
-      className,
-    )}
+    className={cn("text-xs text-[var(--text-muted)] font-normal", className)}
     {...props}
   />
 ));
@@ -50,10 +47,7 @@ export const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tbody
     ref={ref}
-    className={cn(
-      "divide-y divide-[var(--border)] bg-[var(--surface)]",
-      className,
-    )}
+    className={cn("bg-[var(--surface-muted)]", className)}
     {...props}
   />
 ));
@@ -81,7 +75,7 @@ export const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "transition-colors hover:bg-[var(--surface-muted)]/75 data-[state=selected]:bg-[var(--surface-hover)]",
+      "transition-colors hover:bg-[var(--surface-hover)] data-[state=selected]:bg-[var(--surface-hover)]",
       className,
     )}
     {...props}
@@ -110,7 +104,10 @@ export const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+    className={cn(
+      "px-3 py-2.5 border-y border-[var(--border-subtle)] first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r align-middle [&:has([role=checkbox])]:pr-0",
+      className,
+    )}
     {...props}
   />
 ));

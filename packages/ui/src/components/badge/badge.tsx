@@ -37,7 +37,7 @@ const dotStyles: Record<BadgeVariant, string> = {
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
-  sm: "px-2 py-0.5 text-xs",
+  sm: "px-1.5 py-0.5 text-[11px]",
   md: "px-2.5 py-1 text-xs",
 };
 
@@ -57,7 +57,7 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       <span
         ref={ref}
         className={cn(
-          "inline-flex items-center gap-1.5 font-medium border rounded-full transition-colors",
+          "inline-flex items-center gap-1.5 font-medium border rounded-md transition-colors",
           variantStyles[variant],
           sizeStyles[size],
           className,

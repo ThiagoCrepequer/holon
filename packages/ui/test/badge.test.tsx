@@ -13,7 +13,7 @@ describe("Badge component", () => {
     const html = renderToStaticMarkup(<Badge>Neutral</Badge>);
     expect(html).toContain("Neutral");
     expect(html).toContain("bg-[var(--surface-hover)]");
-    expect(html).toContain("px-2 py-0.5 text-xs");
+    expect(html).toContain("px-1.5 py-0.5 text-[11px]");
   });
 
   it("renders all variants correctly", () => {

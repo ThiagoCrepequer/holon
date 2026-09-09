@@ -12,7 +12,6 @@ export interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   tone?: MetricTone;
   icon?: React.ReactNode;
   loading?: boolean;
-  emphasis?: "standard" | "primary";
 }
 
 const toneValueStyles: Record<MetricTone, string> = {
@@ -32,7 +31,6 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
       tone = "neutral",
       icon,
       loading = false,
-      emphasis = "standard",
       className,
       ...props
     },
@@ -45,7 +43,6 @@ export const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
         role="group"
         aria-labelledby={labelId}
         className={cn("metric-card", className)}
-        data-emphasis={emphasis}
         aria-busy={loading || undefined}
         {...props}
       >

@@ -1,30 +1,31 @@
 :root {
+  color-scheme: light;
   /* Canvas & Surface */
-  --canvas: #f9fafb;
+  --canvas: #ededed;
   --surface: #ffffff;
-  --surface-hover: #f3f4f6;
-  --surface-muted: #f8fafc;
-  --surface-subtle: #f1f5f9;
+  --surface-hover: #f0f0f0;
+  --surface-muted: #f8f8f8;
+  --surface-subtle: #eaeaea;
 
   /* Borders & Rings */
-  --border: #e5e7eb;
-  --border-subtle: #f0f1f3;
-  --border-strong: #d1d5db;
-  --focus-ring: #ad2435;
+  --border: #e8e8e8;
+  --border-subtle: #f1f1f1;
+  --border-strong: #d4d4d4;
+  --focus-ring: #525252;
 
   /* Typography */
   --text-primary: #09090b;
-  --text-secondary: #4b5563;
-  --text-muted: #6b7280;
-  --text-disabled: #9ca3af;
+  --text-secondary: #525252;
+  --text-muted: #737373;
+  --text-disabled: #8a8a8a;
   --text-inverse: #ffffff;
 
   /* Accent / Primary Actions */
-  --accent: #ad2435;
-  --accent-hover: #902030;
+  --accent: #101114;
+  --accent-hover: #292a2e;
   --accent-contrast: #ffffff;
-  --accent-subtle: #fbedef;
-  --accent-text: #ad2435;
+  --accent-subtle: #ededed;
+  --accent-text: #171717;
 
   /* Semantic Feedback - Success */
   --success: #16a34a;
@@ -52,8 +53,8 @@
 
   /* Data Visualization / Charts */
   --chart-1: #09090b;
-  --chart-2: #2563eb;
-  --chart-3: #16a34a;
+  --chart-2: #8c8c8c;
+  --chart-3: #c4c4c4;
   --chart-4: #ca8a04;
   --chart-5: #dc2626;
 
@@ -76,48 +77,6 @@
   --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-slow: 300ms;
-}
-
-[data-theme="dark"] {
-  color-scheme: dark;
-  --canvas: #111214;
-  --surface: #1a1b1f;
-  --surface-muted: #16171a;
-  --surface-hover: #24262b;
-  --surface-subtle: #2d3036;
-  --border: #303239;
-  --border-subtle: #27292f;
-  --border-strong: #525661;
-  --text-primary: #f2f2f4;
-  --text-secondary: #c0c2ca;
-  --text-muted: #a0a3ae;
-  --text-disabled: #8b8f9b;
-  --accent: #b82f43;
-  --accent-hover: #ca3b50;
-  --accent-subtle: #342027;
-  --accent-text: #ff8f9d;
-  --focus-ring: #ff8f9d;
-  --success: #5cdaa1;
-  --success-bg: #182c25;
-  --success-border: #2c5342;
-  --success-text: #80dfaf;
-  --warning: #eabd65;
-  --warning-bg: #302919;
-  --warning-border: #584728;
-  --warning-text: #efd08c;
-  --danger: #f27688;
-  --danger-bg: #2c1c23;
-  --danger-border: #59303b;
-  --danger-text: #ff9caa;
-  --info: #82b4f5;
-  --info-bg: #1c2738;
-  --info-border: #354a67;
-  --info-text: #a0c6fa;
-  --chart-1: #f27688;
-  --chart-2: #f5a9b4;
-  --chart-3: #ab7884;
-  --chart-4: #eabd65;
-  --chart-5: #82b4f5;
 }
 
 /* Tabular Numbers */
@@ -183,52 +142,55 @@
   display: none;
 }
 
-/* Metric anatomy is owned by the component, not positional dashboard selectors. */
+/* Shared split metrics: content remains readable without an optional icon. */
 .metric-card {
+  position: relative;
   overflow: hidden;
 }
+.metric-card:has(.metric-card-icon) {
+  padding-right: 72px;
+}
 .metric-card .metric-card-header {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px 6px;
+  padding: 14px 16px 0;
 }
 .metric-card-label {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: 0;
   color: var(--text-secondary);
 }
 .metric-card-icon {
-  color: var(--text-muted);
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 72px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-muted);
+  border-left: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.metric-card-icon > svg {
+  width: 38px;
+  height: 42px;
+  padding: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 3px 3px 0 var(--surface-hover);
 }
 .metric-card [data-slot="card-content"] {
-  padding: 0 18px 16px;
+  padding: 3px 16px 14px;
 }
 .metric-card-value {
+  overflow-wrap: anywhere;
   font-family: inherit;
-  font-size: clamp(26px, 2vw, 33px);
-  font-weight: 550;
+  font-size: clamp(26px, 2vw, 32px);
+  font-weight: 500;
   letter-spacing: -1px;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 .metric-card-description {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 6px;
-}
-.metric-card[data-emphasis="primary"] {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.metric-card[data-emphasis="primary"]
-  :is(
-    .metric-card-label,
-    .metric-card-icon,
-    .metric-card-value,
-    .metric-card-description
-  ) {
-  color: var(--accent-contrast);
+  margin-top: 5px;
 }
