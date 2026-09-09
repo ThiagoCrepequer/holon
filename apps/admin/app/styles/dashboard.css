@@ -1,6 +1,6 @@
 .dashboard-analysis {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 28%);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 32%);
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -20,7 +20,7 @@
 
 .verdict-content {
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   padding: 0 18px 16px;
@@ -28,8 +28,8 @@
 
 .verdict-visual {
   position: relative;
-  width: 100px;
-  height: 100px;
+  width: 88px;
+  height: 88px;
 }
 
 .verdict-ring {
@@ -87,10 +87,10 @@
 }
 
 .recent-runs th {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: 10px;
-  letter-spacing: 0.5px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0;
   padding-block: 12px;
 }
 
@@ -181,11 +181,10 @@
 }
 
 .verdict-legend > div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .verdict-legend dt {
@@ -196,6 +195,7 @@
 }
 
 .verdict-legend i {
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -229,8 +229,14 @@
   gap: 12px;
   margin-bottom: 14px;
 }
-@media (max-width: 1000px) {
+@media (max-width: 1199px) {
   .dashboard-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-metrics {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

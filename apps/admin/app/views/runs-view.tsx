@@ -1,5 +1,6 @@
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -152,12 +153,9 @@ export const RunsView: React.FC<RunsViewProps> = ({
 
             {/* Submit & Reset */}
             <div className="flex items-center gap-2 pb-[1px] w-full md:w-auto">
-              <button
-                type="submit"
-                className="h-9 px-4 text-xs font-semibold bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors shadow-xs shrink-0"
-              >
+              <Button type="submit" className="text-xs shrink-0">
                 Filter
-              </button>
+              </Button>
               {hasActiveFilters && (
                 <Link
                   to="/runs"

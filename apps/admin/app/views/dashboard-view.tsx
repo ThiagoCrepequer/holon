@@ -97,7 +97,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* KPI Cards */}
       <div className="dashboard-metrics">
         <MetricCard
-          emphasis="primary"
           icon={<ConsoleIcon name="runs" />}
           label="Total Runs"
           value={formatNumber(summary.totalRuns)}
@@ -219,7 +218,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             View all runs &rarr;
           </Link>
         </CardHeader>
-        <CardContent className="p-0 border-t border-[var(--border)] overflow-hidden rounded-b-xl">
+        <CardContent className="px-3 pb-3 pt-0 overflow-hidden rounded-b-xl">
           {recentRuns.length === 0 ? (
             <div className="reviews-empty">
               <EmptyState

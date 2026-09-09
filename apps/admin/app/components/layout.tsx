@@ -15,7 +15,10 @@ const navigation = [
   { label: "Readiness", href: "/readiness", glyph: "pulse" },
 ] as const;
 
-export function Layout({ userEmail, children }: LayoutProps) {
+export function Layout({ userEmail, currentPath, children }: LayoutProps) {
+  const section = navigation.find((item) =>
+    item.href === "/" ? currentPath === "/" : currentPath.startsWith(item.href),
+  );
   return (
     <div className="console-shell">
       <a href="#main-content" className="skip-link">
@@ -64,6 +67,15 @@ export function Layout({ userEmail, children }: LayoutProps) {
         </div>
       </aside>
       <div className="console-body">
+        <div className="console-topbar">
+          <div className="console-location">
+            <ConsoleIcon name={section?.glyph ?? "runs"} />
+            <span>{section?.label ?? "Run details"}</span>
+          </div>
+          <span className="console-topbar-note">
+            Review operations · Read-only
+          </span>
+        </div>
         <main id="main-content" tabIndex={-1} className="console-main">
           {children}
         </main>

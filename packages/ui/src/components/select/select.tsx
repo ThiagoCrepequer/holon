@@ -301,7 +301,7 @@ export const SelectField = React.forwardRef<
             className={cn(
               "w-full h-9",
               error &&
-                "border-rose-500 focus:border-rose-500 focus:ring-rose-500/10 focus-visible:border-rose-500",
+                "border-[var(--danger)] focus:border-[var(--danger)] focus:ring-[var(--danger-bg)] focus-visible:border-[var(--danger)]",
               className,
             )}
           >

@@ -12,7 +12,7 @@ export const TabsList = React.forwardRef<
   <BaseTabs.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--surface-hover)] p-1 text-[var(--text-muted)]",
+      "inline-flex h-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[var(--text-muted)]",
       className,
     )}
     {...props}
@@ -30,7 +30,7 @@ export const TabsTab = React.forwardRef<
       "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-all select-none",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]",
       "disabled:pointer-events-none disabled:opacity-50",
-      "data-[selected]:bg-[var(--surface)] data-[selected]:text-[var(--text-primary)] data-[selected]:shadow-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+      "data-[selected]:bg-[var(--accent)] data-[selected]:text-[var(--accent-contrast)] data-[selected]:shadow-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
       className,
     )}
     {...props}

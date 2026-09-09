@@ -124,7 +124,7 @@ describe("Select component", () => {
 
     expect(errorHtml).toContain('aria-invalid="true"');
     expect(errorHtml).toContain("Selection is required");
-    expect(errorHtml).toContain("border-rose-500");
+    expect(errorHtml).toContain("border-[var(--danger)]");
   });
 
   it("supports placeholder without defaultValue and forwards ref to trigger", () => {

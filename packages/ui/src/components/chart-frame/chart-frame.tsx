@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "../../utils/cn.js";
+import { Button } from "../button/button.js";
 import {
   Card,
   CardContent,
@@ -61,14 +62,15 @@ export const ChartFrame = React.forwardRef<HTMLDivElement, ChartFrameProps>(
               )}
             </div>
             {accessibleTable && onToggleTable && (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={onToggleTable}
-                className="text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] rounded px-1"
+                className="shrink-0"
                 aria-expanded={showTable}
               >
                 {showTable ? "View chart" : "View data table"}
-              </button>
+              </Button>
             )}
           </div>
           {insight && (
