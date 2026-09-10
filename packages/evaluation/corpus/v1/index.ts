@@ -23,7 +23,7 @@ function createJob(headSha: string, pullRequestNumber: number) {
         owner: "holon",
       },
     },
-    runId: `github:1:pr:${pullRequestNumber}:head:${headSha}`,
+    runId: `github:1:pr:${pullRequestNumber}:head:${headSha}:base:${baseSha}`,
   };
 }
 

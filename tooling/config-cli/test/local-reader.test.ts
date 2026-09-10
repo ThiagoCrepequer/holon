@@ -130,7 +130,7 @@ it("explains source chains without printing instruction contents and uses the in
   const result = await execute(
     process.execPath,
     ["--import", "tsx", cli, "config", "explain", "--path", "src/index.ts"],
-    { cwd, env: { ...process.env, INIT_CWD: path } },
+    { cwd, env: { ...process.env, INIT_CWD: path }, timeout: 10_000 },
   );
   expect(result.stdout).not.toContain("private-guidance-do-not-print");
   expect(JSON.parse(result.stdout)).toMatchObject({
@@ -146,9 +146,12 @@ it("explains source chains without printing instruction contents and uses the in
   await expect(
     execute(process.execPath, ["--import", "tsx", cli, "config", "invalid"], {
       cwd,
+      timeout: 10_000,
     }),
   ).rejects.toMatchObject({
     code: 1,
     stderr: expect.stringContaining("usage:"),
   });
-});
+  // Two real TypeScript CLI processes plus Git setup can exceed the unit-test
+  // timeout when the CI runner also executes the other workspace coverage jobs.
+}, 30_000);
