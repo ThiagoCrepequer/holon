@@ -8,7 +8,7 @@ import { reviewScopePolicyPath } from "../src/repository-tools.js";
 import type { SandboxPort } from "../src/sandbox-port.js";
 const sha = "a".repeat(40),
   blob = "b".repeat(40),
-  runId = `github:42:pr:7:head:${sha}`;
+  runId = `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`;
 const request = {
   runId,
   repositoryId: 42,
@@ -73,7 +73,7 @@ describe("project metadata authority and bounded blobs", () => {
     { installationId: 10 },
     { snapshotSha: "d".repeat(40) },
     { policyDigest: "other" },
-    { runId: `github:42:pr:8:head:${sha}` },
+    { runId: `github:42:pr:8:head:${sha}:base:${"b".repeat(40)}` },
   ])("rejects mismatched authority %s", async (change) => {
     const { port, run } = sandbox();
     await expect(

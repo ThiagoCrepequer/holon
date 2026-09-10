@@ -67,6 +67,7 @@ function validateReviewJobIdentity(
     readonly envelope: {
       readonly pullRequest: {
         readonly headSha: string;
+        readonly baseSha: string;
         readonly number: number;
       };
       readonly repository: { readonly id: number };
@@ -75,7 +76,7 @@ function validateReviewJobIdentity(
   },
   context: z.core.$RefinementCtx,
 ): void {
-  const expected = `github:${job.envelope.repository.id}:pr:${job.envelope.pullRequest.number}:head:${job.envelope.pullRequest.headSha}`;
+  const expected = `github:${job.envelope.repository.id}:pr:${job.envelope.pullRequest.number}:head:${job.envelope.pullRequest.headSha}:base:${job.envelope.pullRequest.baseSha}`;
   if (job.runId !== expected) {
     context.addIssue({
       code: "custom",

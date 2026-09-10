@@ -45,6 +45,7 @@ export type {
 };
 
 export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
+  identityAmbiguous: z.boolean().optional(),
   evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
   confidence: z.number().min(0).max(1),
   diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
@@ -75,6 +76,7 @@ export const reconciliationSummarySchema: z.ZodType<ReconciliationSummary> =
   });
 
 export const reconciledFindingSchema = reviewFindingSchema.extend({
+  identityAmbiguous: z.boolean().optional(),
   evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
   fingerprint: findingFingerprintSchema,
   firstSeenHeadSha: gitShaSchema.optional(),

@@ -11,7 +11,7 @@ import {
 
 const sha = "a".repeat(40);
 const prKey = "github:42:pr:7" as const;
-const runId = `${prKey}:head:${sha}` as const;
+const runId = `${prKey}:head:${sha}:base:${"b".repeat(40)}` as const;
 
 const validPayload: AdminRunProjectionPayload = {
   headSha: sha,
@@ -76,7 +76,7 @@ describe("admin projection contract", () => {
   it("rejects runId mismatching prKey", () => {
     const invalid = {
       ...validPayload,
-      runId: `github:99:pr:7:head:${sha}`,
+      runId: `github:99:pr:7:head:${sha}:base:${"b".repeat(40)}`,
     };
     expect(() => adminRunProjectionPayloadSchema.parse(invalid)).toThrow(
       /runId does not belong to prKey/u,

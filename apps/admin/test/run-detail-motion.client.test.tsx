@@ -34,7 +34,7 @@ const baseRun: AdminRunRow = {
   review_admission_wait_ms: 100,
   review_phase_reached: "publishing",
   reasoning_tokens: 2,
-  run_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+  run_id: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
   scope_status: "complete",
   shards_count: 1,
   source_event_id: "event-1",

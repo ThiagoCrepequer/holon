@@ -7,7 +7,9 @@ import {
   findingStatusSchema,
 } from "./finding-lifecycle.js";
 import { projectIdentificationResultSchema } from "./project-identification.js";
+import { runConfigurationSummarySchema } from "./repository-config/snapshot.js";
 import { reviewTextLimits } from "./review-limits.js";
+import { reviewFindingSchema } from "./review-output.js";
 import { reviewScopeStatusSchema } from "./review-plan.js";
 import { reviewVerdictSchema } from "./review-verdict.js";
 import {
@@ -28,6 +30,10 @@ import { stepExecutionNodeSchema } from "./workflow-execution-preview.js";
 const nonNegativeSafeIntegerSchema = z.number().int().nonnegative().safe();
 
 export const adminFindingSummarySchema = z.strictObject({
+  details: reviewFindingSchema
+    .pick({ confidence: true, suggestion: true, evidence: true })
+    .optional(),
+  identityAmbiguous: z.boolean().optional(),
   diagnostic: z.string().min(1).max(reviewTextLimits.diagnostic),
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
@@ -60,6 +66,7 @@ export const adminCleanupTaskSummarySchema = z.strictObject({
 });
 
 export const adminRunDetailSchema = z.strictObject({
+  configuration: runConfigurationSummarySchema.nullable(),
   cleanupTask: adminCleanupTaskSummarySchema.nullable(),
   currentFindings: z.array(adminFindingSummarySchema).max(100),
   findingsPerspective: z.enum(["current_pr_state", "historical_run", "both"]),

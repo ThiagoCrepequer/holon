@@ -103,7 +103,39 @@ export const identifiedProjectSchema = z
           });
       }
   });
+export const configuredCompatibilitySchema = z
+  .array(
+    z.strictObject({
+      name: label,
+      root: projectRootSchema,
+      projectIds: z.array(label).max(20),
+      declarations: z
+        .array(
+          z.strictObject({
+            category: z.enum(["runtimes", "frameworks"]),
+            name: label,
+            expected: label,
+            status: z.enum(["matches", "conflicts", "unknown", "not_detected"]),
+            detected: z
+              .array(
+                z.strictObject({
+                  projectId: label,
+                  technology: label,
+                  value: label,
+                  kind: versionKindSchema,
+                  evidenceIds: z.array(label).min(1).max(20),
+                  condition: label.nullable(),
+                }),
+              )
+              .max(2000),
+          }),
+        )
+        .max(10000),
+    }),
+  )
+  .max(20);
 export const projectIdentificationResultSchema = z.strictObject({
+  configuredCompatibility: configuredCompatibilitySchema.optional(),
   snapshotSha: gitShaSchema,
   metadataChanged: z.boolean().optional(),
   usage: z

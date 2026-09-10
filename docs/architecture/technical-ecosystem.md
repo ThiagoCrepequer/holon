@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-09-10
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -41,8 +41,10 @@ holon/
 |   |-- github/
 |   |-- model/
 |   |-- repository-analysis/
+|   |-- repository-config/
 |   `-- test-kit/
 |-- tooling/
+|   |-- config-cli/
 |   `-- typescript/
 |-- .github/workflows/ci.yml
 |-- pnpm-workspace.yaml
@@ -53,8 +55,8 @@ holon/
 ```
 
 `apps` contém unidades implantáveis. `packages` contém código importável e nunca
-é implantado sozinho. `tooling` contém configuração compartilhada sem regra de
-negócio. Testes de composição vertical com Workerd ficam no control plane;
+é implantado sozinho. `tooling` contém configuração compartilhada e comandos locais que invocam
+os casos de uso, sem duplicar regras de negócio. Testes de composição vertical com Workerd ficam no control plane;
 políticas puras ficam junto ao pacote ou app que as possui.
 
 ## Grafo permitido
@@ -71,7 +73,16 @@ flowchart TD
     AP[packages/application]
     DO[packages/domain]
     TK[packages/test-kit]
+    RC[packages/repository-config]
+    CLI[tooling/config-cli]
 
+    CP --> RC
+    RC --> AP
+    RC --> CT
+    CLI --> RC
+    CLI --> AP
+    CLI --> CT
+    CLI --> RA
     CP --> GH
     CP --> MO
     CP --> CT
@@ -99,21 +110,25 @@ valida corpus sintético e mede outputs por oráculos determinísticos. Os modos
 mock e recorded não acessam infraestrutura; o adapter live manual usa `model`
 para chamar a mesma rota autenticada do AI Gateway, sem GitHub, Sandbox ou
 publicação. O domínio nunca depende de schemas runtime. `test-kit` é somente
-para fixtures de teste.
+para fixtures de teste. `repository-config` valida a AST YAML e entrega a entrada
+ao compilador de `application`; `config-cli` usa o mesmo compilador com leitura
+local/Git, gera schema e verifica drift, sem acesso aos deployables.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                 |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR       |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                     |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                              |
-| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI  |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                  |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                     |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura     |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                    |
-| `@holon/ui`                  | Design system: tokens semânticos Tailwind, componentes acessíveis e primitivas Base UI             | `@base-ui/react`, Tailwind CSS; sem domínio/apps |
+| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR           |
+| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                         |
+| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                                  |
+| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI      |
+| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                      |
+| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                         |
+| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura         |
+| `@holon/repository-config`   | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
+| `@holon/config-cli`          | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
+| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
+| `@holon/ui`                  | Design system: tokens semânticos Tailwind, componentes acessíveis e primitivas Base UI             | `@base-ui/react`, Tailwind CSS; sem domínio/apps     |
 
 O adapter live usa ferramentas sintéticas indisponíveis por contrato: ele mede
 prompt e modelo somente com o contexto autocontido do caso. O smoke remoto

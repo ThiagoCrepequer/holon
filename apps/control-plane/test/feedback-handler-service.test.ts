@@ -15,12 +15,15 @@ import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
 } from "../src/feedback-handler-service.js";
+import { configurationReader } from "./configuration-fixtures.js";
 
 const decision: ReviewDecisionContext = {
+  verdictPolicy: { mediumSeverityThreshold: 2 },
+  output: { language: "en", detail: "concise", maxInlineComments: 40 },
   checkRunId: 55,
   headSha: "a".repeat(40),
   isDegraded: false,
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
   scopeStatus: "complete",
   shardsAnalyzed: 1,
   totalShards: 1,
@@ -64,6 +67,7 @@ function session(permission = "write") {
   const repositoryPermission = vi.fn().mockResolvedValue(permission);
   const value: GitHubInstallationSession = {
     api: {} as never,
+    configurationReader: () => configurationReader(),
     currentHeadSha: vi.fn(),
     currentPullRequestRefs: vi.fn(),
     expectedAuthorLogin: "holon-reviewer[bot]",

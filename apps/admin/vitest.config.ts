@@ -35,6 +35,7 @@ export default defineConfig({
                   }
                   const runId = args.runId;
                   return {
+                    configuration: null,
                     cleanupTask: null,
                     currentFindings: [],
                     findingsPerspective: "both",
@@ -75,7 +76,7 @@ export default defineConfig({
                         firstStartedAt: "2026-09-04T11:00:01.000Z",
                         lastEndedAt: "2026-09-04T11:00:01.025Z",
                         phase: "admission",
-                        sanitizedInput: { runId: "github:42:pr:7:head:" + "a".repeat(40) },
+                        sanitizedInput: { runId: "github:42:pr:7:head:" + "a".repeat(40) + ":base:" + "b".repeat(40) },
                         sanitizedOutput: { outcome: "claimed" },
                         status: "completed",
                         stepName: "claim-run",

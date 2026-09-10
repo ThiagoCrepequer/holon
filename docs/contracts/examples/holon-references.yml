@@ -1,0 +1,11 @@
+# Paths are resolved in the selected repository snapshot; create these files first.
+review:
+  reference_files:
+    - docs/architecture.md
+instructions:
+  - path: docs/review-guidance.md
+projects:
+  - name: api
+    root: apps/api
+    instructions:
+      - path: REVIEW.md

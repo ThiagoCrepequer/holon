@@ -97,14 +97,14 @@ describe("review findings", () => {
     ).toThrow();
   });
 
-  it("creates a deterministic, versioned and invisible publication marker", () => {
+  it("creates a deterministic invisible publication marker bound to head and base", () => {
     const marker = buildPublicationMarker(
-      `github:42:pr:7:head:${"a".repeat(40)}`,
+      `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
       `finding:${"b".repeat(64)}`,
     );
 
     expect(marker).toBe(
-      `<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3A${"a".repeat(40)};finding=finding%3A${"b".repeat(64)} -->`,
+      `<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3A${"a".repeat(40)}%3Abase%3A${"b".repeat(40)};finding=finding%3A${"b".repeat(64)} -->`,
     );
   });
 

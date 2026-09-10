@@ -17,9 +17,9 @@ function completeCoverage(...files: string[]) {
 describe("lifecycle", () => {
   const prKey = "github:100:pr:42" as const;
   const runId1 =
-    "github:100:pr:42:head:1111111111111111111111111111111111111111" as const;
+    "github:100:pr:42:head:1111111111111111111111111111111111111111:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
   const runId2 =
-    "github:100:pr:42:head:2222222222222222222222222222222222222222" as const;
+    "github:100:pr:42:head:2222222222222222222222222222222222222222:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
   const sha1 = "1111111111111111111111111111111111111111";
   const sha2 = "2222222222222222222222222222222222222222";
   const finding1: FindingWithFingerprint = {

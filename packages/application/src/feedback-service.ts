@@ -1,3 +1,4 @@
+import type { ReviewLanguage } from "@holon/contracts";
 import type {
   FindingFeedbackRecord,
   FindingSeverity,
@@ -7,6 +8,7 @@ import type {
 } from "@holon/domain";
 import {
   determineReviewVerdict,
+  reviewText,
   isAuthorizedFeedbackAuthor,
   isDismissalFeedback,
   parseFeedbackCommand,
@@ -63,7 +65,10 @@ function activeVerdictCandidates(findings: readonly TrackedFinding[]) {
   }));
 }
 
-function checkRunPresentation(verdict: ReviewVerdict) {
+function checkRunPresentation(
+  verdict: ReviewVerdict,
+  language: ReviewLanguage,
+) {
   return {
     conclusion:
       verdict === "APPROVE"
@@ -73,10 +78,25 @@ function checkRunPresentation(verdict: ReviewVerdict) {
           : ("neutral" as const),
     title:
       verdict === "APPROVE"
-        ? "Holon Review — Approved"
+        ? reviewText(
+            language,
+            "Holon Review — Approved",
+            "Holon Review — Aprovado",
+            "Holon Review — Aprobado",
+          )
         : verdict === "REQUEST_CHANGES"
-          ? "Holon Review — Changes Requested"
-          : "Holon Review — Informational",
+          ? reviewText(
+              language,
+              "Holon Review — Changes Requested",
+              "Holon Review — Alterações solicitadas",
+              "Holon Review — Cambios solicitados",
+            )
+          : reviewText(
+              language,
+              "Holon Review — Informational",
+              "Holon Review — Informativo",
+              "Holon Review — Informativo",
+            ),
   };
 }
 
@@ -109,6 +129,8 @@ async function recalculateVerdict(
   if (decision === undefined) return undefined;
 
   const verdictDetails = determineReviewVerdict({
+    language: decision.output.language,
+    options: decision.verdictPolicy,
     findings: activeVerdictCandidates(application.activeFindings),
     isDegraded: decision.isDegraded,
     scopeStatus: decision.scopeStatus,
@@ -119,7 +141,10 @@ async function recalculateVerdict(
     decision.checkRunId !== undefined &&
     publisher.updateCheckRun !== undefined
   ) {
-    const presentation = checkRunPresentation(verdictDetails.verdict);
+    const presentation = checkRunPresentation(
+      verdictDetails.verdict,
+      decision.output.language,
+    );
     await publisher.updateCheckRun({
       checkRunId: decision.checkRunId,
       conclusion: presentation.conclusion,
@@ -172,23 +197,49 @@ export async function processFeedbackComment(
   });
   if (application.outcome === "not_found") return { actionTaken: "ignored" };
 
+  const language = application.decision?.output.language ?? "en";
   const changesVerdict =
     isDismissalFeedback(command.label) || command.label === "wrong_severity";
   const newVerdict = changesVerdict
     ? await recalculateVerdict(
         application,
-        `Verdict recalculated after finding feedback (${command.label}).`,
+        reviewText(
+          language,
+          `Verdict recalculated after finding feedback (${command.label}).`,
+          `Veredito recalculado após feedback sobre o achado (${command.label}).`,
+          `Veredicto recalculado tras los comentarios sobre el hallazgo (${command.label}).`,
+        ),
         publisher,
       )
     : undefined;
 
   const reply = changesVerdict
-    ? `👀 Feedback aplicado como ${command.label.replaceAll("_", " ")}.${
-        newVerdict === undefined
-          ? " O veredito será recalculado na próxima execução completa."
-          : ` Veredito do PR recalculado para **${newVerdict}**.`
-      }`
-    : "🙏 Obrigado pelo feedback! Registrado para calibração do modelo.";
+    ? reviewText(
+        language,
+        `Feedback applied as ${command.label}.`,
+        `Feedback aplicado como ${command.label}.`,
+        `Comentarios aplicados como ${command.label}.`,
+      ) +
+      " " +
+      (newVerdict === undefined
+        ? reviewText(
+            language,
+            "The verdict will be recalculated on the next complete run.",
+            "O veredito será recalculado na próxima execução completa.",
+            "El veredicto se recalculará en la próxima ejecución completa.",
+          )
+        : reviewText(
+            language,
+            `PR verdict recalculated to **${newVerdict}**.`,
+            `Veredito do PR recalculado para **${newVerdict}**.`,
+            `Veredicto del PR recalculado a **${newVerdict}**.`,
+          ))
+    : reviewText(
+        language,
+        "Thank you for the feedback. Recorded for model calibration.",
+        "Obrigado pelo feedback! Registrado para calibração do modelo.",
+        "Gracias por los comentarios. Registrados para la calibración del modelo.",
+      );
   const replyPosted = await publishReplyOnce(
     application,
     input.deliveryId,
@@ -230,7 +281,12 @@ export async function processThreadResolved(
 
   const newVerdict = await recalculateVerdict(
     application,
-    "Verdict recalculated after thread resolution.",
+    reviewText(
+      application.decision?.output.language ?? "en",
+      "Verdict recalculated after thread resolution.",
+      "Veredito recalculado após a resolução da discussão.",
+      "Veredicto recalculado tras resolver la conversación.",
+    ),
     publisher,
   );
   return {

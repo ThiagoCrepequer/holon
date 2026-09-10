@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-10
 ---
 
 # Decisões
@@ -69,3 +69,5 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - [ADR-0035 — Planejar o contexto completo antes dos limites de shards](0035-plan-complete-context-before-sharding.md)
 
 - [ADR-0036 — Manter um único contrato atual durante o desenvolvimento](0036-use-single-current-development-contracts.md) — decisão vigente para contratos internos.
+
+- [ADR-0037 — Compilar configuração imutável por execução](0037-compile-repository-configuration-per-run.md) — decisão vigente para autoridade, snapshots, identidade head/base e apresentação.

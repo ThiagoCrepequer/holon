@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-10
 related:
   - ../decisions/0015-use-causal-admission-and-durable-terminal-cleanup.md
   - ../decisions/0024-persist-canonical-review-decision-for-feedback.md
@@ -23,7 +23,7 @@ concluído uma operação mesmo quando a resposta não chegou.
 | Identidade  | Forma implementada                                       | Uso                                     |
 | ----------- | -------------------------------------------------------- | --------------------------------------- |
 | Delivery    | `github:<delivery_id>`                                   | Detectar redelivery literal do webhook  |
-| Run         | `github:<repo_id>:pr:<number>:head:<sha>`                | Uma análise lógica de uma revisão do PR |
+| Run         | `github:<repo_id>:pr:<number>:head:<sha>:base:<sha>`     | Uma análise lógica de uma revisão do PR |
 | Workflow    | `review-<sha256(run-id)>`                                | Criação idempotente e dono da execução  |
 | Finding     | Hash estável de path + excerpt + diagnóstico normalizado | Reconciliar entre runs do mesmo PR      |
 | Publication | Run + finding ou `summary`                               | Impedir comentário duplicado            |
@@ -88,7 +88,7 @@ O formato é único e determinístico; o conteúdo visível não depende do marc
 
 A escolha aceita no ADR-0004 é um Durable Object SQLite por `PrKey`. A tabela
 `runs` aplica unicidade por run e registra o owner `workflow_instance_id`,
-`metadata.latest_run_id` identifica o head mais novo observado,
+`metadata.latest_run_id` identifica a run causalmente mais nova observada,
 `transition_operations` torna commits repetidos idempotentes e `publications`
 persiste o claim e o ID retornado pelo GitHub. Updates usam estado esperado na
 cláusula `WHERE`; quando os retries duráveis acabam, estados ativos passam a
@@ -148,3 +148,14 @@ Resoluções usam o mesmo protocolo de claim/marcador/reconciliação de publica
 com identidade por fingerprint e head. Veja a
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
 para os limites de contabilidade e matching.
+
+## Configuração selada — 2026-09-09
+
+A [ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md)
+incorpora a base à identidade sem alterar a ordenação causal. `run_configurations`
+retém manifesto e resumo; `run_configuration_artifacts` guarda chunks privados.
+Retries carregam o snapshot selado, conferem identidade e digests e não consultam
+novamente fontes mutáveis. O cleanup apaga os chunks, preservando o resumo.
+A decisão de feedback conserva idioma, detalhe, cap e limiar de medium; não relê
+YAML nem perde rigor após cleanup/eviction. `review_finding_artifacts` preserva
+os resultados integrais da run independentemente do cap inline.
