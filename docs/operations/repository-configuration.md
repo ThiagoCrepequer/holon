@@ -40,6 +40,13 @@ Exemplos completos: [mínimo](../contracts/examples/holon-minimal.yml),
 [referências](../contracts/examples/holon-references.yml). O contrato estrutural
 é [input.ts](../../packages/contracts/src/repository-config/input.ts).
 
+O próprio Holon usa [`.github/holon.yml`](../../.github/holon.yml) como exemplo
+comentado de todas as opções. Ele configura saída em português, detalhe completo,
+rigor alto, os workspaces reais e regras por caminho. O modeline aponta para o
+schema local, permitindo usar o exemplo no editor antes de qualquer deploy.
+A validação dessa configuração faz parte de `pnpm verify`, antes dos testes e
+builds, para detectar opções ou referências inválidas no próprio repositório.
+
 ## Composição e efeitos
 
 `instructions` aceita texto multilinha ou `{ path: docs/review.md }`.
