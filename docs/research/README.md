@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-10
 ---
 
 # Investigacoes
@@ -36,3 +36,5 @@ Nao criam uma decisao por si so.
   reproduziveis.
 
 - [2026-09-08 — Omissão de contexto antes do planejamento](2026-09-08-context-budget-omission.md)
+
+- [2026-09-09 — Configuração e schema para editores](2026-09-09-repository-configuration-and-editor-schema.md)

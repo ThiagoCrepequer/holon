@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-09-10
 ---
 
 # Arquitetura
@@ -33,3 +33,5 @@ continuam explícitas nos documentos de operação e planejamento.
 
 Se um desenho contradizer um ADR aceito, o ADR prevalece e o documento de
 arquitetura deve ser corrigido.
+
+- [Configuração imutável por run](../decisions/0037-compile-repository-configuration-per-run.md) e [operação](../operations/repository-configuration.md).

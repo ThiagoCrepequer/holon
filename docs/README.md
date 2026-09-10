@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-10
 ---
 
 # Mapa da documentacao
@@ -65,3 +65,5 @@ Plano de funcionalidade proposto: [Identificação de tecnologias e versões por
 
 - [Identificação de versões: arquitetura](architecture/project-version-identification.md)
 - [Identificação de versões: operação](operations/project-version-identification.md)
+
+- [Configuração de repositório e editor](operations/repository-configuration.md) — contrato, CLI, limites e rollout da ADR-0037.
