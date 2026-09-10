@@ -24,6 +24,7 @@ import {
 } from "../app/views/run-detail-view.js";
 import { RunsView } from "../app/views/runs-view.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../workers/types.js";
+import { configuration, identification } from "./configuration-fixtures.js";
 
 const baseRun: AdminRunRow = {
   analysis_started_at: "2026-09-04T11:00:02.000Z",
@@ -177,6 +178,70 @@ function render(element: React.ReactNode, location = "/") {
 }
 
 describe("admin views", () => {
+  it("renders retained evidence and suggestions even when the inline publication limit is zero", () => {
+    const html = render(
+      <RunDetailView
+        run={baseRun}
+        rpcDetail={{
+          ...detail,
+          configuration,
+          projectIdentification: identification,
+          currentFindings: [
+            {
+              ...detail.currentFindings[0]!,
+              details: {
+                confidence: 0.95,
+                suggestion: "Use textContent instead of <script> injection.",
+                evidence: [
+                  {
+                    path: "src/render.ts",
+                    startLine: 12,
+                    endLine: 14,
+                    excerpt:
+                      "element.innerHTML = '<script>untrusted()</script>';",
+                    reason:
+                      "Repository-controlled input reaches the DOM without escaping.",
+                  },
+                ],
+              },
+            },
+            {
+              ...detail.currentFindings[1]!,
+              details: {
+                confidence: 0.9,
+                evidence: [
+                  {
+                    path: "src/load.ts",
+                    startLine: 7,
+                    excerpt: "return result.value;",
+                    reason: "The result can be absent.",
+                  },
+                ],
+              },
+            },
+          ],
+        }}
+      />,
+      "/runs/x",
+    );
+    expect(html).toMatch(/New inline comment limit<\/dt><dd[^>]*>0<\/dd>/u);
+    expect(html).toContain("Detected projects: detected-api");
+    expect(html.match(/Evidence and suggestion/gu)).toHaveLength(2);
+    expect(html).toContain(
+      "Use textContent instead of &lt;script&gt; injection.",
+    );
+    expect(html).toContain("src/render.ts:12–14");
+    expect(html).toContain("&lt;script&gt;untrusted()&lt;/script&gt;");
+    expect(html).toContain(
+      "Repository-controlled input reaches the DOM without escaping.",
+    );
+    expect(html).toContain("src/load.ts:7</p>");
+    expect(html).toContain("return result.value;");
+    expect(html).toContain("The result can be absent.");
+    expect(html).not.toContain("<script>untrusted()");
+    expect(html).not.toContain("No findings emitted");
+  });
+
   it("renders actual queue degradation without conflating unavailable telemetry", () => {
     const degraded = render(
       <DashboardView
