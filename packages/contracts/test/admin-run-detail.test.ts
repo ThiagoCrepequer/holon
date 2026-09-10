@@ -11,7 +11,7 @@ import {
 
 const sha = "c".repeat(40);
 const prKey = "github:10:pr:3" as const;
-const runId = `${prKey}:head:${sha}` as const;
+const runId = `${prKey}:head:${sha}:base:${"b".repeat(40)}` as const;
 
 describe("admin run detail contracts", () => {
   it("validates full admin run detail DTO", () => {
@@ -30,6 +30,7 @@ describe("admin run detail contracts", () => {
           updatedAt: "2026-09-04T12:00:00.000Z",
         },
       ],
+      configuration: null,
       findingsPerspective: "current_pr_state",
       run: {
         runState: "completed",
@@ -88,6 +89,7 @@ describe("admin run detail contracts", () => {
       historicalRunFindings: null,
       stepExecutions: [],
       currentFindings: [],
+      configuration: null,
       findingsPerspective: "current_pr_state",
       run: {
         runState: "completed",

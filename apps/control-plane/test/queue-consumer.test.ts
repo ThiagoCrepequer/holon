@@ -43,7 +43,9 @@ describe("queue consumer", () => {
     expect(queued.state).toEqual({ acked: true, retried: false });
     expect(jobs[0]).toMatchObject({
       id: expect.stringMatching(/^review-[a-f0-9]{64}$/u),
-      params: { runId: `github:42:pr:7:head:${"a".repeat(40)}` },
+      params: {
+        runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
+      },
       retention: {
         errorRetention: "3 days",
         successRetention: "1 day",

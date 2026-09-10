@@ -178,7 +178,7 @@ describe("determineReviewVerdict", () => {
       });
       expect(result.verdict).toBe("COMMENT");
       expect(result.reasons[0]).toContain(
-        "A análise do modelo foi concluída de forma não-estruturada",
+        "The model analysis completed without structured output",
       );
       expect(result.reasons[0]).not.toContain("All reviewed files clean");
     });

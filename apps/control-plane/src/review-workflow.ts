@@ -1,9 +1,13 @@
+import { projectCompatibility } from "@holon/application";
+import { RepositoryConfigurationError } from "@holon/application";
 import {
   createReviewRun,
+  planInlinePublications,
   determineCheckRunConclusion,
   formatCheckRunOutput,
   renderFinding,
 } from "@holon/application";
+import type { RunConfigurationRef } from "@holon/contracts";
 import {
   buildAdminProjectionEvent,
   buildReviewAnalysisCheckpoint,
@@ -20,12 +24,8 @@ import {
   type StepPhase,
   type StepTiming,
 } from "@holon/contracts";
+import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 import {
-  RepositoryPolicyConflictError,
-  RepositoryPolicySchemaError,
-  RepositoryPolicyScopeError,
-  RepositoryPolicySecurityError,
-  RepositoryPolicySyntaxError,
   appendCiEvidenceToSummary,
   calculateInferenceCost,
   classifyFindingPublication,
@@ -49,7 +49,6 @@ import {
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
 import { consoleLogger, errorKind } from "./observability.js";
-import { resolveRepositoryPolicy } from "./repository-policy-resolver.js";
 import { analyzeReview } from "./review-analysis.js";
 import { loadReviewWithCurrentFeedback } from "./review-feedback-refresh.js";
 import {
@@ -59,6 +58,11 @@ import {
   type ReviewServices,
   type WorkflowLedger,
 } from "./review-services.js";
+import {
+  configurationScopePolicy,
+  resolveRunConfiguration,
+} from "./run-configuration-resolver.js";
+import { configurationStep } from "./workflow-policy.js";
 import {
   causalVersionForJob,
   durationFrom,
@@ -73,25 +77,42 @@ import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 export type { ReviewRuntime } from "./review-services.js";
 export { parseAppId } from "./credential-broker.js";
 
-const repositoryPolicyFailureMessages: Readonly<Record<string, string>> = {
-  RepositoryPolicyConflictError:
-    "Use somente um arquivo de política: .github/holon.yml ou .holon.yml.",
-  RepositoryPolicySchemaError:
-    "A política não corresponde ao schema estrito da versão 1.",
-  RepositoryPolicyScopeError:
-    "A política contém uma exclusão de escopo proibida.",
-  RepositoryPolicySecurityError:
-    "O arquivo de política falhou nas validações de segurança.",
-  RepositoryPolicySyntaxError:
-    "O YAML da política contém sintaxe ou construções não suportadas.",
+const repositoryConfigurationFailureMessages: Readonly<
+  Record<string, import("@holon/domain").ReviewMessageCode>
+> = {
+  conflicting_sources: "configurationConflict",
+  invalid_yaml: "configurationYaml",
+  invalid_configuration: "configurationSchema",
+  invalid_file: "configurationFile",
+  access_denied: "configurationAccess",
+  snapshot_unavailable: "configurationSnapshot",
+  too_large: "configurationSize",
+  budget_exceeded: "configurationBudget",
+  snapshot_mismatch: "configurationIntegrity",
+  snapshot_corrupt: "configurationIntegrity",
+  snapshot_conflict: "configurationIntegrity",
+  missing_project_root: "configurationRoot",
+  missing_reference: "configurationReference",
+  excluded_reference: "configurationReference",
+  invalid_compatibility: "configurationCompatibility",
 };
-
-function repositoryPolicyFailureMessage(error: unknown): string | undefined {
-  if (!(error instanceof Error)) return undefined;
-  const kind = error.message.startsWith("HOLON_REPOSITORY_POLICY:")
-    ? error.message.slice("HOLON_REPOSITORY_POLICY:".length)
-    : error.name;
-  return repositoryPolicyFailureMessages[kind];
+function repositoryConfigurationFailureMessage(
+  error: unknown,
+  language: import("@holon/domain").ReviewLanguage,
+): string {
+  const code =
+    error instanceof RepositoryConfigurationError
+      ? error.code
+      : error instanceof Error &&
+          error.message.startsWith("HOLON_REPOSITORY_CONFIG:")
+        ? error.message.slice("HOLON_REPOSITORY_CONFIG:".length)
+        : undefined;
+  return reviewMessage(
+    language,
+    (code === undefined
+      ? undefined
+      : repositoryConfigurationFailureMessages[code]) ?? "configurationUnknown",
+  );
 }
 
 function buildProjectionTimestamps(
@@ -302,6 +323,8 @@ export async function executeReviewWorkflow(
   let repositoryStarted = false;
   let runClaimed = false;
   let effectivePolicy: RepositoryPolicy | undefined;
+  let configuration: RunConfigurationRef | undefined;
+  let outputLanguage: ReviewLanguage = "en";
   let reviewPhaseReached: ReviewPhaseReached = "admitted";
   let analysisStartedAtIso: string | null = null;
 
@@ -472,9 +495,8 @@ export async function executeReviewWorkflow(
         "cancel-check-run",
         "cancelled",
         {
-          summary:
-            "A newer commit or updated base was detected on this pull request. This review run was superseded.",
-          title: "Holon Review Superseded",
+          summary: reviewMessage(outputLanguage, "superseded"),
+          title: reviewMessage(outputLanguage, "supersededTitle"),
         },
         false,
       );
@@ -596,9 +618,8 @@ export async function executeReviewWorkflow(
             headSha: job.envelope.pullRequest.headSha,
             name: "Holon Review",
             output: {
-              summary:
-                "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
-              title: "Holon Review in progress",
+              summary: reviewMessage(outputLanguage, "inProgress"),
+              title: reviewMessage(outputLanguage, "inProgressTitle"),
             },
             startedAt: now(),
             status: "in_progress",
@@ -625,9 +646,8 @@ export async function executeReviewWorkflow(
             completedAt: now(),
             conclusion: "cancelled",
             output: {
-              summary:
-                "A newer commit was pushed to this pull request. This review run was cancelled.",
-              title: "Holon Review Superseded",
+              summary: reviewMessage(outputLanguage, "superseded"),
+              title: reviewMessage(outputLanguage, "supersededTitle"),
             },
             status: "completed",
           });
@@ -821,43 +841,67 @@ export async function executeReviewWorkflow(
       );
     }
 
-    await ensureCheckRunStarted();
-
-    effectivePolicy = await runInstrumentedStep(
-      "resolve-repository-policy",
+    repositoryStarted = true;
+    configuration = await runInstrumentedStep(
+      "resolve-repository-config",
       "admission",
-      repositoryStep,
+      configurationStep,
       async () => {
         try {
-          const session = await services.createSession();
-          return await resolveRepositoryPolicy(
-            session,
-            job.envelope.repository.owner,
-            job.envelope.repository.name,
-            job.envelope.pullRequest.baseSha,
+          return await resolveRunConfiguration(
+            job,
+            services.ledger,
+            async () => {
+              const session = await services.createSession();
+              return session.configurationReader(
+                job.envelope.repository.owner,
+                job.envelope.repository.name,
+                job.envelope.pullRequest.baseSha,
+              );
+            },
+            emit,
           );
-        } catch (policyError) {
+        } catch (error) {
+          if (error instanceof RepositoryConfigurationError)
+            emit("configuration.rejected", {
+              code: error.code,
+              location: error.location,
+            });
           if (
-            policyError instanceof RepositoryPolicyConflictError ||
-            policyError instanceof RepositoryPolicySyntaxError ||
-            policyError instanceof RepositoryPolicySchemaError ||
-            policyError instanceof RepositoryPolicyScopeError ||
-            policyError instanceof RepositoryPolicySecurityError
-          ) {
+            error instanceof RepositoryConfigurationError &&
+            error.code !== "transient_failure"
+          )
             throw new NonRetryableError(
-              `HOLON_REPOSITORY_POLICY:${policyError.name}`,
+              `HOLON_REPOSITORY_CONFIG:${error.code}`,
             );
-          }
-          throw policyError;
+          throw error;
         }
       },
-      () => ({
-        baseSha: job.envelope.pullRequest.baseSha,
-        repoName: job.envelope.repository.name,
-        repoOwner: job.envelope.repository.owner,
-      }),
-      (policy) => ({ policySource: policy.source }),
+      () => ({ baseSha: job.envelope.pullRequest.baseSha }),
+      (reference) => ({ configDigest: reference.configDigest }),
     );
+    const configurationRef = configuration;
+    const preferences = await runInstrumentedStep(
+      "load-repository-scope",
+      "admission",
+      stateStep,
+      async () => {
+        const snapshot =
+          await services.ledger.loadRunConfiguration(configurationRef);
+        return {
+          policy: configurationScopePolicy(snapshot),
+          language: snapshot.config.output.language,
+        };
+      },
+      () => ({ configDigest: configurationRef.configDigest }),
+      (value) => ({
+        scopeDigest: value.policy.effectivePolicyDigest,
+        language: value.language,
+      }),
+    );
+    effectivePolicy = preferences.policy;
+    outputLanguage = preferences.language;
+    await ensureCheckRunStarted();
 
     repositoryStarted = true;
     await runInstrumentedStep(
@@ -866,7 +910,10 @@ export async function executeReviewWorkflow(
       repositoryStep,
       async () => {
         await services.registerCredentialScope();
-        const prepared = await services.prepareRepository(1, effectivePolicy);
+        const policy = configurationScopePolicy(
+          await services.ledger.loadRunConfiguration(configurationRef),
+        );
+        const prepared = await services.prepareRepository(1, policy);
         emit("repository.prepared", {
           changedLineCount: prepared.changedLineCount,
           contextBytes: prepared.contextBytes,
@@ -1008,7 +1055,14 @@ export async function executeReviewWorkflow(
           )
         )
           identification.status = "partial";
-        services.useProjectIdentification?.(identification);
+        const configuredIdentification = {
+          ...identification,
+          configuredCompatibility: projectCompatibility(
+            await services.ledger.loadRunConfiguration(configurationRef),
+            identification,
+          ),
+        };
+        services.useProjectIdentification?.(configuredIdentification);
         if (services.ledger.saveProjectIdentification)
           await runInstrumentedStep(
             "record-project-identification",
@@ -1017,7 +1071,7 @@ export async function executeReviewWorkflow(
             async () =>
               services.ledger.saveProjectIdentification!(
                 job.runId,
-                identification,
+                configuredIdentification,
               ),
             () => ({
               projectsCount: identification.projects.length,
@@ -1035,6 +1089,7 @@ export async function executeReviewWorkflow(
     );
     reviewPhaseReached = "analysis_started";
     let output = await analyzeReview(job, services, emit, effectivePolicy, {
+      configuration: configurationRef,
       runStep: (name, phase, callback) =>
         runInstrumentedStep(
           name,
@@ -1053,15 +1108,6 @@ export async function executeReviewWorkflow(
               promptTruncated:
                 checkpoint.promptTruncated || checkpoint.contextTruncated,
               summary: checkpoint.summary.slice(0, 500),
-              historicalFindings: checkpoint.activeFindings.map((finding) => ({
-                diagnostic: finding.diagnostic,
-                filePath: finding.location.path,
-                fingerprint: finding.fingerprint,
-                line: finding.location.line,
-                severity: finding.severity,
-                status: finding.status,
-                updatedAt: now(),
-              })),
             };
           },
         ),
@@ -1101,16 +1147,23 @@ export async function executeReviewWorkflow(
     let findingsPublished = 0;
     const publishedCommentIds = new Map<string, number>();
 
+    const inlinePlan = await runInstrumentedStep(
+      "plan-inline-publications",
+      "publication",
+      stateStep,
+      async () => {
+        const snapshot =
+          await services.ledger.loadRunConfiguration(configurationRef);
+        const detail = await services.ledger.loadReviewAnalysis(run.id);
+        return planInlinePublications(
+          detail.activeFindings,
+          snapshot.config.output.maxInlineComments,
+        );
+      },
+    );
+    const selectedInlineFindings = new Set(inlinePlan.inlineFingerprints);
     for (const [index, finding] of output.activeFindings.entries()) {
-      if (finding.confidence < 0.8 || finding.severity === "low") continue;
-
-      // Suppress duplicate inline comments for persistent findings
-      if (
-        finding.status === "persistent" &&
-        finding.previousCommentId !== undefined
-      ) {
-        continue;
-      }
+      if (!selectedInlineFindings.has(finding.fingerprint)) continue;
 
       const result = await runInstrumentedStep(
         `publish-inline-${index + 1}`,
@@ -1147,7 +1200,7 @@ export async function executeReviewWorkflow(
               run.id,
               findingId,
               "inline",
-              renderFinding(effectiveFinding),
+              renderFinding(effectiveFinding, detail.output.language),
               {
                 line: effectiveFinding.location.line,
                 path: effectiveFinding.location.path,
@@ -1220,6 +1273,7 @@ export async function executeReviewWorkflow(
               resolved,
               job.envelope.pullRequest.headSha,
               () => authorizeMutation(github, "review"),
+              refreshed.output.language,
             );
             return true;
           } catch (error) {
@@ -1250,16 +1304,18 @@ export async function executeReviewWorkflow(
           run.id,
           prKey,
         );
+        const snapshot =
+          await services.ledger.loadRunConfiguration(configurationRef);
         let summaryText = currentReview.summary;
         try {
           const ciEvidence = await services.ledger.loadCiEvidence(
             prKey,
             job.envelope.pullRequest.headSha,
           );
-          if (ciEvidence?.markdown) {
+          if (ciEvidence !== undefined) {
             summaryText = appendCiEvidenceToSummary(
               summaryText,
-              ciEvidence.markdown,
+              ciEvidence.markdownByLanguage[snapshot.config.output.language],
             );
           }
         } catch (error) {
@@ -1382,7 +1438,16 @@ export async function executeReviewWorkflow(
       "publication",
       stateStep,
       async () => {
+        const snapshot =
+          await services.ledger.loadRunConfiguration(configurationRef);
         await services.ledger.recordReviewDecision(run.id, {
+          output: snapshot.config.output,
+          verdictPolicy: {
+            mediumSeverityThreshold:
+              snapshot.config.verdictStrictness === "block_all_confident_medium"
+                ? 1
+                : 2,
+          },
           headSha: job.envelope.pullRequest.headSha,
           isDegraded: output.isDegraded === true,
           scopeStatus: output.scopeStatus,
@@ -1529,26 +1594,27 @@ export async function executeReviewWorkflow(
     });
     return result;
   } catch (error) {
-    const isPolicyError =
-      error instanceof RepositoryPolicyConflictError ||
-      error instanceof RepositoryPolicySyntaxError ||
-      error instanceof RepositoryPolicySchemaError ||
-      error instanceof RepositoryPolicyScopeError ||
-      error instanceof RepositoryPolicySecurityError ||
+    const isConfigurationError =
+      error instanceof RepositoryConfigurationError ||
       (error instanceof Error &&
-        (error.message.startsWith("HOLON_REPOSITORY_POLICY:") ||
-          error.name.startsWith("RepositoryPolicy")));
+        error.message.startsWith("HOLON_REPOSITORY_CONFIG:"));
 
-    const policyErrorMessage = repositoryPolicyFailureMessage(error);
+    const configurationErrorMessage = repositoryConfigurationFailureMessage(
+      error,
+      outputLanguage,
+    );
 
     if (runClaimed) {
+      await ensureCheckRunStarted();
       await updateCheckRunCompleted("fail-check-run", "failure", {
-        summary: isPolicyError
-          ? `A política configurada para o repositório (.github/holon.yml ou .holon.yml) é inválida:\n\n> ${policyErrorMessage ?? "Erro de configuração"}`
-          : "Holon encountered a system failure and could not complete the automated review. Scheduled for cleanup.",
-        title: isPolicyError
-          ? "Política de repositório inválida"
-          : "Holon Review Failed",
+        summary: isConfigurationError
+          ? reviewMessage(outputLanguage, "configurationInvalid", {
+              reason: configurationErrorMessage,
+            })
+          : reviewMessage(outputLanguage, "failed"),
+        title: isConfigurationError
+          ? reviewMessage(outputLanguage, "configurationInvalidTitle")
+          : reviewMessage(outputLanguage, "failedTitle"),
       });
     }
 
@@ -1634,9 +1700,9 @@ export async function executeReviewWorkflow(
         publicationStep,
         async () => {
           const github = await services.createMutationContext();
-          const noticeBody = isPolicyError
-            ? `Holon encontrou um erro na política configurada para o repositório (.github/holon.yml ou .holon.yml) e interrompeu a revisão:\n\n> ${policyErrorMessage ?? "Erro de configuração"}\n\nCorrija o arquivo de configuração no branch base para retomar as revisões automáticas.`
-            : undefined;
+          const noticeBody = isConfigurationError
+            ? `${reviewMessage(outputLanguage, "configurationInvalid", { reason: configurationErrorMessage })}\n\n${reviewMessage(outputLanguage, "configurationFix")}`
+            : reviewMessage(outputLanguage, "failureNotice");
           await publishFailureNoticeAuthorized(
             github.publisher,
             run.id,
@@ -1644,7 +1710,7 @@ export async function executeReviewWorkflow(
             noticeBody,
           );
         },
-        () => ({ isPolicyError }),
+        () => ({ isConfigurationError }),
         () => ({ published: true }),
       ).catch((publicationError: unknown) => {
         emit("review.failure_notice_failed", {

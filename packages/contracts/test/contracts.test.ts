@@ -20,7 +20,7 @@ import {
   parseModelReviewTransport,
   preparedRepositorySchema,
   publicationRecordSchema,
-  rawRepositoryPolicySchema,
+  repositoryConfigInputSchema,
   reconciledFindingSchema,
   reconciliationSummarySchema,
   repositoryPolicyGlobSchema,
@@ -54,7 +54,7 @@ import {
 } from "../src/index.js";
 
 const sha = "a".repeat(40);
-const runId = `github:42:pr:7:head:${sha}`;
+const runId = `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`;
 const canonicalDiff =
   "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -189,8 +189,10 @@ describe("review job and executor contracts", () => {
   it("requires the run identity to match the webhook coordinates", () => {
     expect(reviewJobSchema.parse(job)).toEqual(job);
     expect(
-      reviewJobSchema.safeParse({ ...job, runId: `github:43:pr:7:head:${sha}` })
-        .success,
+      reviewJobSchema.safeParse({
+        ...job,
+        runId: `github:43:pr:7:head:${sha}:base:${"b".repeat(40)}`,
+      }).success,
     ).toBe(false);
   });
 
@@ -665,9 +667,9 @@ describe("declarative repository policy contracts", () => {
     ).toBe(false);
   });
 
-  it("validates raw repository policy schemas with strict parsing", () => {
+  it("validates repository configuration with strict parsing", () => {
     const minimal = {};
-    expect(rawRepositoryPolicySchema.parse(minimal)).toEqual(minimal);
+    expect(repositoryConfigInputSchema.parse(minimal)).toEqual(minimal);
 
     const full = {
       review: {
@@ -677,27 +679,28 @@ describe("declarative repository policy contracts", () => {
         strictness: "block_all_confident_medium" as const,
       },
     };
-    expect(rawRepositoryPolicySchema.parse(full)).toEqual(full);
+    expect(repositoryConfigInputSchema.parse(full)).toEqual(full);
 
     // Rejects unexpected keys (strictObject)
     expect(
-      rawRepositoryPolicySchema.safeParse({ ...minimal, extra: true }).success,
+      repositoryConfigInputSchema.safeParse({ ...minimal, extra: true })
+        .success,
     ).toBe(false);
     expect(
-      rawRepositoryPolicySchema.safeParse({
+      repositoryConfigInputSchema.safeParse({
         ...full,
         review: { ...full.review, rules: [] },
       }).success,
     ).toBe(false);
 
     // Rejects invalid version
-    expect(rawRepositoryPolicySchema.safeParse({ version: 2 }).success).toBe(
+    expect(repositoryConfigInputSchema.safeParse({ version: 2 }).success).toBe(
       false,
     );
 
     // Rejects invalid strictness
     expect(
-      rawRepositoryPolicySchema.safeParse({
+      repositoryConfigInputSchema.safeParse({
         verdict: { strictness: "invalid" },
       }).success,
     ).toBe(false);
@@ -1225,10 +1228,10 @@ describe("check run contracts", () => {
         filePath: "src/auth/jwt.ts",
         fingerprint: validFingerprint,
         firstSeenHeadSha: "1".repeat(40),
-        firstSeenRunId: `github:1:pr:1:head:${"1".repeat(40)}`,
+        firstSeenRunId: `github:1:pr:1:head:${"1".repeat(40)}:base:${"b".repeat(40)}`,
         githubCommentId: 123456,
         lastSeenHeadSha: "2".repeat(40),
-        lastSeenRunId: `github:1:pr:1:head:${"2".repeat(40)}`,
+        lastSeenRunId: `github:1:pr:1:head:${"2".repeat(40)}:base:${"b".repeat(40)}`,
         line: 42,
         prKey: "github:1:pr:1" as const,
         severity: "critical" as const,

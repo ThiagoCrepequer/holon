@@ -8,6 +8,7 @@ import {
   gitShaSchema,
   positiveIntegerSchema,
   reviewScopeStatusSchema,
+  reviewOutputPreferencesSchema,
   runIdSchema,
   trackedFindingSchema,
   type FindingFeedbackRecord,
@@ -21,6 +22,7 @@ import {
 } from "@holon/domain";
 
 interface PrFindingRow extends Record<string, SqlStorageValue> {
+  identity_ambiguous: number;
   evidence_fingerprint: string;
   confidence: number;
   diagnostic: string;
@@ -54,6 +56,8 @@ interface FindingFeedbackRow extends Record<string, SqlStorageValue> {
 }
 
 interface ReviewDecisionRow extends Record<string, SqlStorageValue> {
+  decision_output_json: string | null;
+  decision_medium_threshold: number | null;
   decision_head_sha: string | null;
   decision_is_degraded: number | null;
   decision_scope_status: string | null;
@@ -65,6 +69,7 @@ interface ReviewDecisionRow extends Record<string, SqlStorageValue> {
 
 function rowToTrackedFinding(row: PrFindingRow): TrackedFinding {
   return trackedFindingSchema.parse({
+    ...(row.identity_ambiguous === 1 ? { identityAmbiguous: true } : {}),
     evidenceFingerprint: row.evidence_fingerprint,
     confidence: row.confidence,
     diagnostic: row.diagnostic,
@@ -145,8 +150,8 @@ export class FindingLedgerStore {
              pr_key, fingerprint, first_seen_run_id, last_seen_run_id,
              first_seen_head_sha, last_seen_head_sha, status, severity,
              file_path, line, diagnostic, github_comment_id, updated_at,
-             confidence, evidence_fingerprint
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             confidence, evidence_fingerprint, identity_ambiguous
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(pr_key, fingerprint) DO UPDATE SET
              last_seen_run_id = excluded.last_seen_run_id,
              last_seen_head_sha = excluded.last_seen_head_sha,
@@ -158,7 +163,8 @@ export class FindingLedgerStore {
              github_comment_id = COALESCE(excluded.github_comment_id, pr_findings.github_comment_id),
              updated_at = MAX(excluded.updated_at, pr_findings.updated_at),
              confidence = excluded.confidence,
-             evidence_fingerprint = excluded.evidence_fingerprint`,
+             evidence_fingerprint = excluded.evidence_fingerprint,
+             identity_ambiguous = excluded.identity_ambiguous`,
           prKey,
           finding.fingerprint,
           finding.firstSeenRunId,
@@ -174,6 +180,7 @@ export class FindingLedgerStore {
           finding.updatedAt,
           finding.confidence,
           finding.evidenceFingerprint,
+          finding.identityAmbiguous ? 1 : 0,
         );
       }
     });
@@ -233,6 +240,10 @@ export class FindingLedgerStore {
     decision: Omit<ReviewDecisionContext, "checkRunId" | "runId">,
   ): void {
     const parsedRunId = runIdSchema.parse(runId);
+    const output = reviewOutputPreferencesSchema.parse(decision.output);
+    const mediumThreshold = positiveIntegerSchema.parse(
+      decision.verdictPolicy.mediumSeverityThreshold,
+    );
     const headSha = gitShaSchema.parse(decision.headSha);
     const scopeStatus = reviewScopeStatusSchema.parse(decision.scopeStatus);
     if (
@@ -247,13 +258,15 @@ export class FindingLedgerStore {
       `UPDATE runs SET
          decision_head_sha = ?, decision_scope_status = ?,
          decision_shards_analyzed = ?, decision_total_shards = ?,
-         decision_is_degraded = ?
+         decision_is_degraded = ?, decision_output_json = ?, decision_medium_threshold = ?
        WHERE id = ?`,
       headSha,
       scopeStatus,
       decision.shardsAnalyzed,
       decision.totalShards,
       decision.isDegraded ? 1 : 0,
+      JSON.stringify(output),
+      mediumThreshold,
       parsedRunId,
     );
     if (cursor.rowsWritten !== 1) {
@@ -268,7 +281,7 @@ export class FindingLedgerStore {
       .exec<ReviewDecisionRow>(
         `SELECT id, github_check_run_id, decision_head_sha,
                 decision_scope_status, decision_shards_analyzed,
-                decision_total_shards, decision_is_degraded
+                decision_total_shards, decision_is_degraded, decision_output_json, decision_medium_threshold
          FROM runs
          WHERE pr_key = ?
            AND id = (SELECT value FROM metadata WHERE key = 'latest_run_id')
@@ -278,6 +291,8 @@ export class FindingLedgerStore {
       .toArray()[0];
     if (
       row === undefined ||
+      row.decision_output_json === null ||
+      row.decision_medium_threshold === null ||
       row.decision_head_sha === null ||
       row.decision_scope_status === null ||
       row.decision_shards_analyzed === null ||
@@ -290,6 +305,14 @@ export class FindingLedgerStore {
       ...(row.github_check_run_id === null
         ? {}
         : { checkRunId: positiveIntegerSchema.parse(row.github_check_run_id) }),
+      verdictPolicy: {
+        mediumSeverityThreshold: positiveIntegerSchema.parse(
+          row.decision_medium_threshold,
+        ),
+      },
+      output: reviewOutputPreferencesSchema.parse(
+        JSON.parse(row.decision_output_json),
+      ),
       headSha: gitShaSchema.parse(row.decision_head_sha),
       isDegraded: row.decision_is_degraded === 1,
       runId: runIdSchema.parse(row.id) as RunId,

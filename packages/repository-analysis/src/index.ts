@@ -11,3 +11,4 @@ export * from "./symbol-extractor.js";
 export * from "./test-gap-detector.js";
 
 export { isProjectMetadataPathAllowed } from "./review-path-policy.js";
+export { isReviewablePath } from "./review-path-policy.js";

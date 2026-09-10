@@ -1,3 +1,5 @@
+import type { LocalizedCiMarkdown } from "@holon/contracts";
+import type { ReviewOutputPreferences } from "@holon/contracts";
 import type {
   AdminCiSummary,
   CreateCheckRunInput,
@@ -23,7 +25,10 @@ import type {
   RunState,
 } from "@holon/domain";
 
+import type { ShardReviewGuidance } from "./configuration-projections.js";
+
 export type ReviewContext = ReviewShardContext & {
+  readonly repositoryGuidance?: ShardReviewGuidance | undefined;
   readonly deadlineAt?: number | undefined;
   readonly priorFindings?:
     | readonly Pick<
@@ -47,6 +52,7 @@ export interface ModelReviewer {
   synthesizeReviewSummary?(
     job: ReviewJob,
     input: {
+      readonly output?: ReviewOutputPreferences | undefined;
       readonly shardSummaries: readonly string[];
       readonly verifiedFindings: readonly {
         diagnostic: string;
@@ -80,12 +86,15 @@ export interface ReviewLedger {
 }
 
 export interface CiEvidenceLedger {
+  loadLatestReviewDecision(
+    prKey: PrKey,
+  ): Promise<ReviewDecisionContext | undefined>;
   loadCiEvidence(
     prKey: PrKey,
     headSha: string,
   ): Promise<
     | {
-        readonly markdown: string;
+        readonly markdownByLanguage: LocalizedCiMarkdown;
         readonly workflowRunId?: number | undefined;
         readonly structuredCi?: AdminCiSummary | null | undefined;
       }
@@ -95,7 +104,7 @@ export interface CiEvidenceLedger {
     prKey: PrKey,
     headSha: string,
     evidence: {
-      readonly markdown: string;
+      readonly markdownByLanguage: LocalizedCiMarkdown;
       readonly workflowRunId?: number | undefined;
       readonly structuredCi?: AdminCiSummary | null | undefined;
     },
@@ -116,6 +125,8 @@ export interface RunTelemetryLedger {
 }
 
 export interface ReviewDecisionContext {
+  readonly verdictPolicy: { readonly mediumSeverityThreshold: number };
+  readonly output: ReviewOutputPreferences;
   readonly checkRunId?: number | undefined;
   readonly headSha: string;
   readonly isDegraded: boolean;

@@ -19,7 +19,7 @@ async function createProjectionEvent(runNumber: number) {
     pullRequestNumber: runNumber,
     repository: { id: 101, name: "holon", owner: "example" },
     reviewPhaseReached: "analyzed",
-    runId: `github:101:pr:${runNumber}:head:${headSha}`,
+    runId: `github:101:pr:${runNumber}:head:${headSha}:base:${"b".repeat(40)}`,
     scopeStatus: "complete",
     telemetry: {
       estimatedCostMicroUsd: 1,

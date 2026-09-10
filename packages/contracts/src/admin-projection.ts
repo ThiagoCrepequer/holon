@@ -68,7 +68,7 @@ export const adminRunProjectionPayloadSchema = z
         path: ["runId"],
       });
     }
-    if (!payload.runId.endsWith(payload.headSha)) {
+    if (!payload.runId.includes(`:head:${payload.headSha}:base:`)) {
       context.addIssue({
         code: "custom",
         message: "runId does not match headSha",
@@ -136,7 +136,7 @@ export const adminRunProjectionEventSchema = z
         path: ["payload", "runId"],
       });
     }
-    if (!event.payload.runId.endsWith(event.payload.headSha)) {
+    if (!event.payload.runId.includes(`:head:${event.payload.headSha}:base:`)) {
       context.addIssue({
         code: "custom",
         message: "runId does not match headSha",

@@ -47,7 +47,7 @@ const baseRun: AdminRunRow = {
   review_admission_wait_ms: 100,
   review_phase_reached: "publishing",
   reasoning_tokens: 2,
-  run_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+  run_id: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
   scope_status: "complete",
   shards_count: 1,
   source_event_id: "event-1",
@@ -65,19 +65,19 @@ const runVariants: AdminRunRow[] = [
   {
     ...baseRun,
     execution_duration_ms: 0,
-    run_id: `github:42:pr:8:head:${"b".repeat(40)}`,
+    run_id: `github:42:pr:8:head:${"b".repeat(40)}:base:${"b".repeat(40)}`,
     terminal_state: "failed_terminal",
     verdict: "REQUEST_CHANGES",
   },
   {
     ...baseRun,
-    run_id: `github:42:pr:9:head:${"c".repeat(40)}`,
+    run_id: `github:42:pr:9:head:${"c".repeat(40)}:base:${"b".repeat(40)}`,
     terminal_state: "obsolete",
     verdict: "COMMENT",
   },
   {
     ...baseRun,
-    run_id: `github:42:pr:10:head:${"d".repeat(40)}`,
+    run_id: `github:42:pr:10:head:${"d".repeat(40)}:base:${"b".repeat(40)}`,
     scope_status: null,
     verdict: null,
   },
@@ -131,6 +131,7 @@ const detail: AdminRunDetail = {
   cleanupTask: null,
   historicalRunFindings: null,
   stepExecutions: [],
+  configuration: null,
   findingsPerspective: "current_pr_state",
   run: {
     runState: "completed",
@@ -338,6 +339,7 @@ describe("admin views", () => {
         state: "completed",
       },
       currentFindings: detail.currentFindings,
+      configuration: null,
       findingsPerspective: "current_pr_state",
       historicalRunFindings: [],
       projectIdentification: null,
@@ -430,6 +432,7 @@ describe("admin views", () => {
           updatedAt: "2026-09-04T11:00:05.000Z",
         },
       ],
+      configuration: null,
       findingsPerspective: "both",
       historicalRunFindings: [],
       projectIdentification: null,
@@ -439,7 +442,8 @@ describe("admin views", () => {
         headSha: baseRun.head_sha,
         isDegraded: false,
         prKey: baseRun.pr_key,
-        runId: baseRun.run_id as `github:${number}:pr:${number}:head:${string}`,
+        runId:
+          baseRun.run_id as `github:${number}:pr:${number}:head:${string}:base:${string}`,
         runState: "completed",
         scopeStatus: "complete",
         shardsCount: 1,
@@ -524,6 +528,7 @@ describe("admin views", () => {
           updatedAt: "2026-09-04T12:00:00.000Z",
         },
       ],
+      configuration: null,
       findingsPerspective: "both",
       historicalRunFindings: [
         {
@@ -563,6 +568,7 @@ describe("admin views", () => {
     const activeDetail: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [],
+      configuration: null,
       findingsPerspective: "current_pr_state",
       historicalRunFindings: null,
       projectIdentification: null,

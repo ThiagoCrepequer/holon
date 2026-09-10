@@ -13,6 +13,7 @@ import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
 } from "./feedback-handler-service.js";
+import { repositorySchemaResponse } from "./repository-schema-route.js";
 
 const maximumWebhookBytes = 2_000_000;
 
@@ -55,6 +56,14 @@ export async function readBoundedRequestBody(
 
 export function createWebhookApp() {
   const app = new Hono<{ Bindings: Cloudflare.Env }>();
+
+  app.get("/schemas/holon.schema.json", (context) =>
+    repositorySchemaResponse(context.req.raw),
+  );
+  app.all(
+    "/schemas/holon.schema.json",
+    () => new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } }),
+  );
 
   app.get("/health", (context) => context.json({ status: "ok" }));
   app.get("/healthz", (context) => {

@@ -132,7 +132,7 @@ export const evalCaseSchema = z
     }
 
     const headSha = evalCase.input.job.envelope.pullRequest.headSha;
-    if (!evalCase.input.job.runId.endsWith(`:head:${headSha}`)) {
+    if (!evalCase.input.job.runId.includes(`:head:${headSha}:base:`)) {
       context.addIssue({
         code: "custom",
         message: "evaluation job runId must identify its head SHA",

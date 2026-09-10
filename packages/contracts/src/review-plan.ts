@@ -32,8 +32,35 @@ export const reviewShardSchema = z.strictObject({
   totalShards: z.number().int().positive(),
 });
 
+export const reviewPlanOmissionSchema = z.discriminatedUnion("code", [
+  z.strictObject({
+    code: z.literal("all_excluded"),
+    count: z.number().int().nonnegative(),
+  }),
+  z.strictObject({ code: z.literal("unsupported") }),
+  z.strictObject({
+    code: z.literal("oversized_patches"),
+    count: z.number().int().nonnegative(),
+    bytes: z.number().int().positive(),
+  }),
+  z.strictObject({
+    code: z.literal("file_limit"),
+    count: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    code: z.literal("policy_excluded"),
+    count: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    code: z.literal("shard_limit"),
+    maximum: z.number().int().positive(),
+    planned: z.number().int().positive(),
+  }),
+  z.strictObject({ code: z.literal("executor_budget") }),
+]);
+export type ReviewPlanOmission = z.infer<typeof reviewPlanOmissionSchema>;
 export const reviewPlanSchema = z.strictObject({
-  omissionReasons: z.array(z.string().min(1).max(300)),
+  omissionReasons: z.array(reviewPlanOmissionSchema),
   scopeStatus: reviewScopeStatusSchema,
   shards: z.array(reviewShardSchema).max(20),
   totalEligibleBytes: z.number().int().nonnegative(),

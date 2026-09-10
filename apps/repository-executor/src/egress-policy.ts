@@ -69,7 +69,7 @@ export function parseGitHubEgressAuthorization(
     repositoryName === ".." ||
     repositoryPath !== `/${repositoryOwner}/${repositoryName}.git` ||
     !new RegExp(
-      `^github:${repositoryId}:pr:[1-9][0-9]*:head:[0-9a-f]{40}$`,
+      `^github:${repositoryId}:pr:[1-9][0-9]*:head:[0-9a-f]{40}:base:[0-9a-f]{40}$`,
       "u",
     ).test(runId)
   ) {

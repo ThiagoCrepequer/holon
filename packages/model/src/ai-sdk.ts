@@ -1,10 +1,10 @@
-/// <reference lib="webworker" />
-
 import {
   createOpenAICompatible,
   type OpenAICompatibleProviderSettings,
 } from "@ai-sdk/openai-compatible";
 import { tool } from "@ai-sdk/provider-utils";
+import type { ReviewOutputPreferences } from "@holon/contracts";
+/// <reference lib="webworker" />
 import {
   modelReviewTransportSchema,
   modelReviewOutputFromTransport,
@@ -14,8 +14,13 @@ import {
   searchStructureArgumentsSchema,
   searchTextArgumentsSchema,
 } from "@holon/contracts";
+import { reviewMessage } from "@holon/domain";
 import { APICallError, Output, generateText, stepCountIs } from "ai";
 
+import {
+  outputLanguageInstructions,
+  preflightConfigurationPrompt,
+} from "./configuration-guidance.js";
 import { generationTimeout } from "./review-budgets.js";
 import type {
   RepositoryToolRunner,
@@ -338,6 +343,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         ? compactContext
         : request.prompt.slice(0, 2000),
       "",
+      request.repositoryGuidance ?? "",
       "### Investigation Findings and Analysis",
       investigationText.trim().length > 0
         ? investigationText
@@ -350,10 +356,13 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       attempt: "finalization" | "recovery",
     ): Promise<unknown> => {
       const isRecovery = attempt === "recovery";
-      const instructions = isRecovery
+      const phaseInstructions = isRecovery
         ? `${finalizationInstructions}\nThis is the single recovery attempt. Do not investigate further. Return the required final object directly.`
         : finalizationInstructions;
 
+      const instructions = `${phaseInstructions}\n${outputLanguageInstructions(request.output)}`;
+      if (request.output !== undefined)
+        preflightConfigurationPrompt(instructions, finalizationPrompt);
       const output =
         this.outputContract === "portable"
           ? Output.object({
@@ -511,8 +520,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           outputLimitations: [
             ...new Set([...generationLimits, "finalization_failed"]),
           ],
-          summary:
-            "Review finalization failed after recovery. Findings from the unfinished investigation were not published; this review is incomplete.",
+          summary: reviewMessage(
+            request.output?.language ?? "en",
+            "finalizationFailed",
+          ),
         };
       }
 
@@ -527,6 +538,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       severity: string;
       path: string;
     }[] = [],
+    output?: ReviewOutputPreferences,
   ): Promise<string> {
     const validSummaries = summaries
       .map((s) => s.trim())
@@ -551,10 +563,14 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       ),
     ].join("\n\n");
 
+    if (output !== undefined)
+      preflightConfigurationPrompt(
+        outputLanguageInstructions(output),
+        synthesisPrompt,
+      );
     try {
       const result = await generateText({
-        instructions:
-          "You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose.",
+        instructions: `You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose. ${outputLanguageInstructions(output)}`,
         maxOutputTokens: 4_000,
         maxRetries: 0,
         model,
@@ -577,9 +593,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       const synthesized = result.text?.trim();
       return synthesized && synthesized.length > 0
         ? synthesized
-        : "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
+        : reviewMessage(output?.language ?? "en", "synthesisUnavailable");
     } catch {
-      return "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
+      return reviewMessage(output?.language ?? "en", "synthesisUnavailable");
     }
   }
 }

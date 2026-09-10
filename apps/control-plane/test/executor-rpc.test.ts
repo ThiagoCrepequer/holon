@@ -4,6 +4,8 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { describe, expect, it, vi } from "vitest";
 
 import { createReviewServices } from "../src/review-services.js";
+import { defaultScopePolicy } from "./configuration-fixtures.js";
+import { configurationReader } from "./configuration-fixtures.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
@@ -34,7 +36,7 @@ const job = reviewJobSchema.parse({
       owner: "acme",
     },
   },
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
 });
 
 function installationSession() {
@@ -45,6 +47,7 @@ function installationSession() {
       },
       request: () => Promise.resolve({ data: { id: 1 } }),
     },
+    configurationReader: () => configurationReader(),
     currentHeadSha: () => Promise.resolve("a".repeat(40)),
     currentPullRequestRefs: () =>
       Promise.resolve({ baseSha: "b".repeat(40), headSha: "a".repeat(40) }),
@@ -78,7 +81,9 @@ describe("current executor RPC contract", () => {
     await expect(services.prepareRepository(0)).rejects.toThrow(
       "maximumAttempts must be a positive safe integer",
     );
-    await expect(services.prepareRepository(1)).rejects.toBe(permanent);
+    await expect(
+      services.prepareRepository(1, await defaultScopePolicy("b".repeat(40))),
+    ).rejects.toBe(permanent);
   });
   it("prepares and reads context using the current RPC contracts", async () => {
     const policy = {
@@ -185,6 +190,7 @@ describe("current executor RPC contract", () => {
 
     const sessionWithoutRefs = {
       ...installationSession(),
+      configurationReader: () => configurationReader(),
       currentHeadSha: () => Promise.resolve("a".repeat(40)),
       currentPullRequestRefs: undefined,
     };
@@ -240,9 +246,9 @@ describe("current executor RPC contract", () => {
       { emit: () => {} },
       {},
     );
-    await expect(services.prepareRepository(1)).rejects.toBeInstanceOf(
-      NonRetryableError,
-    );
+    await expect(
+      services.prepareRepository(1, await defaultScopePolicy("b".repeat(40))),
+    ).rejects.toBeInstanceOf(NonRetryableError);
     await expect(services.loadContext()).rejects.toBeInstanceOf(TypeError);
   });
   it.each([2, 3])(
@@ -281,9 +287,9 @@ describe("current executor RPC contract", () => {
         { emit: () => {} },
         {},
       );
-      await expect(services.prepareRepository(1)).rejects.toBeInstanceOf(
-        NonRetryableError,
-      );
+      await expect(
+        services.prepareRepository(1, await defaultScopePolicy("b".repeat(40))),
+      ).rejects.toBeInstanceOf(NonRetryableError);
       await expect(services.loadContext()).rejects.toThrow();
     },
   );

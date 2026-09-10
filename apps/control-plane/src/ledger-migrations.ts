@@ -311,6 +311,32 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       );
     `,
   },
+  {
+    version: 14,
+    statements: `
+      CREATE TABLE review_finding_artifacts (
+        run_id TEXT NOT NULL,
+        part INTEGER NOT NULL,
+        payload BLOB NOT NULL,
+        PRIMARY KEY(run_id, part)
+      );
+      ALTER TABLE runs ADD COLUMN decision_output_json TEXT;
+      ALTER TABLE runs ADD COLUMN decision_medium_threshold INTEGER;
+      ALTER TABLE pr_findings ADD COLUMN identity_ambiguous INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE run_configurations (
+        run_id TEXT PRIMARY KEY,
+        config_digest TEXT NOT NULL,
+        reference_json TEXT NOT NULL,
+        summary_json TEXT NOT NULL
+      );
+      CREATE TABLE run_configuration_artifacts (
+        run_id TEXT NOT NULL,
+        part INTEGER NOT NULL,
+        payload BLOB NOT NULL,
+        PRIMARY KEY(run_id, part)
+      );
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

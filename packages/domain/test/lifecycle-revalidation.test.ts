@@ -12,7 +12,7 @@ import {
 
 const prKey = "github:100:pr:42" as const;
 const sha = "1".repeat(40);
-const runId = `${prKey}:head:${sha}` as const;
+const runId = `${prKey}:head:${sha}:base:${"b".repeat(40)}` as const;
 const evidence = [
   {
     excerpt: "return user.name;",
@@ -67,7 +67,7 @@ describe("re-review evidence and human decisions", () => {
       (f) => ({ ...f, status: "dismissed" as const, githubCommentId: 99 }),
     );
     const paraphrase = await finding(
-      "Reading this property crashes when the user is null.",
+      "O acesso a esta propriedade falha quando o usuário é nulo.",
     );
     const result = reconcile([paraphrase], baseline);
     expect(result.activeFindings).toHaveLength(0);
@@ -96,6 +96,18 @@ describe("re-review evidence and human decisions", () => {
     );
     expect(ambiguous.summary.persistentCount).toBe(0);
     expect(ambiguous.summary.unverifiedCount).toBe(1);
+    expect(
+      ambiguous.activeFindings.every((f) => f.identityAmbiguous === true),
+    ).toBe(true);
+    const repeated = reconcile(
+      ambiguous.activeFindings,
+      ambiguous.updatedTrackedFindings,
+      [original.fingerprint],
+    );
+    expect(repeated.resolvedFindings).toHaveLength(0);
+    expect(
+      repeated.activeFindings.every((f) => f.identityAmbiguous === true),
+    ).toBe(true);
   });
   it("resolves only a host-confirmed fingerprint from a successfully reviewed file", async () => {
     const original = await finding(

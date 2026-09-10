@@ -11,7 +11,7 @@ function artifacts(paths: string[]) {
     baseSha: "b".repeat(40),
     headSha: "a".repeat(40),
     cloneUrl: "https://github.com/acme/api.git",
-    runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+    runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
     pullRequestNumber: 7,
     repositoryId: 42,
     installationId: 99,

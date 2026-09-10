@@ -56,7 +56,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
       repositoryName: "api",
       repositoryOwner: "acme",
       repositoryPath: "/acme/api.git",
-      runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
     };
 
     const handlers = HolonSandbox.outboundHandlers;
@@ -105,7 +105,7 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
       repositoryName: "api",
       repositoryOwner: "acme",
       repositoryPath: "/acme/api.git",
-      runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
     };
     await port.configureGitHubEgress(authorization);
     expect(setOutboundCalls).toEqual([

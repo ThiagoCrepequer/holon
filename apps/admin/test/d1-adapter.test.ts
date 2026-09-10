@@ -71,7 +71,7 @@ describe("D1AdminStorage", () => {
         {
           headSha: "1111111111111111111111111111111111111111",
           runId:
-            "github:101:pr:1:head:1111111111111111111111111111111111111111",
+            "github:101:pr:1:head:1111111111111111111111111111111111111111:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         },
         "evt-shared-1",
       );
@@ -83,7 +83,7 @@ describe("D1AdminStorage", () => {
           prKey: "github:101:pr:2",
           headSha: "2222222222222222222222222222222222222222",
           runId:
-            "github:101:pr:2:head:2222222222222222222222222222222222222222",
+            "github:101:pr:2:head:2222222222222222222222222222222222222222:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         },
         "evt-shared-1",
       );
@@ -212,7 +212,7 @@ describe("D1AdminStorage", () => {
           prNumber: 42,
           repositoryName: "repo-xyz",
           repositoryOwner: "owner-abc",
-          runId: `github:999:pr:42:head:${sha}`,
+          runId: `github:999:pr:42:head:${sha}:base:${"b".repeat(40)}`,
         },
         "evt-search",
       );
@@ -238,7 +238,7 @@ describe("D1AdminStorage", () => {
       // Search by run_id
       const res3 = await storage.listRuns(
         {
-          searchQuery: `github:999:pr:42:head:${sha}`,
+          searchQuery: `github:999:pr:42:head:${sha}:base:${"b".repeat(40)}`,
           pageSize: 50,
           order: "desc",
         },
@@ -333,7 +333,7 @@ describe("D1AdminStorage", () => {
       const sha2 = "b".repeat(40);
       const event2 = await createSampleProjectionEvent(
         {
-          runId: `github:101:pr:2:head:${sha2}`,
+          runId: `github:101:pr:2:head:${sha2}:base:${"b".repeat(40)}`,
           prKey: "github:101:pr:2",
           prNumber: 2,
           headSha: sha2,
@@ -372,7 +372,7 @@ describe("D1AdminStorage", () => {
       const shaOld = "1".repeat(40);
       const oldEvent = await createSampleProjectionEvent(
         {
-          runId: `github:101:pr:99:head:${shaOld}`,
+          runId: `github:101:pr:99:head:${shaOld}:base:${"b".repeat(40)}`,
           prKey: "github:101:pr:99",
           prNumber: 99,
           headSha: shaOld,
@@ -386,7 +386,7 @@ describe("D1AdminStorage", () => {
       const shaRecent = "2".repeat(40);
       const recentEvent = await createSampleProjectionEvent(
         {
-          runId: `github:101:pr:100:head:${shaRecent}`,
+          runId: `github:101:pr:100:head:${shaRecent}:base:${"b".repeat(40)}`,
           prKey: "github:101:pr:100",
           prNumber: 100,
           headSha: shaRecent,
@@ -432,7 +432,7 @@ describe("D1AdminStorage", () => {
       const now = 1772582400000;
       const sha = "3".repeat(40);
       const event = await createSampleProjectionEvent({
-        runId: `github:101:pr:300:head:${sha}`,
+        runId: `github:101:pr:300:head:${sha}:base:${"b".repeat(40)}`,
         prKey: "github:101:pr:300",
         prNumber: 300,
         headSha: sha,
@@ -446,7 +446,7 @@ describe("D1AdminStorage", () => {
 
       const sha4 = "4".repeat(40);
       const event4 = await createSampleProjectionEvent({
-        runId: `github:101:pr:400:head:${sha4}`,
+        runId: `github:101:pr:400:head:${sha4}:base:${"b".repeat(40)}`,
         prKey: "github:101:pr:400",
         prNumber: 400,
         headSha: sha4,

@@ -195,9 +195,20 @@ export async function enrichReviewWithCiEvidence(
     pullRequestNumber: input.pullRequestNumber,
     repositoryId: input.repository.id,
   });
-  const runId = createRunId(prKey, input.headSha);
+  const refs = await session.currentPullRequestRefs(
+    input.repository.owner,
+    input.repository.name,
+    input.pullRequestNumber,
+  );
+  if (refs.headSha !== input.headSha)
+    return { enriched: false, reason: "obsolete_head" };
+  const runId = createRunId(prKey, input.headSha, refs.baseSha);
   const summaryMarker = buildPublicationMarker(runId, "summary");
-  const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
+  const markdownByLanguage = {
+    en: formatCiEvidenceMarkdown(evidence, changedCoverage, "en"),
+    "pt-BR": formatCiEvidenceMarkdown(evidence, changedCoverage, "pt-BR"),
+    es: formatCiEvidenceMarkdown(evidence, changedCoverage, "es"),
+  };
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
   const rawWorkflowName = input.workflowName ?? evidence.workflowName;
@@ -216,7 +227,7 @@ export async function enrichReviewWithCiEvidence(
   const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
   if (ledger !== undefined) {
     await ledger.saveCiEvidence(prKey, input.headSha, {
-      markdown: evidenceMarkdown,
+      markdownByLanguage,
       structuredCi,
       workflowRunId: input.workflowRunId,
     });
@@ -243,6 +254,11 @@ export async function enrichReviewWithCiEvidence(
     });
     return { enriched: true, reason: "saved_pending_review" };
   }
+
+  const decision = await ledger?.loadLatestReviewDecision(prKey);
+  if (decision?.runId !== runId)
+    return { enriched: true, reason: "saved_pending_review" };
+  const evidenceMarkdown = markdownByLanguage[decision.output.language];
 
   // 7. Format and update the review comment in-place
   const updatedSummary = appendCiEvidenceToSummary(

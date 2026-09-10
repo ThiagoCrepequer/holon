@@ -4,6 +4,7 @@ import {
   reconciledFindingSchema,
   trackedFindingSchema,
 } from "./finding-lifecycle.js";
+import { reviewOutputPreferencesSchema } from "./repository-config/input.js";
 import { repositoryPolicySourceSchema } from "./repository-policy.js";
 import { limitReviewText } from "./review-limits.js";
 import { aggregatedReviewResultSchema } from "./review-plan.js";
@@ -23,6 +24,7 @@ export type AnalysisAccounting = z.infer<typeof analysisAccountingSchema>;
 
 export const reconciledReviewOutputSchema = aggregatedReviewResultSchema.extend(
   {
+    output: reviewOutputPreferencesSchema,
     analysisIsDegraded: z.boolean().optional(),
     verdictPolicy: z
       .strictObject({ mediumSeverityThreshold: z.number().int().positive() })
@@ -60,6 +62,7 @@ export const reviewAnalysisCheckpointSchema = reconciledReviewOutputSchema
       .array(
         reconciledFindingSchema
           .pick({
+            identityAmbiguous: true,
             confidence: true,
             fingerprint: true,
             location: true,
@@ -90,6 +93,7 @@ export function buildReviewAnalysisCheckpoint(
     ...metadata,
     activeFindings: activeFindings.map(
       ({
+        identityAmbiguous,
         confidence,
         fingerprint,
         location,
@@ -98,6 +102,7 @@ export function buildReviewAnalysisCheckpoint(
         previousCommentId,
         diagnostic,
       }) => ({
+        identityAmbiguous,
         confidence,
         fingerprint,
         location,

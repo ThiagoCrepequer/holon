@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { runIdSchema } from "@holon/contracts";
 
 const maximumSandboxIdLength = 63;
 const maximumSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
 const runCoordinates =
-  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40})$/u;
+  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40}):base:(?<baseSha>[a-f0-9]{40})$/u;
 
 interface DurableObjectIdentityNamespace {
   idFromName(name: string): { toString(): string };
@@ -22,13 +24,12 @@ export function createSandboxId(rawRunId: string): string {
   const groups = runCoordinates.exec(runId)?.groups;
   if (groups === undefined) throw new TypeError("Unable to parse run ID");
 
-  const repositoryId = compactCoordinate(groups.repositoryId!, "repositoryId");
-  const pullRequestNumber = compactCoordinate(
-    groups.pullRequestNumber!,
-    "pullRequestNumber",
-  );
-  const prefix = `r-${repositoryId}-${pullRequestNumber}-`;
-  return `${prefix}${groups.headSha!.slice(0, maximumSandboxIdLength - prefix.length)}`;
+  compactCoordinate(groups.repositoryId!, "repositoryId");
+  compactCoordinate(groups.pullRequestNumber!, "pullRequestNumber");
+  return `r-${createHash("sha256")
+    .update(runId)
+    .digest("hex")
+    .slice(0, maximumSandboxIdLength - 2)}`;
 }
 
 export function resolveContainerId(

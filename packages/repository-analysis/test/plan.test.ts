@@ -68,9 +68,9 @@ describe("buildReviewPlan", () => {
     expect(plan.scopeStatus).toBe("partial_by_policy");
     expect(plan.shards).toHaveLength(2);
     expect(plan.omissionReasons).toHaveLength(1);
-    expect(plan.omissionReasons[0]).toContain(
-      "bounded to the first 2 priority shards out of 3",
-    );
+    expect(plan.omissionReasons).toEqual([
+      { code: "shard_limit", maximum: 2, planned: 3 },
+    ]);
   });
 });
 
@@ -87,7 +87,9 @@ it("omits an oversized file completely without starving later eligible patches",
   expect(plan.shards.flatMap((s) => s.files.map((f) => f.path))).toEqual([
     "src/b.ts",
   ]);
-  expect(plan.omissionReasons.join(" ")).toContain("byte limit");
+  expect(plan.omissionReasons).toContainEqual(
+    expect.objectContaining({ code: "oversized_patches", count: 1 }),
+  );
 });
 
 it("bounds selected files across all shards and records omitted eligible files", () => {
@@ -101,5 +103,7 @@ it("bounds selected files across all shards and records omitted eligible files",
   expect(plan.totalEligibleFiles).toBe(51);
   expect(plan.shards.flatMap((s) => s.files)).toHaveLength(50);
   expect(plan.scopeStatus).toBe("partial_by_policy");
-  expect(plan.omissionReasons.join(" ")).toContain("file limit");
+  expect(plan.omissionReasons).toContainEqual(
+    expect.objectContaining({ code: "file_limit" }),
+  );
 });

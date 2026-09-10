@@ -1,4 +1,5 @@
 import type { ReviewJob } from "@holon/contracts";
+import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 import {
   classifyFindingPublication,
   createPrKey,
@@ -26,22 +27,25 @@ export function createReviewRun(job: ReviewJob): ReviewRun {
   };
 }
 
-export function renderFinding(finding: Finding): string {
+export function renderFinding(
+  finding: Finding,
+  language: ReviewLanguage = "en",
+): string {
   const suggestion =
     finding.suggestion === undefined
       ? ""
-      : `\n\nSuggested action: ${finding.suggestion}`;
+      : `\n\n${reviewMessage(language, "suggestedAction")}: ${finding.suggestion}`;
   const evidence = finding.evidence
     .map((item) => {
       const range =
         item.endLine === undefined || item.endLine === item.startLine
           ? `${item.startLine}`
           : `${item.startLine}-${item.endLine}`;
-      const excerpt = item.excerpt.replaceAll(/\s+/gu, " ").trim();
+      const excerpt = item.excerpt;
       return `- ${item.path}:${range} — ${item.reason}: ${excerpt}`;
     })
     .join("\n");
-  return `${finding.diagnostic}${suggestion}\n\nEvidence:\n${evidence}`;
+  return `${finding.diagnostic}${suggestion}\n\n${reviewMessage(language, "evidence")}:\n${evidence}`;
 }
 
 export function selectValidFindings(
