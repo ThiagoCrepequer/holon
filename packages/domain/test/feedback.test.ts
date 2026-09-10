@@ -12,9 +12,9 @@ import { reconcileFindings, type TrackedFinding } from "../src/lifecycle.js";
 
 const prKey: PrKey = "github:42:pr:7";
 const runId1: RunId =
-  "github:42:pr:7:head:1111111111111111111111111111111111111111";
+  "github:42:pr:7:head:1111111111111111111111111111111111111111:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const runId2: RunId =
-  "github:42:pr:7:head:2222222222222222222222222222222222222222";
+  "github:42:pr:7:head:2222222222222222222222222222222222222222:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const fp1: FindingFingerprint =
   "fp:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const fp2: FindingFingerprint =

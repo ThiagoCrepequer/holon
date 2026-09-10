@@ -38,8 +38,20 @@ describe("CI Enrichment Service", () => {
 
   it("returns unsupported_session when session lacks artifact methods", async () => {
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         expectedAuthorLogin: "holon-reviewer[bot]",
       }),
     };
@@ -50,8 +62,20 @@ describe("CI Enrichment Service", () => {
 
   it("returns no_artifacts when workflow run has no artifacts", async () => {
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn(),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi.fn().mockResolvedValue([]),
@@ -64,8 +88,20 @@ describe("CI Enrichment Service", () => {
 
   it("handles download failure gracefully", async () => {
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi
           .fn()
           .mockRejectedValue(new Error("Network timeout")),
@@ -86,8 +122,20 @@ describe("CI Enrichment Service", () => {
     });
 
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn().mockResolvedValue(emptyZip.buffer),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi
@@ -114,6 +162,10 @@ describe("CI Enrichment Service", () => {
       }),
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi
@@ -127,6 +179,7 @@ describe("CI Enrichment Service", () => {
       }),
       ledger: {
         loadCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn(),
         saveCiEvidence: saveCiEvidenceMock,
       },
     };
@@ -135,9 +188,9 @@ describe("CI Enrichment Service", () => {
     expect(result).toEqual({ enriched: true, reason: "saved_pending_review" });
     expect(saveCiEvidenceMock).toHaveBeenCalledTimes(1);
     expect(saveCiEvidenceMock.mock.calls[0]?.[1]).toBe(baseInput.headSha);
-    expect(saveCiEvidenceMock.mock.calls[0]?.[2]?.markdown).toContain(
-      "### 🧪 CI Test & Coverage Evidence",
-    );
+    expect(
+      saveCiEvidenceMock.mock.calls[0]?.[2]?.markdownByLanguage.en,
+    ).toContain("### 🧪 CI Test & Coverage Evidence");
   });
 
   it("enriches review comment when valid artifacts and existing summary exist", async () => {
@@ -151,6 +204,14 @@ describe("CI Enrichment Service", () => {
     const updateReviewMock = vi.fn().mockResolvedValue(undefined);
 
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createPublisher: vi.fn().mockReturnValue({
         findCommentWithBodyByMarker: vi.fn().mockResolvedValue({
           body: "Original summary\n\n<!-- holon:summary -->",
@@ -160,6 +221,10 @@ describe("CI Enrichment Service", () => {
       }),
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi
@@ -192,6 +257,14 @@ describe("CI Enrichment Service", () => {
     const updateReviewMock = vi.fn().mockResolvedValue(undefined);
 
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createPublisher: vi.fn().mockReturnValue({
         findCommentWithBodyByMarker: vi.fn().mockImplementation(async () => {
           // Simulate first run output already present
@@ -224,6 +297,10 @@ describe("CI Enrichment Service", () => {
       }),
       createSession: vi.fn().mockResolvedValue({
         api: {},
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi
@@ -252,7 +329,7 @@ describe("CI Enrichment Service", () => {
       iterate: async function* () {
         yield [
           {
-            body: "Original summary\n\n<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;finding=summary -->",
+            body: "Original summary\n\n<!-- holon;run=github%3A42%3Apr%3A7%3Ahead%3Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%3Abase%3Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;finding=summary -->",
             id: 999,
             user: { login: "holon-reviewer[bot]", type: "Bot" },
           },
@@ -262,8 +339,20 @@ describe("CI Enrichment Service", () => {
     };
 
     const deps: CiEnrichmentDependencies = {
+      ledger: {
+        loadCiEvidence: vi.fn(),
+        saveCiEvidence: vi.fn(),
+        loadLatestReviewDecision: vi.fn().mockResolvedValue({
+          runId: `github:42:pr:7:head:${baseInput.headSha}:base:${"b".repeat(40)}`,
+          output: { language: "en", detail: "concise", maxInlineComments: 40 },
+        }),
+      },
       createSession: vi.fn().mockResolvedValue({
         api: fakeApi,
+        currentPullRequestRefs: vi.fn().mockResolvedValue({
+          headSha: baseInput.headSha,
+          baseSha: "b".repeat(40),
+        }),
         downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
         expectedAuthorLogin: "holon-reviewer[bot]",
         listWorkflowRunArtifacts: vi

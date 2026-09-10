@@ -19,9 +19,9 @@
     "@holon/model": "workspace:*",
     "@holon/project-identification": "workspace:*",
     "@holon/repository-analysis": "workspace:*",
+    "@holon/repository-config": "workspace:*",
     "fflate": "0.8.3",
-    "hono": "catalog:",
-    "yaml": "catalog:"
+    "hono": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "catalog:",

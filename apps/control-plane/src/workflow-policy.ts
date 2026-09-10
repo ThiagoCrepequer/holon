@@ -38,3 +38,8 @@ export function eventId(
 ): string {
   return `${workflowInstanceId}:${event}${suffix === undefined ? "" : `:${suffix}`}`;
 }
+
+export const configurationStep = {
+  retries: { delay: githubRetryDelay, limit: 2 },
+  timeout: "2 minutes",
+} as const;

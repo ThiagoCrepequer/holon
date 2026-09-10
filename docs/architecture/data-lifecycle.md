@@ -4,7 +4,7 @@ kind: architecture
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-10
 related:
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
@@ -29,7 +29,7 @@ aprovadas para o pipeline de review e o read model do Console Operacional Intern
 | Contexto filtrado    | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                                                    |
 | Evidência            | Trechos usados para sustentar finding               | Mínima e com retenção limitada                                                  |
 | IA                   | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita                      |
-| Política efetiva     | Fonte, source digest e effective policy digest      | Metadados da run; conteúdo YAML não é persistido                                |
+| Configuração         | Snapshot compilado, manifesto e digests             | Textos temporários no DO; resumo e digests retidos                              |
 | Publicação           | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria                                |
 | Segredo              | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped                          |
 | Read Model Operacion | Runs agregadas, custos, tempos e vereditos (D1)     | 180 dias no D1 (`admin_runs`), limpeza diária agendada em lotes de 500          |
@@ -96,3 +96,20 @@ artefato até nova tentativa bem-sucedida. Essa exclusão não remove os resulta
 individuais dos shards retidos pela plataforma Workflows nem comentários GitHub.
 `analysis_usage` guarda apenas IDs e contadores de uso; não contém prompts,
 patches ou respostas livres. O prazo geral do ledger permanece pendente.
+
+## Configuração e resultados retidos — 2026-09-09
+
+Pela [ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md),
+`run_configuration_artifacts` guarda o snapshot privado em chunks de 64.000 bytes;
+o cleanup terminal remove os chunks, inclusive sem Sandbox. `run_configurations`
+conserva manifesto/resumo sem descrições ou instruções. `decision_output_json` e
+`decision_medium_threshold` preservam a apresentação e política de feedback.
+
+`review_finding_artifacts` retém exclusivamente resultados verificados: diagnóstico,
+sugestão, confiança, localização e evidências, além da identidade/status do finding.
+A gravação é atômica com o artefato temporário de análise. O cleanup remove a
+análise, mas conserva esses resultados integrais para o console autenticado,
+inclusive cap zero. Esses dados privados não entram no read model D1, em logs
+ou nas saídas sanitizadas das etapas. Não existe TTL novo implícito: a retenção
+geral e deleção por instalação do ledger continuam questões pendentes antes do
+piloto privado. O prazo de 180 dias de D1 não deve ser inferido para o DO.

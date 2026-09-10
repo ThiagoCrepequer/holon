@@ -20,6 +20,7 @@ import { Link, useNavigate } from "react-router";
 import type { AdminRunRow } from "../../workers/types.js";
 import { Layout } from "../components/layout.js";
 import { ProjectVersions } from "../components/project-versions.js";
+import { RepositoryConfiguration } from "../components/repository-configuration.js";
 import {
   StepInspectorDrawer,
   WorkflowCanvas,
@@ -318,6 +319,10 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
         </div>
       )}
 
+      <RepositoryConfiguration
+        configuration={rpcDetail?.configuration}
+        identification={rpcDetail?.projectIdentification}
+      />
       <ProjectVersions result={rpcDetail?.projectIdentification} />
 
       {/* Findings Section */}
@@ -414,6 +419,11 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                         {f.filePath}:{f.line}
                       </span>
                     </div>
+                    {f.identityAmbiguous && (
+                      <Badge variant="warning" size="sm">
+                        Identity revalidation pending
+                      </Badge>
+                    )}
                     <Badge variant="info" size="sm">
                       {f.status}
                     </Badge>
@@ -422,6 +432,30 @@ export const RunDetailView: React.FC<RunDetailViewProps> = ({
                   <p className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
                     {f.diagnostic}
                   </p>
+                  {f.details && (
+                    <details className="text-xs text-[var(--text-secondary)]">
+                      <summary className="cursor-pointer">
+                        Evidence and suggestion
+                      </summary>
+                      {f.details.suggestion && (
+                        <p className="mt-3 whitespace-pre-wrap">
+                          {f.details.suggestion}
+                        </p>
+                      )}
+                      {f.details.evidence.map((evidence, index) => (
+                        <div key={index} className="mt-3 space-y-1">
+                          <p className="font-mono">
+                            {evidence.path}:{evidence.startLine}
+                            {evidence.endLine ? `–${evidence.endLine}` : ""}
+                          </p>
+                          <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-[var(--border)] p-2">
+                            {evidence.excerpt}
+                          </pre>
+                          <p>{evidence.reason}</p>
+                        </div>
+                      ))}
+                    </details>
+                  )}
                 </div>
               ))}
             </div>

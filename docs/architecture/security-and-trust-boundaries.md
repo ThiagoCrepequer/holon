@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-10
 related:
   - ../decisions/0014-version-executor-rpc-and-broker-github-credentials.md
   - ../decisions/0016-require-complete-patches-and-host-verifiable-evidence.md
@@ -80,7 +80,8 @@ Exclusões universais e padrões capazes de atingir política, workflows,
 `SECURITY.md` ou `CODEOWNERS` são rejeitados. Além disso, a autorização de
 contexto e tools dá precedência aos paths protegidos, como defesa em
 profundidade. Toda política exige o contrato atual de preparação e contexto, sem fallback. O par de digests registra os bytes da
-fonte e a política canônica sem persistir o conteúdo do arquivo.
+fonte e o escopo canônico. Textos resolvidos ficam temporariamente no DO privado,
+com cleanup durável; somente metadados sobrevivem ao encerramento.
 
 O executor implementado não executa scripts do repositório:
 
@@ -166,3 +167,15 @@ nega providers que coletem dados.
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+## Configuração expandida — 2026-09-09
+
+A [ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md)
+exige leitura por commit/árvore/blob, prova de tipo em cada segmento e resposta
+streaming limitada antes de decodificar JSON. 404 do transporte é indisponibilidade,
+nunca prova de ausência. O parser rejeita YAML ambíguo e o compilador aplica limites
+agregados e paths case-sensitive. Guidance é dado não confiável e não pode mudar
+permissões, gravidade, verificação de evidências ou publicação. O schema público
+contém somente o contrato estático; não expõe configurações de instalações.
+A leitura autenticada de findings integrais é conteúdo privado de resultado;
+o nome histórico `getSanitizedAdminRunDetail` não autoriza logging do payload.

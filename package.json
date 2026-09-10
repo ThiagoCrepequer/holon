@@ -12,7 +12,11 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "typecheck": "turbo run typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build"
+    "verify": "pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
+    "config:validate": "pnpm --filter @holon/config-cli holon config validate",
+    "config:explain": "pnpm --filter @holon/config-cli holon config explain",
+    "config:schema:generate": "pnpm --filter @holon/config-cli schema:generate",
+    "config:schema:check": "pnpm --filter @holon/config-cli schema:check"
   },
   "devDependencies": {
     "@vitest/coverage-istanbul": "catalog:",

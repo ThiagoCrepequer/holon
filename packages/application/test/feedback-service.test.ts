@@ -15,7 +15,7 @@ import type {
 
 const prKey: PrKey = "github:42:pr:7";
 const runId: RunId =
-  "github:42:pr:7:head:1111111111111111111111111111111111111111";
+  "github:42:pr:7:head:1111111111111111111111111111111111111111:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const fingerprint: FindingFingerprint =
   "fp:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -38,6 +38,8 @@ const finding: TrackedFinding = {
 };
 
 const decision: ReviewDecisionContext = {
+  verdictPolicy: { mediumSeverityThreshold: 2 },
+  output: { language: "en", detail: "concise", maxInlineComments: 40 },
   checkRunId: 555,
   headSha: "1".repeat(40),
   isDegraded: false,
@@ -103,6 +105,28 @@ const commentInput = {
 } as const;
 
 describe("feedback-service", () => {
+  it("preserves configured medium blocking after feedback", async () => {
+    const feedbackLedger = ledger(
+      application({
+        decision: {
+          ...decision,
+          verdictPolicy: { mediumSeverityThreshold: 1 },
+        },
+        activeFindings: [{ ...finding, severity: "medium", confidence: 0.8 }],
+      }),
+    );
+    const reviewPublisher = publisher();
+    const result = await processFeedbackComment(
+      commentInput,
+      feedbackLedger.value,
+      reviewPublisher.value,
+    );
+    expect(result.newVerdict).toBe("REQUEST_CHANGES");
+    expect(reviewPublisher.updateCheckRun).toHaveBeenCalledWith(
+      expect.objectContaining({ conclusion: "failure" }),
+    );
+  });
+
   it("uses the persisted decision and Check Run ID when dismissal removes the blocker", async () => {
     const feedbackLedger = ledger(application());
     const reviewPublisher = publisher();

@@ -7,6 +7,14 @@ import type {
   ReviewLedger,
 } from "@holon/application";
 import {
+  localizedCiMarkdownSchema,
+  type LocalizedCiMarkdown,
+} from "@holon/contracts";
+import type {
+  RunConfigurationRef,
+  RunConfigurationSnapshot,
+} from "@holon/contracts";
+import {
   projectIdentificationResultSchema,
   type ProjectIdentificationResult,
 } from "@holon/contracts";
@@ -33,7 +41,6 @@ import {
   limitReviewText,
   reviewTextLimits,
   type AdminCiSummary,
-  type AdminFindingSummary,
   type AdminRunDetail,
   type AdminRunProjectionEvent,
   type FindingFeedbackRecord,
@@ -68,6 +75,7 @@ import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 import { ReviewAccountingStore } from "./review-accounting-store.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
+import { RunConfigurationStore } from "./run-configuration-store.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 /* eslint-disable no-control-regex */
@@ -916,10 +924,31 @@ export class ReviewLedgerObject
   }
 
   private async cleanupRepository(runId: string): Promise<void> {
+    new RunConfigurationStore(this.ctx.storage).cleanup(runId);
     await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
     this.ctx.storage.sql.exec(
       "DELETE FROM review_analysis_artifacts WHERE run_id = ?",
       runId,
+    );
+  }
+
+  public async saveRunConfiguration(
+    snapshot: RunConfigurationSnapshot,
+  ): Promise<RunConfigurationRef> {
+    return await new RunConfigurationStore(this.ctx.storage).save(snapshot);
+  }
+  public async loadRunConfiguration(
+    reference: RunConfigurationRef,
+  ): Promise<RunConfigurationSnapshot> {
+    return await new RunConfigurationStore(this.ctx.storage).load(reference);
+  }
+  public findRunConfiguration(
+    runId: string,
+  ): Promise<RunConfigurationRef | undefined> {
+    return Promise.resolve(
+      new RunConfigurationStore(this.ctx.storage).reference(
+        runIdSchema.parse(runId),
+      ),
     );
   }
 
@@ -1167,7 +1196,7 @@ export class ReviewLedgerObject
     prKey: PrKey,
     headSha: string,
     evidence: {
-      readonly markdown: string;
+      readonly markdownByLanguage: LocalizedCiMarkdown;
       readonly workflowRunId?: number;
       readonly structuredCi?: AdminCiSummary | null | undefined;
     },
@@ -1183,7 +1212,9 @@ export class ReviewLedgerObject
          ) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
         prKey,
         headSha,
-        evidence.markdown,
+        JSON.stringify(
+          localizedCiMarkdownSchema.parse(evidence.markdownByLanguage),
+        ),
         evidence.workflowRunId ?? null,
         structuredCiJson,
       );
@@ -1196,7 +1227,7 @@ export class ReviewLedgerObject
     headSha: string,
   ): Promise<
     | {
-        readonly markdown: string;
+        readonly markdownByLanguage: LocalizedCiMarkdown;
         readonly workflowRunId?: number | undefined;
         readonly structuredCi?: AdminCiSummary | null | undefined;
       }
@@ -1226,7 +1257,9 @@ export class ReviewLedgerObject
       }
     }
     return Promise.resolve({
-      markdown: first.markdown_content,
+      markdownByLanguage: localizedCiMarkdownSchema.parse(
+        JSON.parse(first.markdown_content),
+      ),
       ...(first.workflow_run_id !== null
         ? { workflowRunId: first.workflow_run_id }
         : {}),
@@ -1396,7 +1429,11 @@ export class ReviewLedgerObject
     raw: ProjectIdentificationResult,
   ): Promise<void> {
     const result = projectIdentificationResultSchema.parse(raw);
-    if (!runIdSchema.parse(runId).endsWith(":head:" + result.snapshotSha))
+    if (
+      !runIdSchema
+        .parse(runId)
+        .includes(":head:" + result.snapshotSha + ":base:")
+    )
       throw new Error("Identification snapshot mismatch");
     const exists = this.ctx.storage.sql
       .exec<{ id: string }>("SELECT id FROM runs WHERE id=?", runId)
@@ -1817,11 +1854,12 @@ export class ReviewLedgerObject
     const headSha =
       telemetry?.headSha ??
       runRow.decision_head_sha ??
-      runId.split(":head:")[1] ??
+      runId.split(":head:")[1]?.split(":base:")[0] ??
       "";
 
     const currentFindingRows = this.ctx.storage.sql
       .exec<{
+        identity_ambiguous: number;
         diagnostic: string;
         file_path: string;
         fingerprint: string;
@@ -1836,7 +1874,7 @@ export class ReviewLedgerObject
           | "dismissed";
         updated_at: string;
       }>(
-        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
+        `SELECT identity_ambiguous, diagnostic, file_path, fingerprint, line, severity, status, updated_at
          FROM pr_findings
          WHERE pr_key = ?
          ORDER BY updated_at DESC, fingerprint ASC
@@ -1847,6 +1885,7 @@ export class ReviewLedgerObject
 
     const currentFindings = currentFindingRows.map((row) =>
       adminFindingSummarySchema.parse({
+        identityAmbiguous: row.identity_ambiguous === 1,
         diagnostic: sanitizeDiagnostic(row.diagnostic),
         filePath: row.file_path,
         fingerprint: row.fingerprint,
@@ -1857,28 +1896,9 @@ export class ReviewLedgerObject
       }),
     );
 
-    const analyzeStepRow = this.ctx.storage.sql
-      .exec<{ sanitized_output_json: string | null }>(
-        "SELECT sanitized_output_json FROM step_executions WHERE run_id = ? AND step_name = 'analyze-review'",
-        runId,
-      )
-      .toArray()[0];
-
-    let historicalRunFindings: AdminFindingSummary[] | null = null;
-    const parsedOutput = safeJsonParse(
-      analyzeStepRow?.sanitized_output_json ?? null,
-    );
-    if (parsedOutput && Array.isArray(parsedOutput.historicalFindings)) {
-      historicalRunFindings = parsedOutput.historicalFindings
-        .map((item: unknown) => {
-          const res = adminFindingSummarySchema.safeParse(item);
-          return res.success ? res.data : null;
-        })
-        .filter(
-          (item: AdminFindingSummary | null): item is AdminFindingSummary =>
-            item !== null,
-        );
-    }
+    const historicalRunFindings = new ReviewAnalysisStore(
+      this.ctx.storage,
+    ).retainedFindings(runId);
 
     const stepExecutions = await this.getStepExecutions(runId);
 
@@ -1936,6 +1956,7 @@ export class ReviewLedgerObject
         : "current_pr_state";
 
     return adminRunDetailSchema.parse({
+      configuration: new RunConfigurationStore(this.ctx.storage).summary(runId),
       cleanupTask,
       currentFindings,
       findingsPerspective,

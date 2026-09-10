@@ -37,24 +37,6 @@ export type RepositoryVerdictStrictness = z.infer<
   typeof repositoryVerdictStrictnessSchema
 >;
 
-export const rawRepositoryPolicySchema = z.strictObject({
-  review: z
-    .strictObject({
-      additional_excludes: z
-        .array(repositoryPolicyGlobSchema)
-        .max(50)
-        .optional(),
-    })
-    .optional(),
-  verdict: z
-    .strictObject({
-      strictness: repositoryVerdictStrictnessSchema.optional(),
-    })
-    .optional(),
-});
-
-export type RawRepositoryPolicy = z.infer<typeof rawRepositoryPolicySchema>;
-
 export const repositoryPolicySourceSchema = z.enum([
   ".github/holon.yml",
   ".holon.yml",

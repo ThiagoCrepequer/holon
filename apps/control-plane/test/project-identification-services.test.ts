@@ -4,17 +4,17 @@ import { reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, it, expect, vi } from "vitest";
 
-import { createDefaultRepositoryPolicy } from "../src/repository-policy-resolver.js";
 import {
   createReviewServices,
   type RepositoryExecutorBinding,
 } from "../src/review-services.js";
+import { defaultScopePolicy } from "./configuration-fixtures.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 afterEach(() => reset());
 const sha = "a".repeat(40),
   base = "b".repeat(40);
 const job = reviewJobSchema.parse({
-  runId: `github:42:pr:7:head:${sha}`,
+  runId: `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`,
   envelope: {
     event: "pull_request",
     action: "opened",
@@ -72,7 +72,7 @@ it("discovers both immutable snapshots then reuses a verified cache entry", asyn
     snapshotSha: request.snapshotSha,
   }));
   const { service, identify } = setup(discover);
-  const policy = await createDefaultRepositoryPolicy(base);
+  const policy = await defaultScopePolicy(base);
   const discovery = await service.identifyProjects!(policy, undefined, true);
   expect(discovery?.baseline?.snapshotSha).toBe(base);
   expect(identify).not.toHaveBeenCalled();
@@ -93,14 +93,12 @@ it("discovers both immutable snapshots then reuses a verified cache entry", asyn
 });
 it("observe persists a result without enriching review context", async () => {
   const { service } = setup(async () => await snapshot(), "observe");
-  const r = await service.identifyProjects!(
-    await createDefaultRepositoryPolicy(base),
-  );
+  const r = await service.identifyProjects!(await defaultScopePolicy(base));
   service.useProjectIdentification!(r!);
   expect(service.getProjectIdentification!()).toBeUndefined();
 });
 it("reports optional failures but propagates authority rejection", async () => {
-  const policy = await createDefaultRepositoryPolicy(base);
+  const policy = await defaultScopePolicy(base);
   expect(
     await setup(async () => {
       throw new Error("offline");
@@ -120,7 +118,7 @@ it("retains head evidence when base collection is unavailable", async () => {
   });
   expect(
     await service.identifyProjects!(
-      await createDefaultRepositoryPolicy(base),
+      await defaultScopePolicy(base),
       undefined,
       true,
     ),
@@ -134,7 +132,7 @@ it("prevents discovery and inference after repository access removal", async () 
   const discover = vi.fn(async () => await snapshot());
   const { service, identify } = setup(discover);
   expect(
-    await service.identifyProjects!(await createDefaultRepositoryPolicy(base)),
+    await service.identifyProjects!(await defaultScopePolicy(base)),
   ).toMatchObject({ limitations: ["access-revoked"] });
   expect(discover).not.toHaveBeenCalled();
   expect(identify).not.toHaveBeenCalled();
@@ -149,7 +147,7 @@ it("propagates revoked authority during baseline discovery without model inferen
   });
   const { service, identify } = setup(discover);
   await expect(
-    service.identifyProjects!(await createDefaultRepositoryPolicy(base)),
+    service.identifyProjects!(await defaultScopePolicy(base)),
   ).rejects.toThrow("PROJECT_METADATA_AUTHORITY");
   expect(discover).toHaveBeenCalledTimes(2);
   expect(identify).not.toHaveBeenCalled();
@@ -168,7 +166,7 @@ it("preserves partial baseline status and limitations alongside complete head me
       : head,
   );
   const result = await service.identifyProjects!(
-    await createDefaultRepositoryPolicy(base),
+    await defaultScopePolicy(base),
     undefined,
     true,
   );

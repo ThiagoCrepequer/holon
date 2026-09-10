@@ -2,7 +2,7 @@
 
 export type DeliveryId = `github:${string}`;
 export type PrKey = `github:${number}:pr:${number}`;
-export type RunId = `${PrKey}:head:${string}`;
+export type RunId = `${PrKey}:head:${string}:base:${string}`;
 export type FindingId = `finding:${string}`;
 export type PublicationId = `${RunId}:publication:${FindingId | "summary"}`;
 export type FindingFingerprint = `fp:${string}`;
@@ -51,11 +51,17 @@ export function createPrKey(coordinates: GitHubPullRequestCoordinates): PrKey {
   return `github:${coordinates.repositoryId}:pr:${coordinates.pullRequestNumber}`;
 }
 
-export function createRunId(prKey: PrKey, headSha: string): RunId {
+export function createRunId(
+  prKey: PrKey,
+  headSha: string,
+  baseSha: string,
+): RunId {
   if (!gitSha.test(headSha)) {
     throw new TypeError("headSha must be a 40-character Git object ID");
   }
-  return `${prKey}:head:${headSha.toLowerCase()}`;
+  if (!gitSha.test(baseSha))
+    throw new TypeError("baseSha must be a 40-character Git object ID");
+  return `${prKey}:head:${headSha.toLowerCase()}:base:${baseSha.toLowerCase()}`;
 }
 
 export function derivePrKeyFromRunId(runId: string): PrKey {

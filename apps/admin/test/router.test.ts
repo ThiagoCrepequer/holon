@@ -170,7 +170,7 @@ describe("apps/admin router and server-side rendered views", () => {
 
     // Non-existent runId returns 404
     const validMissingId =
-      "github:999999:pr:999:head:1234567890abcdef1234567890abcdef12345678";
+      "github:999999:pr:999:head:1234567890abcdef1234567890abcdef12345678:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const reqMissing = new Request(
       `https://admin.example.com/runs/${encodeURIComponent(validMissingId)}`,
       { headers },
@@ -308,6 +308,7 @@ describe("apps/admin router and server-side rendered views", () => {
       getRunDetail: vi.fn().mockResolvedValue({
         cleanupTask: null,
         currentFindings: [],
+        configuration: null,
         findingsPerspective: "both",
         historicalRunFindings: [],
         projectIdentification: null,
@@ -401,7 +402,7 @@ describe("apps/admin router and server-side rendered views", () => {
 
   it("renders 200 with active run and polling when D1 has no row and RPC returns active run", async () => {
     const activeRunId =
-      "github:42:pr:120:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      "github:42:pr:120:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const headers = await createValidAuthHeader();
     const req = new Request(
       `https://admin.example.com/runs/${encodeURIComponent(activeRunId)}`,
@@ -413,6 +414,7 @@ describe("apps/admin router and server-side rendered views", () => {
       getRunDetail: vi.fn().mockResolvedValue({
         cleanupTask: null,
         currentFindings: [],
+        configuration: null,
         findingsPerspective: "current_pr_state",
         historicalRunFindings: [],
         projectIdentification: null,
@@ -511,6 +513,7 @@ describe("apps/admin router and server-side rendered views", () => {
             updatedAt: "2026-09-04T12:00:00.000Z",
           },
         ],
+        configuration: null,
         findingsPerspective: "current_pr_state",
         historicalRunFindings: null,
         projectIdentification: null,

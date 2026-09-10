@@ -23,7 +23,7 @@ const envelope = {
   receivedAt,
   repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
 } as const;
-const runId = `github:42:pr:7:head:${sha}`;
+const runId = `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`;
 const job = reviewJobSchema.parse({
   envelope: {
     ...envelope,
@@ -76,6 +76,22 @@ const output: ModelReviewOutput = {
 };
 
 describe("review application policies", () => {
+  it("localizes labels and preserves evidence bytes", () => {
+    const finding = {
+      ...output.findings[0]!,
+      evidence: [
+        {
+          ...output.findings[0]!.evidence[0]!,
+          excerpt: "if (x) {\n  return null;\n}",
+        },
+      ],
+    };
+    expect(renderFinding(finding, "pt-BR")).toContain("Ação sugerida:");
+    expect(renderFinding(finding, "es")).toContain("Evidencia:");
+    expect(renderFinding(finding, "pt-BR")).toContain(
+      finding.evidence[0]!.excerpt,
+    );
+  });
   it("uses the required GitHub causal timestamp", () => {
     expect(createReviewRun(job).causalVersion).toBe(updatedAt);
   });

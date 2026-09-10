@@ -1,14 +1,13 @@
+import type { ConfigurationSnapshotReader } from "@holon/application";
 import { gitShaSchema } from "@holon/contracts";
-import {
-  RepositoryPolicySecurityError,
-  RepositoryPolicySyntaxError,
-} from "@holon/domain";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 
+import { readConfigurationJson } from "./configuration-json.js";
+import { createConfigurationSnapshotReader } from "./configuration-reader.js";
 import {
   classifyGitHubRequestError,
   executeGitHubAppAuthenticationRequest,
@@ -38,12 +37,12 @@ export interface GitHubWorkflowArtifact {
   readonly sizeInBytes: number;
 }
 
-export interface GitHubRepositoryPolicyContent {
-  readonly content: string;
-  readonly rawBytes: Uint8Array;
-}
-
 export interface GitHubInstallationSession {
+  configurationReader(
+    owner: string,
+    repo: string,
+    baseSha: string,
+  ): ConfigurationSnapshotReader;
   readonly api: GitHubApi;
   currentHeadSha(
     owner: string,
@@ -72,12 +71,6 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<string>;
-  readRepositoryPolicyFile?(
-    owner: string,
-    repo: string,
-    baseSha: string,
-    path: string,
-  ): Promise<GitHubRepositoryPolicyContent | undefined>;
   repositoryPermission?(
     owner: string,
     repo: string,
@@ -294,80 +287,27 @@ export async function createInstallationSession(
         };
       });
     },
-    async readRepositoryPolicyFile(owner, repo, baseSha, path) {
-      let response;
-      try {
-        response = await executeGitHubRequest(async () => {
-          return await octokit.request(
-            "GET /repos/{owner}/{repo}/contents/{path}",
-            {
-              owner,
-              path,
-              ref: baseSha,
-              repo,
-            },
-          );
-        });
-      } catch (error) {
-        if (
-          (error as { status?: number }).status === 404 ||
-          (error as { statusCode?: number }).statusCode === 404
-        ) {
-          return undefined;
-        }
-        throw error;
-      }
-
-      if (Array.isArray(response.data)) {
-        throw new RepositoryPolicySecurityError(
-          `Path '${path}' is a directory, not a regular file`,
-        );
-      }
-      const fileData = response.data as {
-        content?: string;
-        encoding?: string;
-        type?: string;
-      };
-      if (fileData.type !== "file") {
-        throw new RepositoryPolicySecurityError(
-          `Path '${path}' is a ${fileData.type ?? "unknown"}, not a regular file`,
-        );
-      }
-      if (
-        fileData.encoding !== "base64" ||
-        typeof fileData.content !== "string"
-      ) {
-        throw new RepositoryPolicySecurityError(
-          `Unexpected encoding '${fileData.encoding}' for '${path}'`,
-        );
-      }
-      const binaryString = atob(fileData.content.replace(/\s+/gu, ""));
-      if (binaryString.length > 65_536) {
-        throw new RepositoryPolicySecurityError(
-          `Policy file '${path}' exceeds 64 KiB limit (${binaryString.length} bytes)`,
-        );
-      }
-      const rawBytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i += 1) {
-        rawBytes[i] = binaryString.charCodeAt(i);
-      }
-      const textDecoder = new TextDecoder("utf-8", { fatal: true });
-      const text = textDecoder.decode(rawBytes);
-      for (let i = 0; i < text.length; i += 1) {
-        const code = text.charCodeAt(i);
-        if (
-          code === 0 ||
-          (code < 32 && code !== 9 && code !== 10 && code !== 13)
-        ) {
-          throw new RepositoryPolicySyntaxError(
-            `Policy file '${path}' contains forbidden control characters`,
-          );
-        }
-      }
-      return {
-        content: text,
-        rawBytes,
-      };
+    configurationReader(owner, repo, baseSha) {
+      return createConfigurationSnapshotReader(
+        {
+          request: async (route, parameters, maximumBytes) => {
+            const response = await octokit.request(route, {
+              ...parameters,
+              request: {
+                parseSuccessResponseBody: false,
+                retries: 0,
+                signal: AbortSignal.timeout(30_000),
+              },
+            });
+            return {
+              data: await readConfigurationJson(response.data, maximumBytes),
+            };
+          },
+        },
+        owner,
+        repo,
+        baseSha,
+      );
     },
     async pullRequestDiff(owner, repo, pullNumber) {
       return await executeGitHubRequest(async () => {

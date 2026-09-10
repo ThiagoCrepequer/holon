@@ -1,0 +1,31 @@
+output:
+  language: pt-BR
+  detail: detailed
+  max_inline_comments: 10
+review:
+  focus: [correctness, security]
+instructions:
+  - |
+    Check that authorization is enforced before returning tenant data.
+    Preserve exact code excerpts in findings.
+projects:
+  - name: backend
+    root: apps/api
+    compatibility:
+      runtimes:
+        java: "21"
+      frameworks:
+        quarkus: "3.27"
+    instructions:
+      - Check transaction boundaries and retry idempotency.
+  - name: frontend
+    root: apps/web
+    compatibility:
+      runtimes:
+        node: ">=24 <25"
+      frameworks:
+        react: "^19"
+path_rules:
+  - paths: ["**/*test*", "**/test/**"]
+    instructions:
+      - Check that assertions would fail when the behavior regresses.

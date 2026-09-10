@@ -1,3 +1,7 @@
+import type {
+  RunConfigurationRef,
+  RunConfigurationSnapshot,
+} from "@holon/contracts";
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
 }
@@ -69,7 +73,7 @@ import {
   GitHubTransientError,
 } from "./github-operations.js";
 import { errorKind, type StructuredLogger } from "./observability.js";
-import { createDefaultRepositoryPolicy } from "./repository-policy-resolver.js";
+import { configurationScopePolicy } from "./run-configuration-resolver.js";
 import {
   AnalyticsEngineTelemetryEmitter,
   CompositeTelemetryEmitter,
@@ -99,6 +103,13 @@ export interface WorkflowLedger
     CiEvidenceLedger,
     FindingLifecycleLedger,
     RunTelemetryLedger {
+  saveRunConfiguration(
+    snapshot: RunConfigurationSnapshot,
+  ): Promise<RunConfigurationRef>;
+  loadRunConfiguration(
+    reference: RunConfigurationRef,
+  ): Promise<RunConfigurationSnapshot>;
+  findRunConfiguration(runId: string): Promise<RunConfigurationRef | undefined>;
   saveReviewAnalysis(
     runId: string,
     output: ReconciledReviewOutput,
@@ -364,9 +375,17 @@ export function createReviewServices(
     policy?: RepositoryPolicy,
   ): Promise<PreparedRepository> => {
     try {
-      const effectivePolicy =
-        policy ??
-        (await createDefaultRepositoryPolicy(job.envelope.pullRequest.baseSha));
+      let effectivePolicy = policy;
+      if (effectivePolicy === undefined) {
+        const reference = await ledger.findRunConfiguration(job.runId);
+        if (reference === undefined)
+          throw new NonRetryableError(
+            "Repository configuration is not compiled",
+          );
+        effectivePolicy = configurationScopePolicy(
+          await ledger.loadRunConfiguration(reference),
+        );
+      }
 
       const github = await createSession();
       const canonicalDiff = await executeGitHubOperation(() =>

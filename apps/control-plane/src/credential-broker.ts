@@ -13,7 +13,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
 
 const runCoordinates =
-  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40})$/u;
+  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40}):base:(?<baseSha>[a-f0-9]{40})$/u;
 
 interface CredentialLedger {
   authorizeCredential(request: GitHubCredentialRequest): Promise<boolean>;

@@ -117,7 +117,11 @@ export async function dispatchReviewMessages(
       });
       job = reviewJobSchema.parse({
         envelope,
-        runId: createRunId(prKey, envelope.pullRequest.headSha),
+        runId: createRunId(
+          prKey,
+          envelope.pullRequest.headSha,
+          envelope.pullRequest.baseSha,
+        ),
       });
     } catch {
       // Invalid messages cannot become valid through redelivery. Acknowledge
