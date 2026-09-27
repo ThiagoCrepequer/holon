@@ -1,10 +1,18 @@
 import type { TelemetryEmitter } from "@holon/application";
 import type { RunTelemetry, StepTiming } from "@holon/contracts";
+import {
+  consoleErrorReporter,
+  reportError,
+  type ErrorReporter,
+} from "@holon/observability";
 
 import { consoleLogger, type StructuredLogger } from "./observability.js";
 
 export class AnalyticsEngineTelemetryEmitter implements TelemetryEmitter {
-  public constructor(private readonly dataset?: AnalyticsEngineDataset) {}
+  public constructor(
+    private readonly dataset?: AnalyticsEngineDataset,
+    private readonly reporter: ErrorReporter = consoleErrorReporter,
+  ) {}
 
   public emitRunTelemetry(telemetry: RunTelemetry): void {
     if (!this.dataset) return;
@@ -33,8 +41,12 @@ export class AnalyticsEngineTelemetryEmitter implements TelemetryEmitter {
         ],
         indexes: [telemetry.prKey],
       });
-    } catch {
-      // Graceful fallback: never let telemetry emission disrupt review execution
+    } catch (error) {
+      reportError(this.reporter, "telemetry.analytics_write_failed", error, {
+        component: "control-plane",
+        operation: "telemetry.run",
+        runId: telemetry.runId,
+      });
     }
   }
 
@@ -46,8 +58,13 @@ export class AnalyticsEngineTelemetryEmitter implements TelemetryEmitter {
         doubles: [step.durationMs, step.attempt],
         indexes: [step.stepName],
       });
-    } catch {
-      // Graceful fallback
+    } catch (error) {
+      reportError(this.reporter, "telemetry.analytics_write_failed", error, {
+        component: "control-plane",
+        operation: "telemetry.step",
+        stepName: step.stepName,
+        attempt: step.attempt,
+      });
     }
   }
 }
@@ -97,21 +114,48 @@ export class StructuredLogTelemetryEmitter implements TelemetryEmitter {
 }
 
 export class CompositeTelemetryEmitter implements TelemetryEmitter {
-  public constructor(private readonly emitters: readonly TelemetryEmitter[]) {}
+  public constructor(
+    private readonly emitters: readonly TelemetryEmitter[],
+    private readonly reporter: ErrorReporter = consoleErrorReporter,
+  ) {}
+
+  private async emitAll(
+    operation: "telemetry.run" | "telemetry.step",
+    context: {
+      readonly runId?: string;
+      readonly stepName?: string;
+      readonly attempt?: number;
+    },
+    invoke: (emitter: TelemetryEmitter) => Promise<void> | void,
+  ): Promise<void> {
+    const results = await Promise.allSettled(
+      this.emitters.map((emitter) =>
+        Promise.resolve().then(() => invoke(emitter)),
+      ),
+    );
+    for (const [messageIndex, result] of results.entries()) {
+      if (result.status === "rejected") {
+        reportError(this.reporter, "telemetry.sink_failed", result.reason, {
+          component: "control-plane",
+          operation,
+          messageIndex,
+          ...context,
+        });
+      }
+    }
+  }
 
   public async emitRunTelemetry(telemetry: RunTelemetry): Promise<void> {
-    await Promise.allSettled(
-      this.emitters.map((emitter) =>
-        Promise.resolve(emitter.emitRunTelemetry(telemetry)),
-      ),
+    await this.emitAll("telemetry.run", { runId: telemetry.runId }, (emitter) =>
+      emitter.emitRunTelemetry(telemetry),
     );
   }
 
   public async emitStepTiming(step: StepTiming): Promise<void> {
-    await Promise.allSettled(
-      this.emitters.map((emitter) =>
-        Promise.resolve(emitter.emitStepTiming(step)),
-      ),
+    await this.emitAll(
+      "telemetry.step",
+      { stepName: step.stepName, attempt: step.attempt },
+      (emitter) => emitter.emitStepTiming(step),
     );
   }
 }

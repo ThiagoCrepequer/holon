@@ -12,6 +12,13 @@ export interface IngestCiArtifactsOptions {
   readonly source?: string | undefined;
   readonly workflowName?: string | undefined;
   readonly workflowRunId?: number | undefined;
+  readonly onPartialError?:
+    | ((
+        kind: "zip_extraction" | "lcov_parse" | "junit_parse",
+        index: number,
+        error: unknown,
+      ) => void)
+    | undefined;
 }
 
 export interface RawArtifactFile {
@@ -41,7 +48,7 @@ export function ingestCiArtifactZips(
 ): CiEvidence {
   const extractedFiles: RawArtifactFile[] = [];
 
-  for (const zipBuffer of zipBuffers) {
+  for (const [index, zipBuffer] of zipBuffers.entries()) {
     try {
       const files = extractSafeZipArtifact(zipBuffer);
       for (const file of files) {
@@ -50,7 +57,8 @@ export function ingestCiArtifactZips(
           path: file.path,
         });
       }
-    } catch {
+    } catch (error) {
+      options.onPartialError?.("zip_extraction", index, error);
       // If a zip fails extraction (e.g. malformed or oversized), skip it safely
       continue;
     }
@@ -69,20 +77,20 @@ export function ingestRawArtifactFiles(
   const coverageReports: LineCoverage[] = [];
   const testReports: TestExecutionReport[] = [];
 
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     if (isLcovContent(file.path, file.content)) {
       try {
         const parsed = parseLcov(file.content);
         coverageReports.push(...parsed);
-      } catch {
-        // Ignore parsing errors on individual invalid files
+      } catch (error) {
+        options.onPartialError?.("lcov_parse", index, error);
       }
     } else if (isJUnitXmlContent(file.path, file.content)) {
       try {
         const parsed = parseJUnitXml(file.content);
         testReports.push(parsed);
-      } catch {
-        // Ignore parsing errors on individual invalid files
+      } catch (error) {
+        options.onPartialError?.("junit_parse", index, error);
       }
     }
   }

@@ -8,6 +8,42 @@ import {
   githubRetryDelay,
 } from "../src/github-operations.js";
 
+describe("GitHub operation diagnostics", () => {
+  it("reports the typed original error before mapping it to a Workflow error", async () => {
+    const entries: Array<{
+      event: string;
+      code: string | undefined;
+      operation: string | undefined;
+    }> = [];
+    const error = new GitHubRequestError("invalid_response", false);
+    await expect(
+      executeGitHubOperation(() => Promise.reject(error), Date.now, {
+        context: { operation: "github.create_installation_session" },
+        reporter: {
+          report: (event, original, context) =>
+            entries.push({
+              event,
+              code:
+                original instanceof GitHubRequestError
+                  ? original.code
+                  : undefined,
+              operation: context?.operation,
+            }),
+        },
+      }),
+    ).rejects.toMatchObject({
+      message: "HOLON_GITHUB_NON_RETRYABLE:invalid_response",
+    });
+    expect(entries).toEqual([
+      {
+        event: "github.operation_failed",
+        code: "invalid_response",
+        operation: "github.create_installation_session",
+      },
+    ]);
+  });
+});
+
 describe("GitHub operation policy", () => {
   it("preserves the typed GitHub adapter classification and retry delay", async () => {
     await expect(

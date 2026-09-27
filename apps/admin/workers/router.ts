@@ -1,3 +1,4 @@
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
 import { adminRequestContext } from "../app/server/request-context.js";
@@ -96,6 +97,10 @@ export async function handleConsoleRequest(
     );
   } catch (error) {
     if (error instanceof AccessAuthError) return error.toResponse();
+    reportError(consoleErrorReporter, "admin.request_failed", error, {
+      component: "admin",
+      operation: "http.request",
+    });
     const nonce = generateCspNonce();
     return applySecurityHeaders(
       new Response("Internal console error", {

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@holon/contracts": "workspace:*",
+    "@holon/observability": "workspace:*",
     "@holon/ui": "workspace:*",
     "@react-router/cloudflare": "catalog:",
     "jose": "catalog:",

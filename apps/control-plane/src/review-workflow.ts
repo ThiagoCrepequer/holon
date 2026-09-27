@@ -36,6 +36,11 @@ import {
   type RunId,
 } from "@holon/domain";
 import {
+  consoleErrorReporter,
+  reportError,
+  withErrorReporting,
+} from "@holon/observability";
+import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
@@ -167,8 +172,14 @@ async function safeRecordStepStart(
       null,
       stepOrder,
     );
-  } catch {
-    // Non-blocking telemetry
+  } catch (error) {
+    reportError(consoleErrorReporter, "workflow.step_record_failed", error, {
+      component: "control-plane",
+      operation: "workflow.step_start",
+      runId,
+      stepName,
+      attempt,
+    });
   }
 }
 
@@ -190,8 +201,14 @@ async function safeRecordStepComplete(
       durationMs,
       sanitizedOutput,
     );
-  } catch {
-    // Non-blocking telemetry
+  } catch (error) {
+    reportError(consoleErrorReporter, "workflow.step_record_failed", error, {
+      component: "control-plane",
+      operation: "workflow.step_complete",
+      runId,
+      stepName,
+      attempt,
+    });
   }
 }
 
@@ -213,8 +230,14 @@ async function safeRecordStepFailure(
       durationMs,
       errorCode,
     );
-  } catch {
-    // Non-blocking telemetry
+  } catch (error) {
+    reportError(consoleErrorReporter, "workflow.step_record_failed", error, {
+      component: "control-plane",
+      operation: "workflow.step_failure",
+      runId,
+      stepName,
+      attempt,
+    });
   }
 }
 
@@ -264,6 +287,16 @@ async function emitAndRecordProjection(
       }
     });
   } catch (projectionError) {
+    reportError(
+      consoleErrorReporter,
+      "workflow.admin_projection_failed",
+      projectionError,
+      {
+        component: "control-plane",
+        operation: "workflow.admin_projection",
+        runId: payloadInput.runId,
+      },
+    );
     emit("admin.projection_failed", {
       errorKind: errorKind(projectionError),
     });
@@ -278,7 +311,16 @@ export class ReviewWorkflow extends WorkflowEntrypoint<
     event: Readonly<WorkflowEvent<ReviewJob>>,
     step: WorkflowStep,
   ) {
-    return await executeReviewWorkflow(this.env, event, step);
+    return await withErrorReporting(
+      "workflow.run_failed",
+      consoleErrorReporter,
+      {
+        component: "control-plane",
+        operation: "workflow.run",
+        workflowInstanceId: event.instanceId,
+      },
+      async () => await executeReviewWorkflow(this.env, event, step),
+    );
   }
 }
 
@@ -344,8 +386,14 @@ export async function executeReviewWorkflow(
     stepTimings.push(timing);
     try {
       void services.telemetry?.emitStepTiming(timing);
-    } catch {
-      // ignore
+    } catch (error) {
+      reportError(consoleErrorReporter, "workflow.step_timing_failed", error, {
+        component: "control-plane",
+        operation: "telemetry.step",
+        runId: run.id,
+        stepName,
+        attempt,
+      });
     }
   };
 
@@ -407,6 +455,17 @@ export async function executeReviewWorkflow(
           recordStepTiming(stepName, durationMs, "success", attempt);
           return result;
         } catch (error) {
+          reportError(consoleErrorReporter, "workflow.step_failed", error, {
+            component: "control-plane",
+            operation: "workflow.step",
+            runId: run.id,
+            workflowInstanceId,
+            repositoryId: job.envelope.repository.id,
+            pullRequestNumber: job.envelope.pullRequest.number,
+            stepName,
+            attempt,
+            phase,
+          });
           const attemptEndedAtIso = now();
           const durationMs = durationFrom(attemptStartDate, attemptEndedAtIso);
           const safeCode = errorKind(error);
@@ -536,7 +595,18 @@ export async function executeReviewWorkflow(
       .do("save-obsolete-telemetry", stateStep, async () => {
         await services.ledger.saveRunTelemetry(obsoleteTelemetry);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        reportError(
+          consoleErrorReporter,
+          "workflow.telemetry_persist_failed",
+          error,
+          {
+            component: "control-plane",
+            operation: "workflow.save_obsolete_telemetry",
+            runId: run.id,
+          },
+        );
+      });
     void services.telemetry?.emitRunTelemetry(obsoleteTelemetry);
 
     const timestamps = buildProjectionTimestamps(
@@ -1532,7 +1602,18 @@ export async function executeReviewWorkflow(
       .do("save-run-telemetry", stateStep, async () => {
         await services.ledger.saveRunTelemetry(runTelemetry);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        reportError(
+          consoleErrorReporter,
+          "workflow.telemetry_persist_failed",
+          error,
+          {
+            component: "control-plane",
+            operation: "workflow.save_run_telemetry",
+            runId: run.id,
+          },
+        );
+      });
     void services.telemetry?.emitRunTelemetry(runTelemetry);
 
     const completedAt = await moveTo(
@@ -1661,7 +1742,18 @@ export async function executeReviewWorkflow(
       .do("save-failed-telemetry", stateStep, async () => {
         await services.ledger.saveRunTelemetry(failedTelemetry);
       })
-      .catch(() => {});
+      .catch((telemetryError: unknown) => {
+        reportError(
+          consoleErrorReporter,
+          "workflow.telemetry_persist_failed",
+          telemetryError,
+          {
+            component: "control-plane",
+            operation: "workflow.save_failed_telemetry",
+            runId: run.id,
+          },
+        );
+      });
     void services.telemetry?.emitRunTelemetry(failedTelemetry);
 
     const terminal = await runInstrumentedStep(

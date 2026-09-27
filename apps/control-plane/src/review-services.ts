@@ -57,6 +57,7 @@ import {
   RepositoryToolBudgetExceededError,
   createRedactingRepositoryToolRunner,
 } from "@holon/model";
+import { safeErrorDetails } from "@holon/observability";
 import {
   interpretProjects,
   detectorRevision,
@@ -300,7 +301,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryTransientError",
-        reason: error.message.slice(0, 100),
+        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
         retryable: true,
       });
       throw new RepositoryTransientError("repository");
@@ -314,7 +315,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryPermanentError",
-        reason: error.message.slice(0, 100),
+        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
         retryable: false,
       });
       throw new NonRetryableError("HOLON_REPOSITORY_NON_RETRYABLE");
@@ -346,22 +347,37 @@ export function createReviewServices(
   ) as unknown as WorkflowLedger;
   const wait = runtime.wait ?? ((delay) => scheduler.wait(delay));
   const createSession = async () =>
-    await executeGitHubOperation(async () => {
-      if (runtime.createSession) {
-        return await runtime.createSession(
+    await executeGitHubOperation(
+      async () => {
+        if (runtime.createSession) {
+          return await runtime.createSession(
+            job.envelope.installationId,
+            job.envelope.repository.id,
+          );
+        }
+        const keyring = resolveControlPlaneKeyring(env);
+        const keyringOptions = createKeyringTelemetryOptions(
+          logger,
+          logContext,
+        );
+        return await createInstallationSessionWithKeyring(
+          keyring,
           job.envelope.installationId,
           job.envelope.repository.id,
+          keyringOptions,
         );
-      }
-      const keyring = resolveControlPlaneKeyring(env);
-      const keyringOptions = createKeyringTelemetryOptions(logger, logContext);
-      return await createInstallationSessionWithKeyring(
-        keyring,
-        job.envelope.installationId,
-        job.envelope.repository.id,
-        keyringOptions,
-      );
-    });
+      },
+      Date.now,
+      {
+        context: {
+          operation: "github.create_installation_session",
+          runId: job.runId,
+          repositoryId: job.envelope.repository.id,
+          pullRequestNumber: job.envelope.pullRequest.number,
+          installationId: job.envelope.installationId,
+        },
+      },
+    );
 
   const resolveCredentialContainerId = async (): Promise<string> => {
     const containerId = await executor.resolveContainerId(job.runId);

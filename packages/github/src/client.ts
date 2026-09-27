@@ -88,8 +88,9 @@ export async function resolveRepositoryInstallation(
     appId: credentials.appId,
     privateKey: credentials.privateKey,
   });
-  const authentication = await executeGitHubAppAuthenticationRequest(() =>
-    auth({ type: "app" }),
+  const authentication = await executeGitHubAppAuthenticationRequest(
+    () => auth({ type: "app" }),
+    "app_auth",
   );
   const octokit = new Octokit({ auth: authentication.token });
   return await executeGitHubRequest(async () => {
@@ -242,12 +243,14 @@ export async function createInstallationSession(
     appId: credentials.appId,
     privateKey: credentials.privateKey,
   });
-  const authentication = await executeGitHubAppAuthenticationRequest(() =>
-    auth({
-      installationId,
-      repositoryIds: [repositoryId],
-      type: "installation",
-    }),
+  const authentication = await executeGitHubAppAuthenticationRequest(
+    () =>
+      auth({
+        installationId,
+        repositoryIds: [repositoryId],
+        type: "installation",
+      }),
+    "installation_auth",
   );
   const octokit = new InstallationOctokit({
     auth: authentication.token,
@@ -285,7 +288,7 @@ export async function createInstallationSession(
           baseSha: gitShaSchema.parse(response.data.base.sha),
           headSha: gitShaSchema.parse(response.data.head.sha),
         };
-      });
+      }, "pull_request_refs");
     },
     configurationReader(owner, repo, baseSha) {
       return createConfigurationSnapshotReader(
