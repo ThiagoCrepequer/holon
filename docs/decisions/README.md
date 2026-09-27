@@ -69,3 +69,5 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - [ADR-0035 — Planejar o contexto completo antes dos limites de shards](0035-plan-complete-context-before-sharding.md)
 
 - [ADR-0036 — Manter um único contrato atual durante o desenvolvimento](0036-use-single-current-development-contracts.md) — decisão vigente para contratos internos.
+
+- [ADR-0037 — Análise paralela e publicação durável](0037-harden-parallel-review-and-publication.md) — decisão vigente para concorrência, recuperação, CI e contexto complementar.

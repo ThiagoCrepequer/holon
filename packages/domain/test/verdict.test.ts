@@ -124,7 +124,7 @@ describe("determineReviewVerdict", () => {
     });
 
     it("returns REQUEST_CHANGES on accumulation of medium findings (>= 2)", () => {
-      const medium1 = makeFinding("medium", 0.78);
+      const medium1 = makeFinding("medium", 0.8);
       const medium2 = makeFinding("medium", 0.8);
       const result = determineReviewVerdict({
         findings: [medium1, medium2],
@@ -138,8 +138,8 @@ describe("determineReviewVerdict", () => {
     });
 
     it("returns REQUEST_CHANGES when risk score exceeds threshold", () => {
-      // 1 medium (1.5) with confidence 0.78 + 3 low (0.75) = 2.25 >= 2.0
-      const medium = makeFinding("medium", 0.78);
+      // 1 medium (1.5) with confidence 0.8 + 3 low (0.75) = 2.25 >= 2.0
+      const medium = makeFinding("medium", 0.8);
       const low1 = makeFinding("low", 0.8);
       const low2 = makeFinding("low", 0.8);
       const low3 = makeFinding("low", 0.8);
@@ -177,9 +177,7 @@ describe("determineReviewVerdict", () => {
         totalShards: 1,
       });
       expect(result.verdict).toBe("COMMENT");
-      expect(result.reasons[0]).toContain(
-        "A análise do modelo foi concluída de forma não-estruturada",
-      );
+      expect(result.reasons[0]).toContain("The review is incomplete");
       expect(result.reasons[0]).not.toContain("All reviewed files clean");
     });
 
@@ -196,7 +194,7 @@ describe("determineReviewVerdict", () => {
       expect(result.blockingFindingsCount).toBe(0);
       expect(result.advisoryFindingsCount).toBe(2);
       expect(result.reasons[0]).toContain(
-        "2 low-severity advisory observation(s) provided",
+        "2 non-blocking observation(s) provided",
       );
     });
 

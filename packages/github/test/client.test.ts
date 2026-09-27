@@ -165,43 +165,23 @@ describe("GitHub installation client", () => {
       },
     ]);
 
-    const fakeZipBuffer = new ArrayBuffer(16);
+    const bytes = new Uint8Array([1, 2, 3, 4]);
     sdk.request.mockResolvedValueOnce({
-      data: fakeZipBuffer,
+      headers: {},
+      data: new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
     });
-    await expect(
-      session.downloadArtifactZip?.("acme", "api", 101),
-    ).resolves.toBe(fakeZipBuffer);
-
-    // Test Uint8Array / ArrayBufferView
-    const uint8Data = new Uint8Array([1, 2, 3, 4]);
-    sdk.request.mockResolvedValueOnce({
-      data: uint8Data,
-    });
-    const uint8Result = await session.downloadArtifactZip?.("acme", "api", 101);
-    expect(new Uint8Array(uint8Result!)).toEqual(uint8Data);
-
-    // Test object with arrayBuffer() method
-    const streamObject = {
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-    };
-    sdk.request.mockResolvedValueOnce({
-      data: streamObject,
-    });
-    const streamResult = await session.downloadArtifactZip?.(
-      "acme",
-      "api",
-      101,
+    expect(
+      new Uint8Array(await session.downloadArtifactZip!("acme", "api", 101)),
+    ).toEqual(bytes);
+    expect(sdk.request).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ request: { parseSuccessResponseBody: false } }),
     );
-    expect(streamResult?.byteLength).toBe(8);
-
-    // Test array-like numbers fallback
-    const arrayLike = [10, 20, 30];
-    sdk.request.mockResolvedValueOnce({
-      data: arrayLike,
-    });
-    const arrayResult = await session.downloadArtifactZip?.("acme", "api", 101);
-    expect(new Uint8Array(arrayResult!)).toEqual(new Uint8Array(arrayLike));
 
     const options = sdk.octokitOptions as {
       readonly auth: string;

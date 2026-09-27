@@ -148,3 +148,7 @@ Resoluções usam o mesmo protocolo de claim/marcador/reconciliação de publica
 com identidade por fingerprint e head. Veja a
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)
 para os limites de contabilidade e matching.
+
+## Endurecimento do core (2026-09-27)
+
+A [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

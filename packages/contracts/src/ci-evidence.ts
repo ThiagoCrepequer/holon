@@ -32,6 +32,7 @@ export const ciEvidenceStatusSchema = z.enum([
 ]);
 
 export const ciEvidenceSchema = z.strictObject({
+  limitations: z.array(z.string().max(300)).max(10).optional(),
   coverage: z.array(lineCoverageSchema).optional(),
   source: z.string().max(100).optional(),
   status: ciEvidenceStatusSchema,

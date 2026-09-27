@@ -570,43 +570,34 @@ export async function executeReviewWorkflow(
     return result;
   };
 
+  const checkTarget = {
+    baseSha: job.envelope.pullRequest.baseSha,
+    installationId: job.envelope.installationId,
+    repositoryId: job.envelope.repository.id,
+    owner: job.envelope.repository.owner,
+    repo: job.envelope.repository.name,
+    pullNumber: job.envelope.pullRequest.number,
+  };
   const ensureCheckRunStarted = async (): Promise<number | undefined> =>
     await runInstrumentedStep(
       "start-check-run",
       "admission",
       publicationStep,
       async () => {
-        let checkRunId = await services.ledger.checkRunId(run.id);
-        if (checkRunId !== undefined) return checkRunId;
-
-        const github = await services.createMutationContext();
-        if (github.publisher.findCheckRunByExternalId !== undefined) {
-          const existingId = await github.publisher.findCheckRunByExternalId(
-            run.id,
-          );
-          if (existingId !== undefined) {
-            await services.ledger.recordCheckRunId(run.id, existingId);
-            return existingId;
-          }
-        }
-
-        if (github.publisher.createCheckRun !== undefined) {
-          checkRunId = await github.publisher.createCheckRun({
+        await services.ledger.scheduleCheckRun(run.id, {
+          ...checkTarget,
+          input: {
             externalId: run.id,
             headSha: job.envelope.pullRequest.headSha,
-            name: "Holon Review",
-            output: {
-              summary:
-                "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
-              title: "Holon Review in progress",
-            },
-            startedAt: now(),
             status: "in_progress",
-          });
-          await services.ledger.recordCheckRunId(run.id, checkRunId);
-          return checkRunId;
-        }
-        return undefined;
+            startedAt: now(),
+            output: {
+              title: "Holon Review in progress",
+              summary: "Holon is reviewing this pull request.",
+            },
+          },
+        });
+        return await services.reconcileCheckRun(run.id);
       },
       () => ({
         headSha: job.envelope.pullRequest.headSha,
@@ -614,23 +605,24 @@ export async function executeReviewWorkflow(
       }),
       (checkRunId) => ({ checkRunId: checkRunId ?? null }),
       {
-        rollback: async ({ output: checkRunId }) => {
-          if (typeof checkRunId !== "number") return;
-          const currentRunState = await services.ledger.runState(run.id);
-          if (currentRunState !== "obsolete") return;
-          const github = await services.createMutationContext();
-          if (github.publisher.updateCheckRun === undefined) return;
-          await github.publisher.updateCheckRun({
-            checkRunId,
-            completedAt: now(),
-            conclusion: "cancelled",
-            output: {
-              summary:
-                "A newer commit was pushed to this pull request. This review run was cancelled.",
-              title: "Holon Review Superseded",
+        rollback: async () => {
+          if ((await services.ledger.runState(run.id)) !== "obsolete") return;
+          await services.ledger.scheduleCheckRun(run.id, {
+            ...checkTarget,
+            input: {
+              externalId: run.id,
+              headSha: job.envelope.pullRequest.headSha,
+              status: "completed",
+              conclusion: "cancelled",
+              completedAt: now(),
+              output: {
+                title: "Holon Review Superseded",
+                summary:
+                  "A newer pull request snapshot superseded this review.",
+              },
             },
-            status: "completed",
           });
+          await services.reconcileCheckRun(run.id);
         },
         rollbackConfig: {
           retries: {
@@ -659,29 +651,23 @@ export async function executeReviewWorkflow(
       "publication",
       publicationStep,
       async () => {
-        let checkRunId = await services.ledger.checkRunId(run.id);
-        const github = await services.createMutationContext();
-        if (
-          checkRunId === undefined &&
-          github.publisher.findCheckRunByExternalId !== undefined
-        ) {
-          checkRunId = await github.publisher.findCheckRunByExternalId(run.id);
-        }
-        if (
-          checkRunId !== undefined &&
-          github.publisher.updateCheckRun !== undefined
-        ) {
-          if (requireCurrentRefs && !(await refsAreCurrent(github))) {
-            return false;
-          }
-          await github.publisher.updateCheckRun({
-            checkRunId,
-            completedAt: now(),
-            conclusion,
-            output,
+        await services.ledger.scheduleCheckRun(run.id, {
+          ...checkTarget,
+          input: {
+            externalId: run.id,
+            headSha: job.envelope.pullRequest.headSha,
             status: "completed",
-          });
-        }
+            conclusion,
+            completedAt: now(),
+            output,
+          },
+        });
+        if (
+          requireCurrentRefs &&
+          !(await refsAreCurrent(await services.createMutationContext()))
+        )
+          return false;
+        await services.reconcileCheckRun(run.id);
         return true;
       },
       () => ({
@@ -1326,6 +1312,7 @@ export async function executeReviewWorkflow(
               publishedCommentIds.get(finding.fingerprint) ??
               finding.githubCommentId,
           })),
+          run.id,
         );
       },
       () => ({
@@ -1541,6 +1528,61 @@ export async function executeReviewWorkflow(
 
     const policyErrorMessage = repositoryPolicyFailureMessage(error);
 
+    const terminal = await runInstrumentedStep(
+      "mark-review-terminal-and-schedule-cleanup",
+      "cleanup",
+      stateStep,
+      async () => {
+        const occurredAt = now();
+        const changed = await services.ledger.markTerminalAndRequestCleanup(
+          run.id,
+          occurredAt,
+          repositoryStarted,
+        );
+        return { changed, occurredAt };
+      },
+      () => ({ repositoryStarted }),
+      (res) => ({ changed: res.changed, occurredAt: res.occurredAt }),
+    ).catch((terminalError: unknown) => {
+      emit("review.terminalization_failed", {
+        errorKind: errorKind(terminalError),
+      });
+      return undefined;
+    });
+
+    emit("review.failed", {
+      durationMs:
+        terminal === undefined
+          ? 0
+          : durationFrom(rawEvent.timestamp, terminal.occurredAt),
+      errorKind: errorKind(error),
+    });
+    if (runClaimed && terminal?.changed === true) {
+      await runInstrumentedStep(
+        "publish-failure-notice",
+        "publication",
+        publicationStep,
+        async () => {
+          const github = await services.createMutationContext();
+          const noticeBody = isPolicyError
+            ? `Holon encontrou um erro na política configurada para o repositório (.github/holon.yml ou .holon.yml) e interrompeu a revisão:\n\n> ${policyErrorMessage ?? "Erro de configuração"}\n\nCorrija o arquivo de configuração no branch base para retomar as revisões automáticas.`
+            : undefined;
+          await publishFailureNoticeAuthorized(
+            github.publisher,
+            run.id,
+            () => authorizeMutation(github, "failure"),
+            noticeBody,
+          );
+        },
+        () => ({ isPolicyError }),
+        () => ({ published: true }),
+      ).catch((publicationError: unknown) => {
+        emit("review.failure_notice_failed", {
+          errorKind: errorKind(publicationError),
+        });
+      });
+    }
+
     if (runClaimed) {
       await updateCheckRunCompleted("fail-check-run", "failure", {
         summary: isPolicyError
@@ -1597,61 +1639,6 @@ export async function executeReviewWorkflow(
       })
       .catch(() => {});
     void services.telemetry?.emitRunTelemetry(failedTelemetry);
-
-    const terminal = await runInstrumentedStep(
-      "mark-review-terminal-and-schedule-cleanup",
-      "cleanup",
-      stateStep,
-      async () => {
-        const occurredAt = now();
-        const changed = await services.ledger.markTerminalAndRequestCleanup(
-          run.id,
-          occurredAt,
-          repositoryStarted,
-        );
-        return { changed, occurredAt };
-      },
-      () => ({ repositoryStarted }),
-      (res) => ({ changed: res.changed, occurredAt: res.occurredAt }),
-    ).catch((terminalError: unknown) => {
-      emit("review.terminalization_failed", {
-        errorKind: errorKind(terminalError),
-      });
-      return undefined;
-    });
-
-    emit("review.failed", {
-      durationMs:
-        terminal === undefined
-          ? 0
-          : durationFrom(rawEvent.timestamp, terminal.occurredAt),
-      errorKind: errorKind(error),
-    });
-    if (runClaimed && terminal?.changed === true) {
-      await runInstrumentedStep(
-        "publish-failure-notice",
-        "publication",
-        publicationStep,
-        async () => {
-          const github = await services.createMutationContext();
-          const noticeBody = isPolicyError
-            ? `Holon encontrou um erro na política configurada para o repositório (.github/holon.yml ou .holon.yml) e interrompeu a revisão:\n\n> ${policyErrorMessage ?? "Erro de configuração"}\n\nCorrija o arquivo de configuração no branch base para retomar as revisões automáticas.`
-            : undefined;
-          await publishFailureNoticeAuthorized(
-            github.publisher,
-            run.id,
-            () => authorizeMutation(github, "failure"),
-            noticeBody,
-          );
-        },
-        () => ({ isPolicyError }),
-        () => ({ published: true }),
-      ).catch((publicationError: unknown) => {
-        emit("review.failure_notice_failed", {
-          errorKind: errorKind(publicationError),
-        });
-      });
-    }
 
     if (terminal?.changed === true) {
       const timestamps = buildProjectionTimestamps(

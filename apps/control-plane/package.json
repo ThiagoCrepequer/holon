@@ -21,7 +21,8 @@
     "@holon/repository-analysis": "workspace:*",
     "fflate": "0.8.3",
     "hono": "catalog:",
-    "yaml": "catalog:"
+    "yaml": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "catalog:",

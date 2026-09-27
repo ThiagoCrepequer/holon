@@ -1,17 +1,17 @@
-import type { CiEvidenceLedger, ReviewPublisher } from "@holon/application";
+import type { CiEvidenceLedger } from "@holon/application";
 import { ingestCiArtifactZips } from "@holon/application";
-import { truncateUtf8Bytes, type AdminCiSummary } from "@holon/contracts";
 import {
-  appendCiEvidenceToSummary,
-  buildPublicationMarker,
+  truncateUtf8Bytes,
+  type AdminCiSummary,
+  type CiEnrichmentInput,
+} from "@holon/contracts";
+import {
   calculateChangedLinesCoverage,
   createPrKey,
-  createRunId,
   formatCiEvidenceMarkdown,
 } from "@holon/domain";
 import {
   createInstallationSessionWithKeyring,
-  GitHubReviewPublisher,
   type GitHubAppCredentials,
   type GitHubAppKeyring,
   type GitHubInstallationSession,
@@ -33,36 +33,12 @@ import {
   type StructuredLogger,
 } from "./observability.js";
 
-export interface CiEnrichmentInput {
-  readonly deliveryId: string;
-  readonly headSha: string;
-  readonly installationId: number;
-  readonly pullRequestNumber: number;
-  readonly repository: {
-    readonly id: number;
-    readonly name: string;
-    readonly owner: string;
-  };
-  readonly workflowName?: string | undefined;
-  readonly workflowRunId: number;
-}
-
 export interface CiEnrichmentResult {
   readonly enriched: boolean;
   readonly reason?: string;
 }
 
 export interface CiEnrichmentDependencies {
-  readonly createPublisher?: (
-    api: GitHubInstallationSession["api"],
-    target: {
-      readonly expectedAuthorLogin: string;
-      readonly headSha: string;
-      readonly owner: string;
-      readonly pullNumber: number;
-      readonly repo: string;
-    },
-  ) => ReviewPublisher;
   readonly createSession?: (
     credentialsOrKeyring: GitHubAppCredentials | GitHubAppKeyring,
     installationId: number,
@@ -85,9 +61,6 @@ export async function enrichReviewWithCiEvidence(
   const logger = dependencies.logger ?? consoleLogger;
   const sessionFactory =
     dependencies.createSession ?? createInstallationSessionWithKeyring;
-  const publisherFactory =
-    dependencies.createPublisher ??
-    ((api, target) => new GitHubReviewPublisher(api, target));
 
   let session: GitHubInstallationSession;
   try {
@@ -113,7 +86,7 @@ export async function enrichReviewWithCiEvidence(
       installationId: input.installationId,
       pullRequestNumber: input.pullRequestNumber,
     });
-    return { enriched: false, reason: "session_failed" };
+    throw error;
   }
 
   if (!session.listWorkflowRunArtifacts || !session.downloadArtifactZip) {
@@ -134,12 +107,14 @@ export async function enrichReviewWithCiEvidence(
     logger.emit("ci_enrichment_skipped_no_artifacts", {
       pullRequestNumber: input.pullRequestNumber,
       workflowRunId: input.workflowRunId,
+      workflowRunAttempt: input.workflowRunAttempt,
     });
     return { enriched: false, reason: "no_artifacts" };
   }
 
   // 2. Download artifact zips (take up to 3 artifacts matching reports or candidates)
   const zipBuffers: ArrayBuffer[] = [];
+  let downloadFailed = false;
   for (const artifact of artifacts.slice(0, 3)) {
     try {
       const zip = await session.downloadArtifactZip(
@@ -149,6 +124,7 @@ export async function enrichReviewWithCiEvidence(
       );
       zipBuffers.push(zip);
     } catch (error) {
+      downloadFailed = true;
       logger.emit("ci_artifact_download_failed", {
         artifactId: artifact.id,
         errorKind: errorKind(error),
@@ -156,47 +132,78 @@ export async function enrichReviewWithCiEvidence(
     }
   }
 
-  if (zipBuffers.length === 0) {
-    return { enriched: false, reason: "download_failed" };
+  if (downloadFailed || zipBuffers.length === 0) {
+    throw new Error("CI artifact download failed");
   }
 
   // 3. Ingest and parse artifacts
-  const evidence = ingestCiArtifactZips(zipBuffers, {
+  const parsedEvidence = ingestCiArtifactZips(zipBuffers, {
     source: "github-actions",
     workflowName: input.workflowName,
     workflowRunId: input.workflowRunId,
   });
 
+  const evidence =
+    artifacts.length > 3
+      ? {
+          ...parsedEvidence,
+          status:
+            parsedEvidence.status === "available"
+              ? ("partial" as const)
+              : parsedEvidence.status,
+          limitations: [
+            ...(parsedEvidence.limitations ?? []),
+            `${artifacts.length - 3} artifact(s) omitted by the per-execution download budget.`,
+          ],
+        }
+      : parsedEvidence;
+
   if (evidence.status === "not_available") {
     logger.emit("ci_enrichment_no_valid_reports", {
       workflowRunId: input.workflowRunId,
+      workflowRunAttempt: input.workflowRunAttempt,
     });
     return { enriched: false, reason: "no_valid_reports" };
   }
 
-  // 4. Correlate with changed lines from PR diff
-  const diff = await session.pullRequestDiff(
+  // Correlate only when a mutable PR diff is bracketed by identical refs for this CI head.
+  const refsBefore = await session.currentPullRequestRefs(
     input.repository.owner,
     input.repository.name,
     input.pullRequestNumber,
   );
-  const diffFiles = splitPullRequestDiff(diff).filter((file) =>
-    isNonBinaryPullRequestPatch(file.patch),
-  );
-  const changedLines = diffFiles.flatMap((file) =>
-    collectChangedLines(file.path, file.patch),
-  );
-  const changedCoverage = evidence.coverage
-    ? calculateChangedLinesCoverage(changedLines, evidence.coverage)
-    : undefined;
+  let changedCoverage;
+  if (refsBefore.headSha === input.headSha && evidence.coverage) {
+    const diff = await session.pullRequestDiff(
+      input.repository.owner,
+      input.repository.name,
+      input.pullRequestNumber,
+    );
+    const refsAfter = await session.currentPullRequestRefs(
+      input.repository.owner,
+      input.repository.name,
+      input.pullRequestNumber,
+    );
+    if (
+      refsAfter.headSha === refsBefore.headSha &&
+      refsAfter.baseSha === refsBefore.baseSha
+    ) {
+      const changedLines = splitPullRequestDiff(diff)
+        .filter((file) => isNonBinaryPullRequestPatch(file.patch))
+        .flatMap((file) => collectChangedLines(file.path, file.patch));
+      changedCoverage = calculateChangedLinesCoverage(
+        changedLines,
+        evidence.coverage,
+      );
+    }
+  }
 
   const prKey = createPrKey({
     provider: "github",
     pullRequestNumber: input.pullRequestNumber,
     repositoryId: input.repository.id,
   });
-  const runId = createRunId(prKey, input.headSha);
-  const summaryMarker = buildPublicationMarker(runId, "summary");
+
   const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
@@ -219,46 +226,17 @@ export async function enrichReviewWithCiEvidence(
       markdown: evidenceMarkdown,
       structuredCi,
       workflowRunId: input.workflowRunId,
+      workflowRunAttempt: input.workflowRunAttempt,
+      target: {
+        installationId: input.installationId,
+        repositoryId: input.repository.id,
+        owner: input.repository.owner,
+        repo: input.repository.name,
+        pullNumber: input.pullRequestNumber,
+      },
     });
   }
 
-  // 6. Locate existing review summary comment by deterministic marker
-  const publisher = publisherFactory(session.api, {
-    expectedAuthorLogin: session.expectedAuthorLogin,
-    headSha: input.headSha,
-    owner: input.repository.owner,
-    pullNumber: input.pullRequestNumber,
-    repo: input.repository.name,
-  });
-
-  const existingReview = await publisher.findCommentWithBodyByMarker?.(
-    summaryMarker,
-    "summary",
-  );
-
-  if (!existingReview) {
-    logger.emit("ci_enrichment_saved_pending_review", {
-      pullRequestNumber: input.pullRequestNumber,
-      runId,
-    });
-    return { enriched: true, reason: "saved_pending_review" };
-  }
-
-  // 7. Format and update the review comment in-place
-  const updatedSummary = appendCiEvidenceToSummary(
-    existingReview.body,
-    evidenceMarkdown,
-  );
-
-  if (updatedSummary !== existingReview.body) {
-    await publisher.updateReviewComment?.(existingReview.id, updatedSummary);
-    logger.emit("ci_enrichment_success", {
-      commentId: existingReview.id,
-      pullRequestNumber: input.pullRequestNumber,
-      runId,
-    });
-    return { enriched: true };
-  }
-
-  return { enriched: false, reason: "no_changes" };
+  if (ledger === undefined) throw new Error("CI ledger is unavailable");
+  return { enriched: true, reason: "saved_pending_review" };
 }

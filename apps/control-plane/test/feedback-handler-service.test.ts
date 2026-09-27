@@ -192,7 +192,7 @@ describe("feedback-handler-service", () => {
         logger,
         publisher: publisher(),
       }),
-    ).resolves.toEqual({ actionTaken: "ignored" });
+    ).rejects.toThrow("permission lookup");
     expect(logger.emit).toHaveBeenCalledWith(
       "feedback_handler_session_failed",
       expect.objectContaining({ errorKind: "TypeError" }),
@@ -202,13 +202,13 @@ describe("feedback-handler-service", () => {
   it("logs only the error kind when session creation fails", async () => {
     const logger = { emit: vi.fn() };
 
-    const result = await handleFeedbackCommentWebhook(fakeEnv, commentEvent, {
-      createSession: vi.fn().mockRejectedValue(new Error("secret detail")),
-      ledger: ledger().value,
-      logger,
-    });
-
-    expect(result.actionTaken).toBe("ignored");
+    await expect(
+      handleFeedbackCommentWebhook(fakeEnv, commentEvent, {
+        createSession: vi.fn().mockRejectedValue(new Error("secret detail")),
+        ledger: ledger().value,
+        logger,
+      }),
+    ).rejects.toThrow("secret detail");
     expect(logger.emit).toHaveBeenCalledWith(
       "feedback_handler_session_failed",
       expect.objectContaining({ errorKind: "Error" }),

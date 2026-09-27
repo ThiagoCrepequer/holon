@@ -19,11 +19,14 @@ import {
   reconcileFindings,
   type TrackedFinding,
 } from "@holon/domain";
-import { nonRetryableModelFailureCode } from "@holon/model";
+import {
+  ModelProviderRequestError,
+  nonRetryableModelFailureCode,
+} from "@holon/model";
 import { buildReviewPlan } from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
-import { errorKind } from "./observability.js";
+import { resolveReviewGuidance } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
@@ -77,6 +80,7 @@ async function reviewShards(
   baseline: readonly TrackedFinding[] = [],
   shardIndex?: number,
   deadlineAt?: number,
+  effectivePolicy?: RepositoryPolicy,
 ): Promise<{
   readonly results: readonly ShardReviewResult[];
   readonly anyPromptTruncated: boolean;
@@ -86,8 +90,17 @@ async function reviewShards(
   const identification = services.getProjectIdentification?.();
   for (const shard of plan.shards) {
     if (shardIndex !== undefined && shard.index !== shardIndex) continue;
-    services.beginReviewShard?.(shard.index, plan.shards.length);
+    const reviewer = services.createShardReviewer(
+      shard.index,
+      plan.shards.length,
+      effectivePolicy,
+    );
     const shardContext = {
+      reviewGuidance: await resolveReviewGuidance(
+        effectivePolicy,
+        shard.files.map((file) => file.path),
+        identification,
+      ),
       deadlineAt,
       priorFindings: baseline
         .filter(
@@ -148,21 +161,28 @@ async function reviewShards(
       truncated: inputTruncated,
     };
     try {
-      const reviewResult = await services.model.review(job, shardContext);
+      const reviewResult = await reviewer.model.review(job, shardContext);
       if (reviewResult.promptTruncated) {
         anyPromptTruncated = true;
       }
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
-      const budgetExceeded = services.reviewToolBudgetExceeded?.() === true;
+      const budgetExceeded = reviewer.toolBudgetExceeded();
       const verifiedFindings = selectFindingsWithCanonicalEvidence(
         modelOutput.findings,
         shardContext,
       );
       const evidenceRejected =
         verifiedFindings.length !== modelOutput.findings.length;
-      if (modelOutput.outputLimitations?.length || reviewResult.promptTruncated)
+      if (
+        modelOutput.outputLimitations?.length ||
+        reviewResult.promptTruncated ||
+        evidenceRejected
+      )
         emit?.("model.output_limits", {
           shardIndex: shard.index,
+          findingsReceived: modelOutput.findings.length,
+          evidenceRejectedCount:
+            modelOutput.findings.length - verifiedFindings.length,
           limitationCodes: (modelOutput.outputLimitations ?? []).join(","),
           inputContextOmitted: reviewResult.promptTruncated,
         });
@@ -193,9 +213,23 @@ async function reviewShards(
       });
     } catch (error) {
       const failureCode = nonRetryableModelFailureCode(error);
-      if (failureCode !== undefined)
-        throw new NonRetryableError(`HOLON_MODEL_NON_RETRYABLE:${failureCode}`);
-      throw error;
+      if (
+        failureCode === undefined &&
+        !(error instanceof ModelProviderRequestError)
+      )
+        throw error;
+      results.push({
+        shardId: shard.id,
+        shardIndex: shard.index,
+        status: "failure",
+        findings: [],
+        summary: "",
+        errorReason:
+          failureCode ??
+          (error instanceof ModelProviderRequestError && error.isRetryable
+            ? "provider_transient"
+            : "provider_permanent"),
+      });
     }
   }
   return { anyPromptTruncated, results };
@@ -278,70 +312,61 @@ export async function analyzeReview(
       });
       return {
         shardIds: plan.shards.map((shard) => shard.id),
+        planDigest: await planDigest(plan),
         deadlineAt: Date.now() + 600_000,
       };
     });
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
-    for (const [index, shardId] of planning.shardIds.entries()) {
-      const result = await runStep(
-        `analyze-shard-${index + 1}`,
-        "analysis",
-        async () => {
-          const { context, plan } = await load();
-          if (plan.shards[index]?.id !== shardId)
-            throw new NonRetryableError("Review plan changed during replay");
-          if (Date.now() >= planning.deadlineAt)
-            return {
-              results: [
-                {
-                  shardId,
-                  shardIndex: index,
-                  status: "failure" as const,
-                  findings: [],
-                  summary: "",
-                  errorReason: "analysis_deadline",
-                },
-              ],
-              anyPromptTruncated: false,
-            };
-          const perShardDeadline =
-            Date.now() +
-            Math.max(
-              1,
-              Math.floor(
-                (planning.deadlineAt - Date.now()) /
-                  (planning.shardIds.length - index),
-              ),
+    const settled = await Promise.allSettled(
+      planning.shardIds.map(async (shardId, index) => {
+        return await runStep(
+          `analyze-shard-${index + 1}`,
+          "analysis",
+          async () => {
+            const { context, plan } = await load();
+            if (
+              plan.shards[index]?.id !== shardId ||
+              (await planDigest(plan)) !== planning.planDigest
+            )
+              throw new NonRetryableError("Review plan changed during replay");
+            if (Date.now() >= planning.deadlineAt)
+              return {
+                results: [
+                  {
+                    shardId,
+                    shardIndex: index,
+                    status: "failure" as const,
+                    findings: [],
+                    summary: "",
+                    errorReason: "analysis_deadline",
+                  },
+                ],
+                anyPromptTruncated: false,
+              };
+            return reviewShards(
+              job,
+              services,
+              plan,
+              context.structuralImpact,
+              context.truncated || plan.scopeStatus === "partial_by_policy",
+              emit,
+              await services.ledger.loadPrFindings(prKey),
+              index,
+              planning.deadlineAt,
+              effectivePolicy,
             );
-          return reviewShards(
-            job,
-            services,
-            plan,
-            context.structuralImpact,
-            context.truncated || plan.scopeStatus === "partial_by_policy",
-            emit,
-            await services.ledger.loadPrFindings(prKey),
-            index,
-            perShardDeadline,
-          );
-        },
-      ).catch((error: unknown) => {
-        if (planning.shardIds.length === 1) throw error;
-        return {
-          anyPromptTruncated: false,
-          results: [
-            {
-              shardId,
-              shardIndex: index,
-              status: "failure" as const,
-              findings: [],
-              summary: "",
-              errorReason: `model_${nonRetryableModelFailureCode(error) ?? errorKind(error)}`,
-            },
-          ],
-        };
-      });
+          },
+        );
+      }),
+    );
+    // Join every in-flight shard before terminal cleanup. Infrastructure/state
+    // failures retain their cause and cannot become a publishable partial review.
+    for (const result of settled)
+      if (result.status === "rejected") throw result.reason;
+    for (const completed of settled) {
+      if (completed.status !== "fulfilled") continue;
+      const result = completed.value;
       shardResults.push(...result.results);
       anyPromptTruncated ||= result.anyPromptTruncated;
     }
@@ -352,6 +377,8 @@ export async function analyzeReview(
       throw new Error("All review shards failed during model execution");
     return await runStep("analyze-review", "analysis", async () => {
       const { context, plan } = await load();
+      if ((await planDigest(plan)) !== planning.planDigest)
+        throw new NonRetryableError("Review plan changed during replay");
 
       const verdictPolicy =
         context.verdictStrictness === "block_all_confident_medium"
@@ -511,4 +538,16 @@ export async function analyzeReview(
     }
     throw error;
   }
+}
+
+async function planDigest(
+  plan: ReturnType<typeof buildReviewPlan>,
+): Promise<string> {
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(plan)),
+  );
+  return Array.from(new Uint8Array(bytes), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }

@@ -14,6 +14,7 @@
   "dependencies": {
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
+    "fast-xml-parser": "5.11.1",
     "fflate": "0.8.3"
   }
 }

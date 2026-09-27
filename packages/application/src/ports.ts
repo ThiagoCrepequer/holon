@@ -94,11 +94,7 @@ export interface CiEvidenceLedger {
   saveCiEvidence(
     prKey: PrKey,
     headSha: string,
-    evidence: {
-      readonly markdown: string;
-      readonly workflowRunId?: number | undefined;
-      readonly structuredCi?: AdminCiSummary | null | undefined;
-    },
+    evidence: import("@holon/contracts").SavedCiEvidence,
   ): Promise<void>;
 }
 
@@ -107,6 +103,7 @@ export interface FindingLifecycleLedger {
   savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
+    writerRunId: RunId,
   ): Promise<void>;
 }
 

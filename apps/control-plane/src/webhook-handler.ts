@@ -1,5 +1,6 @@
 import { identificationRevocationSchema } from "@holon/contracts";
 import { type HealthCheckReport, pullRequestActions } from "@holon/contracts";
+import { followUpMessageSchema } from "@holon/contracts";
 import {
   mapPullRequestWebhook,
   mapReviewCommentWebhook,
@@ -7,12 +8,6 @@ import {
   verifyWebhookSignature,
 } from "@holon/github";
 import { Hono } from "hono";
-
-import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
-import {
-  handleFeedbackCommentWebhook,
-  handleThreadResolvedWebhook,
-} from "./feedback-handler-service.js";
 
 const maximumWebhookBytes = 2_000_000;
 
@@ -240,20 +235,23 @@ export function createWebhookApp() {
         ) {
           const prNumber = (pullRequests[0] as Record<string, unknown>)?.number;
           if (typeof prNumber === "number") {
-            const enrichPromise = enrichReviewWithCiEvidence(context.env, {
-              deliveryId: delivery,
-              headSha,
-              installationId,
-              pullRequestNumber: prNumber,
-              repository: { id: repoId, name: repoName, owner: repoOwner },
-              workflowName,
-              workflowRunId,
+            const followUp = followUpMessageSchema.parse({
+              event: "ci_enrichment",
+              payload: {
+                deliveryId: delivery,
+                headSha,
+                installationId,
+                pullRequestNumber: prNumber,
+                repository: { id: repoId, name: repoName, owner: repoOwner },
+                workflowName,
+                workflowRunId,
+                workflowRunAttempt:
+                  typeof run.run_attempt === "number" ? run.run_attempt : 1,
+              },
             });
-            try {
-              context.executionCtx.waitUntil(enrichPromise);
-            } catch {
-              // Safe fallback in test harnesses without ExecutionContext
-            }
+            await context.env.REVIEW_QUEUE.send(followUp, {
+              contentType: "json",
+            });
             return context.json(
               { accepted: true, deliveryId: delivery, enriched: true },
               202,
@@ -270,20 +268,23 @@ export function createWebhookApp() {
         if (commentEvent.action !== "created") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = handleFeedbackCommentWebhook(
-          context.env,
-          commentEvent,
+        await context.env.REVIEW_QUEUE.send(
+          followUpMessageSchema.parse({
+            event: "feedback_comment",
+            payload: commentEvent,
+          }),
+          { contentType: "json" },
         );
-        try {
-          context.executionCtx.waitUntil(handlePromise);
-        } catch {
-          // Safe fallback in test harnesses without ExecutionContext
-        }
         return context.json(
           { accepted: true, deliveryId: delivery, feedback: true },
           202,
         );
-      } catch {
+      } catch (error) {
+        if (
+          !(error instanceof TypeError) &&
+          !(error instanceof Error && error.name === "ZodError")
+        )
+          throw error;
         return context.json({ error: "invalid_payload" }, 400);
       }
     }
@@ -294,20 +295,23 @@ export function createWebhookApp() {
         if (threadEvent.action !== "resolved") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = handleThreadResolvedWebhook(
-          context.env,
-          threadEvent,
+        await context.env.REVIEW_QUEUE.send(
+          followUpMessageSchema.parse({
+            event: "feedback_thread",
+            payload: threadEvent,
+          }),
+          { contentType: "json" },
         );
-        try {
-          context.executionCtx.waitUntil(handlePromise);
-        } catch {
-          // Safe fallback in test harnesses without ExecutionContext
-        }
         return context.json(
           { accepted: true, deliveryId: delivery, feedback: true },
           202,
         );
-      } catch {
+      } catch (error) {
+        if (
+          !(error instanceof TypeError) &&
+          !(error instanceof Error && error.name === "ZodError")
+        )
+          throw error;
         return context.json({ error: "invalid_payload" }, 400);
       }
     }

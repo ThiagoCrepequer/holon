@@ -180,7 +180,7 @@ describe("repository-policy-resolver", () => {
 
     it("rejects YAML nesting exceeding safe depth", async () => {
       const yaml =
-        "a:\n  b:\n    c:\n      d:\n        e:\n          f:\n            version: 1";
+        "a:\n  b:\n    c:\n      d:\n        e:\n          f:\n            g:\n              h:\n                i:\n                  version: 1";
       const rawBytes = new TextEncoder().encode(yaml);
       await expect(
         parseAndValidatePolicy(

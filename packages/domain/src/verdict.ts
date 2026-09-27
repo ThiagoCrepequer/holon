@@ -1,4 +1,4 @@
-import type { FindingSeverity } from "./finding.js";
+import { minimumFindingConfidence, type FindingSeverity } from "./finding.js";
 
 export type ReviewVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
@@ -46,7 +46,7 @@ const DEFAULT_OPTIONS = {
   allowApprove: true,
   mediumHighConfidenceThreshold: 0.85,
   mediumSeverityThreshold: 2,
-  minimumConfidenceThreshold: 0.75,
+  minimumConfidenceThreshold: minimumFindingConfidence,
   riskScoreThreshold: 2.0,
 } as const;
 
@@ -61,9 +61,11 @@ export function determineReviewVerdict(
     mediumSeverityThreshold:
       input.options?.mediumSeverityThreshold ??
       DEFAULT_OPTIONS.mediumSeverityThreshold,
-    minimumConfidenceThreshold:
+    minimumConfidenceThreshold: Math.max(
+      minimumFindingConfidence,
       input.options?.minimumConfidenceThreshold ??
-      DEFAULT_OPTIONS.minimumConfidenceThreshold,
+        DEFAULT_OPTIONS.minimumConfidenceThreshold,
+    ),
     riskScoreThreshold:
       input.options?.riskScoreThreshold ?? DEFAULT_OPTIONS.riskScoreThreshold,
   };
@@ -131,7 +133,7 @@ export function determineReviewVerdict(
     (f) => f.confidence >= options.minimumConfidenceThreshold,
   );
 
-  // If findings were emitted but all were low-confidence (< 0.75)
+  // If findings were emitted but all were below the publishable confidence threshold
   if (input.findings.length > 0 && confidentFindings.length === 0) {
     reasons.push(
       `Detected ${input.findings.length} advisory observation(s), but all had confidence below the reliable threshold (${options.minimumConfidenceThreshold}).`,
@@ -165,7 +167,6 @@ export function determineReviewVerdict(
       f.severity === "medium" &&
       f.confidence >= options.mediumHighConfidenceThreshold,
   ).length;
-  const lowCount = input.findings.filter((f) => f.severity === "low").length;
 
   const hasBlockingCriticalOrHigh = criticalCount > 0 || highCount > 0;
   const hasMediumAccumulation =
@@ -223,7 +224,7 @@ export function determineReviewVerdict(
   // No blocking defects found: evaluate APPROVE vs COMMENT
   if (input.isDegraded === true) {
     reasons.push(
-      "ℹ️ A análise do modelo foi concluída de forma não-estruturada. Revise as notas investigativas abaixo.",
+      "The review is incomplete. Verified findings are retained, but unfinished analysis cannot establish that the remaining changes are safe.",
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -247,9 +248,10 @@ export function determineReviewVerdict(
     };
   }
 
-  if (lowCount > 0) {
+  const advisoryCount = input.findings.length;
+  if (advisoryCount > 0) {
     reasons.push(
-      `No blocking defects found. ${lowCount} low-severity advisory observation(s) provided for consideration.`,
+      `No blocking defects found. ${advisoryCount} non-blocking observation(s) provided for consideration.`,
     );
   } else {
     reasons.push(
@@ -258,7 +260,7 @@ export function determineReviewVerdict(
   }
 
   return {
-    advisoryFindingsCount: lowCount,
+    advisoryFindingsCount: advisoryCount,
     blockingFindingsCount: 0,
     reasons,
     riskScore,

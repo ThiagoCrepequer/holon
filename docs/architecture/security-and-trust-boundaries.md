@@ -166,3 +166,7 @@ nega providers que coletem dados.
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+## Endurecimento do core (2026-09-27)
+
+A [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

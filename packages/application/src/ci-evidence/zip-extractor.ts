@@ -1,90 +1,75 @@
-import { unzipSync } from "fflate";
-
-export const MAX_COMPRESSED_BYTES = 10 * 1024 * 1024; // 10 MB
-export const MAX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024; // 30 MB
+import { Unzip, UnzipInflate } from "fflate";
+export const MAX_COMPRESSED_BYTES = 10 * 1024 * 1024;
+export const MAX_UNCOMPRESSED_BYTES = 12 * 1024 * 1024;
 export const MAX_FILES_EXTRACTED = 50;
-
-const ALLOWED_EXTENSIONS = [
-  ".lcov",
-  ".info",
-  ".xml",
-  ".sarif",
-  ".json",
-] as const;
-
 export interface ExtractSafeZipOptions {
-  readonly maxCompressedBytes?: number | undefined;
-  readonly maxFilesExtracted?: number | undefined;
-  readonly maxUncompressedBytes?: number | undefined;
+  readonly maxCompressedBytes?: number;
+  readonly maxFilesExtracted?: number;
+  readonly maxUncompressedBytes?: number;
 }
-
 export interface ExtractedFile {
   readonly content: string;
   readonly path: string;
   readonly sizeBytes: number;
 }
-
-function isAllowedFile(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  // Prevent directory traversal or strange paths
-  if (lower.includes("../") || lower.includes("..\\")) return false;
-  return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
-}
-
-/**
- * Safely extracts allowed CI artifact files from a ZIP buffer with strict size limits
- * and protections against Zip Bombs.
- */
 export function extractSafeZipArtifact(
   zipBuffer: ArrayBuffer | Uint8Array,
-  options?: ExtractSafeZipOptions,
+  options: ExtractSafeZipOptions = {},
 ): readonly ExtractedFile[] {
-  const maxCompressedBytes =
-    options?.maxCompressedBytes ?? MAX_COMPRESSED_BYTES;
-  const maxUncompressedBytes =
-    options?.maxUncompressedBytes ?? MAX_UNCOMPRESSED_BYTES;
-  const maxFilesExtracted = options?.maxFilesExtracted ?? MAX_FILES_EXTRACTED;
-
   const bytes =
     zipBuffer instanceof Uint8Array ? zipBuffer : new Uint8Array(zipBuffer);
-
-  if (bytes.byteLength > maxCompressedBytes) {
-    throw new Error(
-      `Artifact compressed size (${bytes.byteLength} bytes) exceeds safety limit of ${maxCompressedBytes} bytes.`,
-    );
-  }
-
-  if (bytes.byteLength === 0) {
-    return [];
-  }
-
-  let fileCount = 0;
-  const unzipped = unzipSync(bytes, {
-    filter(file) {
-      if (!isAllowedFile(file.name)) return false;
-      fileCount++;
-      return fileCount <= maxFilesExtracted;
-    },
-  });
-
-  let totalUncompressedBytes = 0;
+  const maxBytes = options.maxUncompressedBytes ?? MAX_UNCOMPRESSED_BYTES;
+  if (bytes.length > (options.maxCompressedBytes ?? MAX_COMPRESSED_BYTES))
+    throw new Error("Artifact compressed size exceeds safety limit");
+  if (!bytes.length) return [];
   const results: ExtractedFile[] = [];
-  const decoder = new TextDecoder("utf-8");
-
-  for (const [fileName, fileData] of Object.entries(unzipped)) {
-    totalUncompressedBytes += fileData.byteLength;
-    if (totalUncompressedBytes > maxUncompressedBytes) {
-      throw new Error(
-        `Artifact uncompressed size exceeded maximum threshold of ${maxUncompressedBytes} bytes (Zip Bomb protection).`,
-      );
-    }
-
-    results.push({
-      content: decoder.decode(fileData),
-      path: fileName,
-      sizeBytes: fileData.byteLength,
-    });
-  }
-
+  let total = 0,
+    count = 0,
+    started = 0,
+    finished = 0;
+  const unzip = new Unzip((file) => {
+    if (
+      file.name.includes("..") ||
+      file.name.startsWith("/") ||
+      file.name.includes("\\") ||
+      !/\.(?:xml|info|lcov|sarif|json)$/iu.test(file.name)
+    )
+      return;
+    if (++count > (options.maxFilesExtracted ?? MAX_FILES_EXTRACTED))
+      throw new Error("Artifact file count exceeds safety limit");
+    const fileLimit = Math.min(maxBytes, 2 * 1024 * 1024);
+    if (
+      file.originalSize !== undefined &&
+      (file.originalSize > fileLimit || total + file.originalSize > maxBytes)
+    )
+      throw new Error("Artifact uncompressed size exceeds safety limit");
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let content = "",
+      sizeBytes = 0;
+    started++;
+    file.ondata = (error, chunk, final) => {
+      if (error) throw error;
+      sizeBytes += chunk.length;
+      total += chunk.length;
+      if (sizeBytes > fileLimit || total > maxBytes) {
+        file.terminate();
+        throw new Error("Artifact uncompressed size exceeds safety limit");
+      }
+      content += decoder.decode(chunk, { stream: !final });
+      if (final) {
+        finished++;
+        results.push({ path: file.name, content, sizeBytes });
+      }
+    };
+    file.start();
+  });
+  unzip.register(UnzipInflate);
+  // Bound each inflate allocation as well as retained output. Never inflate the whole ZIP first.
+  for (let offset = 0; offset < bytes.length; offset += 1024)
+    unzip.push(
+      bytes.subarray(offset, offset + 1024),
+      offset + 1024 >= bytes.length,
+    );
+  if (started !== finished) throw new Error("Incomplete artifact ZIP");
   return results;
 }

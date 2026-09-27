@@ -89,3 +89,7 @@ semântica exige o gate do host descrito na
 persistidos; registros incompletos são rejeitados.
 
 A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.
+
+## Contratos do core de review (2026-09-27)
+
+A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `RepositoryPolicy.reviewGuidance` é opcional e integra o digest efetivo. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md).

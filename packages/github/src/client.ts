@@ -9,6 +9,7 @@ import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 
+import { readArtifactBody } from "./artifact-body.js";
 import {
   classifyGitHubRequestError,
   executeGitHubAppAuthenticationRequest,
@@ -443,33 +444,11 @@ export async function createInstallationSession(
             owner,
             repo,
             request: {
-              parseSuccessData: false,
+              parseSuccessResponseBody: false,
             },
           },
         );
-        const data = response.data;
-        if (data instanceof ArrayBuffer) {
-          return data;
-        }
-        if (ArrayBuffer.isView(data)) {
-          const copy = new Uint8Array(data.byteLength);
-          copy.set(
-            new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
-          );
-          return copy.buffer;
-        }
-        if (
-          typeof (data as { arrayBuffer?: () => Promise<ArrayBuffer> })
-            ?.arrayBuffer === "function"
-        ) {
-          return await (
-            data as { arrayBuffer: () => Promise<ArrayBuffer> }
-          ).arrayBuffer();
-        }
-        const bytes = new Uint8Array(data as ArrayLike<number>);
-        const copy = new Uint8Array(bytes.byteLength);
-        copy.set(bytes);
-        return copy.buffer;
+        return await readArtifactBody(response.data, response.headers);
       });
     },
     expiresAt: authentication.expiresAt,

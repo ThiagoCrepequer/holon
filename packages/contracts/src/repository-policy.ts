@@ -4,6 +4,8 @@ import {
 } from "@holon/domain";
 import { z } from "zod";
 
+import { repositoryReviewGuidanceSchema } from "./review-guidance.js";
+
 export { PROTECTED_POLICY_PATHS, isProtectedPath } from "@holon/domain";
 
 export const repositoryPolicyGlobSchema = z
@@ -40,6 +42,7 @@ export type RepositoryVerdictStrictness = z.infer<
 export const rawRepositoryPolicySchema = z.strictObject({
   review: z
     .strictObject({
+      ...repositoryReviewGuidanceSchema.shape,
       additional_excludes: z
         .array(repositoryPolicyGlobSchema)
         .max(50)
@@ -66,6 +69,7 @@ export type RepositoryPolicySource = z.infer<
 >;
 
 export const repositoryPolicySchema = z.strictObject({
+  reviewGuidance: repositoryReviewGuidanceSchema.optional(),
   additionalExcludes: z.array(repositoryPolicyGlobSchema),
   baseSha: z.string().regex(/^[a-f0-9]{40}$/u),
   effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),

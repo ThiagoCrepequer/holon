@@ -45,9 +45,9 @@ export async function createDefaultRepositoryPolicy(
 }
 
 function validateYamlNodeSecurity(node: unknown, depth = 0): void {
-  if (depth > 5) {
+  if (depth > 8) {
     throw new RepositoryPolicySyntaxError(
-      "YAML nesting depth exceeds safe limit of 5 levels",
+      "YAML nesting depth exceeds safe limit of 8 levels",
     );
   }
   if (node === null || typeof node !== "object") {
@@ -163,7 +163,11 @@ export async function parseAndValidatePolicy(
   ].toSorted();
   const verdictStrictness = parsed.data.verdict?.strictness ?? "default";
 
+  const { additional_excludes: _excludes, ...guidance } =
+    parsed.data.review ?? {};
+  const reviewGuidance = Object.keys(guidance).length ? guidance : undefined;
   const canonicalObj = {
+    ...(reviewGuidance ? { reviewGuidance } : {}),
     additionalExcludes,
     verdictStrictness,
   };
@@ -172,6 +176,7 @@ export async function parseAndValidatePolicy(
   const sourceDigest = await computeSha256Hex(rawBytes);
 
   return repositoryPolicySchema.parse({
+    ...(reviewGuidance ? { reviewGuidance } : {}),
     additionalExcludes,
     baseSha,
     effectivePolicyDigest,
