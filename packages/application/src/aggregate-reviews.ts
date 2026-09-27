@@ -22,7 +22,7 @@ import {
   type ReviewVerdictPolicyOptions,
 } from "@holon/domain";
 
-import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+import { verifyFindingsWithCanonicalEvidence } from "./evidence.js";
 import { formatConfiguredFindings } from "./inline-publication-plan.js";
 import { fitPublicationSummary } from "./publication-summary.js";
 
@@ -290,7 +290,7 @@ export function aggregateShardReviews(
   const allChangedLines = plan.shards.flatMap((shard) => shard.changedLines);
   const dedupedCandidates = Array.from(dedupedFindingsMap.values());
 
-  const verifiedFindings = selectFindingsWithCanonicalEvidence(
+  const verifiedFindings = verifyFindingsWithCanonicalEvidence(
     dedupedCandidates,
     {
       changedLines: allChangedLines,
@@ -301,7 +301,7 @@ export function aggregateShardReviews(
   );
 
   const sortedFindings = (
-    options.canonicalFindings ?? verifiedFindings
+    options.canonicalFindings ?? verifiedFindings.findings
   ).toSorted(compareFindings);
 
   const isAnyShardDegraded =

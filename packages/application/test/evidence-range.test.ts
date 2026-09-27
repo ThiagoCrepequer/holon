@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { selectFindingsWithCanonicalEvidence } from "../src/evidence.js";
+import { verifyFindingsWithCanonicalEvidence } from "../src/evidence.js";
 const context = {
   changedLines: [{ path: "a.ts", line: 100, side: "RIGHT" as const }],
   files: [
@@ -27,15 +27,15 @@ const finding = {
   location: { path: "a.ts", line: 100, side: "RIGHT" as const, startLine: 1 },
 };
 it("rejects a range starting outside the canonical hunk", () => {
-  expect(selectFindingsWithCanonicalEvidence([finding], context)).toHaveLength(
-    0,
-  );
+  expect(
+    verifyFindingsWithCanonicalEvidence([finding], context).findings,
+  ).toHaveLength(0);
 });
 it("accepts an in-hunk context start and changed anchor", () => {
   expect(
-    selectFindingsWithCanonicalEvidence(
+    verifyFindingsWithCanonicalEvidence(
       [{ ...finding, location: { ...finding.location, startLine: 99 } }],
       context,
-    ),
+    ).findings,
   ).toHaveLength(1);
 });

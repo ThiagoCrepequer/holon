@@ -5,7 +5,8 @@ import {
 import {
   aggregateShardReviews,
   createReviewRun,
-  selectFindingsWithCanonicalEvidence,
+  verifyFindingsWithCanonicalEvidence,
+  type EvidenceRejection,
 } from "@holon/application";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
@@ -141,10 +142,17 @@ async function reviewShards(
       }
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
       const budgetExceeded = reviewer.toolBudgetExceeded();
-      const verifiedFindings = selectFindingsWithCanonicalEvidence(
+      const verification = verifyFindingsWithCanonicalEvidence(
         modelOutput.findings,
         shardContext,
       );
+      emitEvidenceRejections(
+        emit,
+        shard.index,
+        "finding",
+        verification.rejections,
+      );
+      const verifiedFindings = verification.findings;
       const evidenceRejected =
         verifiedFindings.length !== modelOutput.findings.length;
       if (
@@ -470,36 +478,47 @@ export async function analyzeReview(
                 result.status === "success" && result.isDegraded !== true,
             )
             .flatMap((result) =>
-              (result.resolutions ?? []).map(async (resolution) => {
-                const previous = baseline.find(
-                  (f) =>
-                    f.fingerprint === resolution.fingerprint &&
-                    f.filePath === resolution.location.path,
-                );
-                const shard = plan.shards.find(
-                  (candidateShard) => candidateShard.id === result.shardId,
-                );
-                if (
-                  !previous ||
-                  !shard?.files.some(
-                    (file) => file.path === previous.filePath,
-                  ) ||
-                  resolution.confidence < 0.9
-                )
-                  return [];
-                const verified = selectFindingsWithCanonicalEvidence(
-                  [{ ...resolution, severity: previous.severity }],
-                  context,
-                );
-                if (!verified.length) return [];
-                const evidenceFingerprint = await computeEvidenceFingerprint(
-                  resolution.location.path,
-                  resolution.evidence,
-                );
-                return previous.evidenceFingerprint === evidenceFingerprint
-                  ? []
-                  : [resolution.fingerprint];
-              }),
+              (result.resolutions ?? []).map(
+                async (resolution, resolutionIndex) => {
+                  const previous = baseline.find(
+                    (f) =>
+                      f.fingerprint === resolution.fingerprint &&
+                      f.filePath === resolution.location.path,
+                  );
+                  const shard = plan.shards.find(
+                    (candidateShard) => candidateShard.id === result.shardId,
+                  );
+                  if (
+                    !previous ||
+                    !shard?.files.some(
+                      (file) => file.path === previous.filePath,
+                    ) ||
+                    resolution.confidence < 0.9
+                  )
+                    return [];
+                  const verified = verifyFindingsWithCanonicalEvidence(
+                    [{ ...resolution, severity: previous.severity }],
+                    context,
+                  );
+                  emitEvidenceRejections(
+                    emit,
+                    result.shardIndex,
+                    "resolution",
+                    verified.rejections.map((rejection) => ({
+                      ...rejection,
+                      findingIndex: resolutionIndex,
+                    })),
+                  );
+                  if (!verified.findings.length) return [];
+                  const evidenceFingerprint = await computeEvidenceFingerprint(
+                    resolution.location.path,
+                    resolution.evidence,
+                  );
+                  return previous.evidenceFingerprint === evidenceFingerprint
+                    ? []
+                    : [resolution.fingerprint];
+                },
+              ),
             ),
         )
       ).flat();
@@ -606,4 +625,29 @@ async function planDigest(
   return Array.from(new Uint8Array(bytes), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
+}
+
+/** Logging is advisory and must not change evidence acceptance or retries. */
+function emitEvidenceRejections(
+  emit: EmitReviewEvent | undefined,
+  shardIndex: number,
+  candidateKind: "finding" | "resolution",
+  rejections: readonly EvidenceRejection[],
+): void {
+  for (const rejection of rejections) {
+    try {
+      emit?.(
+        "model.evidence_rejected",
+        {
+          severity: "warning",
+          shardIndex,
+          candidateKind,
+          ...rejection,
+        },
+        `${shardIndex}:${candidateKind}:${rejection.findingIndex}`,
+      );
+    } catch {
+      // Keep the canonical verification result even if the log sink fails.
+    }
+  }
 }

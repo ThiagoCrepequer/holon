@@ -8,7 +8,7 @@ import {
   type RunId,
 } from "@holon/domain";
 
-import { selectFindingsWithCanonicalEvidence } from "./evidence.js";
+import { verifyFindingsWithCanonicalEvidence } from "./evidence.js";
 import type { ReviewContext } from "./ports.js";
 import { fitPublicationSummary } from "./publication-summary.js";
 
@@ -52,7 +52,7 @@ export function selectValidFindings(
   candidates: readonly Finding[],
   context: ReviewContext,
 ): readonly Finding[] {
-  return selectFindingsWithCanonicalEvidence(candidates, context);
+  return verifyFindingsWithCanonicalEvidence(candidates, context).findings;
 }
 
 export function composeReviewSummary(
