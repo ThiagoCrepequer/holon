@@ -1,4 +1,7 @@
-import { createReviewRun } from "@holon/application";
+import {
+  createReviewRun,
+  RepositoryConfigurationError,
+} from "@holon/application";
 import {
   reviewJobSchema,
   type ReviewShardContext,
@@ -9,7 +12,11 @@ import type { RunId } from "@holon/domain";
 import { computeStableFingerprint } from "@holon/domain";
 import { ModelProviderRequestError } from "@holon/model";
 import { identifySnapshot } from "@holon/project-identification";
-import { reset, runInDurableObject } from "cloudflare:test";
+import {
+  reset,
+  runInDurableObject,
+  runDurableObjectAlarm,
+} from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +27,10 @@ import {
   parseAppId,
   type ReviewRuntime,
 } from "../src/review-workflow.js";
+import {
+  configurationReader,
+  defaultScopePolicy,
+} from "./configuration-fixtures.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 afterEach(() => reset());
@@ -44,7 +55,7 @@ const job = reviewJobSchema.parse({
       owner: "acme",
     },
   },
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
 });
 
 const canonicalPatch = [
@@ -132,7 +143,7 @@ it("publishes the latest human severity even when feedback arrives after analysi
   });
   const baseline = {
     ...createReviewRun(job),
-    id: `github:42:pr:7:head:${"c".repeat(40)}` as RunId,
+    id: `github:42:pr:7:head:${"c".repeat(40)}:base:${"b".repeat(40)}` as RunId,
     causalVersion: "2026-08-28T12:00:00.000Z",
   };
   await ledger.claimRun(baseline, "baseline");
@@ -295,6 +306,7 @@ function session(
         return Promise.resolve({ data: { id: posts.length } });
       },
     },
+    configurationReader: () => configurationReader(),
     currentHeadSha: () => Promise.resolve(readHead()),
     currentPullRequestRefs: () =>
       Promise.resolve({ baseSha: "b".repeat(40), headSha: readHead() }),
@@ -396,6 +408,155 @@ function event(instanceId: string, customJob: ReviewJob = job) {
 }
 
 describe("ReviewWorkflow", () => {
+  it.each([
+    ["en", "The saved repository configuration failed integrity validation."],
+    ["pt-BR", "A configuração persistida falhou na validação de integridade."],
+    ["es", "La configuración guardada falló la validación de integridad."],
+  ])(
+    "localizes post-seal failure and cleans private configuration without starting the Sandbox (%s)",
+    async (language, message) => {
+      const setup = runtime();
+      setup.value = {
+        ...setup.value,
+        createSession: () =>
+          Promise.resolve({
+            ...session(setup.posts),
+            configurationReader: () =>
+              configurationReader({
+                ".holon.yml": `output:\n  language: ${language}\ninstructions:\n  - private-guidance-never-log\n`,
+              }),
+          }),
+        executor: {
+          ...unconfiguredExecutor,
+          ...setup.value.executor!,
+          resolveContainerId: async () => {
+            throw new RepositoryConfigurationError("snapshot_mismatch");
+          },
+        },
+      };
+      await expect(
+        executeReviewWorkflow(
+          env,
+          event(`configuration-cleanup-${language}`),
+          immediateStep([]),
+          setup.value,
+        ),
+      ).rejects.toThrow();
+      expect(setup.prepareRepository).not.toHaveBeenCalled();
+      expect(JSON.stringify(setup.posts)).toContain(message);
+      expect(JSON.stringify(setup.posts)).not.toContain(
+        "private-guidance-never-log",
+      );
+      const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+      const ref = await ledger.findRunConfiguration(job.runId);
+      expect(ref).toBeDefined();
+      await runDurableObjectAlarm(ledger);
+      await expect
+        .poll(
+          async () => (await ledger.cleanupState(job.runId as RunId))?.state,
+        )
+        .toBe("completed");
+      await runInDurableObject(ledger, async (object, state) => {
+        expect(
+          state.storage.sql
+            .exec<{ count: number }>(
+              "SELECT COUNT(*) AS count FROM run_configuration_artifacts",
+            )
+            .one().count,
+        ).toBe(0);
+        expect(
+          (await object.getSanitizedAdminRunDetail(job.runId))?.configuration
+            ?.output.language,
+        ).toBe(language);
+      });
+    },
+  );
+
+  it.each([0, 1])(
+    "limits inline publication to %i without losing findings or changing verdict",
+    async (cap) => {
+      const second = {
+        ...finding,
+        diagnostic:
+          "The second changed return also violates its caller contract.",
+        location: { ...finding.location, path: "src/second.ts" },
+        evidence: finding.evidence.map((entry) => ({
+          ...entry,
+          path: "src/second.ts",
+        })),
+      };
+      const secondPatch = canonicalPatch.replaceAll(
+        "src/index.ts",
+        "src/second.ts",
+      );
+      const setup = runtime({
+        context: {
+          ...context,
+          changedLines: [
+            ...context.changedLines,
+            { line: 10, path: "src/second.ts", side: "RIGHT" },
+          ],
+          files: [
+            ...context.files,
+            { mode: "structural", path: "src/second.ts", patch: secondPatch },
+          ],
+        },
+        model: () => ({
+          review: async () => ({
+            output: {
+              findings: [finding, second],
+              summary: "Two independent regressions.",
+            },
+            promptTruncated: false,
+          }),
+        }),
+      });
+      const readerFactory = vi.fn(() =>
+        configurationReader({
+          ".github/holon.yml": `output:\n  language: es\n  max_inline_comments: ${cap}\n`,
+        }),
+      );
+      setup.value = {
+        ...setup.value,
+        createSession: () =>
+          Promise.resolve({
+            ...session(setup.posts),
+            configurationReader: readerFactory,
+            pullRequestDiff: async () => canonicalPatch + "\n" + secondPatch,
+          }),
+      };
+      const result = await executeReviewWorkflow(
+        env,
+        event(`cap-${cap}`),
+        immediateStep([]),
+        setup.value,
+      );
+      expect(result).toEqual({ findingsPublished: cap, outcome: "completed" });
+      expect(
+        setup.posts.filter(
+          (post) =>
+            post.route ===
+            "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+        ),
+      ).toHaveLength(cap);
+      expect(
+        setup.posts.find((post) =>
+          post.route.includes("/pulls/{pull_number}/reviews"),
+        )?.event,
+      ).toBe("REQUEST_CHANGES");
+      const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+      const detail = await ledger.getSanitizedAdminRunDetail(job.runId);
+      expect(detail?.historicalRunFindings).toHaveLength(2);
+      expect(detail?.historicalRunFindings?.[0]?.details?.evidence).toEqual(
+        finding.evidence,
+      );
+      expect(
+        (await ledger.loadLatestReviewDecision("github:42:pr:7"))?.output,
+      ).toMatchObject({ language: "es", maxInlineComments: cap });
+      expect(readerFactory).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("registers the real Durable Object ID resolved by the executor", async () => {
     const setup = runtime();
     let registeredContainerId: string | undefined;
@@ -576,20 +737,10 @@ describe("ReviewWorkflow", () => {
               return request(route, parameters);
             },
           },
-          readRepositoryPolicyFile: async (
-            _owner: string,
-            _repo: string,
-            _baseSha: string,
-            path: string,
-          ) =>
-            path === ".github/holon.yml"
-              ? {
-                  content: "version: [secret-invalid-value",
-                  rawBytes: new TextEncoder().encode(
-                    "version: [secret-invalid-value",
-                  ),
-                }
-              : undefined,
+          configurationReader: () =>
+            configurationReader({
+              ".github/holon.yml": "output: [secret-invalid-value",
+            }),
         });
       },
     };
@@ -603,6 +754,8 @@ describe("ReviewWorkflow", () => {
       ),
     ).rejects.toMatchObject({ name: "NonRetryableError" });
 
+    expect(setup.prepareRepository).not.toHaveBeenCalled();
+    expect(setup.resolveContainerId).not.toHaveBeenCalled();
     expect(setup.posts[0]?.route).toBe("POST /repos/{owner}/{repo}/check-runs");
     expect(checkRunConclusions).toEqual(["failure"]);
     expect(JSON.stringify(setup.posts)).not.toContain("secret-invalid-value");
@@ -666,7 +819,7 @@ describe("ReviewWorkflow", () => {
         },
         receivedAt: "2026-08-29T12:01:01.000Z",
       },
-      runId: `github:42:pr:7:head:${"b".repeat(40)}`,
+      runId: `github:42:pr:7:head:${"b".repeat(40)}:base:${"b".repeat(40)}`,
     });
     const terminate = vi.fn(() => Promise.resolve());
     const get = vi.fn(() =>
@@ -738,7 +891,7 @@ describe("ReviewWorkflow", () => {
         },
         receivedAt: "2026-08-29T12:01:01.000Z",
       },
-      runId: `github:42:pr:7:head:${"b".repeat(40)}`,
+      runId: `github:42:pr:7:head:${"b".repeat(40)}:base:${"b".repeat(40)}`,
     });
     const status = vi.fn(() => Promise.resolve({ status: "running" as const }));
     const setup = runtime({
@@ -1139,11 +1292,12 @@ describe("ReviewWorkflow", () => {
     expect(checkRunRequests[0]).toMatchObject({
       parameters: {
         external_id:
-          "github:42:pr:7:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "github:42:pr:7:head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         head_sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         name: "Holon Review",
         output: {
-          summary: "Holon is reviewing this pull request.",
+          summary:
+            "Holon is reviewing pull request changes for functional regressions, contract breaks, and security flaws.",
           title: "Holon Review in progress",
         },
         owner: "acme",
@@ -1174,7 +1328,8 @@ describe("ReviewWorkflow", () => {
   it("handles existing check runs found via findCheckRunByExternalId or ledger cache", async () => {
     const setup = runtime();
     const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-    const cachedRunId = `github:42:pr:7:head:${"b".repeat(40)}` as RunId;
+    const cachedRunId =
+      `github:42:pr:7:head:${"b".repeat(40)}:base:${"b".repeat(40)}` as RunId;
     const jobWithCachedRun: ReviewJob = {
       ...job,
       envelope: {
@@ -1207,6 +1362,7 @@ describe("ReviewWorkflow", () => {
               return Promise.resolve({ data: { id: 1 } });
             },
           },
+          configurationReader: () => configurationReader(),
           currentHeadSha: () => Promise.resolve("b".repeat(40)),
           currentPullRequestRefs: () =>
             Promise.resolve({
@@ -1588,7 +1744,7 @@ describe("ReviewWorkflow", () => {
             headSha: sha,
           },
         },
-        runId: `github:42:pr:7:head:${sha}`,
+        runId: `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`,
       });
 
     const setup = runtime({
@@ -1689,7 +1845,7 @@ describe("ReviewWorkflow", () => {
     const resolutionReply = posts.find((p) =>
       p.route.includes("/pulls/{pull_number}/comments/{comment_id}/replies"),
     );
-    expect(resolutionReply?.body).toContain("Defeito resolvido no commit");
+    expect(resolutionReply?.body).toContain("Issue resolved in commit");
 
     // Verdict for run 3 transitions to APPROVE automatically!
     const summaryPostRun3 = posts.findLast((p) =>
@@ -1739,7 +1895,7 @@ describe("ReviewWorkflow", () => {
             headSha: sha,
           },
         },
-        runId: `github:42:pr:7:head:${sha}`,
+        runId: `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`,
       });
 
     let currentHead = sha1;
@@ -1844,7 +2000,11 @@ describe("ReviewWorkflow", () => {
         repo: "api",
         pullNumber: 7,
       },
-      markdown: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
+      markdownByLanguage: {
+        en: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
+        "pt-BR": "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
+        es: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
+      },
       workflowRunId: 789,
     });
 
@@ -1868,7 +2028,7 @@ describe("ReviewWorkflow", () => {
           headSha: targetSha,
         },
       },
-      runId: `github:42:pr:7:head:${targetSha}`,
+      runId: `github:42:pr:7:head:${targetSha}:base:${"b".repeat(40)}`,
     });
 
     const result = await executeReviewWorkflow(
@@ -2312,8 +2472,9 @@ it("parallel shard tools share one preparation and retain independent budgets", 
     { emit: () => {} },
     {},
   );
-  const a = services.createShardReviewer(0, 2);
-  const b = services.createShardReviewer(1, 2);
+  const policy = await defaultScopePolicy(job.envelope.pullRequest.baseSha);
+  const a = services.createShardReviewer(0, 2, policy);
+  const b = services.createShardReviewer(1, 2, policy);
   const tasks = [a.model.review(job, context), b.model.review(job, context)];
   await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
   release();

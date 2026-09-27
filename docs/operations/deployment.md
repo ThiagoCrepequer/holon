@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-10
 ---
 
 # Provisionamento e deploy
@@ -230,3 +230,11 @@ não apaga bancos, caches, filas ou namespaces automaticamente.
 Após a atualização e eventual reset autorizado, validar uma nova run completa,
 incluindo policy, credencial JIT, contexto, publicação, projeção e cleanup.
 Ver [ADR-0036](../decisions/0036-use-single-current-development-contracts.md).
+
+## Mudança de identidade e configuração — ADR-0037
+
+Siga o [rollout coordenado](repository-configuration.md#rollout-coordenado):
+drene runs e confirme cleanup antes de atualizar componentes. O contrato incorpora
+base SHA na identidade e exige novos campos persistidos; não há leitor legado.
+Confirme `/schemas/holon.schema.json` contra o build implantado. Reset de estado
+de desenvolvimento, migrações remotas e smoke live exigem autorização específica.

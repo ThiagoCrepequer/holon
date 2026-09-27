@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-10
 ---
 
 # Decisões
@@ -70,4 +70,6 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 
 - [ADR-0036 — Manter um único contrato atual durante o desenvolvimento](0036-use-single-current-development-contracts.md) — decisão vigente para contratos internos.
 
-- [ADR-0037 — Análise paralela e publicação durável](0037-harden-parallel-review-and-publication.md) — decisão vigente para concorrência, recuperação, CI e contexto complementar.
+- [ADR-0037 — Compilar configuração imutável por execução](0037-compile-repository-configuration-per-run.md) — decisão vigente para autoridade, snapshots, identidade head/base e apresentação.
+
+- [ADR-0038 — Análise paralela e publicação durável](0038-harden-parallel-review-and-publication.md) — decisão vigente para concorrência, recuperação, CI e contexto complementar.

@@ -22,7 +22,7 @@ import {
 
 const sha = "a".repeat(40);
 const prKey = "github:42:pr:7" as const;
-const runId = `${prKey}:head:${sha}` as const;
+const runId = `${prKey}:head:${sha}:base:${"b".repeat(40)}` as const;
 
 describe("workflow-execution-preview contracts", () => {
   it("validates stepAttemptTelemetrySchema", () => {
@@ -226,6 +226,7 @@ describe("workflow-execution-preview contracts", () => {
     const runningDetail: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [],
+      configuration: null,
       findingsPerspective: "current_pr_state",
       historicalRunFindings: [],
       projectIdentification: null,
@@ -295,6 +296,7 @@ describe("workflow-execution-preview contracts", () => {
         state: "completed",
       },
       currentFindings: [],
+      configuration: null,
       findingsPerspective: "both",
       historicalRunFindings: [],
       projectIdentification: null,

@@ -3,7 +3,7 @@ id: OPS-PROJECT-VERSION-IDENTIFICATION
 kind: reference
 status: current
 owners: [core-team]
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-10
 ---
 
 # Operar a identificação de versões
@@ -40,3 +40,11 @@ Verificar status/limitações no Run detail, step timing `identify-projects`, co
 A revogação via eventos assinados agenda purge durável; falhas de purge são retomadas por alarm. A reautorização usa namespace com geração nova. Não editar o cache para simular identificação: no futuro valores confirmados no onboarding serão outra entidade.
 
 Limites e fronteiras: [arquitetura](../architecture/project-version-identification.md). Evidência externa consultada em 2026-09-05: [Maven POM](https://maven.apache.org/pom.html), [pnpm catalogs](https://pnpm.io/catalogs), [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/), [Workflows rules](https://developers.cloudflare.com/workflows/build/rules-of-workflows/), [Yarn parsers](https://github.com/yarnpkg/berry/tree/master/packages/yarnpkg-parsers).
+
+## Declarações de configuração
+
+`projects` associa roots configurados aos projetos detectados sem renomear seus
+IDs. Compatibilidade esperada é exibida separadamente de evidência detectada;
+idioma, descrição e cap inline não alteram o cache de identificação. Consulte
+[configuração](repository-configuration.md) para precedência e limites de
+comparação SemVer, PEP 440 e famílias Java.

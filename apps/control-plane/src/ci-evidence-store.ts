@@ -5,6 +5,7 @@ import {
   savedCiEvidenceSchema,
   type AdminCiSummary,
   type SavedCiEvidence,
+  type ReviewLanguage,
 } from "@holon/contracts";
 import {
   appendCiEvidenceToSummary,
@@ -13,12 +14,16 @@ import {
   CI_EVIDENCE_MARKER_END,
   createPrKey,
   createRunId,
+  reviewText,
+  type PrKey,
 } from "@holon/domain";
 import {
   createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
 } from "@holon/github";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 
+import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
 
 export class CiEvidenceStore {
@@ -68,9 +73,34 @@ export class CiEvidenceStore {
       );
     });
   }
-  load(
+  load(prKey: string, headSha: string) {
+    const en = this.loadLanguage(prKey, headSha, "en");
+    if (!en) return undefined;
+    const pt = this.loadLanguage(prKey, headSha, "pt-BR")!;
+    const es = this.loadLanguage(prKey, headSha, "es")!;
+    return {
+      markdownByLanguage: {
+        en: en.markdown,
+        "pt-BR": pt.markdown,
+        es: es.markdown,
+      },
+      structuredCi:
+        en.structuredCi === null
+          ? null
+          : {
+              ...en.structuredCi,
+              status: [en, pt, es].some(
+                (value) => value.structuredCi?.status === "partial",
+              )
+                ? ("partial" as const)
+                : en.structuredCi.status,
+            },
+    };
+  }
+  private loadLanguage(
     prKey: string,
     headSha: string,
+    language: ReviewLanguage,
   ): { markdown: string; structuredCi: AdminCiSummary | null } | undefined {
     const rows = this.storage.sql
       .exec<{ payload: string }>(
@@ -85,7 +115,7 @@ export class CiEvidenceStore {
       .map((row) => savedCiEvidenceSchema.parse(JSON.parse(row.payload)));
     const sections = values.map(
       (value) =>
-        `#### Workflow run #${value.workflowRunId}, attempt ${value.workflowRunAttempt}\n\n${value.markdown.replace(CI_EVIDENCE_MARKER_START, "").replace(CI_EVIDENCE_MARKER_END, "")}`,
+        `#### ${reviewText(language, "Workflow run", "Execução de workflow", "Ejecución de workflow")} #${value.workflowRunId}, ${reviewText(language, "attempt", "tentativa", "intento")} ${value.workflowRunAttempt}\n\n${value.markdownByLanguage[language].replace(CI_EVIDENCE_MARKER_START, "").replace(CI_EVIDENCE_MARKER_END, "")}`,
     );
     let bytes = 0;
     const total = this.storage.sql
@@ -135,7 +165,12 @@ export class CiEvidenceStore {
         ...visible,
         ...(omitted
           ? [
-              `*Additional CI executions omitted from this bounded summary: ${omitted}.*`,
+              reviewText(
+                language,
+                `*Additional CI executions omitted from this bounded summary: ${omitted}.*`,
+                `*Execuções adicionais de CI omitidas pelo limite do resumo: ${omitted}.*`,
+                `*Ejecuciones adicionales de CI omitidas por el límite del resumen: ${omitted}.*`,
+              ),
             ]
           : []),
         CI_EVIDENCE_MARKER_END,
@@ -169,10 +204,31 @@ export class CiEvidenceStore {
         headSha: row.head_sha,
         expectedAuthorLogin: session.expectedAuthorLogin,
       });
+      const refs = await session.currentPullRequestRefs(
+        target.owner,
+        target.repo,
+        target.pullNumber,
+      );
+      if (refs.headSha !== row.head_sha) {
+        this.storage.sql.exec(
+          "UPDATE ci_publication_tasks SET completed_revision=? WHERE pr_key=? AND head_sha=? AND revision=?",
+          row.revision,
+          row.pr_key,
+          row.head_sha,
+          row.revision,
+        );
+        return;
+      }
       const runId = createRunId(
         row.pr_key as Parameters<typeof createRunId>[0],
         row.head_sha,
+        refs.baseSha,
       );
+      const decision = new FindingLedgerStore(
+        this.storage,
+      ).loadLatestReviewDecision(row.pr_key as PrKey);
+      if (decision?.runId !== runId)
+        throw new Error("CI review decision is pending");
       const review = await publisher.findCommentWithBodyByMarker(
         buildPublicationMarker(runId, "summary"),
         "summary",
@@ -180,7 +236,10 @@ export class CiEvidenceStore {
       if (!review) throw new Error("CI summary publication is pending");
       const evidence = this.load(row.pr_key, row.head_sha);
       if (!evidence) throw new Error("CI evidence is unavailable");
-      const body = appendCiEvidenceToSummary(review.body, evidence.markdown);
+      const body = appendCiEvidenceToSummary(
+        review.body,
+        evidence.markdownByLanguage[decision.output.language],
+      );
       if (body !== review.body)
         await publisher.updateReviewComment(review.id, body);
       this.storage.sql.exec(
@@ -190,7 +249,12 @@ export class CiEvidenceStore {
         row.head_sha,
         row.revision,
       );
-    } catch {
+    } catch (error) {
+      reportError(consoleErrorReporter, "ci.publication_failed", error, {
+        component: "control-plane",
+        operation: "ci.publish",
+        prKey: row.pr_key,
+      });
       this.storage.sql.exec(
         "UPDATE ci_publication_tasks SET attempts=attempts+1,next_attempt_at=? WHERE pr_key=? AND head_sha=? AND revision=?",
         new Date(

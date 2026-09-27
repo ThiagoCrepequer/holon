@@ -27,6 +27,10 @@ export function compactProjectContext(
     status: input.status,
     limitations: input.limitations.slice(0, 10),
     projects,
+    configuredCompatibility: [] as NonNullable<
+      ProjectIdentificationResult["configuredCompatibility"]
+    >,
+    omittedCompatibility: input.configuredCompatibility?.length ?? 0,
     omittedTechnologies: input.projects.reduce(
       (n, p) => n + p.technologies.length,
       0,
@@ -40,6 +44,24 @@ export function compactProjectContext(
   }
   while (jsonBytes(result) > 12000 && result.limitations.length)
     result.limitations.pop();
+  // Preserve host comparisons from the compiled configuration as complete entries.
+  for (const comparison of input.configuredCompatibility ?? []) {
+    if (
+      !projects.some(
+        (project) =>
+          comparison.root === "." ||
+          project.root === comparison.root ||
+          project.root.startsWith(comparison.root + "/"),
+      )
+    )
+      continue;
+    result.configuredCompatibility.push(comparison);
+    result.omittedCompatibility--;
+    if (jsonBytes(result) > 6000) {
+      result.configuredCompatibility.pop();
+      result.omittedCompatibility++;
+    }
+  }
   // Round-robin selection gives each affected project context before filling any one project.
   for (let index = 0; index < 100; index++) {
     for (const [projectIndex, project] of input.projects.entries()) {

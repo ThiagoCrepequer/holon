@@ -1,0 +1,303 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "output": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "default": "en",
+          "description": "Language of Holon comments and summaries. Code and evidence are never translated.",
+          "type": "string",
+          "enum": ["en", "pt-BR", "es"]
+        },
+        "detail": {
+          "default": "concise",
+          "description": "Narrative detail; verified findings and coverage limitations are preserved.",
+          "type": "string",
+          "enum": ["concise", "detailed"]
+        },
+        "max_inline_comments": {
+          "default": 40,
+          "description": "Maximum new inline comments per run. Zero keeps summary/check output. Does not change analysis or verdict.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        }
+      },
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "documentation": {
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "root": {
+                "anyOf": [
+                  { "type": "string", "const": "." },
+                  { "type": "string", "minLength": 1, "maxLength": 1024 }
+                ]
+              },
+              "technology": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "url": { "type": "string", "maxLength": 1000, "format": "uri" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "required": ["root", "technology", "version", "url", "sha256"],
+            "additionalProperties": false
+          }
+        },
+        "additional_excludes": {
+          "description": "Additional exclusions; universal globs and protected paths are rejected by runtime policy validation.",
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^(?!\\/)(?!.*\\.\\.)(?!.*\\/\\/)[A-Za-z0-9_.*?/-]+$"
+          }
+        },
+        "focus": {
+          "description": "Review priorities. Other defect categories remain enabled.",
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "correctness",
+              "security",
+              "concurrency",
+              "performance",
+              "accessibility"
+            ]
+          }
+        },
+        "reference_files": {
+          "description": "Context documents relative to repository root; not instructions.",
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*[\\\\:\\u0000-\\u001f\\u007f])(?!.*\\/\\/)(?!.*\\/$).+$"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "verdict": {
+      "type": "object",
+      "properties": {
+        "strictness": {
+          "default": "default",
+          "type": "string",
+          "enum": ["default", "block_all_confident_medium"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "instructions": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384,
+            "pattern": "\\S",
+            "description": "Review guidance. Multiline YAML block strings are supported; runtime also enforces UTF-8 byte limits."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*[\\\\:\\u0000-\\u001f\\u007f])(?!.*\\/\\/)(?!.*\\/$).+$",
+                "description": "Instruction file relative to the project root, or repository root in global/path-rule instructions. Read from the base SHA; no recursive includes."
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "projects": {
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@/-]*$"
+          },
+          "root": {
+            "anyOf": [
+              { "type": "string", "const": "." },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*[\\\\:\\u0000-\\u001f\\u007f])(?!.*\\/\\/)(?!.*\\/$).+$"
+              }
+            ],
+            "description": "Project root relative to repository root. The deepest matching root governs each path."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "\\S"
+          },
+          "compatibility": {
+            "description": "Maintainer-declared compatibility; never replaces detected version evidence. Quote all version values.",
+            "type": "object",
+            "properties": {
+              "runtimes": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9@][A-Za-z0-9_.:@/-]*$"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "\\S"
+                }
+              },
+              "frameworks": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9@][A-Za-z0-9_.:@/-]*$"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "instructions": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384,
+                  "pattern": "\\S",
+                  "description": "Review guidance. Multiline YAML block strings are supported; runtime also enforces UTF-8 byte limits."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512,
+                      "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*[\\\\:\\u0000-\\u001f\\u007f])(?!.*\\/\\/)(?!.*\\/$).+$",
+                      "description": "Instruction file relative to the project root, or repository root in global/path-rule instructions. Read from the base SHA; no recursive includes."
+                    }
+                  },
+                  "required": ["path"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": ["name", "root"],
+        "additionalProperties": false
+      }
+    },
+    "path_rules": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^(?!\\/)(?!.*\\.\\.)(?!.*\\/\\/)[A-Za-z0-9_.*?/-]+$"
+            }
+          },
+          "instructions": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384,
+                  "pattern": "\\S",
+                  "description": "Review guidance. Multiline YAML block strings are supported; runtime also enforces UTF-8 byte limits."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512,
+                      "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.{1,2}(?:\\/|$))(?!.*[\\\\:\\u0000-\\u001f\\u007f])(?!.*\\/\\/)(?!.*\\/$).+$",
+                      "description": "Instruction file relative to the project root, or repository root in global/path-rule instructions. Read from the base SHA; no recursive includes."
+                    }
+                  },
+                  "required": ["path"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": ["paths", "instructions"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "description": "Holon repository configuration. One current contract; read from the PR base SHA. Unknown properties are rejected.",
+  "$id": "urn:holon:repository-configuration",
+  "examples": [
+    { "output": { "language": "en" } },
+    {
+      "instructions": [
+        "Check error handling.",
+        { "path": "docs/review-guidance.md" }
+      ]
+    }
+  ]
+}

@@ -24,3 +24,8 @@ export * from "./follow-up.js";
 export * from "./ci-storage.js";
 
 export * from "./review-guidance.js";
+export * from "./repository-config/snapshot.js";
+
+export * from "./repository-config/compiler-identity.js";
+
+export * from "./repository-config/input.js";

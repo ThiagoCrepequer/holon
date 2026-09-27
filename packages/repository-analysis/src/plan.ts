@@ -107,7 +107,7 @@ export function buildReviewPlan(
     if (policyExcludedFilesCount > 0) {
       return reviewPlanSchema.parse({
         omissionReasons: [
-          `All ${policyExcludedFilesCount} eligible file(s) in this pull request were excluded by repository policy.`,
+          { code: "all_excluded", count: policyExcludedFilesCount },
         ],
         scopeStatus: "partial_by_policy",
         shards: [],
@@ -118,9 +118,7 @@ export function buildReviewPlan(
       });
     }
     return reviewPlanSchema.parse({
-      omissionReasons: [
-        "No supported or non-binary files found in the pull request diff.",
-      ],
+      omissionReasons: [{ code: "unsupported" }],
       scopeStatus: "unsupported",
       shards: [],
       totalEligibleBytes: 0,
@@ -248,35 +246,38 @@ export function buildReviewPlan(
     rawShards.push(currentShard);
   }
 
-  const omissionReasons: string[] = [];
+  const omissionReasons: ReviewPlan["omissionReasons"] = [];
   let scopeStatus: "complete" | "partial_by_policy" = "complete";
 
   if (oversizedFileCount > 0) {
     scopeStatus = "partial_by_policy";
-    omissionReasons.push(
-      `${oversizedFileCount} eligible file(s) omitted whole because their patches exceed the ${maxShardDiffBytes}-byte limit per shard.`,
-    );
+    omissionReasons.push({
+      code: "oversized_patches",
+      count: oversizedFileCount,
+      bytes: maxShardDiffBytes,
+    });
   }
   if (omittedByFileLimit > 0) {
     scopeStatus = "partial_by_policy";
-    omissionReasons.push(
-      `${omittedByFileLimit} eligible file(s) omitted by the 50-file limit across shards.`,
-    );
+    omissionReasons.push({ code: "file_limit", count: omittedByFileLimit });
   }
   if (policyExcludedFilesCount > 0) {
     scopeStatus = "partial_by_policy";
-    omissionReasons.push(
-      `${policyExcludedFilesCount} eligible file(s) excluded by repository policy.`,
-    );
+    omissionReasons.push({
+      code: "policy_excluded",
+      count: policyExcludedFilesCount,
+    });
   }
 
   let selectedRawShards = rawShards;
   if (rawShards.length > maxShards) {
     selectedRawShards = rawShards.slice(0, maxShards);
     scopeStatus = "partial_by_policy";
-    omissionReasons.push(
-      `Review was bounded to the first ${maxShards} priority shards out of ${rawShards.length} planned shards by policy.`,
-    );
+    omissionReasons.push({
+      code: "shard_limit",
+      maximum: maxShards,
+      planned: rawShards.length,
+    });
   }
 
   const totalShards = selectedRawShards.length;

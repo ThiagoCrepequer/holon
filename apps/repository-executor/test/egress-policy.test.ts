@@ -12,7 +12,7 @@ describe("Sandbox GitHub egress policy", () => {
     repositoryName: "api",
     repositoryOwner: "acme",
     repositoryPath: "/acme/api.git",
-    runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+    runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
   };
 
   it.each(["GET", "POST"])(

@@ -5,6 +5,59 @@ import {
   canonicalEvidenceCandidates,
   selectFinalizationEvidence,
 } from "../src/host-context.js";
+it("retains configured compatibility conflicts alongside observed versions", () => {
+  const result = JSON.parse(
+    compactProjectContext({
+      status: "complete",
+      limitations: [],
+      projects: [
+        {
+          root: "apps/api",
+          ecosystem: "node",
+          status: "complete",
+          technologies: [
+            {
+              name: "node",
+              category: "runtime",
+              declarations: [{ kind: "locked", value: "20.0.0" }],
+            },
+          ],
+        },
+      ],
+      configuredCompatibility: [
+        {
+          name: "api",
+          root: "apps/api",
+          projectIds: ["api"],
+          declarations: [
+            {
+              category: "runtimes",
+              name: "node",
+              expected: "22",
+              status: "conflicts",
+              detected: [
+                {
+                  projectId: "api",
+                  technology: "node",
+                  kind: "locked",
+                  value: "20.0.0",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as never),
+  );
+  expect(result.configuredCompatibility[0].declarations[0]).toMatchObject({
+    name: "node",
+    expected: "22",
+    status: "conflicts",
+  });
+  expect(result.projects[0].technologies[0].declarations[0].value).toBe(
+    "20.0.0",
+  );
+});
 it("retains complete JSON entities under the version context budget", () => {
   const result = compactProjectContext({
     projects: Array.from({ length: 20 }, (_, i) => ({

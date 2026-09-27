@@ -306,6 +306,7 @@ const executorRequestShape = {
 function validateRunCoordinates(
   request: {
     readonly headSha: string;
+    readonly baseSha: string;
     readonly pullRequestNumber: number;
     readonly repositoryId: number;
     readonly runId: string;
@@ -316,11 +317,11 @@ function validateRunCoordinates(
     !request.runId.startsWith(
       `github:${request.repositoryId}:pr:${request.pullRequestNumber}:`,
     ) ||
-    !request.runId.endsWith(`:head:${request.headSha}`)
+    !request.runId.endsWith(`:head:${request.headSha}:base:${request.baseSha}`)
   ) {
     context.addIssue({
       code: "custom",
-      message: "runId does not match repositoryId and headSha",
+      message: "runId does not match repositoryId, headSha and baseSha",
       path: ["runId"],
       input: request.runId,
     });

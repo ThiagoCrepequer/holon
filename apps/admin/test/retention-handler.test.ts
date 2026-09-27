@@ -18,7 +18,8 @@ describe("processRetentionCleanup", () => {
     const ms181Days = 181 * 24 * 3600 * 1000;
 
     const oldEvent = await createSampleProjectionEvent({
-      runId: "github:101:pr:99:head:1111111111111111111111111111111111111111",
+      runId:
+        "github:101:pr:99:head:1111111111111111111111111111111111111111:base:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       prKey: "github:101:pr:99",
       prNumber: 99,
       headSha: "1111111111111111111111111111111111111111",

@@ -1,14 +1,21 @@
+import { RepositoryConfigurationError } from "@holon/application";
 import type {
   ModelReviewer,
   ModelReviewResult,
   ReviewContext,
 } from "@holon/application";
+import type { ReviewOutputPreferences } from "@holon/contracts";
 import {
   modelReviewOutputSchema,
   type RepositoryToolCall,
   type ReviewJob,
 } from "@holon/contracts";
 
+import {
+  outputLanguageInstructions,
+  preflightConfigurationPrompt,
+  serializedRepositoryGuidance,
+} from "./configuration-guidance.js";
 import {
   canonicalEvidenceCandidates,
   compactProjectContext,
@@ -21,6 +28,8 @@ import {
 } from "./redaction.js";
 
 export interface ReviewGenerationRequest {
+  readonly output?: ReviewOutputPreferences | undefined;
+  readonly repositoryGuidance?: string | undefined;
   readonly deadlineAt?: number | undefined;
   readonly evidenceCandidates: readonly CanonicalEvidenceCandidate[];
   readonly instructions: string;
@@ -41,6 +50,7 @@ export interface ReviewGenerator {
       severity: string;
       path: string;
     }[],
+    output?: ReviewOutputPreferences,
   ): Promise<string>;
 }
 
@@ -253,6 +263,32 @@ export function buildReviewPrompt(
   return buildReviewPromptResult(job, context).prompt;
 }
 
+/** Build and validate the exact initial request before any inference is scheduled. */
+export function preflightReviewPrompt(
+  job: ReviewJob,
+  context: ReviewContext,
+): ReturnType<typeof buildReviewPromptResult> {
+  const prompt = buildReviewPromptResult(job, context);
+  const guidance = context.repositoryGuidance;
+  if (guidance !== undefined) {
+    const identity = guidance.configuration.identity;
+    if (
+      identity.runId !== job.runId ||
+      identity.installationId !== job.envelope.installationId ||
+      identity.repositoryId !== job.envelope.repository.id ||
+      identity.pullRequestNumber !== job.envelope.pullRequest.number ||
+      identity.baseSha !== job.envelope.pullRequest.baseSha ||
+      identity.headSha !== job.envelope.pullRequest.headSha
+    )
+      throw new RepositoryConfigurationError("identity_mismatch");
+    preflightConfigurationPrompt(
+      `${reviewInstructions}\n${outputLanguageInstructions(guidance.output)}`,
+      `${prompt.prompt}\n${serializedRepositoryGuidance(guidance)}`,
+    );
+  }
+  return prompt;
+}
+
 export class GatewayModelReviewer implements ModelReviewer {
   public constructor(private readonly generator: ReviewGenerator) {}
 
@@ -260,12 +296,17 @@ export class GatewayModelReviewer implements ModelReviewer {
     job: ReviewJob,
     context: ReviewContext,
   ): Promise<ModelReviewResult> {
-    const prompt = buildReviewPromptResult(job, context);
+    const prompt = preflightReviewPrompt(job, context);
+    const guidance = serializedRepositoryGuidance(context.repositoryGuidance);
     const generated = await this.generator.generate({
       deadlineAt: context.deadlineAt,
-      instructions: reviewInstructions,
       evidenceCandidates: canonicalEvidenceCandidates(context.files),
-      prompt: prompt.prompt,
+      instructions: `${reviewInstructions}\n${outputLanguageInstructions(context.repositoryGuidance?.output)}`,
+      output: context.repositoryGuidance?.output,
+      repositoryGuidance: serializedRepositoryGuidance(
+        context.repositoryGuidance,
+      ),
+      prompt: `${prompt.prompt}\n${guidance}`,
     });
     const output = modelReviewOutputSchema.parse(generated);
     return {
@@ -277,6 +318,7 @@ export class GatewayModelReviewer implements ModelReviewer {
   public async synthesizeReviewSummary(
     _job: ReviewJob,
     input: {
+      readonly output?: ReviewOutputPreferences | undefined;
       readonly shardSummaries: readonly string[];
       readonly verifiedFindings: readonly {
         diagnostic: string;
@@ -289,6 +331,7 @@ export class GatewayModelReviewer implements ModelReviewer {
       return await this.generator.synthesizeSummary(
         input.shardSummaries,
         input.verifiedFindings,
+        input.output,
       );
     }
     return input.shardSummaries.join("\n\n");

@@ -16,11 +16,13 @@ describe("review identities", () => {
       repositoryId: 42,
       pullRequestNumber: 7,
     });
-    const run = createRunId(pr, "A".repeat(40));
+    const run = createRunId(pr, "A".repeat(40), "B".repeat(40));
 
     expect(createDeliveryId("delivery-123")).toBe("github:delivery-123");
     expect(pr).toBe("github:42:pr:7");
-    expect(run).toBe(`github:42:pr:7:head:${"a".repeat(40)}`);
+    expect(run).toBe(
+      `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
+    );
 
     const finding = await createFindingId(run, {
       diagnostic: "  Caller   still sends the removed parameter. ",
@@ -69,6 +71,7 @@ describe("review identities", () => {
           pullRequestNumber: 1,
         }),
         "abc",
+        "b".repeat(40),
       ),
   ])("rejects an invalid identity component", (createInvalidIdentity) => {
     expect(createInvalidIdentity).toThrow();
@@ -83,6 +86,7 @@ describe("review identities", () => {
     const runId = createRunId(
       prKey,
       "0123456789abcdef0123456789abcdef01234567",
+      "b".repeat(40),
     );
     expect(derivePrKeyFromRunId(runId)).toBe("github:123:pr:456");
   });
@@ -97,4 +101,15 @@ describe("review identities", () => {
       ),
     ).toThrow("runId does not contain a valid prKey");
   });
+});
+
+it("distinguishes a changed base at the same head", () => {
+  const pr = createPrKey({
+    provider: "github",
+    repositoryId: 42,
+    pullRequestNumber: 7,
+  });
+  expect(createRunId(pr, "a".repeat(40), "b".repeat(40))).not.toBe(
+    createRunId(pr, "a".repeat(40), "c".repeat(40)),
+  );
 });

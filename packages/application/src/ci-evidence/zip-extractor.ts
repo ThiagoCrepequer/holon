@@ -22,6 +22,28 @@ export function extractSafeZipArtifact(
   if (bytes.length > (options.maxCompressedBytes ?? MAX_COMPRESSED_BYTES))
     throw new Error("Artifact compressed size exceeds safety limit");
   if (!bytes.length) return [];
+  // fflate's streaming decoder tolerates unrecognized input with no entries.
+  // Require a complete ZIP envelope so corrupt archives reach partial-error reporting.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = -1;
+  for (
+    let offset = bytes.length - 22;
+    offset >= Math.max(0, bytes.length - 65557);
+    offset--
+  ) {
+    if (
+      view.getUint32(offset, true) === 0x06054b50 &&
+      offset + 22 + view.getUint16(offset + 20, true) === bytes.length
+    ) {
+      end = offset;
+      break;
+    }
+  }
+  if (
+    end < 0 ||
+    view.getUint32(end + 16, true) + view.getUint32(end + 12, true) > end
+  )
+    throw new Error("Invalid or incomplete artifact ZIP");
   const results: ExtractedFile[] = [];
   let total = 0,
     count = 0,

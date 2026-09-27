@@ -1,31 +1,25 @@
+import { configurationDigest } from "@holon/application";
 import {
   resolvedReviewGuidanceSchema,
   type ProjectIdentificationResult,
-  type RepositoryPolicy,
+  type DocumentationReference,
   type ResolvedReviewGuidance,
 } from "@holon/contracts";
 import { redactSecrets } from "@holon/domain";
-
-import { computeSha256Hex } from "./repository-policy-resolver.js";
 const within = (root: string, path: string) =>
   root === "." || path === root || path.startsWith(root + "/");
 /** Fetches only hash-pinned official documentation selected by observed exact versions. */
 export async function resolveReviewGuidance(
-  policy: RepositoryPolicy | undefined,
+  references: readonly DocumentationReference[] | undefined,
   paths: readonly string[],
   identification: ProjectIdentificationResult | undefined,
   fetcher: typeof fetch = fetch,
 ): Promise<ResolvedReviewGuidance> {
-  const config = policy?.reviewGuidance;
   const result: ResolvedReviewGuidance = {
-    instructions: config?.instructions ?? [],
-    projects: (config?.projects ?? []).filter((project) =>
-      paths.some((path) => within(project.root, path)),
-    ),
     documentation: [],
     limitations: [],
   };
-  for (const reference of config?.documentation ?? []) {
+  for (const reference of references ?? []) {
     if (!paths.some((path) => within(reference.root, path))) continue;
     const matched = identification?.projects.some(
       (project) =>
@@ -77,7 +71,7 @@ export async function resolveReviewGuidance(
         bytes.set(chunk, offset);
         offset += chunk.length;
       }
-      if ((await computeSha256Hex(bytes)) !== reference.sha256)
+      if ((await configurationDigest(bytes)) !== reference.sha256)
         throw new Error("Documentation digest mismatch");
       const raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       const content = redactSecrets(
@@ -104,7 +98,6 @@ export async function resolveReviewGuidance(
     );
     while (size() > 24000 && result.documentation.length)
       result.documentation.pop();
-    while (size() > 24000 && result.projects.length) result.projects.pop();
   }
   return resolvedReviewGuidanceSchema.parse(result);
 }

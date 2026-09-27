@@ -28,7 +28,8 @@ const filterParams = {
   pageSize: 50 as const,
 };
 
-const runId = "github:42:pr:7:head:" + "a".repeat(40);
+const runId =
+  "github:42:pr:7:head:" + "a".repeat(40) + ":base:" + "b".repeat(40);
 
 describe("admin cursor contracts and keyring", () => {
   it("computes deterministic filterHash for filter params", async () => {

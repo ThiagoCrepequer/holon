@@ -1,3 +1,4 @@
+import { formatConfiguredFindings } from "@holon/application";
 import {
   formatReconciliationSection,
   fitPublicationSummary,
@@ -6,6 +7,7 @@ import {
   reconciledReviewOutputSchema,
   type ReconciledReviewOutput,
 } from "@holon/contracts";
+import { reviewMessage } from "@holon/domain";
 import {
   applyFeedbackToFindings,
   determineReviewVerdict,
@@ -78,6 +80,7 @@ export function refreshReviewFeedback(
     (output.analysisIsDegraded ?? output.isDegraded) === true ||
     unverifiedCount > 0;
   const verdictDetails = determineReviewVerdict({
+    language: output.output.language,
     findings: activeFindings,
     isDegraded,
     options: output.verdictPolicy,
@@ -87,13 +90,18 @@ export function refreshReviewFeedback(
   });
   const summary = fitPublicationSummary(
     [
-      formatVerdictBadge(verdictDetails.verdict),
+      formatVerdictBadge(verdictDetails.verdict, output.output.language),
       verdictDetails.reasons.join(" "),
     ].join("\n\n"),
-    "Review updated to reflect current human feedback.",
-    [formatReconciliationSection(reconciliation), ...output.omissionReasons]
+    reviewMessage(output.output.language, "feedbackUpdated"),
+    [
+      formatReconciliationSection(reconciliation, output.output.language),
+      ...output.omissionReasons,
+      formatConfiguredFindings(activeFindings, output.output),
+    ]
       .filter(Boolean)
       .join("\n\n"),
+    output.output.language,
   );
   return reconciledReviewOutputSchema.parse({
     ...output,
@@ -107,6 +115,7 @@ export function refreshReviewFeedback(
     summary,
     findings: activeFindings.map(
       ({
+        identityAmbiguous: _identityAmbiguous,
         fingerprint: _fp,
         evidenceFingerprint: _ef,
         status: _status,

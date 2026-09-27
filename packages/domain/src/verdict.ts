@@ -1,4 +1,5 @@
 import { minimumFindingConfidence, type FindingSeverity } from "./finding.js";
+import { reviewText, type ReviewLanguage } from "./review-language.js";
 
 export type ReviewVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
@@ -20,6 +21,7 @@ export interface ReviewVerdictPolicyOptions {
 }
 
 export interface DetermineReviewVerdictInput {
+  readonly language?: ReviewLanguage | undefined;
   readonly findings: readonly {
     readonly confidence: number;
     readonly severity: FindingSeverity;
@@ -53,6 +55,8 @@ const DEFAULT_OPTIONS = {
 export function determineReviewVerdict(
   input: DetermineReviewVerdictInput,
 ): ReviewVerdictDetails {
+  const text = (en: string, pt: string, es: string) =>
+    reviewText(input.language ?? "en", en, pt, es);
   const options = {
     allowApprove: input.options?.allowApprove ?? DEFAULT_OPTIONS.allowApprove,
     mediumHighConfidenceThreshold:
@@ -75,7 +79,11 @@ export function determineReviewVerdict(
   // 1. Fail-Safe / Incomplete Scope Checks (COMMENT only)
   if (input.scopeStatus === "partial_by_policy") {
     reasons.push(
-      "Review scope is partial due to exclusion policies or file budgets; cannot approve or request changes without complete context.",
+      text(
+        "Review scope is partial due to exclusion policies or file budgets; cannot approve or request changes without complete context.",
+        "O escopo da revisão é parcial devido às exclusões ou aos limites de arquivos; não é possível aprovar ou solicitar alterações sem contexto completo.",
+        "El alcance de la revisión es parcial por exclusiones o límites de archivos; no se puede aprobar ni solicitar cambios sin contexto completo.",
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -88,7 +96,11 @@ export function determineReviewVerdict(
 
   if (input.scopeStatus === "partial_by_failure") {
     reasons.push(
-      "Review was interrupted by shard execution failure; cannot approve or request changes without full analysis.",
+      text(
+        "Review was interrupted by shard execution failure; cannot approve or request changes without full analysis.",
+        "A revisão foi interrompida por falha na execução de uma parte; não é possível aprovar ou solicitar alterações sem análise completa.",
+        "La revisión se interrumpió por un fallo de ejecución; no se puede aprobar ni solicitar cambios sin un análisis completo.",
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -100,7 +112,13 @@ export function determineReviewVerdict(
   }
 
   if (input.scopeStatus === "unsupported") {
-    reasons.push("Pull request contains no supported code changes.");
+    reasons.push(
+      text(
+        "Pull request contains no supported code changes.",
+        "O pull request não contém alterações de código suportadas.",
+        "El pull request no contiene cambios de código compatibles.",
+      ),
+    );
     return {
       advisoryFindingsCount: 0,
       blockingFindingsCount: 0,
@@ -117,7 +135,11 @@ export function determineReviewVerdict(
     input.shardsAnalyzed < input.totalShards
   ) {
     reasons.push(
-      `Incomplete shard execution (${input.shardsAnalyzed}/${input.totalShards} shards analyzed); review is incomplete.`,
+      text(
+        `Incomplete shard execution (${input.shardsAnalyzed}/${input.totalShards} shards analyzed); review is incomplete.`,
+        `Execução incompleta (${input.shardsAnalyzed}/${input.totalShards} partes analisadas); a revisão está incompleta.`,
+        `Ejecución incompleta (${input.shardsAnalyzed}/${input.totalShards} partes analizadas); la revisión está incompleta.`,
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -136,7 +158,11 @@ export function determineReviewVerdict(
   // If findings were emitted but all were below the publishable confidence threshold
   if (input.findings.length > 0 && confidentFindings.length === 0) {
     reasons.push(
-      `Detected ${input.findings.length} advisory observation(s), but all had confidence below the reliable threshold (${options.minimumConfidenceThreshold}).`,
+      text(
+        `Detected ${input.findings.length} advisory observation(s), but all had confidence below the reliable threshold (${options.minimumConfidenceThreshold}).`,
+        `${input.findings.length} observação(ões) detectada(s), todas com confiança abaixo do limite confiável (${options.minimumConfidenceThreshold}).`,
+        `${input.findings.length} observación(es) detectada(s), todas con confianza inferior al umbral fiable (${options.minimumConfidenceThreshold}).`,
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -190,25 +216,45 @@ export function determineReviewVerdict(
 
     if (criticalCount > 0) {
       reasons.push(
-        `${criticalCount} critical defect(s) identified requiring resolution.`,
+        text(
+          `${criticalCount} critical defect(s) identified requiring resolution.`,
+          `${criticalCount} defeito(s) crítico(s) identificado(s) que precisam de correção.`,
+          `${criticalCount} defecto(s) crítico(s) identificado(s) que requieren corrección.`,
+        ),
       );
     }
     if (highCount > 0) {
       reasons.push(
-        `${highCount} high-severity defect(s) identified requiring resolution.`,
+        text(
+          `${highCount} high-severity defect(s) identified requiring resolution.`,
+          `${highCount} defeito(s) de alta severidade identificado(s) que precisam de correção.`,
+          `${highCount} defecto(s) de alta gravedad identificado(s) que requieren corrección.`,
+        ),
       );
     }
     if (mediumHighConfidenceCount > 0 && !hasMediumAccumulation) {
       reasons.push(
-        `${mediumHighConfidenceCount} high-confidence moderate defect(s) identified requiring resolution.`,
+        text(
+          `${mediumHighConfidenceCount} high-confidence moderate defect(s) identified requiring resolution.`,
+          `${mediumHighConfidenceCount} defeito(s) moderado(s) com alta confiança que precisam de correção.`,
+          `${mediumHighConfidenceCount} defecto(s) moderado(s) con alta confianza que requieren corrección.`,
+        ),
       );
     } else if (hasMediumAccumulation) {
       reasons.push(
-        `${mediumConfidentCount} moderate defects accumulated (threshold: ${options.mediumSeverityThreshold}), indicating significant code risk.`,
+        text(
+          `${mediumConfidentCount} moderate defects accumulated (threshold: ${options.mediumSeverityThreshold}), indicating significant code risk.`,
+          `${mediumConfidentCount} defeitos moderados acumulados (limite: ${options.mediumSeverityThreshold}), indicando risco significativo no código.`,
+          `${mediumConfidentCount} defectos moderados acumulados (umbral: ${options.mediumSeverityThreshold}), indicando un riesgo significativo en el código.`,
+        ),
       );
     } else if (exceedsRiskScore && !hasBlockingCriticalOrHigh) {
       reasons.push(
-        `Risk score ${riskScore.toFixed(1)} reached or exceeded threshold ${options.riskScoreThreshold.toFixed(1)}.`,
+        text(
+          `Risk score ${riskScore.toFixed(1)} reached or exceeded threshold ${options.riskScoreThreshold.toFixed(1)}.`,
+          `A pontuação de risco ${riskScore.toFixed(1)} atingiu ou excedeu o limite ${options.riskScoreThreshold.toFixed(1)}.`,
+          `La puntuación de riesgo ${riskScore.toFixed(1)} alcanzó o superó el umbral ${options.riskScoreThreshold.toFixed(1)}.`,
+        ),
       );
     }
 
@@ -224,7 +270,11 @@ export function determineReviewVerdict(
   // No blocking defects found: evaluate APPROVE vs COMMENT
   if (input.isDegraded === true) {
     reasons.push(
-      "The review is incomplete. Verified findings are retained, but unfinished analysis cannot establish that the remaining changes are safe.",
+      text(
+        "The review is incomplete. Verified findings are retained, but unfinished analysis cannot establish that the remaining changes are safe.",
+        "A revisão está incompleta. Os achados verificados foram preservados, mas a análise pendente não permite concluir que as demais alterações são seguras.",
+        "La revisión está incompleta. Se conservan los hallazgos verificados, pero el análisis pendiente no permite concluir que los demás cambios sean seguros.",
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -237,7 +287,11 @@ export function determineReviewVerdict(
 
   if (!options.allowApprove) {
     reasons.push(
-      "No blocking defects found, but automated approvals are disabled by policy.",
+      text(
+        "No blocking defects found, but automated approvals are disabled by policy.",
+        "Nenhum defeito bloqueante encontrado, mas as aprovações automáticas estão desabilitadas pela política.",
+        "No se encontraron defectos bloqueantes, pero las aprobaciones automáticas están deshabilitadas por la política.",
+      ),
     );
     return {
       advisoryFindingsCount: input.findings.length,
@@ -251,11 +305,19 @@ export function determineReviewVerdict(
   const advisoryCount = input.findings.length;
   if (advisoryCount > 0) {
     reasons.push(
-      `No blocking defects found. ${advisoryCount} non-blocking observation(s) provided for consideration.`,
+      text(
+        `No blocking defects found. ${advisoryCount} non-blocking observation(s) provided for consideration.`,
+        `Nenhum defeito bloqueante encontrado. ${advisoryCount} observação(ões) não bloqueante(s) para consideração.`,
+        `No se encontraron defectos bloqueantes. ${advisoryCount} observación(es) no bloqueante(s) para su consideración.`,
+      ),
     );
   } else {
     reasons.push(
-      "All reviewed files clean; no defects or regressions identified.",
+      text(
+        "All reviewed files clean; no defects or regressions identified.",
+        "Nenhum defeito ou regressão identificado nos arquivos revisados.",
+        "No se identificaron defectos ni regresiones en los archivos revisados.",
+      ),
     );
   }
 
@@ -268,14 +330,32 @@ export function determineReviewVerdict(
   };
 }
 
-export function formatVerdictBadge(verdict: ReviewVerdict): string {
+export function formatVerdictBadge(
+  verdict: ReviewVerdict,
+  language: ReviewLanguage = "en",
+): string {
   switch (verdict) {
     case "APPROVE":
-      return "### Verdict: Approved";
+      return reviewText(
+        language,
+        "### Verdict: Approved",
+        "### Veredito: Aprovado",
+        "### Veredicto: Aprobado",
+      );
     case "REQUEST_CHANGES":
-      return "### Verdict: Changes requested";
+      return reviewText(
+        language,
+        "### Verdict: Changes requested",
+        "### Veredito: Alterações solicitadas",
+        "### Veredicto: Cambios solicitados",
+      );
     case "COMMENT":
     default:
-      return "### Verdict: Informational Comment";
+      return reviewText(
+        language,
+        "### Verdict: Informational Comment",
+        "### Veredito: Comentário informativo",
+        "### Veredicto: Comentario informativo",
+      );
   }
 }

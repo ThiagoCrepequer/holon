@@ -34,7 +34,7 @@ const request = executorRequestSchema.parse({
   headSha: "a".repeat(40),
   pullRequestNumber: 7,
   repositoryId: 42,
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
 });
 
 function buildTool(call: unknown) {

@@ -27,7 +27,7 @@ const job = reviewJobSchema.parse({
       owner: "acme",
     },
   },
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
 });
 
 describe("workflow policy", () => {

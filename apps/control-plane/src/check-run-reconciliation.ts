@@ -3,17 +3,20 @@ import {
   gitShaSchema,
   positiveIntegerSchema,
   runIdSchema,
+  reviewOutputPreferencesSchema,
 } from "@holon/contracts";
-import { createPrKey, createRunId } from "@holon/domain";
+import { createPrKey, createRunId, reviewMessage } from "@holon/domain";
 import {
   createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
 } from "@holon/github";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import { z } from "zod";
 
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
 
 export const desiredCheckRunSchema = z.strictObject({
+  language: reviewOutputPreferencesSchema.shape.language,
   baseSha: gitShaSchema,
   installationId: positiveIntegerSchema,
   repositoryId: positiveIntegerSchema,
@@ -38,6 +41,7 @@ export class CheckRunReconciliationStore {
             pullRequestNumber: desired.pullNumber,
           }),
           desired.input.headSha,
+          desired.baseSha,
         )
     )
       throw new Error("Check run identity mismatch");
@@ -146,9 +150,8 @@ export class CheckRunReconciliationStore {
           conclusion: "cancelled",
           completedAt: new Date().toISOString(),
           output: {
-            title: "Holon Review Superseded",
-            summary:
-              "This review was superseded by a newer pull request snapshot.",
+            title: reviewMessage(desired.language, "supersededTitle"),
+            summary: reviewMessage(desired.language, "superseded"),
           },
         };
       else if (run.state === "failed_terminal")
@@ -157,10 +160,13 @@ export class CheckRunReconciliationStore {
           status: "completed",
           conclusion: "failure",
           completedAt: new Date().toISOString(),
-          output: {
-            title: "Holon Review Failed",
-            summary: "The review could not be completed.",
-          },
+          output:
+            input.status === "completed" && input.conclusion === "failure"
+              ? input.output
+              : {
+                  title: reviewMessage(desired.language, "failedTitle"),
+                  summary: reviewMessage(desired.language, "failed"),
+                },
         };
       const id =
         run.github_check_run_id ??
@@ -174,7 +180,12 @@ export class CheckRunReconciliationStore {
         row.run_id,
       );
       this.complete(row.run_id, row.revision);
-    } catch {
+    } catch (error) {
+      reportError(consoleErrorReporter, "check.reconciliation_failed", error, {
+        component: "control-plane",
+        operation: "check.reconcile",
+        runId: row.run_id,
+      });
       const delay = Math.min(300000, 1000 * 2 ** Math.min(row.attempts + 1, 9));
       this.storage.sql.exec(
         "UPDATE check_run_tasks SET attempts=attempts+1,next_attempt_at=? WHERE run_id=? AND revision=?",

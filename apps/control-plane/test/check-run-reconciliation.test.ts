@@ -10,8 +10,9 @@ vi.mock("@holon/github", async (importOriginal) => ({
 }));
 afterEach(() => reset());
 const key = "github:42:pr:7" as const;
-const runId = `${key}:head:${"a".repeat(40)}` as const;
+const runId = `${key}:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;
 const desired = {
+  language: "en" as const,
   baseSha: "b".repeat(40),
   installationId: 99,
   repositoryId: 42,
@@ -211,7 +212,7 @@ it("rejects unknown runs and mismatched identities before scheduling network wor
     expect(() => store.schedule(runId, { ...desired, pullNumber: 8 })).toThrow(
       "identity mismatch",
     );
-    const absent = `${key}:head:${"b".repeat(40)}`;
+    const absent = `${key}:head:${"b".repeat(40)}:base:${"b".repeat(40)}`;
     expect(() =>
       store.schedule(absent, {
         ...desired,

@@ -1,8 +1,13 @@
 import {
+  projectConfigurationGuidance,
+  RepositoryConfigurationError,
+} from "@holon/application";
+import {
   aggregateShardReviews,
   createReviewRun,
   selectFindingsWithCanonicalEvidence,
 } from "@holon/application";
+import type { RunConfigurationRef } from "@holon/contracts";
 import {
   modelReviewOutputSchema,
   reconciledReviewOutputSchema,
@@ -12,6 +17,8 @@ import {
   type ShardReviewResult,
   type StructuralImpactReport,
 } from "@holon/contracts";
+import { matchingConfigurationRules } from "@holon/domain";
+import { reviewMessage } from "@holon/domain";
 import {
   computeStableFingerprint,
   computeEvidenceFingerprint,
@@ -22,15 +29,18 @@ import {
 import {
   ModelProviderRequestError,
   nonRetryableModelFailureCode,
+  preflightReviewPrompt,
 } from "@holon/model";
 import { buildReviewPlan } from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
 import { resolveReviewGuidance } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
+import { buildShardReviewContext } from "./review-shard-context.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
 export interface ReviewAnalysisExecution<T> {
+  readonly configuration: RunConfigurationRef;
   runStep<R>(
     name: string,
     phase: "preparation" | "analysis",
@@ -81,6 +91,7 @@ async function reviewShards(
   shardIndex?: number,
   deadlineAt?: number,
   effectivePolicy?: RepositoryPolicy,
+  configuration?: RunConfigurationRef,
 ): Promise<{
   readonly results: readonly ShardReviewResult[];
   readonly anyPromptTruncated: boolean;
@@ -95,70 +106,33 @@ async function reviewShards(
       plan.shards.length,
       effectivePolicy,
     );
+    const snapshot =
+      configuration === undefined
+        ? undefined
+        : await services.ledger.loadRunConfiguration(configuration);
+    const repositoryGuidance =
+      snapshot === undefined
+        ? undefined
+        : projectConfigurationGuidance(
+            snapshot,
+            shard.files.map((file) => file.path),
+          );
+    const supplemental = await resolveReviewGuidance(
+      snapshot?.config.documentation,
+      shard.files.map((file) => file.path),
+      identification,
+    );
     const shardContext = {
-      reviewGuidance: await resolveReviewGuidance(
-        effectivePolicy,
-        shard.files.map((file) => file.path),
+      ...buildShardReviewContext(
+        shard,
+        structuralImpact,
+        baseline,
         identification,
+        inputTruncated,
+        repositoryGuidance,
+        deadlineAt,
       ),
-      deadlineAt,
-      priorFindings: baseline
-        .filter(
-          (f) =>
-            ["new", "persistent", "reintroduced"].includes(f.status) &&
-            shard.files.some((file) => file.path === f.filePath),
-        )
-        .slice(0, 8)
-        .map(({ fingerprint, diagnostic, filePath, severity }) => ({
-          fingerprint,
-          diagnostic,
-          filePath,
-          severity,
-        })),
-      projectIdentification: identification
-        ? {
-            ...identification,
-            projects: identification.projects.filter((project) =>
-              shard.files.some(
-                (file) =>
-                  (project.root === "." ||
-                    file.path.startsWith(project.root + "/")) &&
-                  !identification.projects.some(
-                    (other) =>
-                      other.root !== project.root &&
-                      (project.root === "." ||
-                        other.root.startsWith(project.root + "/")) &&
-                      file.path.startsWith(other.root + "/"),
-                  ),
-              ),
-            ),
-          }
-        : undefined,
-      changedLines: shard.changedLines,
-      files: shard.files,
-      structuralImpact: structuralImpact
-        ? {
-            ...structuralImpact,
-            changedSymbols: structuralImpact.changedSymbols.filter((signal) =>
-              shard.files.some((file) => file.path === signal.path),
-            ),
-            contractBreaks: structuralImpact.contractBreaks.filter((signal) =>
-              shard.files.some((file) => file.path === signal.path),
-            ),
-            downstreamReferences: structuralImpact.downstreamReferences.filter(
-              (signal) =>
-                shard.files.some((file) => file.path === signal.targetPath),
-            ),
-            testGaps: structuralImpact.testGaps.filter((signal) =>
-              shard.files.some((file) => file.path === signal.sourcePath),
-            ),
-            securitySurfaces: structuralImpact.securitySurfaces.filter(
-              (signal) => shard.files.some((file) => file.path === signal.path),
-            ),
-          }
-        : undefined,
-      surface: shard.surface,
-      truncated: inputTruncated,
+      reviewGuidance: supplemental,
     };
     try {
       const reviewResult = await reviewer.model.review(job, shardContext);
@@ -281,7 +255,7 @@ export async function analyzeReview(
             scopeStatus: "partial_by_policy" as const,
             omissionReasons: [
               ...plan.omissionReasons,
-              "Eligible patches or context sections were omitted by the executor budget.",
+              { code: "executor_budget" as const },
             ],
           }
         : plan,
@@ -296,6 +270,52 @@ export async function analyzeReview(
     });
     const planning = await runStep("plan-review", "preparation", async () => {
       const { context, plan } = await load();
+      if (execution !== undefined) {
+        const snapshot = await services.ledger.loadRunConfiguration(
+          execution.configuration,
+        );
+        const baseline = await services.ledger.loadPrFindings(prKey);
+        const matchedRules = new Set(
+          plan.shards.flatMap((shard) =>
+            shard.files.flatMap((file) =>
+              matchingConfigurationRules(file.path, snapshot.config.pathRules),
+            ),
+          ),
+        );
+        const unmatchedPathRules = snapshot.config.pathRules
+          .map((rule, index) => (matchedRules.has(rule) ? null : index))
+          .filter((index) => index !== null);
+        if (unmatchedPathRules.length)
+          emit("configuration.unmatched_path_rules", {
+            indices: unmatchedPathRules.join(","),
+            count: unmatchedPathRules.length,
+          });
+        for (const shard of plan.shards) {
+          const guidance = projectConfigurationGuidance(
+            snapshot,
+            shard.files.map((file) => file.path),
+          );
+          emit("configuration.guidance_applied", {
+            configDigest: snapshot.configDigest,
+            shardIndex: shard.index,
+            paths: guidance.scopes.length,
+            instructions: guidance.instructions.length,
+            bytes: new TextEncoder().encode(JSON.stringify(guidance))
+              .byteLength,
+          });
+          preflightReviewPrompt(
+            job,
+            buildShardReviewContext(
+              shard,
+              context.structuralImpact,
+              baseline,
+              services.getProjectIdentification?.(),
+              context.truncated,
+              guidance,
+            ),
+          );
+        }
+      }
       const patchBytes = contextBytes(context);
       emit("model.input", {
         changedLineCount: context.changedLines.length,
@@ -355,6 +375,7 @@ export async function analyzeReview(
               index,
               planning.deadlineAt,
               effectivePolicy,
+              execution?.configuration,
             );
           },
         );
@@ -379,6 +400,18 @@ export async function analyzeReview(
       const { context, plan } = await load();
       if ((await planDigest(plan)) !== planning.planDigest)
         throw new NonRetryableError("Review plan changed during replay");
+      const outputPreferences =
+        execution === undefined
+          ? {
+              language: "en" as const,
+              detail: "concise" as const,
+              maxInlineComments: 40,
+            }
+          : (
+              await services.ledger.loadRunConfiguration(
+                execution.configuration,
+              )
+            ).config.output;
 
       const verdictPolicy =
         context.verdictStrictness === "block_all_confident_medium"
@@ -387,7 +420,11 @@ export async function analyzeReview(
 
       if (plan.scopeStatus === "unsupported" || plan.shards.length === 0) {
         const output: ReconciledReviewOutput = {
-          ...aggregateShardReviews(plan, [], { verdictPolicy }),
+          ...aggregateShardReviews(plan, [], {
+            verdictPolicy,
+            language: outputPreferences.language,
+          }),
+          output: outputPreferences,
           activeFindings: [],
           contextTruncated: context.truncated,
           effectivePolicyDigest: context.effectivePolicyDigest,
@@ -407,6 +444,7 @@ export async function analyzeReview(
         .map((r) => r.summary.trim());
 
       const rawAggregated = aggregateShardReviews(plan, shardResults, {
+        language: outputPreferences.language,
         verdictPolicy,
       });
       const currentWithFingerprints = await Promise.all(
@@ -494,6 +532,14 @@ export async function analyzeReview(
       ) {
         try {
           unifiedSummary = await services.model.synthesizeReviewSummary(job, {
+            output:
+              execution === undefined
+                ? undefined
+                : (
+                    await services.ledger.loadRunConfiguration(
+                      execution.configuration,
+                    )
+                  ).config.output,
             shardSummaries: successfulSummaries,
             verifiedFindings: reconciled.activeFindings.map((finding) => ({
               diagnostic: finding.diagnostic,
@@ -502,13 +548,20 @@ export async function analyzeReview(
             })),
           });
         } catch {
-          unifiedSummary =
-            "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.";
+          unifiedSummary = reviewMessage(
+            outputPreferences.language,
+            "synthesisUnavailable",
+          );
         }
       }
 
       const finalAggregated = aggregateShardReviews(plan, shardResults, {
+        language: outputPreferences.language,
         canonicalFindings: reconciled.activeFindings,
+        publication: {
+          findings: reconciled.activeFindings,
+          output: outputPreferences,
+        },
         unifiedSummary,
         reconciliation: reconciled.summary,
         structuralImpact: context.structuralImpact,
@@ -516,6 +569,7 @@ export async function analyzeReview(
       });
       const output = reconciledReviewOutputSchema.parse({
         ...finalAggregated,
+        output: outputPreferences,
         analysisIsDegraded: rawAggregated.isDegraded === true,
         verdictPolicy,
         activeFindings: reconciled.activeFindings,
@@ -532,6 +586,8 @@ export async function analyzeReview(
       return execution ? execution.finish(output) : output;
     });
   } catch (error) {
+    if (error instanceof RepositoryConfigurationError)
+      throw new NonRetryableError(`HOLON_REPOSITORY_CONFIG:${error.code}`);
     const failureCode = nonRetryableModelFailureCode(error);
     if (failureCode !== undefined) {
       throw new NonRetryableError(`HOLON_MODEL_NON_RETRYABLE:${failureCode}`);

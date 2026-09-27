@@ -8,12 +8,13 @@ import {
   createInstallationSessionWithKeyring,
   type GitHubAppKeyring,
 } from "@holon/github";
+import { consoleErrorReporter, withErrorReporting } from "@holon/observability";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
 
 const runCoordinates =
-  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40})$/u;
+  /^github:(?<repositoryId>\d+):pr:(?<pullRequestNumber>\d+):head:(?<headSha>[a-f0-9]{40}):base:(?<baseSha>[a-f0-9]{40})$/u;
 
 interface CredentialLedger {
   authorizeCredential(request: GitHubCredentialRequest): Promise<boolean>;
@@ -89,6 +90,17 @@ export class GitHubCredentialBrokerEntrypoint extends WorkerEntrypoint<Credentia
   public getInstallationToken(
     request: GitHubCredentialRequest,
   ): Promise<GitHubCredentialResponse> {
-    return issueGitHubCredential(this.env, request);
+    return withErrorReporting(
+      "credential_broker.rpc_failed",
+      consoleErrorReporter,
+      {
+        component: "control-plane",
+        operation: "github.issue_installation_token",
+        runId: request.runId,
+        repositoryId: request.repositoryId,
+        installationId: request.installationId,
+      },
+      async () => await issueGitHubCredential(this.env, request),
+    );
   }
 }

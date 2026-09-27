@@ -27,7 +27,7 @@ function withIdentity(
             number: pullRequestNumber,
           },
         },
-        runId: `github:1:pr:${pullRequestNumber}:head:${headSha}`,
+        runId: `github:1:pr:${pullRequestNumber}:head:${headSha}:base:${source.input.job.envelope.pullRequest.baseSha}`,
       },
     },
   };

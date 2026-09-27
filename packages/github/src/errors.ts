@@ -11,6 +11,11 @@ export class GitHubRequestError extends Error {
     public readonly retryable: boolean,
     public readonly statusCode?: number,
     public readonly retryAfterMs?: number,
+    public readonly phase?:
+      | "app_auth"
+      | "installation_auth"
+      | "pull_request_refs",
+    public readonly originName?: string,
   ) {
     super(`HOLON_GITHUB_${code.toUpperCase()}:${statusCode ?? "network"}`);
     this.name = "GitHubRequestError";
@@ -18,8 +23,18 @@ export class GitHubRequestError extends Error {
 }
 
 export class GitHubAppAuthenticationError extends GitHubRequestError {
-  public constructor() {
-    super("upstream_permanent", false);
+  public constructor(
+    cause?: unknown,
+    phase?: "app_auth" | "installation_auth",
+  ) {
+    super(
+      "upstream_permanent",
+      false,
+      undefined,
+      undefined,
+      phase,
+      safeOriginName(cause),
+    );
     this.name = "GitHubAppAuthenticationError";
   }
 }
@@ -93,13 +108,37 @@ function isSecondaryRateLimit(error: unknown): boolean {
   return /secondary rate limit|abuse detection/iu.test(message);
 }
 
+function safeOriginName(error: unknown): string {
+  if (!(error instanceof Error)) return "UnknownError";
+  return [
+    "Error",
+    "TypeError",
+    "RangeError",
+    "SyntaxError",
+    "ZodError",
+    "RequestError",
+    "AbortError",
+    "DataError",
+  ].includes(error.name)
+    ? error.name
+    : "UnknownError";
+}
+
 export function classifyGitHubRequestError(
   error: unknown,
   now = Date.now(),
+  phase?: "app_auth" | "installation_auth" | "pull_request_refs",
 ): GitHubRequestError {
   if (error instanceof GitHubRequestError) return error;
   if (error instanceof TypeError) {
-    return new GitHubRequestError("invalid_response", false);
+    return new GitHubRequestError(
+      "invalid_response",
+      false,
+      undefined,
+      undefined,
+      phase,
+      safeOriginName(error),
+    );
   }
   const status = extractStatusCode(error);
   const delay = retryDelay(error, now);
@@ -113,44 +152,65 @@ export function classifyGitHubRequestError(
       true,
       status,
       delay ?? 60_000,
+      phase,
+      safeOriginName(error),
     );
   }
   if (status !== undefined && status >= 500) {
-    return new GitHubRequestError("upstream_transient", true, status);
+    return new GitHubRequestError(
+      "upstream_transient",
+      true,
+      status,
+      undefined,
+      phase,
+      safeOriginName(error),
+    );
   }
   if (
     status === undefined &&
     error instanceof Error &&
     (error.name === "RequestError" || error.name === "AbortError")
   ) {
-    return new GitHubRequestError("network_transient", true);
+    return new GitHubRequestError(
+      "network_transient",
+      true,
+      undefined,
+      undefined,
+      phase,
+      safeOriginName(error),
+    );
   }
   return new GitHubRequestError(
     status === undefined ? "invalid_response" : "upstream_permanent",
     false,
     status,
+    undefined,
+    phase,
+    safeOriginName(error),
   );
 }
 
 export async function executeGitHubRequest<T>(
   operation: () => Promise<T>,
+  phase?: "pull_request_refs",
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    throw classifyGitHubRequestError(error);
+    throw classifyGitHubRequestError(error, Date.now(), phase);
   }
 }
 
 export async function executeGitHubAppAuthenticationRequest<T>(
   operation: () => Promise<T>,
+  phase: "app_auth" | "installation_auth",
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
     if (isLocalPrivateKeyError(error)) {
-      throw new GitHubAppAuthenticationError();
+      throw new GitHubAppAuthenticationError(error, phase);
     }
-    throw classifyGitHubRequestError(error);
+    throw classifyGitHubRequestError(error, Date.now(), phase);
   }
 }

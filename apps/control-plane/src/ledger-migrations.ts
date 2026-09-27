@@ -314,19 +314,45 @@ const ledgerMigrations: readonly LedgerMigration[] = [
   {
     version: 14,
     statements: `
-    CREATE TABLE check_run_tasks (
-      run_id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL,
-      completed_revision INTEGER NOT NULL, attempts INTEGER NOT NULL, next_attempt_at TEXT NOT NULL
-    );
-  `,
+      CREATE TABLE review_finding_artifacts (
+        run_id TEXT NOT NULL,
+        part INTEGER NOT NULL,
+        payload BLOB NOT NULL,
+        PRIMARY KEY(run_id, part)
+      );
+      ALTER TABLE runs ADD COLUMN decision_output_json TEXT;
+      ALTER TABLE runs ADD COLUMN decision_medium_threshold INTEGER;
+      ALTER TABLE pr_findings ADD COLUMN identity_ambiguous INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE run_configurations (
+        run_id TEXT PRIMARY KEY,
+        config_digest TEXT NOT NULL,
+        reference_json TEXT NOT NULL,
+        summary_json TEXT NOT NULL
+      );
+      CREATE TABLE run_configuration_artifacts (
+        run_id TEXT NOT NULL,
+        part INTEGER NOT NULL,
+        payload BLOB NOT NULL,
+        PRIMARY KEY(run_id, part)
+      );
+    `,
   },
   {
     version: 15,
     statements: `
-    ALTER TABLE ci_evidences RENAME TO retired_ci_evidences;
-    CREATE TABLE ci_workflow_evidence(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,workflow_run_id INTEGER NOT NULL,attempt INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha,workflow_run_id));
-    CREATE TABLE ci_publication_tasks(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,target TEXT NOT NULL,revision INTEGER NOT NULL,completed_revision INTEGER NOT NULL,attempts INTEGER NOT NULL,next_attempt_at TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha));
-  `,
+      CREATE TABLE check_run_tasks (
+        run_id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL,
+        completed_revision INTEGER NOT NULL, attempts INTEGER NOT NULL, next_attempt_at TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    version: 16,
+    statements: `
+      ALTER TABLE ci_evidences RENAME TO retired_ci_evidences;
+      CREATE TABLE ci_workflow_evidence(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,workflow_run_id INTEGER NOT NULL,attempt INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha,workflow_run_id));
+      CREATE TABLE ci_publication_tasks(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,target TEXT NOT NULL,revision INTEGER NOT NULL,completed_revision INTEGER NOT NULL,attempts INTEGER NOT NULL,next_attempt_at TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha));
+    `,
   },
 ] as const;
 

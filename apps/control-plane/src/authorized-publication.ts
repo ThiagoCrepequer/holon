@@ -1,5 +1,6 @@
 import type { ReviewLedger, ReviewPublisher } from "@holon/application";
 import type { PublishCommentInput } from "@holon/application";
+import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 import {
   buildPublicationMarker,
   createPublicationId,
@@ -108,6 +109,7 @@ export async function publishResolutionAuthorized(
   },
   headSha: string,
   authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
+  language: ReviewLanguage = "en",
 ): Promise<boolean> {
   const commentId = resolved.githubCommentId;
   if (commentId === undefined) return false;
@@ -130,7 +132,7 @@ export async function publishResolutionAuthorized(
     runId,
     findingId,
     "inline",
-    `✅ Defeito resolvido no commit \`${headSha.slice(0, 7)}\`.`,
+    reviewMessage(language, "resolved", { sha: headSha.slice(0, 7) }),
     {},
     authorizeImmediatelyBeforeMutation,
   );

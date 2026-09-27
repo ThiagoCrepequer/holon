@@ -8,7 +8,8 @@ import { AdminReadEntrypoint } from "../src/admin-read-entrypoint.js";
 
 describe("AdminReadEntrypoint", () => {
   const validSha = "a".repeat(40);
-  const validRunId = `github:42:pr:7:head:${validSha}` as RunId;
+  const validRunId =
+    `github:42:pr:7:head:${validSha}:base:${"b".repeat(40)}` as RunId;
 
   it("responds to ping with readiness", async () => {
     const entrypoint = new AdminReadEntrypoint(createExecutionContext(), env);
@@ -123,7 +124,8 @@ describe("AdminReadEntrypoint", () => {
     ).rejects.toThrow();
 
     const missingSha = "9".repeat(40);
-    const missingRunId = `github:42:pr:7:head:${missingSha}` as RunId;
+    const missingRunId =
+      `github:42:pr:7:head:${missingSha}:base:${"b".repeat(40)}` as RunId;
     expect(await entrypoint.getRunDetail({ runId: missingRunId })).toBeNull();
   });
 });

@@ -1,18 +1,19 @@
 import { limitReviewText, reviewTextLimits } from "@holon/contracts";
+import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 
 /** Reserve coverage/lifecycle information before allocating narrative space. */
 export function fitPublicationSummary(
   prefix: string,
   narrative: string,
   suffix: string,
+  language: ReviewLanguage = "en",
 ): string {
   prefix = limitReviewText(prefix, 2_000);
-  const notice =
-    "\n\n[Additional narrative omitted to fit the publication budget.]";
+  const notice = "\n\n" + reviewMessage(language, "narrativeOmitted");
   const boundedSuffix = limitReviewText(
     suffix,
     8_000,
-    "\n[Additional detail omitted.]",
+    "\n" + reviewMessage(language, "detailOmitted"),
   );
   const fixed = [prefix, boundedSuffix].filter(Boolean).join("\n\n");
   const budget = Math.max(

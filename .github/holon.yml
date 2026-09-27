@@ -1,0 +1,298 @@
+# yaml-language-server: $schema=../docs/contracts/holon.schema.json
+# Configuração real do Holon e exemplo de todas as opções disponíveis.
+# Guia: docs/operations/repository-configuration.md
+# Validar, na raiz: pnpm config:validate --directory "$PWD"
+# Inspecionar um arquivo: pnpm config:explain --directory "$PWD" --path apps/control-plane/src/review-workflow.ts
+# Configuração e referências são lidas do base SHA: mudanças neste arquivo
+# passam a orientar novas reviews depois de entrarem na branch de destino.
+
+output:
+  # Catálogo: en, pt-BR, es. Código e trechos de evidência preservam o original.
+  language: pt-BR
+  # concise ou detailed; o detalhamento não altera a decisão do review.
+  detail: detailed
+  # 0–40 novos comentários inline por execução; 0 mantém resumo e Check Run.
+  max_inline_comments: 40
+
+review:
+  # Exclusões aditivas para relatórios gerados pelas ferramentas locais.
+  additional_excludes:
+    - "apps/*/junit*.xml"
+    - "packages/*/junit*.xml"
+    - "tooling/*/junit*.xml"
+    - "apps/*/coverage/**"
+    - "packages/*/coverage/**"
+    - "tooling/*/coverage/**"
+    - "artifacts/**"
+  # Todas as prioridades aceitas; a lista não desliga outras categorias.
+  focus:
+    - correctness
+    - security
+    - concurrency
+    - performance
+    - accessibility
+  # Documentos usados como contexto, sem autoridade de instrução.
+  # Paths globais são relativos à raiz do repositório, inclusive neste arquivo.
+  reference_files:
+    - docs/operations/README.md
+
+verdict:
+  # default ou block_all_confident_medium. Nesta configuração, um único
+  # finding medium com confiança suficiente pode gerar REQUEST_CHANGES.
+  strictness: block_all_confident_medium
+
+instructions:
+  # Referência explícita, lida uma única vez; sem includes recursivos.
+  - path: AGENTS.md
+
+# O root mais específico governa cada arquivo. Projetos filhos não herdam
+# instruções do projeto raiz; regras compartilhadas ficam no bloco global.
+# Versões abaixo expressam compatibilidade pretendida, conforme os manifests
+# atuais, e são sempre strings. Não substituem versões detectadas pelo Holon.
+# Tecnologias sem comparador ficam contextuais
+# (unknown/not_detected); isso, isoladamente, não comprova incompatibilidade.
+projects:
+  - name: holon
+    root: .
+    description: Toolchain e configuração raiz.
+    compatibility:
+      runtimes:
+        node: ">=24 <25"
+      frameworks:
+        typescript: "7.x"
+    instructions:
+      - |
+        Confira catálogo pnpm, manifests, lockfile, ESM e gates em conjunto.
+
+  - name: control-plane
+    root: apps/control-plane
+    description: Orquestração e ledger das reviews.
+    instructions:
+      - |
+        Preserve transições condicionais por PR/head/base, revalidação e
+        cleanup durável. Verifique retries, eviction e checkpoints pequenos.
+
+  - name: repository-executor
+    root: apps/repository-executor
+    description: Checkout e ferramentas no Sandbox.
+    instructions:
+      - |
+        Preserve SHA exato, egress restrito e política única de paths nas tools.
+        Verifique isolamento, limites de leitura e destruição do Sandbox.
+
+  - name: admin
+    root: apps/admin
+    description: Console de operação autenticado.
+    compatibility:
+      frameworks:
+        react: "19.x"
+    instructions:
+      - |
+        Confira autorização em loaders/RPCs, paginação e estados de erro.
+        Preserve teclado, foco, responsividade e escape de evidências.
+
+  - name: domain
+    root: packages/domain
+    description: Políticas puras de review.
+    instructions:
+      - |
+        Mantenha domínio sem I/O. Idioma, detalhe e cap devem preservar
+        identidade, feedback humano e veredito.
+
+  - name: application
+    root: packages/application
+    description: Casos de uso e portas.
+    instructions:
+      - |
+        Verifique consumo das preferências, precedência e limites UTF-8.
+        Configuração inválida deve falhar antes da review.
+
+  - name: contracts
+    root: packages/contracts
+    description: Contratos e schema de editor.
+    instructions:
+      - |
+        Confira produtores, consumidores, schemas estritos e exemplos.
+        Distinga validação estrutural de invariantes semânticas.
+
+  - name: github
+    root: packages/github
+    description: Integração e publicação GitHub.
+    instructions:
+      - |
+        Confira instalação, autorização, limites, rate limit e ausência real.
+        Preserve recuperação de publicação parcial e marcadores estáveis.
+
+  - name: model
+    root: packages/model
+    description: Investigação e finalização por IA.
+    instructions:
+      - |
+        Confira orçamentos e separação investigação/finalização. O host deve
+        validar evidências e permissões independentemente do prompt.
+
+  - name: repository-analysis
+    root: packages/repository-analysis
+    description: Análise e planejamento de shards.
+    instructions:
+      - |
+        Planeje todos os patches elegíveis; explicite omissões por orçamento.
+        Preserve a semântica de paths, renames e exclusões.
+
+  - name: repository-config
+    root: packages/repository-config
+    description: Parser YAML compartilhado.
+    instructions:
+      - |
+        Rejeite tags, aliases, merge keys, documentos múltiplos e excessos.
+        Diagnósticos devem ser úteis sem expor conteúdo privado.
+
+  - name: project-identification
+    root: packages/project-identification
+    description: Detecção com proveniência.
+    instructions:
+      - |
+        Separe declarações de fatos detectados; preserve proveniência e IDs.
+        Use unknown/not_detected quando a evidência for insuficiente.
+
+  - name: evaluation
+    root: packages/evaluation
+    description: Avaliações offline.
+    instructions:
+      - |
+        Use oráculos independentes e métricas que detectem regressões.
+        Evidência offline não comprova qualidade ou custos em produção.
+
+  - name: test-kit
+    root: packages/test-kit
+    description: Fixtures compartilhadas.
+    instructions:
+      - |
+        Preserve isolamento e fixtures determinísticas que respeitem os
+        contratos sem mascarar falhas de autorização, estado ou limites.
+
+  - name: ui
+    root: packages/ui
+    description: Componentes e tokens visuais.
+    compatibility:
+      frameworks:
+        react: "19.x"
+        tailwindcss: "4.x"
+    instructions:
+      - |
+        Confira acessibilidade, foco e estados disabled/loading. Preserve
+        consumidores, contraste, tokens e comportamento responsivo.
+
+  - name: admin-cli
+    root: tooling/admin-cli
+    description: Comandos administrativos.
+    compatibility:
+      runtimes:
+        node: ">=24 <25"
+    instructions:
+      - |
+        Confira argumentos, destino, autorização de efeitos remotos,
+        idempotência de replay e saída sanitizada.
+
+  - name: config-cli
+    root: tooling/config-cli
+    description: Validação local e JSON Schema.
+    compatibility:
+      runtimes:
+        node: ">=24 <25"
+    instructions:
+      - |
+        Compare leitura por ref e working tree, inclusive maiúsculas.
+        Mostre origens sem expor textos ou instalar dependências inspecionadas.
+
+  - name: typescript
+    root: tooling/typescript
+    description: Opções de compilação.
+    compatibility:
+      frameworks:
+        typescript: "7.x"
+    instructions:
+      - |
+        Confira efeitos em todos os workspaces, ESM e tipos Node/Workers.
+        Evite casts que escondam divergências de contrato.
+
+  - name: docs
+    root: docs
+    description: Documentação do projeto.
+    instructions:
+      # Relativo ao root: docs/operations/README.md.
+      - path: operations/README.md
+
+# Todas as regras correspondentes são compostas na ordem declarada, depois
+# das instruções globais e do projeto. Os globs partem da raiz do repositório.
+path_rules:
+  - paths:
+      - "**/test/**"
+      - "**/*.test.ts"
+      - "**/*.test.tsx"
+    instructions:
+      - |
+        Confira assertions, limites, isolamento e concorrência.
+        O teste deve detectar a regressão real, não apenas executar código.
+
+  - paths:
+      - "apps/control-plane/src/*store*.ts"
+      - "apps/control-plane/src/*object*.ts"
+      - "apps/control-plane/src/*migrations*.ts"
+    instructions:
+      - |
+        Verifique atomicidade, ordem causal e replay após eviction ou resposta
+        perdida. Confira retenção e cleanup de cada classe de dado.
+
+  - paths:
+      - "apps/control-plane/src/*workflow*.ts"
+      - "apps/control-plane/src/review-analysis*.ts"
+    instructions:
+      - |
+        Confira checkpoints pequenos, retomada durável e cleanup em todos os
+        caminhos terminais, inclusive antes de criar Sandbox.
+
+  - paths:
+      - "packages/contracts/src/**"
+      - "docs/contracts/**"
+      - "tooling/config-cli/schema.ts"
+      - ".github/holon.yml"
+    instructions:
+      - |
+        Confira paridade entre schema, runtime e exemplos; regenere os
+        artefatos e atualize todos os consumidores de contratos alterados.
+
+  - paths:
+      - "**/wrangler.jsonc"
+      - ".github/workflows/**"
+      - "**/Dockerfile"
+      - "**/Dockerfile.*"
+    instructions:
+      - |
+        Confira bindings, egress, autenticação e comandos do deployable.
+        Diferencie verificações locais de operações que mudam estado remoto.
+
+  - paths:
+      - "apps/admin/app/**"
+      - "packages/ui/src/**"
+    instructions:
+      - |
+        Confira teclado, foco, telas estreitas e estados de carregamento/erro.
+        Evidências devem ser escapadas e consultadas com autorização.
+
+  - paths:
+      - "packages/model/src/**"
+      - "packages/application/src/*configuration*.ts"
+    instructions:
+      - |
+        Separe contexto de instruções e limite bytes/tokens agregados.
+        Prompts não substituem autorização nem validação de evidências.
+
+  - paths:
+      - "docs/decisions/**"
+      - "docs/architecture/**"
+      - "docs/operations/**"
+    instructions:
+      - |
+        Preserve ADRs aceitas. Documente mudanças de decisão, retenção e
+        rollout; distinga validação local de comprovação live.

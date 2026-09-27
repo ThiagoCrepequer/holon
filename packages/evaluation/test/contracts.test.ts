@@ -145,19 +145,28 @@ describe("evalCaseSchema", () => {
     ).toThrow(/terms must be unique/u);
   });
 
-  it("rejects a run identity for a different head SHA", () => {
-    const evalCase = createEvalCase();
-    expect(() =>
-      evalCaseSchema.parse({
-        ...evalCase,
-        input: {
-          ...evalCase.input,
-          job: {
-            ...evalCase.input.job,
-            runId: evalCase.input.job.runId.replace(/a{40}$/u, "c".repeat(40)),
+  it.each(["headSha", "baseSha"] as const)(
+    "rejects a run identity for a different %s",
+    (field) => {
+      const evalCase = createEvalCase();
+      expect(() =>
+        evalCaseSchema.parse({
+          ...evalCase,
+          input: {
+            ...evalCase.input,
+            job: {
+              ...evalCase.input.job,
+              envelope: {
+                ...evalCase.input.job.envelope,
+                pullRequest: {
+                  ...evalCase.input.job.envelope.pullRequest,
+                  [field]: "c".repeat(40),
+                },
+              },
+            },
           },
-        },
-      }),
-    ).toThrow();
-  });
+        }),
+      ).toThrow(/runId does not match the webhook coordinates/u);
+    },
+  );
 });

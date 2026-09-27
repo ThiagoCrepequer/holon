@@ -108,7 +108,7 @@ export function createSampleProjectionPayload(
     1;
   const prKey = (overrides?.prKey as string) ?? `github:${repoId}:pr:${prNum}`;
   const runId = ((overrides?.runId as string) ??
-    `${prKey}:head:${sha}`) as RunId;
+    `${prKey}:head:${sha}:base:${"b".repeat(40)}`) as RunId;
 
   const terminalEpoch = overrides?.terminalAtEpochMs as number | undefined;
   const terminalAt =

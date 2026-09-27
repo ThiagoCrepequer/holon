@@ -289,7 +289,7 @@ describe("GitHubReviewPublisher", () => {
     });
 
     const checkRunId = await publisher.createCheckRun({
-      externalId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      externalId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
       headSha: "a".repeat(40),
       name: "Holon Review",
       output: {
@@ -303,7 +303,7 @@ describe("GitHubReviewPublisher", () => {
     expect(checkRunId).toBe(123);
     expect(api.requests[0]).toEqual({
       parameters: {
-        external_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+        external_id: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
         head_sha: "a".repeat(40),
         name: "Holon Review",
         output: {
@@ -322,7 +322,7 @@ describe("GitHubReviewPublisher", () => {
     await publisher.createCheckRun({
       completedAt: "2026-08-29T12:05:00.000Z",
       conclusion: "success",
-      externalId: `github:42:pr:7:head:${"a".repeat(40)}`,
+      externalId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
       headSha: "a".repeat(40),
       status: "completed",
     });
@@ -331,7 +331,7 @@ describe("GitHubReviewPublisher", () => {
       parameters: {
         completed_at: "2026-08-29T12:05:00.000Z",
         conclusion: "success",
-        external_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+        external_id: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
         head_sha: "a".repeat(40),
         name: "Holon Review",
         owner: "acme",
@@ -407,7 +407,7 @@ describe("GitHubReviewPublisher", () => {
       pullNumber: 7,
       repo: "api",
     });
-    const runId = `github:42:pr:7:head:${"a".repeat(40)}`;
+    const runId = `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`;
     api.checkRuns = [
       {
         externalId: runId,

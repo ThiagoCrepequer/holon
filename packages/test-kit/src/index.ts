@@ -5,6 +5,7 @@ import {
 } from "@holon/contracts";
 
 const defaultHeadSha = "a".repeat(40);
+const defaultBaseSha = "b".repeat(40);
 
 export function createReviewJob(
   overrides: {
@@ -23,7 +24,7 @@ export function createReviewJob(
       event: "pull_request",
       installationId: 99,
       pullRequest: {
-        baseSha: "b".repeat(40),
+        baseSha: defaultBaseSha,
         headSha,
         number: pullRequestNumber,
         updatedAt: "2026-08-29T12:00:00.000Z",
@@ -36,7 +37,7 @@ export function createReviewJob(
         owner: "acme",
       },
     },
-    runId: `github:${repositoryId}:pr:${pullRequestNumber}:head:${headSha}`,
+    runId: `github:${repositoryId}:pr:${pullRequestNumber}:head:${headSha}:base:${defaultBaseSha}`,
   });
 }
 

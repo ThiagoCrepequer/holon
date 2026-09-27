@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-09-10
 ---
 
 # Desenvolvimento local
@@ -173,3 +173,10 @@ Não atua sobre o banco remoto.
 ## Identificação de versões (2026-09-05)
 
 Consulte o [runbook de identificação](project-version-identification.md) para configuração, deploy coordenado, corpus offline/live e invalidação por perfil. A identificação faz parte do workflow padrão; `observe` registra os resultados sem enriquecer a investigação.
+
+## Configuração e schema
+
+O gate começa por `pnpm config:schema:check`. Após alterar fontes do compilador
+ou contratos, execute `pnpm format` e `pnpm config:schema:generate`, depois confira
+o diff. A [operação de configuração](repository-configuration.md) descreve CLI,
+validação de refs imutáveis, uso no editor e rollout sem reset implícito.

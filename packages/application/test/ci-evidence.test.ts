@@ -217,8 +217,12 @@ DA:invalid,format
 
       // Empty / corrupted zip -> not_available
       const corruptedZip = new Uint8Array([1, 2, 3, 4, 5]);
-      const notAvailable = ingestCiArtifactZips([corruptedZip]);
+      const partialErrors: Array<{ kind: string; index: number }> = [];
+      const notAvailable = ingestCiArtifactZips([corruptedZip], {
+        onPartialError: (kind, index) => partialErrors.push({ kind, index }),
+      });
       expect(notAvailable.status).toBe("not_available");
+      expect(partialErrors).toEqual([{ kind: "zip_extraction", index: 0 }]);
     });
   });
 });

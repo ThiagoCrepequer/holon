@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-10
 ---
 
 # Investigacoes
@@ -24,8 +24,10 @@ Nao criam uma decisao por si so.
 - [Incidente de diff divergente e output semântico ausente](2026-08-30-canonical-diff-and-semantic-output-incident.md)
 - [Smoke remoto do fluxo de review do GitHub App](2026-08-31-live-github-app-review-smoke.md)
 - [Toolchain e arquitetura do Console Operacional Interno](2026-09-04-internal-operational-console-toolchain.md)
-
 - [Confiabilidade do core de review](2026-09-08-review-core-reliability.md)
+- [Omissão de contexto antes do planejamento](2026-09-08-context-budget-omission.md)
+- [Configuração e schema para editores](2026-09-09-repository-configuration-and-editor-schema.md)
+- [Arquitetura e estado da arte para serviço de busca de documentação](2026-09-10-technical-documentation-retrieval-service.md)
 
 ## Politica de manutencao
 
@@ -34,5 +36,3 @@ Nao criam uma decisao por si so.
 - Promova uma conclusao para ADR quando ela resultar em escolha normativa.
 - Use prioritariamente documentacao oficial, schemas publicados e testes
   reproduziveis.
-
-- [2026-09-08 — Omissão de contexto antes do planejamento](2026-09-08-context-budget-omission.md)

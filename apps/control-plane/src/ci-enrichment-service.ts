@@ -17,6 +17,7 @@ import {
   type GitHubInstallationSession,
   type KeyringOperationOptions,
 } from "@holon/github";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import {
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -141,6 +142,15 @@ export async function enrichReviewWithCiEvidence(
     source: "github-actions",
     workflowName: input.workflowName,
     workflowRunId: input.workflowRunId,
+    onPartialError: (kind, index, error) =>
+      reportError(consoleErrorReporter, "ci.artifact_partial_failure", error, {
+        component: "control-plane",
+        operation: `ci.${kind}`,
+        deliveryId: input.deliveryId,
+        repositoryId: input.repository.id,
+        pullRequestNumber: input.pullRequestNumber,
+        messageIndex: index,
+      }),
   });
 
   const evidence =
@@ -203,8 +213,20 @@ export async function enrichReviewWithCiEvidence(
     pullRequestNumber: input.pullRequestNumber,
     repositoryId: input.repository.id,
   });
-
-  const evidenceMarkdown = formatCiEvidenceMarkdown(evidence, changedCoverage);
+  const markdownByLanguage = {
+    en: truncateUtf8Bytes(
+      formatCiEvidenceMarkdown(evidence, changedCoverage, "en"),
+      16000,
+    ),
+    "pt-BR": truncateUtf8Bytes(
+      formatCiEvidenceMarkdown(evidence, changedCoverage, "pt-BR"),
+      16000,
+    ),
+    es: truncateUtf8Bytes(
+      formatCiEvidenceMarkdown(evidence, changedCoverage, "es"),
+      16000,
+    ),
+  };
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
   const rawWorkflowName = input.workflowName ?? evidence.workflowName;
@@ -223,7 +245,7 @@ export async function enrichReviewWithCiEvidence(
   const ledger = dependencies.ledger ?? env.REVIEW_LEDGERS?.getByName(prKey);
   if (ledger !== undefined) {
     await ledger.saveCiEvidence(prKey, input.headSha, {
-      markdown: evidenceMarkdown,
+      markdownByLanguage,
       structuredCi,
       workflowRunId: input.workflowRunId,
       workflowRunAttempt: input.workflowRunAttempt,
@@ -237,6 +259,8 @@ export async function enrichReviewWithCiEvidence(
     });
   }
 
+  // The durable outbox revalidates live head/base and the persisted decision
+  // before publishing the localized summary, including CI that arrives first.
   if (ledger === undefined) throw new Error("CI ledger is unavailable");
   return { enriched: true, reason: "saved_pending_review" };
 }

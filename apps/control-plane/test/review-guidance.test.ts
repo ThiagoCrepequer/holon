@@ -1,64 +1,58 @@
+import {
+  compileRepositoryConfiguration,
+  configurationDigest,
+  projectConfigurationGuidance,
+} from "@holon/application";
+import { parseRepositoryConfigurationYaml } from "@holon/repository-config";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseAndValidatePolicy } from "../src/repository-policy-resolver.js";
 import { resolveReviewGuidance } from "../src/review-guidance.js";
+import { configurationReader } from "./configuration-fixtures.js";
 const base = "b".repeat(40);
+async function compile(yaml: string) {
+  return compileRepositoryConfiguration(
+    {
+      runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${base}`,
+      installationId: 99,
+      repositoryId: 42,
+      pullRequestNumber: 7,
+      headSha: "a".repeat(40),
+      baseSha: base,
+    },
+    configurationReader({ ".holon.yml": yaml }),
+    parseRepositoryConfigurationYaml,
+  );
+}
 describe("project guidance", () => {
   it("accepts bounded directions and compatibility by project without changing observed versions", async () => {
     const yaml =
-      'review:\n  instructions: ["Check tenant boundaries"]\n  projects:\n    - root: apps/api\n      instructions: ["Keep writes transactional"]\n      compatibility:\n        node: "22"\n';
-    const policy = await parseAndValidatePolicy(
-      yaml,
-      new TextEncoder().encode(yaml),
-      ".holon.yml",
-      base,
-    );
-    const context = await resolveReviewGuidance(
-      policy,
-      ["apps/api/src/a.ts"],
-      undefined,
-      vi.fn(),
-    );
-    expect(context.instructions).toContain("Check tenant boundaries");
-    expect(context.projects[0]?.compatibility).toEqual({ node: "22" });
+      'instructions: ["Check tenant boundaries"]\nprojects:\n  - name: api\n    root: apps/api\n    instructions: ["Keep writes transactional"]\n    compatibility:\n      runtimes:\n        node: "22"\n';
+    const snapshot = await compile(yaml);
+    const context = projectConfigurationGuidance(snapshot, [
+      "apps/api/src/a.ts",
+    ]);
+    expect(JSON.stringify(context)).toContain("Check tenant boundaries");
+    expect(snapshot.config.projects[0]?.compatibility).toEqual({
+      runtimes: { node: "22" },
+    });
+    expect(JSON.stringify(context)).toContain("Keep writes transactional");
     expect(
-      (
-        await resolveReviewGuidance(
-          policy,
-          ["apps/web/a.ts"],
-          undefined,
-          vi.fn(),
-        )
-      ).projects,
-    ).toEqual([]);
+      JSON.stringify(projectConfigurationGuidance(snapshot, ["apps/web/a.ts"])),
+    ).not.toContain("Keep writes transactional");
   });
   it("rejects unsupported documentation hosts at the configuration boundary", async () => {
     const yaml =
       'review:\n  documentation:\n    - root: .\n      technology: node\n      version: "22.0.0"\n      url: https://127.0.0.1/private\n      sha256: ' +
       "a".repeat(64);
-    await expect(
-      parseAndValidatePolicy(
-        yaml,
-        new TextEncoder().encode(yaml),
-        ".holon.yml",
-        base,
-      ),
-    ).rejects.toThrow();
+    await expect(compile(yaml)).rejects.toThrow();
   });
 });
 
 it("verifies the content digest and observed exact version before supplying external docs", async () => {
-  const { computeSha256Hex } =
-    await import("../src/repository-policy-resolver.js");
   const content = "Node 22 API reference";
-  const digest = await computeSha256Hex(content);
+  const digest = await configurationDigest(content);
   const yaml = `review:\n  documentation:\n    - root: .\n      technology: node\n      version: "22.0.0"\n      url: https://nodejs.org/docs/v22.0.0/api/\n      sha256: ${digest}\n`;
-  const policy = await parseAndValidatePolicy(
-    yaml,
-    new TextEncoder().encode(yaml),
-    ".holon.yml",
-    base,
-  );
+  const policy = (await compile(yaml)).config.documentation;
   const identification = {
     projects: [
       {
@@ -108,12 +102,7 @@ it("verifies the content digest and observed exact version before supplying exte
 });
 it("bounds external document bodies while streaming and records unavailable sources", async () => {
   const yaml = `review:\n  documentation:\n    - root: .\n      technology: node\n      version: "22.0.0"\n      url: https://nodejs.org/docs/v22.0.0/api/\n      sha256: ${"a".repeat(64)}\n`;
-  const policy = await parseAndValidatePolicy(
-    yaml,
-    new TextEncoder().encode(yaml),
-    ".holon.yml",
-    base,
-  );
+  const policy = (await compile(yaml)).config.documentation;
   const identification = {
     projects: [
       {
@@ -145,26 +134,15 @@ it("bounds external document bodies while streaming and records unavailable sour
 });
 
 it("omits complete guidance entries under the shared byte budget", async () => {
-  const { computeSha256Hex } =
-    await import("../src/repository-policy-resolver.js");
   const content = "reference ".repeat(1000);
-  const sha256 = await computeSha256Hex(content);
-  const policy = {
-    reviewGuidance: {
-      instructions: ["general instruction"],
-      projects: Array.from({ length: 20 }, (_, index) => ({
-        root: index === 0 ? "." : "apps/api",
-        instructions: ["界".repeat(1000), "界".repeat(1000)],
-      })),
-      documentation: Array.from({ length: 4 }, () => ({
-        root: ".",
-        technology: "node",
-        version: "22.0.0",
-        url: "https://nodejs.org/api/",
-        sha256,
-      })),
-    },
-  } as never;
+  const sha256 = await configurationDigest(content);
+  const policy = Array.from({ length: 4 }, () => ({
+    root: ".",
+    technology: "node",
+    version: "22.0.0",
+    url: "https://nodejs.org/api/",
+    sha256,
+  }));
   const identification = {
     projects: [
       {
@@ -190,7 +168,8 @@ it("omits complete guidance entries under the shared byte budget", async () => {
   expect(result.limitations).toContain(
     "Supplementary project guidance exceeds the context budget; complete entries were omitted.",
   );
-  expect(result.instructions).toEqual(["general instruction"]);
+  expect(result.documentation.length).toBeLessThan(4);
+  expect(result.documentation.length).toBeGreaterThan(0);
 });
 it("does not fetch docs outside a shard and treats an unavailable source as a limitation", async () => {
   const config = {
@@ -200,7 +179,7 @@ it("does not fetch docs outside a shard and treats an unavailable source as a li
     url: "https://nodejs.org/api/",
     sha256: "a".repeat(64),
   };
-  const policy = { reviewGuidance: { documentation: [config] } } as never;
+  const policy = [config];
   const fetcher = vi.fn(async () => new Response(null, { status: 503 }));
   await resolveReviewGuidance(policy, ["apps/web/a.ts"], undefined, fetcher);
   expect(fetcher).not.toHaveBeenCalled();

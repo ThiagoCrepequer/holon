@@ -12,6 +12,13 @@ export interface IngestCiArtifactsOptions {
   readonly source?: string | undefined;
   readonly workflowName?: string | undefined;
   readonly workflowRunId?: number | undefined;
+  readonly onPartialError?:
+    | ((
+        kind: "zip_extraction" | "lcov_parse" | "junit_parse",
+        index: number,
+        error: unknown,
+      ) => void)
+    | undefined;
 }
 
 export interface RawArtifactFile {
@@ -43,7 +50,7 @@ export function ingestCiArtifactZips(
   let totalBytes = 0;
   let omitted = 0;
 
-  for (const zipBuffer of zipBuffers) {
+  for (const [index, zipBuffer] of zipBuffers.entries()) {
     try {
       const files = extractSafeZipArtifact(zipBuffer, {
         maxUncompressedBytes: Math.max(0, 12 * 1024 * 1024 - totalBytes),
@@ -52,9 +59,10 @@ export function ingestCiArtifactZips(
         totalBytes += file.sizeBytes;
         extractedFiles.push({ content: file.content, path: file.path });
       }
-    } catch {
+    } catch (error) {
       omitted++;
-      // Keep verified reports while recording omitted artifacts.
+      options.onPartialError?.("zip_extraction", index, error);
+      // If a zip fails extraction (e.g. malformed or oversized), skip it safely
       continue;
     }
   }
@@ -83,20 +91,22 @@ export function ingestRawArtifactFiles(
   const testReports: TestExecutionReport[] = [];
   let invalidReports = 0;
 
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     if (isLcovContent(file.path, file.content)) {
       try {
         const parsed = parseLcov(file.content);
         coverageReports.push(...parsed);
-      } catch {
+      } catch (error) {
         invalidReports++;
+        options.onPartialError?.("lcov_parse", index, error);
       }
     } else if (isJUnitXmlContent(file.path, file.content)) {
       try {
         const parsed = parseJUnitXml(file.content);
         testReports.push(parsed);
-      } catch {
+      } catch (error) {
         invalidReports++;
+        options.onPartialError?.("junit_parse", index, error);
       }
     }
   }

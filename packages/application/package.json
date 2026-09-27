@@ -14,7 +14,12 @@
   "dependencies": {
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
+    "@renovatebot/pep440": "4.2.4",
     "fast-xml-parser": "5.11.1",
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "semver": "7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "7.8.0"
   }
 }

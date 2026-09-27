@@ -1,3 +1,8 @@
+import type {
+  RunConfigurationRef,
+  RunConfigurationSnapshot,
+} from "@holon/contracts";
+
 import type { DesiredCheckRun } from "./check-run-reconciliation.js";
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
@@ -54,6 +59,7 @@ import {
   RepositoryToolBudgetExceededError,
   createRedactingRepositoryToolRunner,
 } from "@holon/model";
+import { safeErrorDetails } from "@holon/observability";
 import {
   interpretProjects,
   detectorRevision,
@@ -70,7 +76,7 @@ import {
   GitHubTransientError,
 } from "./github-operations.js";
 import { errorKind, type StructuredLogger } from "./observability.js";
-import { createDefaultRepositoryPolicy } from "./repository-policy-resolver.js";
+import { configurationScopePolicy } from "./run-configuration-resolver.js";
 import {
   AnalyticsEngineTelemetryEmitter,
   CompositeTelemetryEmitter,
@@ -102,6 +108,13 @@ export interface WorkflowLedger
     RunTelemetryLedger {
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
+  saveRunConfiguration(
+    snapshot: RunConfigurationSnapshot,
+  ): Promise<RunConfigurationRef>;
+  loadRunConfiguration(
+    reference: RunConfigurationRef,
+  ): Promise<RunConfigurationSnapshot>;
+  findRunConfiguration(runId: string): Promise<RunConfigurationRef | undefined>;
   saveReviewAnalysis(
     runId: string,
     output: ReconciledReviewOutput,
@@ -304,7 +317,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryTransientError",
-        reason: error.message.slice(0, 100),
+        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
         retryable: true,
       });
       throw new RepositoryTransientError("repository");
@@ -318,7 +331,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryPermanentError",
-        reason: error.message.slice(0, 100),
+        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
         retryable: false,
       });
       throw new NonRetryableError("HOLON_REPOSITORY_NON_RETRYABLE");
@@ -350,22 +363,37 @@ export function createReviewServices(
   ) as unknown as WorkflowLedger;
   const wait = runtime.wait ?? ((delay) => scheduler.wait(delay));
   const createSession = async () =>
-    await executeGitHubOperation(async () => {
-      if (runtime.createSession) {
-        return await runtime.createSession(
+    await executeGitHubOperation(
+      async () => {
+        if (runtime.createSession) {
+          return await runtime.createSession(
+            job.envelope.installationId,
+            job.envelope.repository.id,
+          );
+        }
+        const keyring = resolveControlPlaneKeyring(env);
+        const keyringOptions = createKeyringTelemetryOptions(
+          logger,
+          logContext,
+        );
+        return await createInstallationSessionWithKeyring(
+          keyring,
           job.envelope.installationId,
           job.envelope.repository.id,
+          keyringOptions,
         );
-      }
-      const keyring = resolveControlPlaneKeyring(env);
-      const keyringOptions = createKeyringTelemetryOptions(logger, logContext);
-      return await createInstallationSessionWithKeyring(
-        keyring,
-        job.envelope.installationId,
-        job.envelope.repository.id,
-        keyringOptions,
-      );
-    });
+      },
+      Date.now,
+      {
+        context: {
+          operation: "github.create_installation_session",
+          runId: job.runId,
+          repositoryId: job.envelope.repository.id,
+          pullRequestNumber: job.envelope.pullRequest.number,
+          installationId: job.envelope.installationId,
+        },
+      },
+    );
 
   const resolveCredentialContainerId = async (): Promise<string> => {
     const containerId = await executor.resolveContainerId(job.runId);
@@ -379,9 +407,17 @@ export function createReviewServices(
     policy?: RepositoryPolicy,
   ): Promise<PreparedRepository> => {
     try {
-      const effectivePolicy =
-        policy ??
-        (await createDefaultRepositoryPolicy(job.envelope.pullRequest.baseSha));
+      let effectivePolicy = policy;
+      if (effectivePolicy === undefined) {
+        const reference = await ledger.findRunConfiguration(job.runId);
+        if (reference === undefined)
+          throw new NonRetryableError(
+            "Repository configuration is not compiled",
+          );
+        effectivePolicy = configurationScopePolicy(
+          await ledger.loadRunConfiguration(reference),
+        );
+      }
 
       const github = await createSession();
       const canonicalDiff = await executeGitHubOperation(() =>

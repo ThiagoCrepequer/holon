@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-10
 ---
 
 # Contratos
@@ -90,6 +90,18 @@ persistidos; registros incompletos são rejeitados.
 
 A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.
 
+## Configuração compilada — 2026-09-09
+
+`repository-config/input.ts` é a entrada estrutural única; `snapshot.ts` separa
+snapshot privado, referência e resumo público autenticado. O artefato
+[holon.schema.json](holon.schema.json) deriva de Zod draft-07 e é servido pelo
+control-plane. O gate verifica schema e identidade gerada do compilador. A
+[CLI](../operations/repository-configuration.md) aplica validação semântica.
+`configDigest` identifica semântica/defaults/textos, `sourceDigest` a proveniência
+e `scopeDigest` somente exclusões. Identidade de run exige PR/head/base.
+`AdminRunDetail.historicalRunFindings` contém resultados retidos integrais,
+independentes dos manifests temporários e do limite de publicação inline.
+
 ## Contratos do core de review (2026-09-27)
 
-A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `RepositoryPolicy.reviewGuidance` é opcional e integra o digest efetivo. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md).
+A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `review.documentation` integra o snapshot compilado e seu digest; instruções e compatibilidade seguem o contrato único de configuração. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md).

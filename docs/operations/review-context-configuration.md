@@ -13,28 +13,31 @@ O parser rejeita chaves desconhecidas, aliases, tags e aninhamento excessivo.
 O arquivo continua limitado a 64 KiB.
 
 ```yaml
-review:
-  instructions:
-    - "Verificar isolamento entre tenants nas consultas e atualizações."
-  projects:
-    - root: apps/api
-      instructions:
-        - "Preservar a transação ao atualizar saldo e histórico."
-      compatibility:
+instructions:
+  - "Verificar isolamento entre tenants nas consultas e atualizações."
+projects:
+  - name: api
+    root: apps/api
+    instructions:
+      - "Preservar a transação ao atualizar saldo e histórico."
+    compatibility:
+      runtimes:
         node: "22"
-    - root: apps/web
-      compatibility:
+  - name: web
+    root: apps/web
+    compatibility:
+      frameworks:
         react: "19"
 verdict:
   strictness: default
 ```
 
-Instruções e compatibilidade só são aplicadas aos projetos cujas raízes contêm
-arquivos do shard. Cada lista tem no máximo oito instruções de mil caracteres;
-são permitidos vinte projetos e vinte alvos de compatibilidade por projeto.
-Compatibilidade é intenção declarada, não substitui a versão observada em
+Instruções, escopo por raiz mais específica, arquivos de referência e limites
+seguem o [contrato único de configuração](repository-configuration.md).
+Compatibilidade é intenção declarada, não substitui versões observadas em
 manifestos/lockfiles. As restrições de segurança, evidência e formato continuam
-controladas pelo host.
+controladas pelo host. `review.documentation` é compilada no mesmo snapshot
+imutável por execução e integra seu digest.
 
 ## Documentação de versões
 
@@ -79,5 +82,5 @@ Resultados de workflows diferentes são identificados separadamente; uma nova
 tentativa substitui apenas sua própria execução.
 
 A migração do armazenamento de CI e a ausência de leitor legado estão descritas
-na [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md). Nenhuma
+na [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md). Nenhuma
 operação de reset é automática.

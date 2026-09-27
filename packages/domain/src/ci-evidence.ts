@@ -1,4 +1,6 @@
 import { redactSecrets } from "./redaction.js";
+import type { ReviewLanguage } from "./review-language.js";
+import { reviewMessage } from "./review-messages.js";
 export interface LineCoverage {
   readonly hitsByLine: Readonly<Record<number, number>>;
   readonly path: string;
@@ -123,6 +125,7 @@ function isTestableSourceFile(path: string): boolean {
 export function formatLineIntervals(
   lines: readonly number[],
   maxRanges = 6,
+  language: ReviewLanguage = "en",
 ): string {
   if (lines.length === 0) return "";
   const sorted = [...new Set(lines)].toSorted((a, b) => a - b);
@@ -156,7 +159,7 @@ export function formatLineIntervals(
   }, 0);
   const remainingCount = sorted.length - displayedLineCount;
 
-  return `${shown} (...and ${remainingCount} more lines)`;
+  return `${shown} (${reviewMessage(language, "ciMoreLines", { count: remainingCount })})`;
 }
 
 /**
@@ -256,17 +259,16 @@ export const CI_EVIDENCE_MARKER_END = "<!-- holon:ci-evidence:end -->";
 export function formatCiEvidenceMarkdown(
   evidence: CiEvidence,
   changedLinesCoverage?: ChangedLinesCoverageResult,
+  language: ReviewLanguage = "en",
 ): string {
   const lines: string[] = [];
 
   lines.push(CI_EVIDENCE_MARKER_START);
   lines.push("---");
-  lines.push("### 🧪 CI Test & Coverage Evidence");
+  lines.push(reviewMessage(language, "ciTitle"));
 
   if (evidence.status === "not_available") {
-    lines.push(
-      "*CI test and coverage artifacts were not available for this run.*",
-    );
+    lines.push(reviewMessage(language, "ciUnavailable"));
     lines.push(CI_EVIDENCE_MARKER_END);
     return lines.join("\n");
   }
@@ -278,18 +280,26 @@ export function formatCiEvidenceMarkdown(
     const { coveragePercentage, coveredLinesCount, totalChangedLines } =
       changedLinesCoverage;
     lines.push(
-      `- **Changed lines coverage**: ${coveragePercentage}% (${coveredLinesCount}/${totalChangedLines} lines covered)`,
+      reviewMessage(language, "ciCoverage", {
+        percentage: coveragePercentage,
+        covered: coveredLinesCount,
+        total: totalChangedLines,
+      }),
     );
 
     if (changedLinesCoverage.uncoveredByFile.length > 0) {
-      lines.push("  - **Uncovered lines**:");
+      lines.push(reviewMessage(language, "ciUncovered"));
       for (const item of changedLinesCoverage.uncoveredByFile.slice(0, 5)) {
-        const lineStr = formatLineIntervals(item.lines);
-        lines.push(`    - \`${safeCiText(item.path)}\`: lines ${lineStr}`);
+        const lineStr = formatLineIntervals(item.lines, 6, language);
+        lines.push(
+          `    - \`${safeCiText(item.path)}\`: ${reviewMessage(language, "ciLines")} ${lineStr}`,
+        );
       }
       if (changedLinesCoverage.uncoveredByFile.length > 5) {
         lines.push(
-          `    - *...and ${changedLinesCoverage.uncoveredByFile.length - 5} more files with uncovered lines.*`,
+          reviewMessage(language, "ciMoreFiles", {
+            count: changedLinesCoverage.uncoveredByFile.length - 5,
+          }),
         );
       }
     }
@@ -300,11 +310,21 @@ export function formatCiEvidenceMarkdown(
     const durationStr =
       durationMs !== undefined ? ` (${(durationMs / 1000).toFixed(2)}s)` : "";
     lines.push(
-      `- **Test suite**: ${passed} passed, ${failed} failed, ${skipped} skipped, ${total} total${durationStr}`,
+      reviewMessage(language, "ciSuite", {
+        passed,
+        failed,
+        skipped,
+        total,
+        duration: durationStr,
+      }),
     );
 
     if (evidence.tests.failures.length > 0) {
-      lines.push(`  - **Failed tests (${evidence.tests.failures.length})**:`);
+      lines.push(
+        reviewMessage(language, "ciFailed", {
+          count: evidence.tests.failures.length,
+        }),
+      );
       for (const failure of evidence.tests.failures.slice(0, 5)) {
         const location =
           failure.filePath && failure.line
@@ -313,7 +333,8 @@ export function formatCiEvidenceMarkdown(
               ? ` (\`${safeCiText(failure.filePath)}\`)`
               : "";
         const cleanMessage = safeCiText(
-          failure.message.split("\n")[0] || "Test failed",
+          failure.message.split("\n")[0] ||
+            reviewMessage(language, "ciTestFailed"),
         );
         lines.push(
           `    - **${safeCiText(failure.testName)}**${location}: ${cleanMessage}`,
@@ -321,7 +342,9 @@ export function formatCiEvidenceMarkdown(
       }
       if (evidence.tests.failures.length > 5) {
         lines.push(
-          `    - *...and ${evidence.tests.failures.length - 5} more failed tests.*`,
+          reviewMessage(language, "ciMoreFailed", {
+            count: evidence.tests.failures.length - 5,
+          }),
         );
       }
     }
@@ -331,11 +354,14 @@ export function formatCiEvidenceMarkdown(
     lines.push(`- **Limitation**: ${safeCiText(limitation)}`);
 
   if (evidence.workflowName || evidence.workflowRunId) {
-    const nameStr = evidence.workflowName ?? "CI Workflow";
+    const nameStr =
+      evidence.workflowName ?? reviewMessage(language, "ciWorkflow");
     const runStr = evidence.workflowRunId
-      ? ` (run #${evidence.workflowRunId})`
+      ? ` (${reviewMessage(language, "ciRun")} #${evidence.workflowRunId})`
       : "";
-    lines.push(`- **Source**: ${safeCiText(nameStr)}${runStr}`);
+    lines.push(
+      `- **${reviewMessage(language, "ciSource")}**: ${safeCiText(nameStr)}${runStr}`,
+    );
   }
 
   lines.push(CI_EVIDENCE_MARKER_END);

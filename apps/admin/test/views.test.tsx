@@ -24,6 +24,7 @@ import {
 } from "../app/views/run-detail-view.js";
 import { RunsView } from "../app/views/runs-view.js";
 import type { AdminRunRow, AdminSummaryMetrics } from "../workers/types.js";
+import { configuration, identification } from "./configuration-fixtures.js";
 
 const baseRun: AdminRunRow = {
   analysis_started_at: "2026-09-04T11:00:02.000Z",
@@ -47,7 +48,7 @@ const baseRun: AdminRunRow = {
   review_admission_wait_ms: 100,
   review_phase_reached: "publishing",
   reasoning_tokens: 2,
-  run_id: `github:42:pr:7:head:${"a".repeat(40)}`,
+  run_id: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
   scope_status: "complete",
   shards_count: 1,
   source_event_id: "event-1",
@@ -65,19 +66,19 @@ const runVariants: AdminRunRow[] = [
   {
     ...baseRun,
     execution_duration_ms: 0,
-    run_id: `github:42:pr:8:head:${"b".repeat(40)}`,
+    run_id: `github:42:pr:8:head:${"b".repeat(40)}:base:${"b".repeat(40)}`,
     terminal_state: "failed_terminal",
     verdict: "REQUEST_CHANGES",
   },
   {
     ...baseRun,
-    run_id: `github:42:pr:9:head:${"c".repeat(40)}`,
+    run_id: `github:42:pr:9:head:${"c".repeat(40)}:base:${"b".repeat(40)}`,
     terminal_state: "obsolete",
     verdict: "COMMENT",
   },
   {
     ...baseRun,
-    run_id: `github:42:pr:10:head:${"d".repeat(40)}`,
+    run_id: `github:42:pr:10:head:${"d".repeat(40)}:base:${"b".repeat(40)}`,
     scope_status: null,
     verdict: null,
   },
@@ -131,6 +132,7 @@ const detail: AdminRunDetail = {
   cleanupTask: null,
   historicalRunFindings: null,
   stepExecutions: [],
+  configuration: null,
   findingsPerspective: "current_pr_state",
   run: {
     runState: "completed",
@@ -176,6 +178,70 @@ function render(element: React.ReactNode, location = "/") {
 }
 
 describe("admin views", () => {
+  it("renders retained evidence and suggestions even when the inline publication limit is zero", () => {
+    const html = render(
+      <RunDetailView
+        run={baseRun}
+        rpcDetail={{
+          ...detail,
+          configuration,
+          projectIdentification: identification,
+          currentFindings: [
+            {
+              ...detail.currentFindings[0]!,
+              details: {
+                confidence: 0.95,
+                suggestion: "Use textContent instead of <script> injection.",
+                evidence: [
+                  {
+                    path: "src/render.ts",
+                    startLine: 12,
+                    endLine: 14,
+                    excerpt:
+                      "element.innerHTML = '<script>untrusted()</script>';",
+                    reason:
+                      "Repository-controlled input reaches the DOM without escaping.",
+                  },
+                ],
+              },
+            },
+            {
+              ...detail.currentFindings[1]!,
+              details: {
+                confidence: 0.9,
+                evidence: [
+                  {
+                    path: "src/load.ts",
+                    startLine: 7,
+                    excerpt: "return result.value;",
+                    reason: "The result can be absent.",
+                  },
+                ],
+              },
+            },
+          ],
+        }}
+      />,
+      "/runs/x",
+    );
+    expect(html).toMatch(/New inline comment limit<\/dt><dd[^>]*>0<\/dd>/u);
+    expect(html).toContain("Detected projects: detected-api");
+    expect(html.match(/Evidence and suggestion/gu)).toHaveLength(2);
+    expect(html).toContain(
+      "Use textContent instead of &lt;script&gt; injection.",
+    );
+    expect(html).toContain("src/render.ts:12–14");
+    expect(html).toContain("&lt;script&gt;untrusted()&lt;/script&gt;");
+    expect(html).toContain(
+      "Repository-controlled input reaches the DOM without escaping.",
+    );
+    expect(html).toContain("src/load.ts:7</p>");
+    expect(html).toContain("return result.value;");
+    expect(html).toContain("The result can be absent.");
+    expect(html).not.toContain("<script>untrusted()");
+    expect(html).not.toContain("No findings emitted");
+  });
+
   it("renders actual queue degradation without conflating unavailable telemetry", () => {
     const degraded = render(
       <DashboardView
@@ -338,6 +404,7 @@ describe("admin views", () => {
         state: "completed",
       },
       currentFindings: detail.currentFindings,
+      configuration: null,
       findingsPerspective: "current_pr_state",
       historicalRunFindings: [],
       projectIdentification: null,
@@ -430,6 +497,7 @@ describe("admin views", () => {
           updatedAt: "2026-09-04T11:00:05.000Z",
         },
       ],
+      configuration: null,
       findingsPerspective: "both",
       historicalRunFindings: [],
       projectIdentification: null,
@@ -439,7 +507,8 @@ describe("admin views", () => {
         headSha: baseRun.head_sha,
         isDegraded: false,
         prKey: baseRun.pr_key,
-        runId: baseRun.run_id as `github:${number}:pr:${number}:head:${string}`,
+        runId:
+          baseRun.run_id as `github:${number}:pr:${number}:head:${string}:base:${string}`,
         runState: "completed",
         scopeStatus: "complete",
         shardsCount: 1,
@@ -524,6 +593,7 @@ describe("admin views", () => {
           updatedAt: "2026-09-04T12:00:00.000Z",
         },
       ],
+      configuration: null,
       findingsPerspective: "both",
       historicalRunFindings: [
         {
@@ -563,6 +633,7 @@ describe("admin views", () => {
     const activeDetail: AdminRunDetail = {
       cleanupTask: null,
       currentFindings: [],
+      configuration: null,
       findingsPerspective: "current_pr_state",
       historicalRunFindings: null,
       projectIdentification: null,

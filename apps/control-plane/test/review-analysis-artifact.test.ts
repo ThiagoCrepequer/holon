@@ -11,7 +11,8 @@ import {
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
 afterEach(() => reset());
-const runId = `github:42:pr:7:head:${"a".repeat(40)}` as const;
+const runId =
+  `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;
 it("retains usage and completed attempt timings across replay and eviction", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
@@ -80,6 +81,7 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
     })),
   }));
   const output: ReconciledReviewOutput = {
+    output: { language: "en", detail: "concise", maxInlineComments: 0 },
     activeFindings: findings,
     findings: findings.map(
       ({ fingerprint: _f, evidenceFingerprint: _e, status: _s, ...f }) => f,
@@ -145,6 +147,16 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
     .toBe("completed");
   await runInDurableObject(ledger, (object) => {
     expect(() => object.loadReviewAnalysis(runId)).toThrow("unavailable");
+  });
+  await evictDurableObject(ledger);
+  const retained = await ledger.getSanitizedAdminRunDetail(runId);
+  expect(retained?.historicalRunFindings).toHaveLength(40);
+  expect(retained?.historicalRunFindings?.[39]).toMatchObject({
+    diagnostic: findings[39]!.diagnostic,
+    details: {
+      suggestion: findings[39]!.suggestion,
+      evidence: findings[39]!.evidence,
+    },
   });
 });
 

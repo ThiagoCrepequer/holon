@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-09-10
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -22,7 +22,7 @@ related:
 
 # Fluxo de execução de uma review
 
-Uma run é vinculada ao head SHA observado no webhook. Se o PR mudar antes da
+Uma run é vinculada ao par head/base SHA observado no webhook. Se o PR mudar antes da
 publicação, o resultado antigo não é publicado como se ainda fosse atual.
 
 No primeiro deploy, IN, o producer/consumer de Q e a definição de CO pertencem
@@ -47,7 +47,7 @@ sequenceDiagram
     IN->>Q: enqueue normalized envelope
     IN-->>GH: 2xx
     Q->>CO: at-least-once delivery
-    CO->>LE: claim run(repo, PR, head SHA)
+    CO->>LE: claim run(repo, PR, head SHA, base SHA)
     alt already claimed or obsolete
         LE-->>CO: duplicate/obsolete
         CO-->>Q: acknowledge without effects
@@ -55,7 +55,7 @@ sequenceDiagram
         LE->>LE: persist authority + obsolete prior active runs
         LE-->>CO: pending superseded Workflow IDs
         CO->>CO: terminate prior instances with rollback
-        CO->>GH: read policy at exact base SHA
+        CO->>GH: compile configuration at exact base SHA
         CO->>CO: validate YAML AST + strict policy schema
         CO->>GH: fetch canonical PR diff
         CO->>AN: step prepare-repository
@@ -108,7 +108,8 @@ sequenceDiagram
 
 Na ordem normal, o Workflow executa `claim-run`, zero ou mais
 `terminate-superseded-workflow-N`, `start-run`,
-`revalidate-initial-refs`, `start-check-run`, `resolve-repository-policy`,
+`revalidate-initial-refs`, `resolve-repository-config`, `load-repository-scope`,
+`start-check-run`,
 `prepare-repository`, identificação por projeto, `plan-review`,
 `analyze-shard-N`, `analyze-review`, `begin-publication`,
 `revalidate-current-refs`, zero ou mais `publish-inline-N`,
@@ -124,7 +125,7 @@ O ciclo de vida no GitHub Check Runs é mantido de forma idempotente:
 - Se o head for substituído (`completeObsolete`), o Check Run é atualizado para `status: "completed"` com `conclusion: "cancelled"`.
 - Se a instância for terminada ativamente, o rollback registrado em
   `start-check-run` faz a mesma conclusão `cancelled` para o ID conhecido.
-- Ao concluir a publicação (`complete-check-run`), o Check Run é atualizado para `status: "completed"` com `conclusion: "success"` (0 findings) ou `conclusion: "neutral"` (achados identificados ou escopo parcial), detalhando contagem de achados, arquivos e duração.
+- Ao concluir a publicação (`complete-check-run`), o Check Run é atualizado para `status: "completed"` com `conclusion: "success"` para `APPROVE`, `"failure"` para `REQUEST_CHANGES` e `"neutral"` para `COMMENT`, detalhando achados e limitações de cobertura.
 - Em caso de falha terminal (`fail-check-run`), o Check Run é concluído com `conclusion: "failure"`.
 
 Obsolescência e falha registram a mesma obrigação de cleanup durável. Em uma
@@ -171,7 +172,8 @@ estrutural disponível ao modelo durante a investigação.
 
 Antes da preparação, o control plane lê a política exclusivamente no
 `baseSha`. O resultado validado é output durável de
-`resolve-repository-policy` e acompanha toda reconstrução do Sandbox; não
+`load-repository-scope`, derivado do snapshot selado, e acompanha toda
+reconstrução do Sandbox; não
 depende de estado em memória entre callbacks. Uma política customizada exige
 `prepareRepository` e `loadContext`, sem downgrade. Exclusões adicionais
 produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
@@ -281,6 +283,21 @@ findings verificados; não solicita síntese adicional ao modelo.
 
 A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.
 
+## Configuração por execução — 2026-09-09
+
+`resolve-repository-config` precede preparação, credenciais de Sandbox e
+inferência. O leitor obrigatório prova ausência na árvore Git do base SHA,
+resolve fontes limitadas e sela o snapshot no ledger. Depois o workflow carrega
+uma projeção de escopo; o Check Run inicial usa o idioma materializado. Antes de
+qualquer shard de review, projeta guidance para todos os shards e valida seus
+limites. Referências não dão autoridade a instruções embutidas no documento.
+Identificação mantém IDs e evidências detectadas; compatibilidade configurada é
+uma projeção separada. A seleção inline determinística aplica o cap somente na
+publicação, com revalidação de refs e claims intactos. Resultados integrais vão
+para o histórico autenticado, não para o checkpoint sanitizado. Consulte a
+[operação](../operations/repository-configuration.md) e a
+[ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md).
+
 ## Endurecimento do core (2026-09-27)
 
-A [ADR-0037](../decisions/0037-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

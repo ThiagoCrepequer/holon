@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { adminCiSummarySchema } from "./admin-run-detail.js";
+import { localizedCiMarkdownSchema } from "./repository-config/snapshot.js";
 import { positiveIntegerSchema } from "./shared.js";
 export const ciPublicationTargetSchema = z.strictObject({
   installationId: positiveIntegerSchema,
@@ -10,7 +11,7 @@ export const ciPublicationTargetSchema = z.strictObject({
   pullNumber: positiveIntegerSchema,
 });
 export const savedCiEvidenceSchema = z.strictObject({
-  markdown: z.string().max(16000),
+  markdownByLanguage: localizedCiMarkdownSchema,
   workflowRunId: positiveIntegerSchema,
   workflowRunAttempt: positiveIntegerSchema,
   structuredCi: adminCiSummarySchema.nullish(),

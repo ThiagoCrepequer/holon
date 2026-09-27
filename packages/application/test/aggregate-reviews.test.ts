@@ -89,7 +89,7 @@ describe("aggregateShardReviews", () => {
 
   it("handles unsupported review plans", () => {
     const unsupportedPlan = {
-      omissionReasons: ["No supported files"],
+      omissionReasons: [{ code: "unsupported" as const }],
       scopeStatus: "unsupported" as const,
       shards: [],
       totalEligibleBytes: 0,
@@ -546,7 +546,7 @@ describe("aggregateShardReviews", () => {
       const formatted = formatStructuralImpactSection(report);
       expect(formatted).toContain("### 🏛️ Structural Impact Analysis");
       expect(formatted).toContain("Contract Investigation Leads");
-      expect(formatted).toContain("deleteUser");
+      expect(formatted).toContain("Exported symbol removed (src/user.ts:5)");
       expect(formatted).toContain("Symbols Modified");
       expect(formatted).toContain("Downstream Impact Radius");
       expect(formatted).toContain("Test Gaps");

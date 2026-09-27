@@ -1,4 +1,8 @@
 import {
+  compileRepositoryConfiguration,
+  configurationReference,
+} from "@holon/application";
+import {
   reviewJobSchema,
   type ReviewShardContext,
   type ReviewContext,
@@ -8,6 +12,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { analyzeReview } from "../src/review-analysis.js";
 import type { ReviewServices } from "../src/review-services.js";
+import {
+  configurationReader,
+  defaultRunConfiguration,
+} from "./configuration-fixtures.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
@@ -38,7 +46,7 @@ const job = reviewJobSchema.parse({
       owner: "acme",
     },
   },
-  runId: `github:42:pr:7:head:${"a".repeat(40)}`,
+  runId: `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}`,
 });
 
 // Confidence 0.80 is confident (>= 0.75) but below high-confidence (0.85)
@@ -87,6 +95,7 @@ function createMockServices(
       toolCallsCount: 1,
     }),
     ledger: {
+      loadRunConfiguration: () => defaultRunConfiguration(job),
       loadPrFindings: () => Promise.resolve([]),
       savePrFindings: () => Promise.resolve(),
     } as unknown as ReviewServices["ledger"],
@@ -563,6 +572,7 @@ it("replays completed shard checkpoints without repeating model calls after aggr
   const cache = new Map<string, unknown>();
   let interrupted = false;
   const execution = {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
     async runStep<R>(
       name: string,
       _phase: "preparation" | "analysis",
@@ -627,6 +637,7 @@ it("retries a failed shard without spending another model call on its successful
     () => undefined,
     undefined,
     {
+      configuration: configurationReference(await defaultRunConfiguration(job)),
       async runStep<R>(
         _name: string,
         _phase: "preparation" | "analysis",
@@ -695,4 +706,62 @@ it("never downgrades a ledger failure into a model shard failure", async () => {
   await expect(analyzeReview(job, services, vi.fn())).rejects.toThrow(
     "ledger unavailable",
   );
+});
+it("preflights later-shard guidance before spending any review inference", async () => {
+  const snapshot = await compileRepositoryConfiguration(
+    {
+      runId: job.runId,
+      installationId: job.envelope.installationId,
+      repositoryId: 42,
+      pullRequestNumber: 7,
+      headSha: "a".repeat(40),
+      baseSha: "b".repeat(40),
+    },
+    configurationReader({
+      ".holon.yml": JSON.stringify({
+        instructions: ["global guidance ".repeat(1000)],
+        path_rules: [
+          {
+            paths: ["src/z-last.ts"],
+            instructions: ["specific guidance ".repeat(880)],
+          },
+        ],
+      }),
+    }),
+    JSON.parse,
+  );
+  const files = [
+    ...Array.from(
+      { length: 20 },
+      (_, index) => `src/a${index.toString().padStart(2, "0")}.ts`,
+    ),
+    "src/z-last.ts",
+  ].map((path) => ({
+    path,
+    mode: "structural" as const,
+    patch: "@@ -1 +1 @@\n-old\n+new\n",
+  }));
+  const services = createMockServices({
+    changedLines: [],
+    files,
+    truncated: false,
+  });
+  services.ledger.loadRunConfiguration = async () => snapshot;
+  const review = vi.spyOn(services.model, "review");
+  const emit = vi.fn();
+  await expect(
+    analyzeReview(job, services, emit, undefined, {
+      configuration: configurationReference(snapshot),
+      runStep: async (_name, _phase, fn) => fn(),
+      finish: async (output) => output,
+    }),
+  ).rejects.toMatchObject({
+    name: "NonRetryableError",
+    message: "HOLON_REPOSITORY_CONFIG:budget_exceeded",
+  });
+  expect(emit).toHaveBeenCalledWith(
+    "configuration.guidance_applied",
+    expect.objectContaining({ shardIndex: 0 }),
+  );
+  expect(review).not.toHaveBeenCalled();
 });

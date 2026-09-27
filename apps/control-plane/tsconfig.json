@@ -1,7 +1,8 @@
 {
   "extends": "../../tooling/typescript/base.json",
   "compilerOptions": {
-    "types": ["@cloudflare/vitest-plugin/types"]
+    "types": ["@cloudflare/vitest-plugin/types"],
+    "resolveJsonModule": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "worker-configuration.d.ts"]
 }

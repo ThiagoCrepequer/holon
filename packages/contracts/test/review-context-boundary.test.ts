@@ -2,29 +2,27 @@ import { expect, it } from "vitest";
 
 import {
   documentationReferenceSchema,
-  rawRepositoryPolicySchema,
+  repositoryConfigInputSchema,
   followUpMessageSchema,
 } from "../src/index.js";
 it("accepts scoped compatibility and rejects excess configuration or unsafe docs destinations", () => {
   const valid = {
-    review: {
-      instructions: ["Inspect authorization"],
-      projects: [{ root: "apps/api", compatibility: { node: "22" } }],
-    },
-  };
-  expect(rawRepositoryPolicySchema.safeParse(valid).success).toBe(true);
-  expect(
-    rawRepositoryPolicySchema.safeParse({
-      review: {
-        projects: [
-          {
-            root: ".",
-            compatibility: Object.fromEntries(
-              Array.from({ length: 21 }, (_, i) => [`lib${i}`, "1"]),
-            ),
-          },
-        ],
+    instructions: ["Inspect authorization"],
+    projects: [
+      {
+        name: "api",
+        root: "apps/api",
+        compatibility: { runtimes: { node: "22" } },
       },
+    ],
+  };
+  expect(repositoryConfigInputSchema.safeParse(valid).success).toBe(true);
+  expect(
+    repositoryConfigInputSchema.safeParse({
+      projects: Array.from({ length: 21 }, (_, i) => ({
+        name: `project${i}`,
+        root: `apps/p${i}`,
+      })),
     }).success,
   ).toBe(false);
   const reference = {

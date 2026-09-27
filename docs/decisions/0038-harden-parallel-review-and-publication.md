@@ -1,5 +1,5 @@
 ---
-id: ADR-0037
+id: ADR-0038
 kind: decision
 status: accepted
 date: 2026-09-27
@@ -56,8 +56,9 @@ ZIPs são baixados por streaming com limite de 10 MiB; a extração limita aloca
 inválido e apresenta texto escapado, sem sequências de terminal ou segredos
 reconhecidos. Observações LCOV duplicadas são combinadas independentemente da ordem.
 
-Orientações por projeto e alvos de compatibilidade vêm exclusivamente da política
-no SHA base. Fatos de versões observadas permanecem separados. Documentação é
+Orientações por projeto e alvos de compatibilidade seguem o snapshot imutável
+da ADR-0037, compilado no SHA base. As referências de documentação integram o
+mesmo contrato de entrada e seu configDigest. Fatos de versões observadas permanecem separados. Documentação é
 opcional, limitada a hosts oficiais permitidos, correspondência exata de versão e
 hash SHA-256 configurado; redirects são proibidos. Ela é obtida no control plane,
 sem ampliar egress do Sandbox. Falhas e omissões são contexto explícito, nunca
@@ -81,7 +82,7 @@ execuções e tentativas; somar testes de workflows distintos não deduplica o m
 caso executado em matrizes diferentes. Testes são importados dos artifacts do CI,
 não executados pelo Sandbox.
 
-A migração 15 cria o armazenamento atual e renomeia o antigo para
+A migração 16 cria o armazenamento atual e renomeia o antigo para
 `retired_ci_evidences`, sem apagar dados. Não há leitor legado: evidências antigas
 não entram na nova agregação. Uma nova entrega de CI deve repovoar o contrato atual.
 A remoção do armazenamento retirado ou reset de desenvolvimento exige ação

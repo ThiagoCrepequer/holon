@@ -7,6 +7,7 @@ import type {
 } from "./identity.js";
 
 export interface TrackedFinding {
+  readonly identityAmbiguous?: boolean | undefined;
   readonly evidenceFingerprint: string;
   readonly confidence: number;
   readonly diagnostic: string;
@@ -25,6 +26,7 @@ export interface TrackedFinding {
 }
 
 export interface ReconciledFinding extends Finding {
+  readonly identityAmbiguous?: boolean | undefined;
   readonly evidenceFingerprint: string;
   readonly fingerprint: FindingFingerprint;
   readonly firstSeenHeadSha?: string | undefined;
@@ -89,6 +91,7 @@ export function reconcileFindings(
     input.coverage.confirmedResolvedFingerprints ?? [],
   );
   let unverifiedCount = 0;
+  const ambiguousBaselineIds = new Set<FindingFingerprint>();
 
   // 1. Process current findings against baseline
   for (const candidate of input.currentFindings) {
@@ -105,6 +108,44 @@ export function reconcileFindings(
       evidenceMatches.length === 1 && uniqueCandidate
         ? evidenceMatches[0]
         : undefined;
+    const exact = baselineMap.get(candidate.fingerprint);
+    if (
+      (exact === undefined || exact.identityAmbiguous === true) &&
+      evidenceMatches.length > 0 &&
+      (evidenceMatch === undefined ||
+        (evidenceMatch.fingerprint !== candidate.fingerprint &&
+          currentIds.has(evidenceMatch.fingerprint)))
+    ) {
+      for (const match of evidenceMatches)
+        ambiguousBaselineIds.add(match.fingerprint);
+      const tracked: TrackedFinding = {
+        ...exact,
+        identityAmbiguous: true,
+        evidenceFingerprint: candidate.evidenceFingerprint,
+        confidence: candidate.confidence,
+        diagnostic: candidate.diagnostic,
+        filePath: candidate.location.path,
+        fingerprint: candidate.fingerprint,
+        firstSeenHeadSha: exact?.firstSeenHeadSha ?? input.currentHeadSha,
+        firstSeenRunId: exact?.firstSeenRunId ?? input.currentRunId,
+        lastSeenHeadSha: input.currentHeadSha,
+        lastSeenRunId: input.currentRunId,
+        line: candidate.location.line,
+        prKey: input.prKey,
+        severity: candidate.severity,
+        status: exact?.status ?? "new",
+        updatedAt: now,
+      };
+      updatedTrackedMap.set(candidate.fingerprint, tracked);
+      handledFingerprints.add(candidate.fingerprint);
+      activeFindings.push({
+        ...candidate,
+        identityAmbiguous: true,
+        status: tracked.status,
+        previousCommentId: exact?.githubCommentId,
+      });
+      continue;
+    }
     const current =
       !baselineMap.has(candidate.fingerprint) &&
       evidenceMatch !== undefined &&
@@ -123,6 +164,7 @@ export function reconcileFindings(
       // The issue is still active -> persistent
       const tracked: TrackedFinding = {
         ...existing,
+        identityAmbiguous: undefined,
         evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
@@ -143,6 +185,7 @@ export function reconcileFindings(
       // The issue was resolved before, but has been reintroduced
       const tracked: TrackedFinding = {
         ...existing,
+        identityAmbiguous: undefined,
         evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
@@ -163,6 +206,7 @@ export function reconcileFindings(
       // Previously dismissed issue still matches: preserve dismissal without blocking
       const tracked: TrackedFinding = {
         ...existing,
+        identityAmbiguous: undefined,
         evidenceFingerprint: current.evidenceFingerprint,
         confidence: current.confidence,
         lastSeenHeadSha: input.currentHeadSha,
@@ -216,6 +260,12 @@ export function reconcileFindings(
       continue;
     }
 
+    if (ambiguousBaselineIds.has(existing.fingerprint)) {
+      updatedTrackedMap.set(existing.fingerprint, existing);
+      if (["new", "persistent", "reintroduced"].includes(existing.status))
+        unverifiedCount += 1;
+      continue;
+    }
     if (
       existing.status === "new" ||
       existing.status === "persistent" ||

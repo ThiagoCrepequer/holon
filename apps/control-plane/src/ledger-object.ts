@@ -6,6 +6,10 @@ import type {
   ReviewDecisionContext,
   ReviewLedger,
 } from "@holon/application";
+import type {
+  RunConfigurationRef,
+  RunConfigurationSnapshot,
+} from "@holon/contracts";
 import {
   projectIdentificationResultSchema,
   type ProjectIdentificationResult,
@@ -31,7 +35,6 @@ import {
   timestampSchema,
   limitReviewText,
   reviewTextLimits,
-  type AdminFindingSummary,
   type AdminRunDetail,
   type AdminRunProjectionEvent,
   type FindingFeedbackRecord,
@@ -59,6 +62,7 @@ import type {
 } from "@holon/domain";
 import { canTransitionRun, derivePrKeyFromRunId } from "@holon/domain";
 import { redactSecrets } from "@holon/model";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import { DurableObject } from "cloudflare:workers";
 
 import {
@@ -71,6 +75,7 @@ import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 import { ReviewAccountingStore } from "./review-accounting-store.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
+import { RunConfigurationStore } from "./run-configuration-store.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 /* eslint-disable no-control-regex */
@@ -675,6 +680,13 @@ export class ReviewLedgerObject
           runId: cleanup.run_id,
         });
       } catch (error) {
+        reportError(consoleErrorReporter, "ledger.cleanup_failed", error, {
+          component: "control-plane",
+          operation: "ledger.cleanup",
+          runId: cleanup.run_id,
+          attempt,
+          disposition: "retry",
+        });
         const nextAttemptAt = new Date(
           Date.now() + maintenanceBackoff(attempt),
         ).toISOString();
@@ -959,10 +971,31 @@ export class ReviewLedgerObject
   }
 
   private async cleanupRepository(runId: string): Promise<void> {
+    new RunConfigurationStore(this.ctx.storage).cleanup(runId);
     await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
     this.ctx.storage.sql.exec(
       "DELETE FROM review_analysis_artifacts WHERE run_id = ?",
       runId,
+    );
+  }
+
+  public async saveRunConfiguration(
+    snapshot: RunConfigurationSnapshot,
+  ): Promise<RunConfigurationRef> {
+    return await new RunConfigurationStore(this.ctx.storage).save(snapshot);
+  }
+  public async loadRunConfiguration(
+    reference: RunConfigurationRef,
+  ): Promise<RunConfigurationSnapshot> {
+    return await new RunConfigurationStore(this.ctx.storage).load(reference);
+  }
+  public findRunConfiguration(
+    runId: string,
+  ): Promise<RunConfigurationRef | undefined> {
+    return Promise.resolve(
+      new RunConfigurationStore(this.ctx.storage).reference(
+        runIdSchema.parse(runId),
+      ),
     );
   }
 
@@ -1044,6 +1077,13 @@ export class ReviewLedgerObject
         runId: supersession.superseded_run_id,
       });
     } catch (error) {
+      reportError(consoleErrorReporter, "ledger.supersession_failed", error, {
+        component: "control-plane",
+        operation: "ledger.supersession",
+        runId: supersession.superseded_run_id,
+        attempt,
+        disposition: "retry",
+      });
       const nextAttemptAt = new Date(
         Date.now() + maintenanceBackoff(attempt),
       ).toISOString();
@@ -1106,6 +1146,18 @@ export class ReviewLedgerObject
         runId: task.run_id,
       });
     } catch (error) {
+      reportError(
+        consoleErrorReporter,
+        "ledger.projection_dispatch_failed",
+        error,
+        {
+          component: "control-plane",
+          operation: "ledger.projection_dispatch",
+          runId: task.run_id,
+          attempt: currentAttempts,
+          disposition: currentAttempts >= 20 ? "quarantine" : "retry",
+        },
+      );
       const kind = errorKind(error).slice(0, 100);
       if (currentAttempts >= 20) {
         const exhaustedAt = new Date().toISOString();
@@ -1382,7 +1434,11 @@ export class ReviewLedgerObject
     raw: ProjectIdentificationResult,
   ): Promise<void> {
     const result = projectIdentificationResultSchema.parse(raw);
-    if (!runIdSchema.parse(runId).endsWith(":head:" + result.snapshotSha))
+    if (
+      !runIdSchema
+        .parse(runId)
+        .includes(":head:" + result.snapshotSha + ":base:")
+    )
       throw new Error("Identification snapshot mismatch");
     const exists = this.ctx.storage.sql
       .exec<{ id: string }>("SELECT id FROM runs WHERE id=?", runId)
@@ -1416,7 +1472,14 @@ export class ReviewLedgerObject
     if (sanitizedInput) {
       try {
         validatedInput = sanitizePayloadRecord(sanitizedInput);
-      } catch {
+      } catch (error) {
+        reportError(consoleErrorReporter, "ledger.step_input_rejected", error, {
+          component: "control-plane",
+          operation: "ledger.step_input",
+          runId,
+          stepName,
+          attempt,
+        });
         validatedInput = {
           sanitized: false,
           redactedReason: "payload_rejected",
@@ -1520,7 +1583,19 @@ export class ReviewLedgerObject
     if (sanitizedOutput) {
       try {
         validatedOutput = sanitizePayloadRecord(sanitizedOutput);
-      } catch {
+      } catch (error) {
+        reportError(
+          consoleErrorReporter,
+          "ledger.step_output_rejected",
+          error,
+          {
+            component: "control-plane",
+            operation: "ledger.step_output",
+            runId,
+            stepName,
+            attempt,
+          },
+        );
         validatedOutput = {
           sanitized: false,
           redactedReason: "payload_rejected",
@@ -1803,11 +1878,12 @@ export class ReviewLedgerObject
     const headSha =
       telemetry?.headSha ??
       runRow.decision_head_sha ??
-      runId.split(":head:")[1] ??
+      runId.split(":head:")[1]?.split(":base:")[0] ??
       "";
 
     const currentFindingRows = this.ctx.storage.sql
       .exec<{
+        identity_ambiguous: number;
         diagnostic: string;
         file_path: string;
         fingerprint: string;
@@ -1822,7 +1898,7 @@ export class ReviewLedgerObject
           | "dismissed";
         updated_at: string;
       }>(
-        `SELECT diagnostic, file_path, fingerprint, line, severity, status, updated_at
+        `SELECT identity_ambiguous, diagnostic, file_path, fingerprint, line, severity, status, updated_at
          FROM pr_findings
          WHERE pr_key = ?
          ORDER BY updated_at DESC, fingerprint ASC
@@ -1833,6 +1909,7 @@ export class ReviewLedgerObject
 
     const currentFindings = currentFindingRows.map((row) =>
       adminFindingSummarySchema.parse({
+        identityAmbiguous: row.identity_ambiguous === 1,
         diagnostic: sanitizeDiagnostic(row.diagnostic),
         filePath: row.file_path,
         fingerprint: row.fingerprint,
@@ -1843,28 +1920,9 @@ export class ReviewLedgerObject
       }),
     );
 
-    const analyzeStepRow = this.ctx.storage.sql
-      .exec<{ sanitized_output_json: string | null }>(
-        "SELECT sanitized_output_json FROM step_executions WHERE run_id = ? AND step_name = 'analyze-review'",
-        runId,
-      )
-      .toArray()[0];
-
-    let historicalRunFindings: AdminFindingSummary[] | null = null;
-    const parsedOutput = safeJsonParse(
-      analyzeStepRow?.sanitized_output_json ?? null,
-    );
-    if (parsedOutput && Array.isArray(parsedOutput.historicalFindings)) {
-      historicalRunFindings = parsedOutput.historicalFindings
-        .map((item: unknown) => {
-          const res = adminFindingSummarySchema.safeParse(item);
-          return res.success ? res.data : null;
-        })
-        .filter(
-          (item: AdminFindingSummary | null): item is AdminFindingSummary =>
-            item !== null,
-        );
-    }
+    const historicalRunFindings = new ReviewAnalysisStore(
+      this.ctx.storage,
+    ).retainedFindings(runId);
 
     const stepExecutions = await this.getStepExecutions(runId);
 
@@ -1922,6 +1980,7 @@ export class ReviewLedgerObject
         : "current_pr_state";
 
     return adminRunDetailSchema.parse({
+      configuration: new RunConfigurationStore(this.ctx.storage).summary(runId),
       cleanupTask,
       currentFindings,
       findingsPerspective,
