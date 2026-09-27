@@ -18,6 +18,15 @@ it("selects the deepest segment ancestor and does not invent inheritance", () =>
   );
   expect(selectConfiguredProject("Apps/api/a.ts", projects)?.name).toBe("root");
 });
+it("selects a project for its root path without matching a similarly named sibling", () => {
+  const projects = [
+    { name: "root", root: "." },
+    { name: "api", root: "apps/api" },
+  ];
+
+  expect(selectConfiguredProject("apps/api", projects)?.name).toBe("api");
+  expect(selectConfiguredProject("apps/api-v2", projects)?.name).toBe("root");
+});
 it("composes every matching rule in declaration order", () => {
   const rules = [
     { paths: ["**/*.ts"] },
@@ -27,4 +36,9 @@ it("composes every matching rule in declaration order", () => {
   expect(matchingConfigurationRules("apps/api/main.ts", rules)).toEqual(
     rules.slice(0, 2),
   );
+});
+it("applies a rule only once when multiple patterns in that rule match", () => {
+  const rules = [{ paths: ["**/*.ts", "apps/api/**"] }, { paths: ["apps/**"] }];
+
+  expect(matchingConfigurationRules("apps/api/main.ts", rules)).toEqual(rules);
 });
