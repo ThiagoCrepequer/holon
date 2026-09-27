@@ -112,3 +112,31 @@ Verificado localmente em 2026-09-27: com o pacote instalado
 `github_key_pkcs1_unsupported`; uma chave sintética PKCS#8 consegue assinar um JWT
 verificado independentemente antes da resposta HTTP simulada. Isso reproduz
 uma causa possível do incidente, sem afirmar qual segredo está implantado.
+
+## Achados rejeitados pela evidência canônica
+
+O evento `model.evidence_rejected` registra o primeiro motivo de rejeição de
+cada candidato, com `severity = warning`, `shardIndex`, `candidateKind`
+(`finding` ou `resolution`), `findingIndex` e, quando aplicável, `evidenceIndex`.
+Todos os índices começam em zero e se referem à lista original daquele shard.
+O evento herda `runId`, `workflowInstanceId`, `repositoryId` e
+`pullRequestNumber` do Workflow. O sufixo do `eventId` diferencia os candidatos.
+
+| `reason`                    | Significado                                               |
+| --------------------------- | --------------------------------------------------------- |
+| `location_file_missing`     | Arquivo do comentário não consta no contexto canônico.    |
+| `location_outside_hunk`     | Intervalo do comentário não está contido em um hunk.      |
+| `location_not_added`        | Linha de ancoragem não é uma linha adicionada.            |
+| `evidence_file_missing`     | Arquivo da evidência não consta no contexto.              |
+| `evidence_range_too_large`  | Intervalo ultrapassa o limite do validador.               |
+| `evidence_range_missing`    | Uma linha citada não existe no patch disponível.          |
+| `evidence_excerpt_empty`    | Citação vazia após normalização de espaços.               |
+| `evidence_excerpt_mismatch` | Citação não corresponde ao conteúdo das linhas indicadas. |
+| `finding_contract_invalid`  | Candidato não atende às demais invariantes de domínio.    |
+
+Não são registrados caminhos, trechos, diagnósticos do modelo nem mensagens de
+exceção. Não há reparo automático ou relaxamento do gate. Uma falha ao emitir
+esse log não muda a aceitação nem a decisão de retry. O evento agregado
+`model.output_limits` continua informando a quantidade de candidatos rejeitados.
+Esses motivos somente estarão disponíveis para execuções feitas com a nova
+instrumentação; não podem ser reconstruídos dos contadores antigos.

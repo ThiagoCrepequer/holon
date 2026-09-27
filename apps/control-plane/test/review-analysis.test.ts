@@ -556,7 +556,22 @@ it.each(["silence", "invented", "low-confidence", "unchanged", "valid"])(
       },
       promptTruncated: false,
     });
-    const result = await analyzeReview(job, services, () => undefined);
+    const emit = vi.fn();
+    const result = await analyzeReview(job, services, emit);
+    if (mode === "invented") {
+      expect(emit).toHaveBeenCalledWith(
+        "model.evidence_rejected",
+        {
+          severity: "warning",
+          shardIndex: 0,
+          candidateKind: "resolution",
+          findingIndex: 0,
+          evidenceIndex: 0,
+          reason: "evidence_excerpt_mismatch",
+        },
+        "0:resolution:0",
+      );
+    }
     expect(result.resolvedFindings).toHaveLength(mode === "valid" ? 1 : 0);
     expect(result.verdict).toBe(mode === "valid" ? "APPROVE" : "COMMENT");
   },
@@ -764,4 +779,76 @@ it("preflights later-shard guidance before spending any review inference", async
     expect.objectContaining({ shardIndex: 0 }),
   );
   expect(review).not.toHaveBeenCalled();
+});
+
+it("logs the exact rejection reason without leaking candidate content", async () => {
+  const context: ReviewShardContext = {
+    changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" }],
+    files: [
+      { path: "src/index.ts", patch: canonicalPatch, mode: "structural" },
+    ],
+    truncated: false,
+  };
+  const services = createMockServices(context, {
+    output: {
+      summary: "PRIVATE summary",
+      findings: [
+        {
+          ...moderateFinding,
+          evidence: [
+            {
+              ...moderateFinding.evidence[0]!,
+              excerpt: "PRIVATE invented excerpt",
+            },
+          ],
+        },
+      ],
+    },
+    promptTruncated: false,
+  });
+  const emit = vi.fn();
+  const result = await analyzeReview(job, services, emit);
+  expect(result.findings).toHaveLength(0);
+  expect(result.verdict).toBe("COMMENT");
+  expect(result.summary).toContain("evidence_rejected");
+  expect(emit).toHaveBeenCalledWith(
+    "model.evidence_rejected",
+    {
+      severity: "warning",
+      shardIndex: 0,
+      candidateKind: "finding",
+      findingIndex: 0,
+      evidenceIndex: 0,
+      reason: "evidence_excerpt_mismatch",
+    },
+    "0:finding:0",
+  );
+  const rejections = emit.mock.calls.filter(
+    ([event]) => event === "model.evidence_rejected",
+  );
+  expect(JSON.stringify(rejections)).not.toMatch(
+    /PRIVATE|src\/index.ts|return null/u,
+  );
+});
+
+it("keeps evidence rejection semantics when the diagnostic sink fails", async () => {
+  const services = createMockServices(revalidationContext(), {
+    output: {
+      summary: "Review",
+      findings: [
+        {
+          ...moderateFinding,
+          evidence: [{ ...moderateFinding.evidence[0]!, excerpt: "invented" }],
+        },
+      ],
+    },
+    promptTruncated: false,
+  });
+  const result = await analyzeReview(job, services, (event) => {
+    if (event === "model.evidence_rejected")
+      throw new Error("sink unavailable");
+  });
+  expect(result.findings).toHaveLength(0);
+  expect(result.verdict).toBe("COMMENT");
+  expect(result.summary).toContain("evidence_rejected");
 });
