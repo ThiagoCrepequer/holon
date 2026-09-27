@@ -59,6 +59,20 @@ describe("GitHub request error classification", () => {
     },
   );
 
+  it("retains the safe stage and original error class without its message", () => {
+    const original = new TypeError("private key contents");
+    const classified = classifyGitHubRequestError(
+      original,
+      Date.now(),
+      "installation_auth",
+    );
+    expect(classified).toMatchObject({
+      code: "invalid_response",
+      phase: "installation_auth",
+      originName: "TypeError",
+    });
+  });
+
   it("preserves an already classified safe error", () => {
     const error = new GitHubRequestError("upstream_transient", true, 503);
     expect(classifyGitHubRequestError(error)).toBe(error);

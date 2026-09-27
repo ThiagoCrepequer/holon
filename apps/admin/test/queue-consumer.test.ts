@@ -151,6 +151,52 @@ describe("processAdminProjectionBatch", () => {
     expect(msg.ackMock).not.toHaveBeenCalled();
   });
 
+  it("reports both quarantined and retried items in a mixed batch", async () => {
+    const invalid = createMockMessage({ invalid: true });
+    const validEvent = await createSampleProjectionEvent();
+    const transient = createMockMessage(validEvent);
+    const entries: Array<{ event: string; context: Record<string, unknown> }> =
+      [];
+    const mockStorage = {
+      quarantine: vi.fn().mockResolvedValue(undefined),
+      insertProjection: vi
+        .fn()
+        .mockRejectedValue(new Error("private D1 detail")),
+    } as unknown as D1AdminStorage;
+
+    const result = await processAdminProjectionBatch(
+      createMockBatch<unknown>([invalid, transient]),
+      mockStorage,
+      {
+        reporter: {
+          report: (event, _error, context) => {
+            entries.push({ event, context: { ...context } });
+          },
+        },
+      },
+    );
+
+    expect(result).toEqual({ acknowledged: 0, quarantined: 1, retried: 1 });
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "admin.queue_message_quarantined",
+          context: expect.objectContaining({
+            messageIndex: 0,
+            disposition: "quarantine",
+          }),
+        }),
+        expect.objectContaining({
+          event: "admin.queue_message_failed",
+          context: expect.objectContaining({
+            messageIndex: 1,
+            disposition: "retry",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("quarantines event_id_collision and acks", async () => {
     const quarantineMock = vi.fn().mockResolvedValue(undefined);
     const mockStorage = {

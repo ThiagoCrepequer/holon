@@ -6,6 +6,11 @@ import {
   mapReviewThreadWebhook,
   verifyWebhookSignature,
 } from "@holon/github";
+import {
+  consoleErrorReporter,
+  reportError,
+  withErrorReporting,
+} from "@holon/observability";
 import { Hono } from "hono";
 
 import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
@@ -56,6 +61,13 @@ export async function readBoundedRequestBody(
 
 export function createWebhookApp() {
   const app = new Hono<{ Bindings: Cloudflare.Env }>();
+  app.onError((error, context) => {
+    reportError(consoleErrorReporter, "webhook.unhandled_error", error, {
+      component: "control-plane",
+      operation: "http.webhook",
+    });
+    return context.json({ error: "internal_error" }, 500);
+  });
 
   app.get("/schemas/holon.schema.json", (context) =>
     repositorySchemaResponse(context.req.raw),
@@ -112,6 +124,22 @@ export function createWebhookApp() {
     const signature = context.req.header("x-hub-signature-256") ?? "";
     const delivery = context.req.header("x-github-delivery") ?? "";
     const event = context.req.header("x-github-event") ?? "";
+    const reject = (code: string, status: 400 | 401 | 413) => {
+      reportError(
+        consoleErrorReporter,
+        "webhook.rejected",
+        {
+          name: "WebhookRejection",
+          code,
+        },
+        {
+          component: "control-plane",
+          operation: "webhook.validate",
+          deliveryId: delivery,
+        },
+      );
+      return context.json({ error: code }, status);
+    };
     let rawBytes: Uint8Array;
     try {
       rawBytes = await readBoundedRequestBody(
@@ -120,7 +148,7 @@ export function createWebhookApp() {
       );
     } catch (error) {
       if (!(error instanceof PayloadTooLargeError)) throw error;
-      return context.json({ error: "payload_too_large" }, 413);
+      return reject("payload_too_large", 413);
     }
     if (
       !(await verifyWebhookSignature(
@@ -129,18 +157,17 @@ export function createWebhookApp() {
         signature,
       ))
     ) {
-      return context.json({ error: "invalid_signature" }, 401);
+      return reject("invalid_signature", 401);
     }
     if (event === "installation" || event === "installation_repositories") {
       let eventPayload: unknown;
       try {
         eventPayload = JSON.parse(new TextDecoder().decode(rawBytes));
       } catch {
-        return context.json({ error: "invalid_json" }, 400);
+        return reject("invalid_json", 400);
       }
       const decoded = identificationRevocationSchema.safeParse(eventPayload);
-      if (!decoded.success)
-        return context.json({ error: "invalid_installation_event" }, 400);
+      if (!decoded.success) return reject("invalid_installation_event", 400);
       const payload = decoded.data;
       if (
         (event === "installation" &&
@@ -182,7 +209,7 @@ export function createWebhookApp() {
     try {
       payload = JSON.parse(rawBody);
     } catch {
-      return context.json({ error: "invalid_json" }, 400);
+      return reject("invalid_json", 400);
     }
 
     if (event === "workflow_run") {
@@ -249,15 +276,28 @@ export function createWebhookApp() {
         ) {
           const prNumber = (pullRequests[0] as Record<string, unknown>)?.number;
           if (typeof prNumber === "number") {
-            const enrichPromise = enrichReviewWithCiEvidence(context.env, {
-              deliveryId: delivery,
-              headSha,
-              installationId,
-              pullRequestNumber: prNumber,
-              repository: { id: repoId, name: repoName, owner: repoOwner },
-              workflowName,
-              workflowRunId,
-            });
+            const enrichPromise = withErrorReporting(
+              "webhook.ci_enrichment_failed",
+              consoleErrorReporter,
+              {
+                component: "control-plane",
+                operation: "webhook.ci_enrichment",
+                repositoryId: repoId,
+                pullRequestNumber: prNumber,
+                installationId,
+                deliveryId: delivery,
+              },
+              async () =>
+                await enrichReviewWithCiEvidence(context.env, {
+                  deliveryId: delivery,
+                  headSha,
+                  installationId,
+                  pullRequestNumber: prNumber,
+                  repository: { id: repoId, name: repoName, owner: repoOwner },
+                  workflowName,
+                  workflowRunId,
+                }),
+            );
             try {
               context.executionCtx.waitUntil(enrichPromise);
             } catch {
@@ -279,9 +319,16 @@ export function createWebhookApp() {
         if (commentEvent.action !== "created") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = handleFeedbackCommentWebhook(
-          context.env,
-          commentEvent,
+        const handlePromise = withErrorReporting(
+          "webhook.feedback_failed",
+          consoleErrorReporter,
+          {
+            component: "control-plane",
+            operation: "webhook.feedback",
+            deliveryId: delivery,
+          },
+          async () =>
+            await handleFeedbackCommentWebhook(context.env, commentEvent),
         );
         try {
           context.executionCtx.waitUntil(handlePromise);
@@ -293,7 +340,7 @@ export function createWebhookApp() {
           202,
         );
       } catch {
-        return context.json({ error: "invalid_payload" }, 400);
+        return reject("invalid_payload", 400);
       }
     }
 
@@ -303,9 +350,16 @@ export function createWebhookApp() {
         if (threadEvent.action !== "resolved") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = handleThreadResolvedWebhook(
-          context.env,
-          threadEvent,
+        const handlePromise = withErrorReporting(
+          "webhook.thread_feedback_failed",
+          consoleErrorReporter,
+          {
+            component: "control-plane",
+            operation: "webhook.thread_feedback",
+            deliveryId: delivery,
+          },
+          async () =>
+            await handleThreadResolvedWebhook(context.env, threadEvent),
         );
         try {
           context.executionCtx.waitUntil(handlePromise);
@@ -317,7 +371,7 @@ export function createWebhookApp() {
           202,
         );
       } catch {
-        return context.json({ error: "invalid_payload" }, 400);
+        return reject("invalid_payload", 400);
       }
     }
 
@@ -338,11 +392,18 @@ export function createWebhookApp() {
         new Date().toISOString(),
       );
     } catch {
-      return context.json({ error: "invalid_payload" }, 400);
+      return reject("invalid_payload", 400);
     }
     try {
       await context.env.REVIEW_QUEUE.send(envelope, { contentType: "json" });
-    } catch {
+    } catch (error) {
+      reportError(consoleErrorReporter, "webhook.queue_send_failed", error, {
+        component: "control-plane",
+        operation: "webhook.queue_send",
+        repositoryId: envelope.repository.id,
+        pullRequestNumber: envelope.pullRequest.number,
+        deliveryId: delivery,
+      });
       return context.json({ error: "queue_unavailable" }, 503);
     }
     return context.json(

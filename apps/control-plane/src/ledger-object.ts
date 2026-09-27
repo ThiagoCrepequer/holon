@@ -68,6 +68,7 @@ import type {
 } from "@holon/domain";
 import { canTransitionRun, derivePrKeyFromRunId } from "@holon/domain";
 import { redactSecrets } from "@holon/model";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import { DurableObject } from "cloudflare:workers";
 
 import { FindingLedgerStore } from "./finding-ledger-store.js";
@@ -649,6 +650,13 @@ export class ReviewLedgerObject
           runId: cleanup.run_id,
         });
       } catch (error) {
+        reportError(consoleErrorReporter, "ledger.cleanup_failed", error, {
+          component: "control-plane",
+          operation: "ledger.cleanup",
+          runId: cleanup.run_id,
+          attempt,
+          disposition: "retry",
+        });
         const nextAttemptAt = new Date(
           Date.now() + maintenanceBackoff(attempt),
         ).toISOString();
@@ -1030,6 +1038,13 @@ export class ReviewLedgerObject
         runId: supersession.superseded_run_id,
       });
     } catch (error) {
+      reportError(consoleErrorReporter, "ledger.supersession_failed", error, {
+        component: "control-plane",
+        operation: "ledger.supersession",
+        runId: supersession.superseded_run_id,
+        attempt,
+        disposition: "retry",
+      });
       const nextAttemptAt = new Date(
         Date.now() + maintenanceBackoff(attempt),
       ).toISOString();
@@ -1092,6 +1107,18 @@ export class ReviewLedgerObject
         runId: task.run_id,
       });
     } catch (error) {
+      reportError(
+        consoleErrorReporter,
+        "ledger.projection_dispatch_failed",
+        error,
+        {
+          component: "control-plane",
+          operation: "ledger.projection_dispatch",
+          runId: task.run_id,
+          attempt: currentAttempts,
+          disposition: currentAttempts >= 20 ? "quarantine" : "retry",
+        },
+      );
       const kind = errorKind(error).slice(0, 100);
       if (currentAttempts >= 20) {
         const exhaustedAt = new Date().toISOString();
@@ -1252,7 +1279,12 @@ export class ReviewLedgerObject
         structuredCi = adminCiSummarySchema.parse(
           JSON.parse(first.structured_ci_json),
         );
-      } catch {
+      } catch (error) {
+        reportError(consoleErrorReporter, "ledger.ci_summary_invalid", error, {
+          component: "control-plane",
+          operation: "ledger.read_ci_summary",
+          prKey,
+        });
         structuredCi = null;
       }
     }
@@ -1467,7 +1499,14 @@ export class ReviewLedgerObject
     if (sanitizedInput) {
       try {
         validatedInput = sanitizePayloadRecord(sanitizedInput);
-      } catch {
+      } catch (error) {
+        reportError(consoleErrorReporter, "ledger.step_input_rejected", error, {
+          component: "control-plane",
+          operation: "ledger.step_input",
+          runId,
+          stepName,
+          attempt,
+        });
         validatedInput = {
           sanitized: false,
           redactedReason: "payload_rejected",
@@ -1571,7 +1610,19 @@ export class ReviewLedgerObject
     if (sanitizedOutput) {
       try {
         validatedOutput = sanitizePayloadRecord(sanitizedOutput);
-      } catch {
+      } catch (error) {
+        reportError(
+          consoleErrorReporter,
+          "ledger.step_output_rejected",
+          error,
+          {
+            component: "control-plane",
+            operation: "ledger.step_output",
+            runId,
+            stepName,
+            attempt,
+          },
+        );
         validatedOutput = {
           sanitized: false,
           redactedReason: "payload_rejected",

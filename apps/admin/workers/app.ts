@@ -1,4 +1,5 @@
 import type { AdminRunProjectionEvent } from "@holon/contracts";
+import { consoleErrorReporter, withErrorReporting } from "@holon/observability";
 
 import { D1AdminStorage } from "./d1-adapter.js";
 import { processAdminProjectionBatch } from "./queue-consumer.js";
@@ -17,7 +18,12 @@ export async function handleAdminFetch(
   env: AdminEnv,
   ctx: ExecutionContext,
 ): Promise<Response> {
-  return handleConsoleRequest(request, env, ctx);
+  return await withErrorReporting(
+    "admin.fetch_failed",
+    consoleErrorReporter,
+    { component: "admin", operation: "http.fetch" },
+    async () => await handleConsoleRequest(request, env, ctx),
+  );
 }
 
 export async function handleAdminQueue(
@@ -25,8 +31,19 @@ export async function handleAdminQueue(
   env: AdminEnv,
   _ctx: ExecutionContext,
 ): Promise<void> {
-  const storage = new D1AdminStorage(env.DB);
-  await processAdminProjectionBatch(batch, storage);
+  await withErrorReporting(
+    "admin.queue_failed",
+    consoleErrorReporter,
+    {
+      component: "admin",
+      operation: "queue.projection",
+      batchSize: batch.messages.length,
+    },
+    async () => {
+      const storage = new D1AdminStorage(env.DB);
+      await processAdminProjectionBatch(batch, storage);
+    },
+  );
 }
 
 export async function handleAdminScheduled(
@@ -34,8 +51,15 @@ export async function handleAdminScheduled(
   env: AdminEnv,
   _ctx: ExecutionContext,
 ): Promise<void> {
-  const storage = new D1AdminStorage(env.DB);
-  await processRetentionCleanup(storage);
+  await withErrorReporting(
+    "admin.scheduled_failed",
+    consoleErrorReporter,
+    { component: "admin", operation: "scheduled.retention" },
+    async () => {
+      const storage = new D1AdminStorage(env.DB);
+      await processRetentionCleanup(storage);
+    },
+  );
 }
 
 export default {

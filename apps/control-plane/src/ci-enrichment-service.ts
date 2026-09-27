@@ -17,6 +17,7 @@ import {
   type GitHubInstallationSession,
   type KeyringOperationOptions,
 } from "@holon/github";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import {
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -165,6 +166,15 @@ export async function enrichReviewWithCiEvidence(
     source: "github-actions",
     workflowName: input.workflowName,
     workflowRunId: input.workflowRunId,
+    onPartialError: (kind, index, error) =>
+      reportError(consoleErrorReporter, "ci.artifact_partial_failure", error, {
+        component: "control-plane",
+        operation: `ci.${kind}`,
+        deliveryId: input.deliveryId,
+        repositoryId: input.repository.id,
+        pullRequestNumber: input.pullRequestNumber,
+        messageIndex: index,
+      }),
   });
 
   if (evidence.status === "not_available") {

@@ -1,3 +1,5 @@
+import { consoleErrorReporter, withErrorReporting } from "@holon/observability";
+
 import { dispatchReviewMessages } from "./queue-consumer.js";
 import { createWebhookApp } from "./webhook-handler.js";
 
@@ -14,13 +16,27 @@ export default {
     env: Env,
     context: ExecutionContext,
   ): Promise<Response> {
-    return await app.fetch(request, env, context);
+    return await withErrorReporting(
+      "worker.fetch_failed",
+      consoleErrorReporter,
+      { component: "control-plane", operation: "http.fetch" },
+      async () => await app.fetch(request, env, context),
+    );
   },
   async queue(batch: MessageBatch, env: Env): Promise<void> {
-    await dispatchReviewMessages(batch.messages, env.REVIEW_WORKFLOW);
+    await withErrorReporting(
+      "worker.queue_failed",
+      consoleErrorReporter,
+      {
+        component: "control-plane",
+        operation: "queue.dispatch",
+        batchSize: batch.messages.length,
+      },
+      async () =>
+        await dispatchReviewMessages(batch.messages, env.REVIEW_WORKFLOW),
+    );
   },
 } satisfies ExportedHandler<Env>;
 
 export { ProjectIdentificationCacheObject } from "./project-identification-cache.js";
-
 export { ProjectIdentificationRegistryObject } from "./project-identification-registry.js";

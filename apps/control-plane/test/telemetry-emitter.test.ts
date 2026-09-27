@@ -156,6 +156,41 @@ describe("StructuredLogTelemetryEmitter", () => {
   });
 });
 
+describe("telemetry failure diagnostics", () => {
+  it("reports a failed sink while the healthy sink still completes", async () => {
+    const events: Array<{ event: string; context: Record<string, unknown> }> =
+      [];
+    const reporter = {
+      report: (
+        event: string,
+        _error: unknown,
+        context?: Record<string, unknown>,
+      ) => {
+        events.push({ event, context: context ?? {} });
+      },
+    };
+    const composite = new CompositeTelemetryEmitter(
+      [
+        { emitRunTelemetry: vi.fn(), emitStepTiming: vi.fn() },
+        {
+          emitRunTelemetry: () =>
+            Promise.reject(new Error("private sink detail")),
+          emitStepTiming: vi.fn(),
+        },
+      ],
+      reporter,
+    );
+
+    await composite.emitRunTelemetry(sampleTelemetry());
+    expect(events).toEqual([
+      expect.objectContaining({
+        event: "telemetry.sink_failed",
+        context: expect.objectContaining({ messageIndex: 1, runId: "run:123" }),
+      }),
+    ]);
+  });
+});
+
 describe("CompositeTelemetryEmitter", () => {
   it("delegates to all child emitters concurrently and handles failures safely", async () => {
     const emitter1 = {

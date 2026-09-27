@@ -151,6 +151,53 @@ describe("queue consumer", () => {
     expect(lookups).toBe(2);
   });
 
+  it("records a partial batch failure and the disposition of each workflow", async () => {
+    const existing = message(envelope);
+    const unavailable = message({
+      ...envelope,
+      deliveryId: "github:delivery-partial",
+      pullRequest: { ...envelope.pullRequest, headSha: "d".repeat(40) },
+    });
+    const errors: Array<{ event: string; context: Record<string, unknown> }> =
+      [];
+    let existingId = "";
+    await dispatchReviewMessages(
+      [existing.value, unavailable.value],
+      {
+        createBatch: (batch) => {
+          if (batch.length === 2) existingId = batch[0]!.id;
+          return Promise.reject(new Error("private upstream detail"));
+        },
+        get: (id) =>
+          id === existingId
+            ? Promise.resolve({
+                status: () => Promise.resolve({ status: "errored" }),
+              })
+            : Promise.reject(new Error("private lookup detail")),
+      },
+      {
+        report: (event, _error, context) => {
+          errors.push({ event, context: { ...context } });
+        },
+      },
+    );
+
+    expect(existing.state.acked).toBe(true);
+    expect(unavailable.state.retried).toBe(true);
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event: "queue.batch_dispatch_failed" }),
+        expect.objectContaining({
+          event: "queue.workflow_dispatch_failed",
+          context: expect.objectContaining({
+            disposition: "retry",
+            runId: expect.stringContaining(":head:"),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("routes the Worker queue handler through the validated dispatcher", async () => {
     const queued = message(envelope);
     const jobs: unknown[] = [];
