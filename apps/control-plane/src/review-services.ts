@@ -810,13 +810,25 @@ export function createReviewServices(
     },
     readCurrentRefs: async () => {
       const github = await createSession();
-      return await executeGitHubOperation(async () => {
-        return await github.currentPullRequestRefs(
-          job.envelope.repository.owner,
-          job.envelope.repository.name,
-          job.envelope.pullRequest.number,
-        );
-      });
+      return await executeGitHubOperation(
+        async () => {
+          return await github.currentPullRequestRefs(
+            job.envelope.repository.owner,
+            job.envelope.repository.name,
+            job.envelope.pullRequest.number,
+          );
+        },
+        Date.now,
+        {
+          context: {
+            operation: "github.pull_request_refs",
+            runId: job.runId,
+            repositoryId: job.envelope.repository.id,
+            pullRequestNumber: job.envelope.pullRequest.number,
+            installationId: job.envelope.installationId,
+          },
+        },
+      );
     },
     registerCredentialScope: async () => {
       await ledger.registerCredentialScope({

@@ -1,3 +1,17 @@
+import {
+  diagnosticMessages,
+  nativeErrorCode,
+  type DiagnosticReason,
+} from "@holon/observability";
+export type GitHubOperationPhase =
+  | "app_auth"
+  | "installation_auth"
+  | "pull_request_refs"
+  | "auth_configuration"
+  | "jwt_signing"
+  | "installation_token_request"
+  | "installation_token_response";
+
 export type GitHubFailureCode =
   | "invalid_response"
   | "network_transient"
@@ -11,11 +25,11 @@ export class GitHubRequestError extends Error {
     public readonly retryable: boolean,
     public readonly statusCode?: number,
     public readonly retryAfterMs?: number,
-    public readonly phase?:
-      | "app_auth"
-      | "installation_auth"
-      | "pull_request_refs",
+    public readonly phase?: GitHubOperationPhase,
     public readonly originName?: string,
+    public readonly reason?: DiagnosticReason,
+    public readonly originCode?: string,
+    public readonly githubRequestId?: string,
   ) {
     super(`HOLON_GITHUB_${code.toUpperCase()}:${statusCode ?? "network"}`);
     this.name = "GitHubRequestError";
@@ -23,10 +37,7 @@ export class GitHubRequestError extends Error {
 }
 
 export class GitHubAppAuthenticationError extends GitHubRequestError {
-  public constructor(
-    cause?: unknown,
-    phase?: "app_auth" | "installation_auth",
-  ) {
+  public constructor(cause?: unknown, phase?: GitHubOperationPhase) {
     super(
       "upstream_permanent",
       false,
@@ -34,6 +45,8 @@ export class GitHubAppAuthenticationError extends GitHubRequestError {
       undefined,
       phase,
       safeOriginName(cause),
+      diagnose(cause, phase),
+      nativeErrorCode(record(cause)?.code),
     );
     this.name = "GitHubAppAuthenticationError";
   }
@@ -127,7 +140,7 @@ function safeOriginName(error: unknown): string {
 export function classifyGitHubRequestError(
   error: unknown,
   now = Date.now(),
-  phase?: "app_auth" | "installation_auth" | "pull_request_refs",
+  phase?: GitHubOperationPhase,
 ): GitHubRequestError {
   if (error instanceof GitHubRequestError) return error;
   if (error instanceof TypeError) {
@@ -138,6 +151,9 @@ export function classifyGitHubRequestError(
       undefined,
       phase,
       safeOriginName(error),
+      diagnose(error, phase),
+      nativeErrorCode(record(error)?.code),
+      safeRequestId(error),
     );
   }
   const status = extractStatusCode(error);
@@ -154,6 +170,9 @@ export function classifyGitHubRequestError(
       delay ?? 60_000,
       phase,
       safeOriginName(error),
+      diagnose(error, phase),
+      nativeErrorCode(record(error)?.code),
+      safeRequestId(error),
     );
   }
   if (status !== undefined && status >= 500) {
@@ -164,6 +183,9 @@ export function classifyGitHubRequestError(
       undefined,
       phase,
       safeOriginName(error),
+      diagnose(error, phase),
+      nativeErrorCode(record(error)?.code),
+      safeRequestId(error),
     );
   }
   if (
@@ -178,6 +200,9 @@ export function classifyGitHubRequestError(
       undefined,
       phase,
       safeOriginName(error),
+      diagnose(error, phase),
+      nativeErrorCode(record(error)?.code),
+      safeRequestId(error),
     );
   }
   return new GitHubRequestError(
@@ -187,12 +212,15 @@ export function classifyGitHubRequestError(
     undefined,
     phase,
     safeOriginName(error),
+    diagnose(error, phase),
+    nativeErrorCode(record(error)?.code),
+    safeRequestId(error),
   );
 }
 
 export async function executeGitHubRequest<T>(
   operation: () => Promise<T>,
-  phase?: "pull_request_refs",
+  phase?: GitHubOperationPhase,
 ): Promise<T> {
   try {
     return await operation();
@@ -203,7 +231,7 @@ export async function executeGitHubRequest<T>(
 
 export async function executeGitHubAppAuthenticationRequest<T>(
   operation: () => Promise<T>,
-  phase: "app_auth" | "installation_auth",
+  phase: GitHubOperationPhase,
 ): Promise<T> {
   try {
     return await operation();
@@ -212,5 +240,73 @@ export async function executeGitHubAppAuthenticationRequest<T>(
       throw new GitHubAppAuthenticationError(error, phase);
     }
     throw classifyGitHubRequestError(error, Date.now(), phase);
+  }
+}
+
+function safeRequestId(error: unknown): string | undefined {
+  const value = header(headers(error), "x-github-request-id");
+  return value && /^[A-Fa-f0-9:]{8,80}$/u.test(value) ? value : undefined;
+}
+
+function diagnose(
+  error: unknown,
+  phase?: GitHubOperationPhase,
+): DiagnosticReason {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message.includes(
+      "Private Key is in PKCS#1 format, but only PKCS#8 is supported",
+    )
+  )
+    return "github_key_pkcs1_unsupported";
+  if (
+    message.includes(
+      "Private Key is in OpenSSH format, but only PKCS#8 is supported",
+    )
+  )
+    return "github_key_openssh_unsupported";
+  if (isLocalPrivateKeyError(error)) return "github_key_invalid";
+  if (phase === "auth_configuration") return "github_configuration_invalid";
+  const status = extractStatusCode(error);
+  if (status === 401) return "github_auth_rejected";
+  if (
+    status === 429 ||
+    retryDelay(error, Date.now()) !== undefined ||
+    isSecondaryRateLimit(error)
+  )
+    return "github_rate_limited";
+  if (status === 403 || status === 404) return "github_permission_denied";
+  if (status !== undefined && status >= 500) return "github_unavailable";
+  if (
+    phase === "installation_token_response" ||
+    record(error)?.name === "ZodError"
+  )
+    return "github_response_invalid";
+  if (
+    record(error)?.name === "RequestError" ||
+    record(error)?.name === "AbortError"
+  )
+    return "github_transport_failed";
+  return "github_unknown_failure";
+}
+
+export class GitHubConfigurationError extends GitHubRequestError {
+  public constructor(
+    reason:
+      | "github_current_key_missing"
+      | "github_previous_without_current"
+      | "github_app_id_invalid"
+      | "github_app_slug_invalid",
+  ) {
+    super(
+      "invalid_response",
+      false,
+      undefined,
+      undefined,
+      "auth_configuration",
+      "TypeError",
+      reason,
+    );
+    this.message = diagnosticMessages[reason];
   }
 }

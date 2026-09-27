@@ -15,12 +15,14 @@
     "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
+    "@holon/observability": "workspace:*",
     "@holon/repository-analysis": "workspace:*",
     "@octokit/auth-app": "catalog:",
     "@octokit/core": "catalog:",
     "@octokit/openapi-webhooks-types": "catalog:",
     "@octokit/plugin-paginate-rest": "catalog:",
     "@octokit/plugin-retry": "catalog:",
-    "@octokit/plugin-throttling": "catalog:"
+    "@octokit/plugin-throttling": "catalog:",
+    "universal-github-app-jwt": "catalog:"
   }
 }

@@ -79,3 +79,36 @@ Fontes Cloudflare verificadas em 2026-09-27:
 [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/),
 [regras de Workflows](https://developers.cloudflare.com/workflows/build/rules-of-workflows/) e
 [retries parciais de Queues](https://developers.cloudflare.com/queues/configuration/batching-retries/).
+
+## Autenticação do GitHub App
+
+Os eventos `github.operation_failed`, `workflow.step_failed` e
+`queue.follow_up_failed` incluem `errorReason` e `errorMessage` de um catálogo
+fechado. A mensagem explica o motivo operacional; nunca é copiada da exceção
+ou do body HTTP. `originCode` aceita somente códigos nativos conhecidos e
+`githubRequestId` aceita o identificador hexadecimal retornado pelo GitHub.
+Erros desconhecidos permanecem explícitos como `github_unknown_failure`; não
+há promessa de recuperar texto descartado de execuções anteriores.
+
+As fases separam `auth_configuration`, `jwt_signing` (inclui importação da
+chave pelo assinador), `installation_token_request`,
+`installation_token_response` e `pull_request_refs`. Falhas anteriores ou
+posteriores às fronteiras instrumentadas do SDK mantêm `app_auth` ou
+`installation_auth`. O hook de assinatura conserva a biblioteca, o cache do
+SDK e o ajuste de relógio, sem implementar JWT manualmente. Erros normalizados
+para Workflows preservam os metadados seguros em memória e acrescentam fase e
+motivo à mensagem terminal; assim `wrangler workflows instances describe`
+continua útil mesmo quando a plataforma não preserva propriedades customizadas.
+
+Para o incidente do smoke, consulte o Worker `holon-control-plane`, selecione
+o horário da execução e filtre por `event = github.operation_failed`. Use
+`pullRequestNumber`, `runId` e `workflowInstanceId` quando presentes. O histórico
+de etapas do Workflow não substitui os eventos de console. A leitura pela API
+exige a permissão Workers Observability Write; `wrangler tail` captura somente
+novos eventos. Nenhuma execução real, rotação ou deploy é disparado pelos testes.
+
+Verificado localmente em 2026-09-27: com o pacote instalado
+`universal-github-app-jwt@2.2.2`, o runtime Workers rejeita PKCS#1 com
+`github_key_pkcs1_unsupported`; uma chave sintética PKCS#8 consegue assinar um JWT
+verificado independentemente antes da resposta HTTP simulada. Isso reproduz
+uma causa possível do incidente, sem afirmar qual segredo está implantado.

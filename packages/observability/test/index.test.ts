@@ -165,3 +165,32 @@ describe("safe error diagnostics", () => {
     });
   });
 });
+
+it("renders trusted diagnostic messages and never accepts supplied message text", () => {
+  const result = safeErrorDetails({
+    name: "GitHubRequestError",
+    reason: "github_key_pkcs1_unsupported",
+    diagnosticMessage: "SECRET",
+    originCode: "ERR_OSSL_UNSUPPORTED",
+  });
+  expect(result).toMatchObject({
+    errorReason: "github_key_pkcs1_unsupported",
+    errorMessage:
+      "The JWT signer requires a PKCS#8 PEM; the supplied key uses PKCS#1.",
+    originCode: "ERR_OSSL_UNSUPPORTED",
+  });
+  expect(JSON.stringify(result)).not.toContain("SECRET");
+});
+
+it("rejects attacker-controlled diagnostic reasons, native codes and request IDs", () => {
+  for (const reason of ["SECRET", "__proto__", "constructor"]) {
+    expect(
+      safeErrorDetails({
+        name: "Error",
+        reason,
+        originCode: "SECRET",
+        githubRequestId: "Bearer SECRET",
+      }),
+    ).toEqual({ errorName: "Error" });
+  }
+});

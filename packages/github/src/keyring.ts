@@ -3,7 +3,11 @@ import {
   resolveRepositoryInstallation,
   type GitHubInstallationSession,
 } from "./client.js";
-import { GitHubAppAuthenticationError, GitHubRequestError } from "./errors.js";
+import {
+  GitHubConfigurationError,
+  GitHubAppAuthenticationError,
+  GitHubRequestError,
+} from "./errors.js";
 
 export interface GitHubAppKeyring {
   readonly appId: number;
@@ -146,12 +150,12 @@ export function isAppAuthenticationError(error: unknown): boolean {
 function parseAppId(value: number | string): number {
   const normalized = typeof value === "string" ? value.trim() : value;
   if (typeof normalized === "string" && !/^[1-9]\d*$/u.test(normalized)) {
-    throw new TypeError("GitHub App ID must be a positive safe integer");
+    throw new GitHubConfigurationError("github_app_id_invalid");
   }
   const parsed =
     typeof normalized === "number" ? normalized : Number(normalized);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new TypeError("GitHub App ID must be a positive safe integer");
+    throw new GitHubConfigurationError("github_app_id_invalid");
   }
   return parsed;
 }
@@ -162,10 +166,10 @@ export function resolveGitHubAppKeyring(
   const current = env.GITHUB_APP_PRIVATE_KEY_CURRENT?.trim();
   const previous = env.GITHUB_APP_PRIVATE_KEY_PREVIOUS?.trim();
   if (!current) {
-    throw new TypeError(
+    throw new GitHubConfigurationError(
       previous
-        ? "GITHUB_APP_PRIVATE_KEY_PREVIOUS cannot be configured without a CURRENT key"
-        : "Missing GitHub App private key: configure GITHUB_APP_PRIVATE_KEY_CURRENT",
+        ? "github_previous_without_current"
+        : "github_current_key_missing",
     );
   }
   const resolvedCurrent = current;

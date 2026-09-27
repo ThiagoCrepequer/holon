@@ -2,6 +2,7 @@ import { GitHubRequestError } from "@holon/github";
 import {
   consoleErrorReporter,
   reportError,
+  safeErrorDetails,
   type ErrorContext,
   type ErrorReporter,
 } from "@holon/observability";
@@ -113,9 +114,17 @@ export async function executeGitHubOperation<T>(
             : error.code === "upstream_transient"
               ? "server"
               : "transport";
-        throw new GitHubTransientError(reason, error.retryAfterMs);
+        throw preserveDiagnostics(
+          new GitHubTransientError(reason, error.retryAfterMs),
+          error,
+        );
       }
-      throw new NonRetryableError(`HOLON_GITHUB_NON_RETRYABLE:${error.code}`);
+      throw preserveDiagnostics(
+        new NonRetryableError(
+          `HOLON_GITHUB_NON_RETRYABLE:${error.code}${error.reason ? `:${error.phase ?? "unknown"}:${error.reason}` : ""}`,
+        ),
+        error,
+      );
     }
     const status = statusCode(error);
     const rateDelay = rateLimitDelayMs(error, nowMilliseconds);
@@ -155,4 +164,22 @@ export function githubRetryDelay(context: WorkflowRetryContext): number {
   if (retryAfter !== undefined) return boundedDelay(retryAfter);
   const attempt = context.ctx?.attempt ?? context.attempt ?? 1;
   return Math.min(60_000, 5_000 * 2 ** Math.max(0, attempt - 1));
+}
+
+/** Copy only validated metadata, never the SDK error/cause with request secrets. */
+function preserveDiagnostics<T extends Error>(
+  target: T,
+  source: GitHubRequestError,
+): T {
+  const details = safeErrorDetails(source);
+  return Object.assign(target, {
+    code: source.code,
+    phase: details.errorPhase,
+    statusCode: details.statusCode,
+    retryable: details.retryable,
+    originName: details.causeName,
+    reason: details.errorReason,
+    originCode: details.originCode,
+    githubRequestId: details.githubRequestId,
+  });
 }

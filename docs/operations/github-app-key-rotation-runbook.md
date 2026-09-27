@@ -126,3 +126,21 @@ Verificadas em 2026-09-03:
 - [GitHub: gerenciamento de chaves privadas para GitHub Apps](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
 - [Cloudflare Workers: secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
 - [Wrangler: comandos `secret put` e `secret bulk`](https://developers.cloudflare.com/workers/wrangler/commands/workers/#secret)
+
+### Formato da PEM no runtime Workers
+
+Verificado em 2026-09-27: o GitHub entrega a chave RSA em PKCS#1
+(`BEGIN RSA PRIVATE KEY`). O caminho WebCrypto da biblioteca usada pelo Holon
+exige PKCS#8 (`BEGIN PRIVATE KEY`). Antes de configurar CURRENT/PREVIOUS,
+converta o arquivo localmente, preservando a mesma chave RSA:
+
+```bash
+openssl pkcs8 -topk8 -nocrypt -in nova-chave.pem -out nova-chave-pkcs8.pem
+```
+
+Use o conteúdo completo de `nova-chave-pkcs8.pem` no secret. Essa conversão
+não gera outra chave e não exige alterar o App ID. Não copie PEMs para logs,
+commits ou comentários. O diagnóstico `github_key_pkcs1_unsupported` identifica
+a rejeição do formato; `github_auth_rejected` identifica uma rejeição HTTP 401.
+
+Fonte: [formatos aceitos pelo assinador](https://github.com/gr2m/universal-github-app-jwt#private-key-formats).

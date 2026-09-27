@@ -1,3 +1,9 @@
+import {
+  diagnosticMessages,
+  diagnosticReason,
+  nativeErrorCode,
+} from "./diagnostics.js";
+export * from "./diagnostics.js";
 /**
  * Error logs contain only explicit operational identifiers and typed error metadata.
  * Never pass exception messages, stacks, request bodies or arbitrary objects to logs.
@@ -31,6 +37,10 @@ export interface ErrorReporter {
 }
 
 export interface SafeErrorDetails {
+  readonly errorReason?: string;
+  readonly errorMessage?: string;
+  readonly originCode?: string;
+  readonly githubRequestId?: string;
   readonly errorName: string;
   readonly errorCode?: string;
   readonly errorPhase?: string;
@@ -102,7 +112,7 @@ function oneError(error: unknown) {
   const code =
     errorCode(value.code) ??
     (typeof value.message === "string" &&
-    /^HOLON_[A-Z0-9_]+(?::[A-Za-z0-9_-]+)?$/u.test(value.message)
+    /^HOLON_[A-Z0-9_]+(?::[A-Za-z0-9_-]+){0,4}$/u.test(value.message)
       ? value.message
       : undefined);
   return {
@@ -125,7 +135,17 @@ export function safeErrorDetails(error: unknown): SafeErrorDetails {
       ? undefined
       : oneError(record(error)?.cause);
   const safeOrigin = identifier(record(error)?.originName, 64);
+  const reason = diagnosticReason(record(error)?.reason);
+  const originCode = nativeErrorCode(record(error)?.originCode);
+  const requestId = record(error)?.githubRequestId;
   return {
+    ...(reason
+      ? { errorReason: reason, errorMessage: diagnosticMessages[reason] }
+      : {}),
+    ...(originCode ? { originCode } : {}),
+    ...(typeof requestId === "string" && /^[A-Fa-f0-9:]{8,80}$/u.test(requestId)
+      ? { githubRequestId: requestId }
+      : {}),
     errorName: current.name,
     ...(current.code === undefined ? {} : { errorCode: current.code }),
     ...(!("phase" in current) || current.phase === undefined

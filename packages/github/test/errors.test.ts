@@ -93,3 +93,35 @@ describe("GitHub request error classification", () => {
     });
   });
 });
+
+it("diagnoses PKCS1 rejection without retaining private key material", () => {
+  const error = classifyGitHubRequestError(
+    new Error(
+      "[universal-github-app-jwt] Private Key is in PKCS#1 format, but only PKCS#8 is supported. SECRET",
+    ),
+    Date.now(),
+    "installation_auth",
+  );
+  expect(error).toMatchObject({ reason: "github_key_pkcs1_unsupported" });
+  expect(JSON.stringify(error)).not.toContain("SECRET");
+});
+
+it.each([
+  [
+    new Error("Private Key is in OpenSSH format, but only PKCS#8 is supported"),
+    "github_key_openssh_unsupported",
+  ],
+  [new Error("invalid key data"), "github_key_invalid"],
+  [new Error("PRIVATE unseen diagnostic"), "github_unknown_failure"],
+  [
+    Object.assign(new Error("PRIVATE"), {
+      name: "AbortError",
+      code: "ETIMEDOUT",
+    }),
+    "github_transport_failed",
+  ],
+])("uses a bounded diagnosis for %s", (original, reason) => {
+  const error = classifyGitHubRequestError(original);
+  expect(error.reason).toBe(reason);
+  expect(JSON.stringify(error)).not.toContain("PRIVATE");
+});
