@@ -9,9 +9,15 @@ last-reviewed: 2026-09-27
 
 # Diagnóstico de erros nos Workers
 
-Os Workers do control plane, executor e console interno escrevem falhas estruturadas
-com `console.error`. Em Workers Logs, filtre por `severity = error` e pelo campo
-`event`. Use `runId`, `workflowInstanceId`, `repositoryId`, `pullRequestNumber`,
+As configurações dos três Workers habilitam logs de invocação da Cloudflare com
+amostragem integral. Um handler novo recebe automaticamente registro de
+invocação e de exceção não tratada, sem chamar `withErrorReporting`. Falhas
+capturadas que resultam em resposta de sucesso ou de erro controlado não são
+reconhecidas automaticamente como falhas pela plataforma.
+
+Para esses casos, o logger compartilhado escreve um objeto estruturado com
+`console.error`, de modo que os campos sejam indexáveis no Workers Logs. Filtre
+por `severity = error` e pelo campo `event`. Use `runId`, `workflowInstanceId`, `repositoryId`, `pullRequestNumber`,
 `messageId` ou `deliveryId` para correlacionar uma execução. O `errorId` é um
 identificador novo para cada registro, não uma chave de deduplicação.
 
@@ -29,11 +35,21 @@ também geram registros próprios. Falhas parciais ao extrair ou interpretar art
 de CI geram `ci.artifact_partial_failure` com tipo de operação e índice do
 artefato, sem registrar seu nome ou conteúdo.
 
-A instrumentação fica nas fronteiras de HTTP, Queue, Workflow, RPC, Sandbox e
-nos destinos assíncronos. Ela preserva a exceção original e a decisão de
-ack/retry; falhas no próprio logger não devem alterar a execução. Ela não
-substitui um sink externo de retenção, alertas ou tracing distribuído.
+`withErrorReporting` é um adaptador para as poucas fronteiras que propagam uma
+exceção e precisam acrescentar contexto seguro; não deve envolver toda função
+nova. Funções internas são cobertas pela fronteira existente quando o erro
+propaga. Um novo handler independente precisa de uma fronteira ou do registro
+automático da Cloudflare. Quando um `catch` recupera uma falha, um batch
+continua parcialmente ou uma função devolve um resultado degradado, somente
+o código que conhece essa decisão pode emitir o evento por item. Não há
+interceptador global capaz de deduzir que uma operação concluída foi parcial.
+
+A instrumentação preserva a exceção original e a decisão de ack/retry; falhas
+no próprio logger não devem alterar a execução. Ela não substitui um sink
+externo de retenção, alertas ou tracing distribuído.
 Os logs de plataforma para exceções não tratadas continuam complementares.
+Eles podem incluir a mensagem original da exceção e metadados da requisição;
+por isso os erros lançados nas fronteiras também devem evitar dados sensíveis.
 Não há garantia de registrar erros que ocorram antes da inicialização do Worker
 ou quando a plataforma não conseguir persistir logs.
 
@@ -42,10 +58,11 @@ ou quando a plataforma não conseguir persistir logs.
 O logger compartilhado só aceita campos de contexto enumerados e identificadores
 com formato restrito. Não registra mensagens ou stacks de exceções, prompts,
 diffs, conteúdo de arquivos, bodies HTTP, cabeçalhos de autorização ou chaves.
-Novos pontos de falha devem usar `reportError` ou `withErrorReporting` de
-`@holon/observability`, passando somente IDs e fases operacionais. Se uma
+Novos pontos de falha tratados ou degradados devem usar `reportError` de
+`@holon/observability`, passando somente IDs e fases operacionais. O adaptador
+`withErrorReporting` é reservado para novas fronteiras sem captura central. Se uma
 biblioteca encapsular o erro, preserve apenas metadados tipados seguros
-(código, status, fase e nome de origem validado). Não passe objetos completos
+(código, status, fase e nome de origem validado). Não passe objetos de exceção, requisição ou resposta completos
 para `console.error`.
 
 ## Verificação e operação

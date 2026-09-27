@@ -173,15 +173,13 @@ function safeContext(context: ErrorContext): Record<string, string | number> {
 export const consoleErrorReporter: ErrorReporter = {
   report(event, error, context = {}) {
     const safeEvent = identifier(event, 100) ?? "diagnostics.invalid_event";
-    console.error(
-      JSON.stringify({
-        severity: "error",
-        event: safeEvent,
-        errorId: crypto.randomUUID(),
-        ...safeContext(context),
-        ...safeErrorDetails(error),
-      }),
-    );
+    console.error({
+      severity: "error",
+      event: safeEvent,
+      errorId: crypto.randomUUID(),
+      ...safeContext(context),
+      ...safeErrorDetails(error),
+    });
   },
 };
 
@@ -199,6 +197,7 @@ export function reportError(
   }
 }
 
+/** Use at an invocation or asynchronous boundary, not around every internal function. */
 export async function withErrorReporting<T>(
   event: string,
   reporter: ErrorReporter,

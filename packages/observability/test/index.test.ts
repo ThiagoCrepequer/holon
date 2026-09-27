@@ -40,7 +40,7 @@ describe("safe error diagnostics", () => {
         token: "should never appear",
       } as never,
     );
-    const entry = JSON.parse(String(write.mock.calls[0]?.[0]));
+    const entry = write.mock.calls[0]?.[0];
     expect(entry).toMatchObject({
       severity: "error",
       event: "queue.item_failed",
@@ -129,14 +129,14 @@ describe("safe error diagnostics", () => {
         token: "secret",
       } as never,
     );
-    expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toMatchObject({
+    expect(write.mock.calls[0]?.[0]).toMatchObject({
       event: "diagnostics.invalid_event",
       component: "admin",
       attempt: 2,
       errorName: "TypeError",
       statusCode: 503,
     });
-    expect(String(write.mock.calls[0]?.[0])).not.toMatch(
+    expect(JSON.stringify(write.mock.calls[0]?.[0])).not.toMatch(
       /private|secret|repositoryId|batchSize/u,
     );
     write.mockRestore();
