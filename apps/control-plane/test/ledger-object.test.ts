@@ -312,6 +312,8 @@ describe("ReviewLedgerObject", () => {
         { version: 12 },
         { version: 13 },
         { version: 14 },
+        { version: 15 },
+        { version: 16 },
       ]);
       expect(
         state.storage.sql
@@ -430,6 +432,7 @@ describe("ReviewLedgerObject", () => {
     });
     await ledger.recordProjectionTask(event);
 
+    await runDurableObjectAlarm(ledger);
     const leaseExpiresAt = Date.now() + 60_000;
     await runInDurableObject(ledger, async (_object, state) => {
       state.storage.sql.exec(
@@ -711,7 +714,8 @@ describe("ReviewLedgerObject", () => {
       updatedAt: "2026-09-02T12:00:00.000Z",
     };
 
-    await ledger.savePrFindings(prKey, [initialFinding]);
+    await authorizeFindingWriter(ledger, run);
+    await ledger.savePrFindings(prKey, [initialFinding], runId);
 
     let loaded = await ledger.loadPrFindings(prKey);
     expect(loaded).toHaveLength(1);
@@ -728,7 +732,7 @@ describe("ReviewLedgerObject", () => {
       updatedAt: "2026-09-02T13:00:00.000Z",
     };
 
-    await ledger.savePrFindings(prKey, [persistentFinding]);
+    await ledger.savePrFindings(prKey, [persistentFinding], runId);
     loaded = await ledger.loadPrFindings(prKey);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.status).toBe("persistent");
@@ -742,7 +746,7 @@ describe("ReviewLedgerObject", () => {
       updatedAt: "2026-09-02T14:00:00.000Z",
     };
 
-    await ledger.savePrFindings(prKey, [resolvedFinding]);
+    await ledger.savePrFindings(prKey, [resolvedFinding], runId);
     loaded = await ledger.loadPrFindings(prKey);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.status).toBe("resolved");
@@ -762,7 +766,7 @@ describe("ReviewLedgerObject", () => {
       status: "dismissed" as const,
       updatedAt: "2026-09-02T15:00:00.000Z",
     };
-    await ledger.savePrFindings(prKey, [dismissedFinding]);
+    await ledger.savePrFindings(prKey, [dismissedFinding], runId);
     loaded = await ledger.loadPrFindings(prKey);
     expect(loaded[0]?.status).toBe("dismissed");
 
@@ -817,25 +821,30 @@ describe("ReviewLedgerObject", () => {
     await expect(ledger.loadLatestReviewDecision(prKey)).resolves.toMatchObject(
       { verdictPolicy: { mediumSeverityThreshold: 1 } },
     );
-    await ledger.savePrFindings(prKey, [
-      {
-        confidence: 0.62,
-        diagnostic: "A persisted finding with enough detail.",
-        filePath: "src/example.ts",
-        fingerprint,
-        evidenceFingerprint: fingerprint.slice(3),
-        firstSeenHeadSha: "a".repeat(40),
-        firstSeenRunId: runId,
-        githubCommentId: 202,
-        lastSeenHeadSha: "a".repeat(40),
-        lastSeenRunId: runId,
-        line: 12,
-        prKey,
-        severity: "high",
-        status: "new",
-        updatedAt: "2026-09-03T12:00:00.000Z",
-      },
-    ]);
+    await authorizeFindingWriter(ledger, run);
+    await ledger.savePrFindings(
+      prKey,
+      [
+        {
+          confidence: 0.62,
+          diagnostic: "A persisted finding with enough detail.",
+          filePath: "src/example.ts",
+          fingerprint,
+          evidenceFingerprint: fingerprint.slice(3),
+          firstSeenHeadSha: "a".repeat(40),
+          firstSeenRunId: runId,
+          githubCommentId: 202,
+          lastSeenHeadSha: "a".repeat(40),
+          lastSeenRunId: runId,
+          line: 12,
+          prKey,
+          severity: "high",
+          status: "new",
+          updatedAt: "2026-09-03T12:00:00.000Z",
+        },
+      ],
+      runId,
+    );
 
     const input = {
       authorAssociation: "MEMBER",
@@ -877,9 +886,11 @@ describe("ReviewLedgerObject", () => {
 
     // The review loaded its baseline before the human response arrived.
     const dismissed = (await ledger.loadPrFindings(prKey))[0]!;
-    await ledger.savePrFindings(prKey, [
-      { ...dismissed, status: "persistent" },
-    ]);
+    await ledger.savePrFindings(
+      prKey,
+      [{ ...dismissed, status: "persistent" }],
+      runId,
+    );
     await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
       { status: "dismissed" },
     ]);
@@ -890,9 +901,11 @@ describe("ReviewLedgerObject", () => {
       targetSeverity: "low",
       update: { severity: "low" },
     });
-    await ledger.savePrFindings(prKey, [
-      { ...dismissed, severity: "critical", status: "persistent" },
-    ]);
+    await ledger.savePrFindings(
+      prKey,
+      [{ ...dismissed, severity: "critical", status: "persistent" }],
+      runId,
+    );
     await expect(ledger.loadPrFindings(prKey)).resolves.toMatchObject([
       { status: "dismissed", severity: "low" },
     ]);
@@ -974,6 +987,14 @@ describe("ReviewLedgerObject", () => {
     expect(initial).toBeUndefined();
 
     await ledger.saveCiEvidence(testPrKey, testHeadSha, {
+      workflowRunAttempt: 1,
+      target: {
+        installationId: 99,
+        repositoryId: 42,
+        owner: "acme",
+        repo: "api",
+        pullNumber: 88,
+      },
       markdownByLanguage: {
         en: "### 🧪 CI Test Evidence\nCoverage: 95%",
         "pt-BR": "### 🧪 CI Test Evidence\nCoverage: 95%",
@@ -984,10 +1005,9 @@ describe("ReviewLedgerObject", () => {
 
     const loaded = await ledger.loadCiEvidence(testPrKey, testHeadSha);
     expect(loaded).toBeDefined();
-    expect(loaded?.markdownByLanguage.en).toBe(
+    expect(loaded?.markdownByLanguage.en).toContain(
       "### 🧪 CI Test Evidence\nCoverage: 95%",
     );
-    expect(loaded?.workflowRunId).toBe(12345);
   });
 
   it("persists and loads run telemetry accurately", async () => {
@@ -1235,30 +1255,35 @@ describe("ReviewLedgerObject", () => {
     };
     await ledger.saveRunTelemetry(telemetry);
 
-    await ledger.savePrFindings(testPrKey, [
-      {
-        evidenceFingerprint:
-          "fp:1111111111111111111111111111111111111111111111111111111111111111".slice(
-            3,
-          ),
-        confidence: 0.95,
-        diagnostic:
-          "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890 " +
-          "界".repeat(1500),
-        filePath: "src/api.ts",
-        fingerprint:
-          "fp:1111111111111111111111111111111111111111111111111111111111111111",
-        firstSeenHeadSha: "f".repeat(40),
-        firstSeenRunId: testRunId,
-        lastSeenHeadSha: "f".repeat(40),
-        lastSeenRunId: testRunId,
-        line: 42,
-        prKey: testPrKey,
-        severity: "high" as const,
-        status: "new" as const,
-        updatedAt: new Date().toISOString(),
-      },
-    ]);
+    await authorizeFindingWriter(ledger, { ...run, id: testRunId });
+    await ledger.savePrFindings(
+      testPrKey,
+      [
+        {
+          evidenceFingerprint:
+            "fp:1111111111111111111111111111111111111111111111111111111111111111".slice(
+              3,
+            ),
+          confidence: 0.95,
+          diagnostic:
+            "\u001b[31mError: \u001b[0mBearer ghp_secret1234567890abcdef1234567890 " +
+            "界".repeat(1500),
+          filePath: "src/api.ts",
+          fingerprint:
+            "fp:1111111111111111111111111111111111111111111111111111111111111111",
+          firstSeenHeadSha: "f".repeat(40),
+          firstSeenRunId: testRunId,
+          lastSeenHeadSha: "f".repeat(40),
+          lastSeenRunId: testRunId,
+          line: 42,
+          prKey: testPrKey,
+          severity: "high" as const,
+          status: "new" as const,
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      testRunId,
+    );
 
     const detail = await ledger.getSanitizedAdminRunDetail(testRunId);
     expect(detail).not.toBeNull();
@@ -1292,6 +1317,14 @@ describe("ReviewLedgerObject", () => {
     );
 
     await ledger.saveCiEvidence(testPrKey, headSha1, {
+      workflowRunAttempt: 1,
+      target: {
+        installationId: 99,
+        repositoryId: 42,
+        owner: "acme",
+        repo: "api",
+        pullNumber: 101,
+      },
       markdownByLanguage: {
         en: "CI run completed",
         "pt-BR": "CI run completed",
@@ -1339,21 +1372,14 @@ describe("ReviewLedgerObject", () => {
     await runInDurableObject(ledger, async (instance) => {
       const internal = instance as unknown as LedgerTestInternal;
       internal.ctx.storage.sql.exec(
-        `INSERT OR REPLACE INTO ci_evidences (
-           pr_key, head_sha, markdown_content, workflow_run_id, structured_ci_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+        "INSERT INTO ci_workflow_evidence(pr_key,head_sha,workflow_run_id,attempt,payload) VALUES(?,?,1002,1,?)",
         testPrKey,
         "2".repeat(40),
-        JSON.stringify({
-          en: "evidence",
-          "pt-BR": "evidência",
-          es: "evidencia",
-        }),
-        1002,
         "{invalid-json",
       );
-      const loaded = await instance.loadCiEvidence(testPrKey, "2".repeat(40));
-      expect(loaded?.structuredCi).toBeNull();
+      expect(() =>
+        instance.loadCiEvidence(testPrKey, "2".repeat(40)),
+      ).toThrow();
     });
   });
 
@@ -1761,6 +1787,47 @@ describe("Migration 12 and step executions telemetry", () => {
       "2026-09-04T10:00:04.000Z",
       "op-r1-pub",
     );
+
+    // Add findings: one produced by run 1, one updated later by run 2
+    await ledger.savePrFindings(
+      prKey,
+      [
+        {
+          evidenceFingerprint: `fp:${"1".repeat(64)}`.slice(3),
+          confidence: 0.95,
+          diagnostic: "A concrete functional defect in the old code.",
+          filePath: "src/old.ts",
+          fingerprint: `fp:${"1".repeat(64)}`,
+          firstSeenHeadSha: "1".repeat(40),
+          firstSeenRunId: runId1,
+          lastSeenHeadSha: "1".repeat(40),
+          lastSeenRunId: runId1,
+          line: 10,
+          prKey,
+          severity: "medium",
+          status: "resolved",
+          updatedAt: "2026-09-04T10:00:05.000Z",
+        },
+        {
+          evidenceFingerprint: `fp:${"2".repeat(64)}`.slice(3),
+          confidence: 0.95,
+          diagnostic: "A concrete functional defect introduced in new code.",
+          filePath: "src/new.ts",
+          fingerprint: `fp:${"2".repeat(64)}`,
+          firstSeenHeadSha: "2".repeat(40),
+          firstSeenRunId: runId2,
+          lastSeenHeadSha: "2".repeat(40),
+          lastSeenRunId: runId2,
+          line: 20,
+          prKey,
+          severity: "high",
+          status: "new",
+          updatedAt: "2026-09-04T11:00:00.000Z",
+        },
+      ],
+      runId1,
+    );
+
     await ledger.transition(
       runId1,
       "publishing",
@@ -1768,42 +1835,6 @@ describe("Migration 12 and step executions telemetry", () => {
       "2026-09-04T10:00:05.000Z",
       "op-r1-done",
     );
-
-    // Add findings: one produced by run 1, one updated later by run 2
-    await ledger.savePrFindings(prKey, [
-      {
-        evidenceFingerprint: `fp:${"1".repeat(64)}`.slice(3),
-        confidence: 0.95,
-        diagnostic: "A concrete functional defect in the old code.",
-        filePath: "src/old.ts",
-        fingerprint: `fp:${"1".repeat(64)}`,
-        firstSeenHeadSha: "1".repeat(40),
-        firstSeenRunId: runId1,
-        lastSeenHeadSha: "1".repeat(40),
-        lastSeenRunId: runId1,
-        line: 10,
-        prKey,
-        severity: "medium",
-        status: "resolved",
-        updatedAt: "2026-09-04T10:00:05.000Z",
-      },
-      {
-        evidenceFingerprint: `fp:${"2".repeat(64)}`.slice(3),
-        confidence: 0.95,
-        diagnostic: "A concrete functional defect introduced in new code.",
-        filePath: "src/new.ts",
-        fingerprint: `fp:${"2".repeat(64)}`,
-        firstSeenHeadSha: "2".repeat(40),
-        firstSeenRunId: runId2,
-        lastSeenHeadSha: "2".repeat(40),
-        lastSeenRunId: runId2,
-        line: 20,
-        prKey,
-        severity: "high",
-        status: "new",
-        updatedAt: "2026-09-04T11:00:00.000Z",
-      },
-    ]);
 
     // Record step execution for run 1 with analyze-review output snapshot
     await ledger.recordStepAttemptStart(
@@ -2006,3 +2037,108 @@ describe("Migration 12 and step executions telemetry", () => {
     expect(missing).toBeNull();
   });
 });
+
+it("rejects delayed finding writes from a superseded run inside the ledger transaction", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
+  await ledger.claimRun(run, "old-workflow");
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    "2026-09-27T12:00:00Z",
+    "old-start",
+  );
+  await ledger.transition(
+    runId,
+    "running",
+    "publishing",
+    "2026-09-27T12:00:01Z",
+    "old-publish",
+  );
+  const finding = {
+    confidence: 0.95,
+    diagnostic: "An unconditional write bypasses authorization.",
+    filePath: "a.ts",
+    fingerprint: `fp:${"d".repeat(64)}` as const,
+    evidenceFingerprint: "d".repeat(64),
+    firstSeenHeadSha: "a".repeat(40),
+    firstSeenRunId: runId,
+    lastSeenHeadSha: "a".repeat(40),
+    lastSeenRunId: runId,
+    line: 1,
+    prKey: run.prKey,
+    severity: "high" as const,
+    status: "new" as const,
+    updatedAt: "2026-09-27T12:00:00Z",
+  };
+  await ledger.savePrFindings(run.prKey, [finding], runId);
+  const nextId: RunId = `${run.prKey}:head:${"b".repeat(40)}:base:${"b".repeat(40)}`;
+  await ledger.claimRun(
+    {
+      ...run,
+      id: nextId,
+      causalVersion: "2026-09-27T12:01:00Z",
+      createdAt: "2026-09-27T12:01:01Z",
+    },
+    "new-workflow",
+  );
+  await ledger.transition(
+    nextId,
+    "queued",
+    "running",
+    "2026-09-27T12:01:02Z",
+    "new-start",
+  );
+  await ledger.transition(
+    nextId,
+    "running",
+    "publishing",
+    "2026-09-27T12:01:03Z",
+    "new-publish",
+  );
+  await ledger.savePrFindings(
+    run.prKey,
+    [
+      {
+        ...finding,
+        lastSeenRunId: nextId,
+        lastSeenHeadSha: "b".repeat(40),
+        status: "resolved",
+        updatedAt: "2026-09-27T12:01:04Z",
+      },
+    ],
+    nextId,
+  );
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.savePrFindings(run.prKey, [finding], runId)).toThrow(
+      "no longer authoritative",
+    );
+  });
+  expect((await ledger.loadPrFindings(run.prKey))[0]).toMatchObject({
+    lastSeenRunId: nextId,
+    status: "resolved",
+  });
+});
+
+async function authorizeFindingWriter(
+  ledger: DurableObjectStub<
+    import("../src/ledger-object.js").ReviewLedgerObject
+  >,
+  fixture: ReviewRun,
+): Promise<void> {
+  await ledger.claimRun(fixture, "finding-fixture");
+  await ledger.transition(
+    fixture.id,
+    "queued",
+    "running",
+    fixture.createdAt,
+    `${fixture.id}:fixture-start`,
+  );
+  await ledger.transition(
+    fixture.id,
+    "running",
+    "publishing",
+    fixture.createdAt,
+    `${fixture.id}:fixture-publish`,
+  );
+}

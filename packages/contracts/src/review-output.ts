@@ -106,8 +106,8 @@ const resilientNullablePositiveInteger = z.preprocess(
 
 const resilientConfidence = z.preprocess(
   (val) =>
-    typeof val === "string" && !Number.isNaN(Number.parseFloat(val))
-      ? Math.max(0, Math.min(1, Number.parseFloat(val)))
+    typeof val === "string" && /^(?:0(?:\.\d+)?|1(?:\.0+)?)$/u.test(val.trim())
+      ? Number(val.trim())
       : val,
   z.number().min(0).max(1),
 );
@@ -156,7 +156,7 @@ const reviewTransportFields = z
     resolutions: z.array(reviewResolutionSchema).max(8).optional(),
     findings: z.preprocess(
       (val) =>
-        Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : [],
+        Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : val,
       z
         .array(
           z

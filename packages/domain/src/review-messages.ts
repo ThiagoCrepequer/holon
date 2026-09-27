@@ -245,10 +245,10 @@ export const reviewMessages = {
     es: "    - *...y {count} archivos más con líneas sin cobertura.*",
   },
   ciSuite: {
-    en: "- **Test suite**: {passed} passed, {failed} failed, {total} total{duration}",
+    en: "- **Test suite**: {passed} passed, {failed} failed, {skipped} skipped, {total} total{duration}",
     "pt-BR":
-      "- **Suíte de testes**: {passed} passaram, {failed} falharam, {total} no total{duration}",
-    es: "- **Suite de pruebas**: {passed} pasaron, {failed} fallaron, {total} en total{duration}",
+      "- **Suíte de testes**: {passed} passaram, {failed} falharam, {skipped} ignorados, {total} no total{duration}",
+    es: "- **Suite de pruebas**: {passed} pasaron, {failed} fallaron, {skipped} omitidos, {total} en total{duration}",
   },
   ciFailed: {
     en: "  - **Failed tests ({count})**:",

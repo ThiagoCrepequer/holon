@@ -177,7 +177,7 @@ export async function handleFeedbackCommentWebhook(
     );
   } catch (error) {
     sessionFailure(logger, event, error);
-    return { actionTaken: "ignored" };
+    throw error;
   }
 }
 
@@ -234,6 +234,6 @@ export async function handleThreadResolvedWebhook(
     );
   } catch (error) {
     sessionFailure(logger, event, error);
-    return { actionTaken: "ignored" };
+    throw error;
   }
 }

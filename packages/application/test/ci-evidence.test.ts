@@ -70,7 +70,6 @@ DA:invalid,format
   describe("junit-parser", () => {
     it("parses JUnit XML with testcases, failures, and skipped tests", () => {
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE testsuite SYSTEM "test.dtd">
 <!-- Some comment -->
 <testsuites name="vitest tests" tests="3" failures="1" errors="0" skipped="1" time="1.25">
   <testsuite name="math.test.ts" tests="3" failures="1">
@@ -114,10 +113,9 @@ DA:invalid,format
     });
 
     it("handles empty or malformed XML gracefully", () => {
-      const result = parseJUnitXml("<not-a-test-report></not-a-test-report>");
-      expect(result.total).toBe(0);
-      expect(result.passed).toBe(0);
-      expect(result.failed).toBe(0);
+      expect(() =>
+        parseJUnitXml("<not-a-test-report></not-a-test-report>"),
+      ).toThrow("Not a JUnit report");
     });
   });
 
@@ -164,7 +162,7 @@ DA:invalid,format
 
       expect(() =>
         extractSafeZipArtifact(zipData, { maxUncompressedBytes: 1024 }),
-      ).toThrow("Zip Bomb protection");
+      ).toThrow("Artifact uncompressed size");
     });
   });
 

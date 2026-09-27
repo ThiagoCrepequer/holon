@@ -159,3 +159,7 @@ novamente fontes mutáveis. O cleanup apaga os chunks, preservando o resumo.
 A decisão de feedback conserva idioma, detalhe, cap e limiar de medium; não relê
 YAML nem perde rigor após cleanup/eviction. `review_finding_artifacts` preserva
 os resultados integrais da run independentemente do cap inline.
+
+## Endurecimento do core (2026-09-27)
+
+A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

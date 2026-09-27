@@ -2,6 +2,8 @@ import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
 } from "@holon/contracts";
+
+import type { DesiredCheckRun } from "./check-run-reconciliation.js";
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
 }
@@ -104,6 +106,8 @@ export interface WorkflowLedger
     CiEvidenceLedger,
     FindingLifecycleLedger,
     RunTelemetryLedger {
+  scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
+  reconcileCheckRun(runId: string): Promise<number | undefined>;
   saveRunConfiguration(
     snapshot: RunConfigurationSnapshot,
   ): Promise<RunConfigurationRef>;
@@ -121,6 +125,7 @@ export interface WorkflowLedger
     eventId: string,
     usage: AnalysisUsage,
   ): Promise<void>;
+
   reserveAnalysisToolCall(
     runId: string,
     index: number,
@@ -189,6 +194,10 @@ export interface WorkflowLedger
 }
 
 export interface ReviewRuntime {
+  readonly reconcileCheckRun?: (
+    runId: string,
+    connect: () => Promise<GitHubInstallationSession>,
+  ) => Promise<number | undefined>;
   readonly identificationModel?: import("@holon/application").ProjectIdentificationModel;
   readonly adminProjectionQueue?: Queue<unknown>;
   readonly createModel?: (
@@ -222,8 +231,14 @@ function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
 }
 
 export interface ReviewServices {
-  beginReviewShard?(index: number, totalShards: number): void;
-  reviewToolBudgetExceeded?(): boolean;
+  createShardReviewer(
+    index: number,
+    totalShards: number,
+    policy?: RepositoryPolicy,
+  ): {
+    readonly model: ModelReviewer;
+    toolBudgetExceeded(): boolean;
+  };
   useProjectIdentification?(result: ProjectIdentificationResult): void;
   getProjectIdentification?(): ProjectIdentificationResult | undefined;
   identifyProjects?(
@@ -245,6 +260,7 @@ export interface ReviewServices {
     readonly outputTokens: number;
     readonly toolCallsCount: number;
   };
+  reconcileCheckRun(runId: string): Promise<number | undefined>;
   createMutationContext(): Promise<GitHubMutationContext>;
   createSession(): Promise<GitHubInstallationSession>;
   ensureContext(
@@ -461,62 +477,113 @@ export function createReviewServices(
   let inputTokens = 0;
   let outputTokens = 0;
   let toolCallsCount = 0;
-  let shardIndex = 0;
-  let shardCount = 1;
-  let currentAnalysisPolicy: RepositoryPolicy | undefined;
-
-  const toolBudget = createPartitionedRepositoryToolRunner(
-    createRedactingRepositoryToolRunner({
-      run: async (call) => {
-        if (
-          !(await ledger.reserveAnalysisToolCall(
-            job.runId,
-            shardIndex,
-            shardCount,
-          ))
-        )
-          throw new RepositoryToolBudgetExceededError(12);
-        toolCallsCount += 1;
-        if (!(await executor.hasContext(job.runId))) {
-          await prepareRepository(2, currentAnalysisPolicy);
-        }
-        return repositoryToolResultSchema.parse(
-          await executor.runTool(job.runId, call),
-        );
-      },
-    }),
-    12,
-  );
-  const toolRunner = toolBudget.runner;
-  const model =
-    runtime.createModel?.(toolRunner) ??
-    new GatewayModelReviewer(
-      new AiSdkReviewGenerator(
-        {
-          accountId: env.AI_GATEWAY_ACCOUNT_ID,
-          apiToken: env.AI_GATEWAY_API_TOKEN,
-          gatewayId: env.AI_GATEWAY_ID,
-          metadata: {
-            pr_number: String(job.envelope.pullRequest.number),
-            repository_id: String(job.envelope.repository.id),
-            run_id: job.runId,
-            stage: "review",
-          },
-          model: env.AI_MODEL_ID,
+  let contextPreparation: Promise<void> | undefined;
+  const ensureContext = (
+    maximumAttempts: number,
+    policy?: RepositoryPolicy,
+  ): Promise<void> => {
+    if (contextPreparation) return contextPreparation;
+    const pending = (async () => {
+      if (!(await executor.hasContext(job.runId)))
+        await prepareRepository(maximumAttempts, policy);
+    })();
+    contextPreparation = pending;
+    return pending.finally(() => {
+      if (contextPreparation === pending) contextPreparation = undefined;
+    });
+  };
+  const createShardReviewer = (
+    shardIndex: number,
+    shardCount: number,
+    policy?: RepositoryPolicy,
+  ) => {
+    let infrastructureFailure: unknown;
+    const toolBudget = createPartitionedRepositoryToolRunner(
+      createRedactingRepositoryToolRunner({
+        run: async (call) => {
+          try {
+            if (
+              !(await ledger.reserveAnalysisToolCall(
+                job.runId,
+                shardIndex,
+                shardCount,
+              ))
+            )
+              throw new RepositoryToolBudgetExceededError(12);
+            toolCallsCount += 1;
+            await ensureContext(2, policy);
+            return repositoryToolResultSchema.parse(
+              await executor.runTool(job.runId, call),
+            );
+          } catch (error) {
+            if (!(error instanceof RepositoryToolBudgetExceededError))
+              infrastructureFailure = new Error(
+                "Repository infrastructure failed",
+                { cause: error },
+              );
+            throw error;
+          }
         },
-        toolRunner,
-        async (usage) => {
-          inputTokens += usage.inputTokens ?? 0;
-          outputTokens += usage.outputTokens ?? 0;
-          await ledger.recordAnalysisUsage(job.runId, crypto.randomUUID(), {
-            inputTokens: usage.inputTokens ?? 0,
-            outputTokens: usage.outputTokens ?? 0,
-            toolCallsCount: 0,
-          });
-          logger.emit("model.usage", { ...logContext, ...usage });
-        },
-      ),
+      }),
+      12 * shardCount,
     );
+    toolBudget.beginShard(shardIndex, shardCount);
+    const delegateModel =
+      runtime.createModel?.(toolBudget.runner) ??
+      new GatewayModelReviewer(
+        new AiSdkReviewGenerator(
+          {
+            accountId: env.AI_GATEWAY_ACCOUNT_ID,
+            apiToken: env.AI_GATEWAY_API_TOKEN,
+            gatewayId: env.AI_GATEWAY_ID,
+            metadata: {
+              pr_number: String(job.envelope.pullRequest.number),
+              repository_id: String(job.envelope.repository.id),
+              run_id: job.runId,
+              stage: "review",
+            },
+            model: env.AI_MODEL_ID,
+          },
+          toolBudget.runner,
+          async (usage) => {
+            inputTokens += usage.inputTokens ?? 0;
+            outputTokens += usage.outputTokens ?? 0;
+            await ledger.recordAnalysisUsage(job.runId, crypto.randomUUID(), {
+              inputTokens: usage.inputTokens ?? 0,
+              outputTokens: usage.outputTokens ?? 0,
+              toolCallsCount: 0,
+            });
+            logger.emit("model.usage", { ...logContext, ...usage });
+          },
+        ),
+      );
+
+    return {
+      model: {
+        async review(
+          reviewJob: ReviewJob,
+          context: Parameters<ModelReviewer["review"]>[1],
+        ) {
+          try {
+            const result = await delegateModel.review(reviewJob, context);
+            if (infrastructureFailure !== undefined)
+              throw infrastructureFailure;
+            return result;
+          } catch (error) {
+            throw infrastructureFailure ?? error;
+          }
+        },
+        ...(delegateModel.synthesizeReviewSummary
+          ? {
+              synthesizeReviewSummary:
+                delegateModel.synthesizeReviewSummary.bind(delegateModel),
+            }
+          : {}),
+      },
+      toolBudgetExceeded: () => toolBudget.exceeded(),
+    };
+  };
+  const model = createShardReviewer(0, 1).model;
 
   const telemetry =
     runtime.telemetry ??
@@ -583,12 +650,7 @@ export function createReviewServices(
     model,
     modelRoute: env.AI_MODEL_ID,
     toolsBudget: 12,
-    beginReviewShard: (index, totalShards) => {
-      shardIndex = index;
-      shardCount = totalShards;
-      toolBudget.beginShard(index, totalShards);
-    },
-    reviewToolBudgetExceeded: () => toolBudget.exceeded(),
+    createShardReviewer,
     telemetry,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     getAccumulatedUsage: () => ({
@@ -597,17 +659,13 @@ export function createReviewServices(
       toolCallsCount,
     }),
     createMutationContext: mutationContext,
+    reconcileCheckRun: runtime.reconcileCheckRun
+      ? (runId) => runtime.reconcileCheckRun!(runId, createSession)
+      : (runId) => ledger.reconcileCheckRun(runId),
     createSession: async () => await createSession(),
-    ensureContext: async (maximumPreparationAttempts, effectivePolicy) => {
-      currentAnalysisPolicy = effectivePolicy;
-      if (!(await executor.hasContext(job.runId))) {
-        await prepareRepository(maximumPreparationAttempts, effectivePolicy);
-      }
-    },
-    loadContext: async (effectivePolicy) => {
-      currentAnalysisPolicy = effectivePolicy;
-      return reviewContextSchema.parse(await executor.loadContext(job.runId));
-    },
+    ensureContext,
+    loadContext: async () =>
+      reviewContextSchema.parse(await executor.loadContext(job.runId)),
     useProjectIdentification: (result) => {
       identificationInputTokens = result.usage?.inputTokens ?? 0;
       identificationOutputTokens = result.usage?.outputTokens ?? 0;

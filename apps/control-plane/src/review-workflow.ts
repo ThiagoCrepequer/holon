@@ -662,42 +662,35 @@ export async function executeReviewWorkflow(
     return result;
   };
 
+  const checkTarget = {
+    baseSha: job.envelope.pullRequest.baseSha,
+    installationId: job.envelope.installationId,
+    repositoryId: job.envelope.repository.id,
+    owner: job.envelope.repository.owner,
+    repo: job.envelope.repository.name,
+    pullNumber: job.envelope.pullRequest.number,
+  };
   const ensureCheckRunStarted = async (): Promise<number | undefined> =>
     await runInstrumentedStep(
       "start-check-run",
       "admission",
       publicationStep,
       async () => {
-        let checkRunId = await services.ledger.checkRunId(run.id);
-        if (checkRunId !== undefined) return checkRunId;
-
-        const github = await services.createMutationContext();
-        if (github.publisher.findCheckRunByExternalId !== undefined) {
-          const existingId = await github.publisher.findCheckRunByExternalId(
-            run.id,
-          );
-          if (existingId !== undefined) {
-            await services.ledger.recordCheckRunId(run.id, existingId);
-            return existingId;
-          }
-        }
-
-        if (github.publisher.createCheckRun !== undefined) {
-          checkRunId = await github.publisher.createCheckRun({
+        await services.ledger.scheduleCheckRun(run.id, {
+          ...checkTarget,
+          language: outputLanguage,
+          input: {
             externalId: run.id,
             headSha: job.envelope.pullRequest.headSha,
-            name: "Holon Review",
-            output: {
-              summary: reviewMessage(outputLanguage, "inProgress"),
-              title: reviewMessage(outputLanguage, "inProgressTitle"),
-            },
-            startedAt: now(),
             status: "in_progress",
-          });
-          await services.ledger.recordCheckRunId(run.id, checkRunId);
-          return checkRunId;
-        }
-        return undefined;
+            startedAt: now(),
+            output: {
+              title: reviewMessage(outputLanguage, "inProgressTitle"),
+              summary: reviewMessage(outputLanguage, "inProgress"),
+            },
+          },
+        });
+        return await services.reconcileCheckRun(run.id);
       },
       () => ({
         headSha: job.envelope.pullRequest.headSha,
@@ -705,22 +698,24 @@ export async function executeReviewWorkflow(
       }),
       (checkRunId) => ({ checkRunId: checkRunId ?? null }),
       {
-        rollback: async ({ output: checkRunId }) => {
-          if (typeof checkRunId !== "number") return;
-          const currentRunState = await services.ledger.runState(run.id);
-          if (currentRunState !== "obsolete") return;
-          const github = await services.createMutationContext();
-          if (github.publisher.updateCheckRun === undefined) return;
-          await github.publisher.updateCheckRun({
-            checkRunId,
-            completedAt: now(),
-            conclusion: "cancelled",
-            output: {
-              summary: reviewMessage(outputLanguage, "superseded"),
-              title: reviewMessage(outputLanguage, "supersededTitle"),
+        rollback: async () => {
+          if ((await services.ledger.runState(run.id)) !== "obsolete") return;
+          await services.ledger.scheduleCheckRun(run.id, {
+            ...checkTarget,
+            language: outputLanguage,
+            input: {
+              externalId: run.id,
+              headSha: job.envelope.pullRequest.headSha,
+              status: "completed",
+              conclusion: "cancelled",
+              completedAt: now(),
+              output: {
+                title: reviewMessage(outputLanguage, "supersededTitle"),
+                summary: reviewMessage(outputLanguage, "superseded"),
+              },
             },
-            status: "completed",
           });
+          await services.reconcileCheckRun(run.id);
         },
         rollbackConfig: {
           retries: {
@@ -749,29 +744,24 @@ export async function executeReviewWorkflow(
       "publication",
       publicationStep,
       async () => {
-        let checkRunId = await services.ledger.checkRunId(run.id);
-        const github = await services.createMutationContext();
-        if (
-          checkRunId === undefined &&
-          github.publisher.findCheckRunByExternalId !== undefined
-        ) {
-          checkRunId = await github.publisher.findCheckRunByExternalId(run.id);
-        }
-        if (
-          checkRunId !== undefined &&
-          github.publisher.updateCheckRun !== undefined
-        ) {
-          if (requireCurrentRefs && !(await refsAreCurrent(github))) {
-            return false;
-          }
-          await github.publisher.updateCheckRun({
-            checkRunId,
-            completedAt: now(),
-            conclusion,
-            output,
+        await services.ledger.scheduleCheckRun(run.id, {
+          ...checkTarget,
+          language: outputLanguage,
+          input: {
+            externalId: run.id,
+            headSha: job.envelope.pullRequest.headSha,
             status: "completed",
-          });
-        }
+            conclusion,
+            completedAt: now(),
+            output,
+          },
+        });
+        if (
+          requireCurrentRefs &&
+          !(await refsAreCurrent(await services.createMutationContext()))
+        )
+          return false;
+        await services.reconcileCheckRun(run.id);
         return true;
       },
       () => ({
@@ -1452,6 +1442,7 @@ export async function executeReviewWorkflow(
               publishedCommentIds.get(finding.fingerprint) ??
               finding.githubCommentId,
           })),
+          run.id,
         );
       },
       () => ({
@@ -1685,6 +1676,35 @@ export async function executeReviewWorkflow(
       outputLanguage,
     );
 
+    const terminal = await runInstrumentedStep(
+      "mark-review-terminal-and-schedule-cleanup",
+      "cleanup",
+      stateStep,
+      async () => {
+        const occurredAt = now();
+        const changed = await services.ledger.markTerminalAndRequestCleanup(
+          run.id,
+          occurredAt,
+          repositoryStarted,
+        );
+        return { changed, occurredAt };
+      },
+      () => ({ repositoryStarted }),
+      (res) => ({ changed: res.changed, occurredAt: res.occurredAt }),
+    ).catch((terminalError: unknown) => {
+      emit("review.terminalization_failed", {
+        errorKind: errorKind(terminalError),
+      });
+      return undefined;
+    });
+
+    emit("review.failed", {
+      durationMs:
+        terminal === undefined
+          ? 0
+          : durationFrom(rawEvent.timestamp, terminal.occurredAt),
+      errorKind: errorKind(error),
+    });
     if (runClaimed) {
       await ensureCheckRunStarted();
       await updateCheckRunCompleted("fail-check-run", "failure", {
@@ -1696,6 +1716,32 @@ export async function executeReviewWorkflow(
         title: isConfigurationError
           ? reviewMessage(outputLanguage, "configurationInvalidTitle")
           : reviewMessage(outputLanguage, "failedTitle"),
+      });
+    }
+
+    if (runClaimed && terminal?.changed === true) {
+      await runInstrumentedStep(
+        "publish-failure-notice",
+        "publication",
+        publicationStep,
+        async () => {
+          const github = await services.createMutationContext();
+          const noticeBody = isConfigurationError
+            ? `${reviewMessage(outputLanguage, "configurationInvalid", { reason: configurationErrorMessage })}\n\n${reviewMessage(outputLanguage, "configurationFix")}`
+            : reviewMessage(outputLanguage, "failureNotice");
+          await publishFailureNoticeAuthorized(
+            github.publisher,
+            run.id,
+            () => authorizeMutation(github, "failure"),
+            noticeBody,
+          );
+        },
+        () => ({ isConfigurationError }),
+        () => ({ published: true }),
+      ).catch((publicationError: unknown) => {
+        emit("review.failure_notice_failed", {
+          errorKind: errorKind(publicationError),
+        });
       });
     }
 
@@ -1756,61 +1802,8 @@ export async function executeReviewWorkflow(
       });
     void services.telemetry?.emitRunTelemetry(failedTelemetry);
 
-    const terminal = await runInstrumentedStep(
-      "mark-review-terminal-and-schedule-cleanup",
-      "cleanup",
-      stateStep,
-      async () => {
-        const occurredAt = now();
-        const changed = await services.ledger.markTerminalAndRequestCleanup(
-          run.id,
-          occurredAt,
-          repositoryStarted,
-        );
-        return { changed, occurredAt };
-      },
-      () => ({ repositoryStarted }),
-      (res) => ({ changed: res.changed, occurredAt: res.occurredAt }),
-    ).catch((terminalError: unknown) => {
-      emit("review.terminalization_failed", {
-        errorKind: errorKind(terminalError),
-      });
-      return undefined;
-    });
-
-    emit("review.failed", {
-      durationMs:
-        terminal === undefined
-          ? 0
-          : durationFrom(rawEvent.timestamp, terminal.occurredAt),
-      errorKind: errorKind(error),
-    });
-    if (runClaimed && terminal?.changed === true) {
-      await runInstrumentedStep(
-        "publish-failure-notice",
-        "publication",
-        publicationStep,
-        async () => {
-          const github = await services.createMutationContext();
-          const noticeBody = isConfigurationError
-            ? `${reviewMessage(outputLanguage, "configurationInvalid", { reason: configurationErrorMessage })}\n\n${reviewMessage(outputLanguage, "configurationFix")}`
-            : reviewMessage(outputLanguage, "failureNotice");
-          await publishFailureNoticeAuthorized(
-            github.publisher,
-            run.id,
-            () => authorizeMutation(github, "failure"),
-            noticeBody,
-          );
-        },
-        () => ({ isConfigurationError }),
-        () => ({ published: true }),
-      ).catch((publicationError: unknown) => {
-        emit("review.failure_notice_failed", {
-          errorKind: errorKind(publicationError),
-        });
-      });
-    }
-
+    // Terminalization, failure emission and the localized failure notice run above,
+    // before accounting, so an accounting outage cannot skip cleanup.
     if (terminal?.changed === true) {
       const timestamps = buildProjectionTimestamps(
         rawEvent.timestamp,

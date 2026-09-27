@@ -10,6 +10,7 @@ import {
 } from "@holon/contracts";
 import type { RunId } from "@holon/domain";
 import { computeStableFingerprint } from "@holon/domain";
+import { ModelProviderRequestError } from "@holon/model";
 import { identifySnapshot } from "@holon/project-identification";
 import {
   reset,
@@ -20,12 +21,16 @@ import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CheckRunReconciliationStore } from "../src/check-run-reconciliation.js";
 import {
   executeReviewWorkflow,
   parseAppId,
   type ReviewRuntime,
 } from "../src/review-workflow.js";
-import { configurationReader } from "./configuration-fixtures.js";
+import {
+  configurationReader,
+  defaultScopePolicy,
+} from "./configuration-fixtures.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 afterEach(() => reset());
@@ -136,27 +141,49 @@ it("publishes the latest human severity even when feedback arrives after analysi
     excerpt: finding.evidence[0]!.excerpt,
     path: finding.location.path,
   });
-  await ledger.savePrFindings("github:42:pr:7", [
-    {
-      fingerprint,
-      evidenceFingerprint: fingerprint.slice(3),
-      diagnostic: finding.diagnostic,
-      filePath: finding.location.path,
-      line: 10,
-      severity: "high",
-      confidence: 0.95,
-      status: "new",
-      prKey: "github:42:pr:7",
-      firstSeenHeadSha: "a".repeat(40),
-      lastSeenHeadSha: "a".repeat(40),
-      firstSeenRunId:
-        job.runId as `github:${number}:pr:${number}:head:${string}:base:${string}`,
-      lastSeenRunId:
-        job.runId as `github:${number}:pr:${number}:head:${string}:base:${string}`,
-      githubCommentId: 99,
-      updatedAt: new Date().toISOString(),
-    },
-  ]);
+  const baseline = {
+    ...createReviewRun(job),
+    id: `github:42:pr:7:head:${"c".repeat(40)}:base:${"b".repeat(40)}` as RunId,
+    causalVersion: "2026-08-28T12:00:00.000Z",
+  };
+  await ledger.claimRun(baseline, "baseline");
+  await ledger.transition(
+    baseline.id,
+    "queued",
+    "running",
+    baseline.createdAt,
+    "baseline-start",
+  );
+  await ledger.transition(
+    baseline.id,
+    "running",
+    "publishing",
+    baseline.createdAt,
+    "baseline-publish",
+  );
+  await ledger.savePrFindings(
+    "github:42:pr:7",
+    [
+      {
+        fingerprint,
+        evidenceFingerprint: fingerprint.slice(3),
+        diagnostic: finding.diagnostic,
+        filePath: finding.location.path,
+        line: 10,
+        severity: "high",
+        confidence: 0.95,
+        status: "new",
+        prKey: "github:42:pr:7",
+        firstSeenHeadSha: "a".repeat(40),
+        lastSeenHeadSha: "a".repeat(40),
+        firstSeenRunId: baseline.id,
+        lastSeenRunId: baseline.id,
+        githubCommentId: 99,
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    baseline.id,
+  );
   const setup = runtime();
   await executeReviewWorkflow(
     env,
@@ -322,6 +349,20 @@ function runtime(
     }),
   );
   const value: ReviewRuntime = {
+    reconcileCheckRun: async (runId, connect) => {
+      const ledger = env.REVIEW_LEDGERS.getByName(
+        runId.slice(0, runId.indexOf(":head:")),
+      );
+      await runInDurableObject(ledger, async (_object, state) => {
+        await new CheckRunReconciliationStore(state.storage).processDue(
+          env,
+          new Date().toISOString(),
+          connect,
+          runId,
+        );
+      });
+      return await ledger.checkRunId(runId as RunId);
+    },
     createModel:
       options.model ??
       (() => ({
@@ -590,7 +631,7 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
 
-    expect(headReads).toBe(5);
+    expect(headReads).toBe(7);
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
@@ -614,7 +655,7 @@ describe("ReviewWorkflow", () => {
     const setup = runtime({
       head: () => {
         headReads += 1;
-        return headReads < 4 ? "a".repeat(40) : "c".repeat(40);
+        return headReads < 5 ? "a".repeat(40) : "c".repeat(40);
       },
     });
 
@@ -1352,7 +1393,7 @@ describe("ReviewWorkflow", () => {
       checkRunRequests.filter(
         (r) => r.startsWith("PATCH") && r.includes("check-runs"),
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("finds existing check runs on GitHub when ledger does not have checkRunId", async () => {
@@ -1398,8 +1439,8 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toMatchObject({ outcome: "completed" });
 
-    expect(checkRunPatches).toHaveLength(1);
-    expect(checkRunPatches[0]?.parameters).toMatchObject({
+    expect(checkRunPatches).toHaveLength(2);
+    expect(checkRunPatches[1]?.parameters).toMatchObject({
       check_run_id: 888,
       status: "completed",
     });
@@ -1492,7 +1533,18 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toMatchObject({ outcome: "completed" });
 
-    expect(events.some((e) => e.event === "check_run.start_failed")).toBe(true);
+    const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+    await runInDurableObject(ledger, (_object, state) => {
+      const row = state.storage.sql
+        .exec<{
+          revision: number;
+          completed_revision: number;
+          attempts: number;
+        }>("SELECT * FROM check_run_tasks WHERE run_id=?", job.runId)
+        .one();
+      expect(row.revision).toBeGreaterThan(row.completed_revision);
+      expect(row.attempts).toBeGreaterThan(0);
+    });
   });
 
   it("orchestrates multi-shard review with partial shard failure", async () => {
@@ -1520,7 +1572,7 @@ describe("ReviewWorkflow", () => {
         review: () => {
           modelCalls += 1;
           if (modelCalls === 2) {
-            return Promise.reject(new Error("Shard 2 transient error"));
+            return Promise.reject(new ModelProviderRequestError(true, 504));
           }
           return Promise.resolve({
             output: {
@@ -1940,6 +1992,14 @@ describe("ReviewWorkflow", () => {
     const ledger = env.REVIEW_LEDGERS.getByName(prKey);
 
     await ledger.saveCiEvidence(prKey, targetSha, {
+      workflowRunAttempt: 1,
+      target: {
+        installationId: 99,
+        repositoryId: 42,
+        owner: "acme",
+        repo: "api",
+        pullNumber: 7,
+      },
       markdownByLanguage: {
         en: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
         "pt-BR": "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
@@ -2319,4 +2379,108 @@ it("waits durably for an existing cache owner then reuses its result", async () 
   );
   expect(names).toContain("wait-project-identification-0-0");
   expect(identify).not.toHaveBeenCalled();
+});
+
+it("schedules durable cleanup before failed accounting can interrupt terminalization", async () => {
+  const setup = runtime({
+    model: () => ({
+      review: async () => {
+        throw new Error("analysis infrastructure unavailable");
+      },
+    }),
+  });
+  const steps: string[] = [];
+  await expect(
+    executeReviewWorkflow(
+      env,
+      event("failed-accounting"),
+      immediateStep(steps, undefined, {
+        "failed-snapshot-accounting": new Error("accounting unavailable"),
+      }),
+      setup.value,
+    ),
+  ).rejects.toThrow("accounting unavailable");
+  expect(
+    steps.indexOf("mark-review-terminal-and-schedule-cleanup"),
+  ).toBeLessThan(steps.indexOf("failed-snapshot-accounting"));
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  expect(await ledger.runState(job.runId as RunId)).toBe("failed_terminal");
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec("SELECT run_id FROM cleanup_tasks WHERE run_id=?", job.runId)
+        .toArray(),
+    ).toHaveLength(1);
+  });
+});
+
+it("parallel shard tools share one preparation and retain independent budgets", async () => {
+  const { createReviewServices } = await import("../src/review-services.js");
+  const setup = runtime();
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await ledger.claimRun(createReviewRun(job), "parallel-tools");
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const prepare = vi.fn(async () => {
+    await barrier;
+    return {
+      changedLineCount: 1,
+      contextBytes: 100,
+      fileCount: 1,
+      runId: job.runId,
+      effectivePolicyDigest: "c".repeat(64),
+      waiversCount: 0,
+      truncated: false,
+    };
+  });
+  let ready = false;
+  const runTool = vi.fn(async () => ({
+    content: "return null;",
+    truncated: false,
+  }));
+  const services = createReviewServices(
+    env,
+    job,
+    {
+      ...setup.value,
+      executor: {
+        ...setup.value.executor!,
+        hasContext: async () => ready,
+        prepareRepository: async (request) => {
+          const result = await prepare();
+          expect(request.runId).toBe(job.runId);
+          ready = true;
+          return result;
+        },
+        runTool,
+      },
+      createModel: (toolRunner) => ({
+        review: async () => {
+          await toolRunner.run({
+            name: "read_file",
+            arguments: { path: "src/index.ts", startLine: 1, endLine: 10 },
+          });
+          return {
+            output: { findings: [], summary: "Checked the changed code." },
+            promptTruncated: false,
+          };
+        },
+      }),
+    },
+    { emit: () => {} },
+    {},
+  );
+  const policy = await defaultScopePolicy(job.envelope.pullRequest.baseSha);
+  const a = services.createShardReviewer(0, 2, policy);
+  const b = services.createShardReviewer(1, 2, policy);
+  const tasks = [a.model.review(job, context), b.model.review(job, context)];
+  await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+  release();
+  await Promise.all(tasks);
+  expect(prepare).toHaveBeenCalledOnce();
+  expect(runTool).toHaveBeenCalledTimes(2);
+  expect(a.toolBudgetExceeded()).toBe(false);
+  expect(b.toolBudgetExceeded()).toBe(false);
 });

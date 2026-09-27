@@ -10,6 +10,10 @@ export * from "./review-run.js";
 export * from "./repository-policy.js";
 export * from "./slo.js";
 export * from "./verdict.js";
+
+export { minimumFindingConfidence } from "./finding.js";
+
+export { redactSecrets } from "./redaction.js";
 export * from "./configuration-scope.js";
 
 export { reviewText } from "./review-language.js";

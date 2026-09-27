@@ -136,8 +136,22 @@ export class FindingLedgerStore {
   public savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
+    writerRunId: RunId,
   ): void {
     this.storage.transactionSync(() => {
+      const writer = runIdSchema.parse(writerRunId);
+      const authority = this.storage.sql
+        .exec<{ id: string; state: string; pr_key: string }>(
+          "SELECT runs.id, runs.state, runs.pr_key FROM runs JOIN metadata ON metadata.key = 'latest_run_id' AND metadata.value = runs.id WHERE runs.id = ?",
+          writer,
+        )
+        .toArray()[0];
+      if (
+        !authority ||
+        authority.pr_key !== prKey ||
+        authority.state !== "publishing"
+      )
+        throw new Error("Finding writer is no longer authoritative");
       // Feedback and machine updates share this transaction. A baseline loaded
       // before a human response must never overwrite that response on replay.
       for (const candidate of findings) {

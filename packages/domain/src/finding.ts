@@ -32,6 +32,8 @@ export interface FindingCandidate {
 }
 
 export type Finding = FindingCandidate;
+export const minimumFindingConfidence = 0.8;
+
 export type FindingPublication = "inline" | "summary_only" | "discard";
 
 function assertNonBlank(value: string, name: string, minimumLength = 1): void {
@@ -111,7 +113,7 @@ export function createFinding(
 export function classifyFindingPublication(
   finding: Finding,
 ): FindingPublication {
-  if (finding.confidence < 0.8) return "discard";
+  if (finding.confidence < minimumFindingConfidence) return "discard";
   if (finding.severity === "low") return "summary_only";
   return "inline";
 }

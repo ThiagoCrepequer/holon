@@ -61,7 +61,7 @@ it.each(["en", "pt-BR", "es"] as const)(
     expect(text).toContain(
       reviewMessage(language, "ciMoreFiles", { count: 1 }),
     );
-    expect(text).toContain("**test_0** (`src/test.ts:2`): literal evidence");
+    expect(text).toContain("**test\\_0** (`src/test.ts:2`): literal evidence");
     expect(formatLineIntervals([1, 3, 5], 1, language)).toContain(
       reviewMessage(language, "ciMoreLines", { count: 2 }),
     );

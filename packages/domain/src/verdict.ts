@@ -1,4 +1,4 @@
-import type { FindingSeverity } from "./finding.js";
+import { minimumFindingConfidence, type FindingSeverity } from "./finding.js";
 import { reviewText, type ReviewLanguage } from "./review-language.js";
 
 export type ReviewVerdict = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
@@ -48,7 +48,7 @@ const DEFAULT_OPTIONS = {
   allowApprove: true,
   mediumHighConfidenceThreshold: 0.85,
   mediumSeverityThreshold: 2,
-  minimumConfidenceThreshold: 0.75,
+  minimumConfidenceThreshold: minimumFindingConfidence,
   riskScoreThreshold: 2.0,
 } as const;
 
@@ -65,9 +65,11 @@ export function determineReviewVerdict(
     mediumSeverityThreshold:
       input.options?.mediumSeverityThreshold ??
       DEFAULT_OPTIONS.mediumSeverityThreshold,
-    minimumConfidenceThreshold:
+    minimumConfidenceThreshold: Math.max(
+      minimumFindingConfidence,
       input.options?.minimumConfidenceThreshold ??
-      DEFAULT_OPTIONS.minimumConfidenceThreshold,
+        DEFAULT_OPTIONS.minimumConfidenceThreshold,
+    ),
     riskScoreThreshold:
       input.options?.riskScoreThreshold ?? DEFAULT_OPTIONS.riskScoreThreshold,
   };
@@ -153,7 +155,7 @@ export function determineReviewVerdict(
     (f) => f.confidence >= options.minimumConfidenceThreshold,
   );
 
-  // If findings were emitted but all were low-confidence (< 0.75)
+  // If findings were emitted but all were below the publishable confidence threshold
   if (input.findings.length > 0 && confidentFindings.length === 0) {
     reasons.push(
       text(
@@ -191,7 +193,6 @@ export function determineReviewVerdict(
       f.severity === "medium" &&
       f.confidence >= options.mediumHighConfidenceThreshold,
   ).length;
-  const lowCount = input.findings.filter((f) => f.severity === "low").length;
 
   const hasBlockingCriticalOrHigh = criticalCount > 0 || highCount > 0;
   const hasMediumAccumulation =
@@ -270,9 +271,9 @@ export function determineReviewVerdict(
   if (input.isDegraded === true) {
     reasons.push(
       text(
-        "ℹ️ The model analysis completed without structured output. Review the investigative notes below.",
-        "ℹ️ A análise do modelo foi concluída de forma não-estruturada. Revise as notas investigativas abaixo.",
-        "ℹ️ El análisis del modelo terminó sin una salida estructurada. Revise las notas de investigación siguientes.",
+        "The review is incomplete. Verified findings are retained, but unfinished analysis cannot establish that the remaining changes are safe.",
+        "A revisão está incompleta. Os achados verificados foram preservados, mas a análise pendente não permite concluir que as demais alterações são seguras.",
+        "La revisión está incompleta. Se conservan los hallazgos verificados, pero el análisis pendiente no permite concluir que los demás cambios sean seguros.",
       ),
     );
     return {
@@ -301,12 +302,13 @@ export function determineReviewVerdict(
     };
   }
 
-  if (lowCount > 0) {
+  const advisoryCount = input.findings.length;
+  if (advisoryCount > 0) {
     reasons.push(
       text(
-        `No blocking defects found. ${lowCount} low-severity advisory observation(s) provided for consideration.`,
-        `Nenhum defeito bloqueante encontrado. ${lowCount} observação(ões) de baixa severidade para consideração.`,
-        `No se encontraron defectos bloqueantes. ${lowCount} observación(es) de baja gravedad para su consideración.`,
+        `No blocking defects found. ${advisoryCount} non-blocking observation(s) provided for consideration.`,
+        `Nenhum defeito bloqueante encontrado. ${advisoryCount} observação(ões) não bloqueante(s) para consideração.`,
+        `No se encontraron defectos bloqueantes. ${advisoryCount} observación(es) no bloqueante(s) para su consideración.`,
       ),
     );
   } else {
@@ -320,7 +322,7 @@ export function determineReviewVerdict(
   }
 
   return {
-    advisoryFindingsCount: lowCount,
+    advisoryFindingsCount: advisoryCount,
     blockingFindingsCount: 0,
     reasons,
     riskScore,

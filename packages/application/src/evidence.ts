@@ -63,6 +63,20 @@ export function selectFindingsWithCanonicalEvidence(
   context: ReviewShardContext,
 ): readonly Finding[] {
   return candidates.flatMap((candidate) => {
+    const patch = context.files.find(
+      (file) => file.path === candidate.location.path,
+    )?.patch;
+    const start = candidate.location.startLine ?? candidate.location.line;
+    const end = candidate.location.line;
+    const rangeInHunk = patch?.split("\n").some((line) => {
+      const hunk = hunkHeaderPattern.exec(line);
+      if (!hunk?.[1]) return false;
+      const first = Number(hunk[1]);
+      const count = Number(hunk[2] ?? 1);
+      return start >= first && end < first + count;
+    });
+    if (!rangeInHunk) return [];
+
     if (
       !candidate.evidence.every((evidence) =>
         evidenceAppearsInPatch(evidence, context),

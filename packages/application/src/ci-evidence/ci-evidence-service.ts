@@ -34,7 +34,7 @@ function isLcovContent(path: string, content: string): boolean {
 
 function isJUnitXmlContent(path: string, content: string): boolean {
   const lowerPath = path.toLowerCase();
-  if (lowerPath.endsWith(".xml")) return true;
+  if (!lowerPath.endsWith(".xml")) return false;
   return content.includes("<testsuite") || content.includes("<testsuites");
 }
 
@@ -47,24 +47,37 @@ export function ingestCiArtifactZips(
   options: IngestCiArtifactsOptions = {},
 ): CiEvidence {
   const extractedFiles: RawArtifactFile[] = [];
+  let totalBytes = 0;
+  let omitted = 0;
 
   for (const [index, zipBuffer] of zipBuffers.entries()) {
     try {
-      const files = extractSafeZipArtifact(zipBuffer);
+      const files = extractSafeZipArtifact(zipBuffer, {
+        maxUncompressedBytes: Math.max(0, 12 * 1024 * 1024 - totalBytes),
+      });
       for (const file of files) {
-        extractedFiles.push({
-          content: file.content,
-          path: file.path,
-        });
+        totalBytes += file.sizeBytes;
+        extractedFiles.push({ content: file.content, path: file.path });
       }
     } catch (error) {
+      omitted++;
       options.onPartialError?.("zip_extraction", index, error);
       // If a zip fails extraction (e.g. malformed or oversized), skip it safely
       continue;
     }
   }
 
-  return ingestRawArtifactFiles(extractedFiles, options);
+  const evidence = ingestRawArtifactFiles(extractedFiles, options);
+  return omitted
+    ? {
+        ...evidence,
+        status: evidence.status === "available" ? "partial" : evidence.status,
+        limitations: [
+          ...(evidence.limitations ?? []),
+          `${omitted} artifact archive(s) could not be safely parsed.`,
+        ],
+      }
+    : evidence;
 }
 
 /**
@@ -76,6 +89,7 @@ export function ingestRawArtifactFiles(
 ): CiEvidence {
   const coverageReports: LineCoverage[] = [];
   const testReports: TestExecutionReport[] = [];
+  let invalidReports = 0;
 
   for (const [index, file] of files.entries()) {
     if (isLcovContent(file.path, file.content)) {
@@ -83,6 +97,7 @@ export function ingestRawArtifactFiles(
         const parsed = parseLcov(file.content);
         coverageReports.push(...parsed);
       } catch (error) {
+        invalidReports++;
         options.onPartialError?.("lcov_parse", index, error);
       }
     } else if (isJUnitXmlContent(file.path, file.content)) {
@@ -90,6 +105,7 @@ export function ingestRawArtifactFiles(
         const parsed = parseJUnitXml(file.content);
         testReports.push(parsed);
       } catch (error) {
+        invalidReports++;
         options.onPartialError?.("junit_parse", index, error);
       }
     }
@@ -113,7 +129,9 @@ export function ingestRawArtifactFiles(
       if (report.durationMs !== undefined) {
         durationMs = (durationMs ?? 0) + report.durationMs;
       }
-      failures.push(...report.failures);
+      failures.push(
+        ...report.failures.slice(0, Math.max(0, 50 - failures.length)),
+      );
     }
 
     combinedTests = {
@@ -137,9 +155,12 @@ export function ingestRawArtifactFiles(
   }
 
   return {
+    limitations: invalidReports
+      ? [`${invalidReports} report(s) were rejected as invalid.`]
+      : [],
     coverage: hasCoverage ? coverageReports : undefined,
     source: options.source,
-    status,
+    status: invalidReports && status === "available" ? "partial" : status,
     tests: combinedTests,
     workflowName: options.workflowName,
     workflowRunId: options.workflowRunId,

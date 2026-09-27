@@ -262,9 +262,9 @@ no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
 feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
 relógio da identificação ficam dentro de steps, preservando resultados em replay.
 
-A análise distribui 600 segundos entre shards restantes e reserva tempo para
-finalização/recuperação; síntese tem 30 segundos adicionais. As 12 tools têm
-quotas por shard e reserva durável antes da chamada. Erro de evidência ou
+A análise executa até cinco shards em paralelo sob um deadline comum de 600 segundos,
+reservando tempo para finalização/recuperação; síntese tem 30 segundos adicionais.
+Cada shard tem 12 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências
 sem revalidação impedem aprovação. Respostas de resolução têm marcador e
@@ -297,3 +297,7 @@ publicação, com revalidação de refs e claims intactos. Resultados integrais 
 para o histórico autenticado, não para o checkpoint sanitizado. Consulte a
 [operação](../operations/repository-configuration.md) e a
 [ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md).
+
+## Endurecimento do core (2026-09-27)
+
+A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

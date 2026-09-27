@@ -44,8 +44,7 @@ export class ReviewAccountingStore {
       totalShards > 5
     )
       throw new TypeError("Invalid shard allocation");
-    const allocation =
-      Math.floor(12 / totalShards) + (index < 12 % totalShards ? 1 : 0);
+    const allocation = 12;
     const prefix = `tool:${index}:`;
     const row = this.sql
       .exec<{ total: number; shard: number }>(
@@ -54,7 +53,7 @@ export class ReviewAccountingStore {
         runId,
       )
       .toArray()[0]!;
-    if (row.total >= 12 || row.shard >= allocation) return false;
+    if (row.total >= 12 * totalShards || row.shard >= allocation) return false;
     this.record(runId, `${prefix}${row.shard + 1}`, {
       inputTokens: 0,
       outputTokens: 0,

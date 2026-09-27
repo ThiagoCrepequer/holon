@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { documentationReferenceSchema } from "../review-guidance.js";
+
 export const repositoryConfigLimits = {
   yamlBytes: 65_536,
   sourceBytes: 262_144,
@@ -106,6 +108,7 @@ export const repositoryConfigInputSchema = z
       .optional(),
     review: z
       .strictObject({
+        documentation: z.array(documentationReferenceSchema).max(4).optional(),
         additional_excludes: z
           .array(globSchema)
           .max(50)

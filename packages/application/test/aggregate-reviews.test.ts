@@ -689,9 +689,7 @@ describe("aggregateShardReviews", () => {
       expect(aggregated.isDegraded).toBe(true);
       expect(aggregated.verdict).toBe("COMMENT");
       expect(aggregated.summary).toContain("Verdict: Informational Comment");
-      expect(aggregated.summary).toContain(
-        "The model analysis completed without structured output",
-      );
+      expect(aggregated.summary).toContain("The review is incomplete");
       expect(aggregated.summary).not.toContain("All reviewed files clean");
     });
 

@@ -309,6 +309,7 @@ export async function compileRepositoryConfiguration(
     },
     additionalExcludes,
     focus: [...new Set(input.review?.focus ?? [])].toSorted(),
+    documentation: input.review?.documentation ?? [],
     verdictStrictness: input.verdict?.strictness ?? "default",
     instructions,
     references: contextReferences,

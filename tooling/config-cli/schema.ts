@@ -32,6 +32,7 @@ if (formatted.errors.length)
 const inputs = [
   "packages/contracts/src/repository-config/input.ts",
   "packages/contracts/src/repository-config/snapshot.ts",
+  "packages/contracts/src/review-guidance.ts",
   "packages/application/src/repository-configuration.ts",
   "packages/application/src/configuration-projections.ts",
   "packages/application/src/configuration-compatibility.ts",

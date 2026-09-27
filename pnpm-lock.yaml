@@ -288,6 +288,9 @@ importers:
       hono:
         specifier: 'catalog:'
         version: 4.13.5
+      zod:
+        specifier: 'catalog:'
+        version: 4.5.4
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: 'catalog:'
@@ -353,6 +356,9 @@ importers:
       '@renovatebot/pep440':
         specifier: 4.2.4
         version: 4.2.4
+      fast-xml-parser:
+        specifier: 5.11.1
+        version: 5.11.1
       fflate:
         specifier: 0.8.3
         version: 0.8.3

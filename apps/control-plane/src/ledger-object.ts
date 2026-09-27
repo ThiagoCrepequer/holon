@@ -6,10 +6,6 @@ import type {
   ReviewDecisionContext,
   ReviewLedger,
 } from "@holon/application";
-import {
-  localizedCiMarkdownSchema,
-  type LocalizedCiMarkdown,
-} from "@holon/contracts";
 import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
@@ -19,7 +15,6 @@ import {
   type ProjectIdentificationResult,
 } from "@holon/contracts";
 import {
-  adminCiSummarySchema,
   adminCleanupTaskSummarySchema,
   adminFindingSummarySchema,
   adminRunDetailSchema,
@@ -40,7 +35,6 @@ import {
   timestampSchema,
   limitReviewText,
   reviewTextLimits,
-  type AdminCiSummary,
   type AdminRunDetail,
   type AdminRunProjectionEvent,
   type FindingFeedbackRecord,
@@ -71,6 +65,11 @@ import { redactSecrets } from "@holon/model";
 import { consoleErrorReporter, reportError } from "@holon/observability";
 import { DurableObject } from "cloudflare:workers";
 
+import {
+  CheckRunReconciliationStore,
+  type DesiredCheckRun,
+} from "./check-run-reconciliation.js";
+import { CiEvidenceStore } from "./ci-evidence-store.js";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
@@ -625,6 +624,37 @@ export class ReviewLedgerObject
     await this.ensureMaintenanceAlarm();
   }
 
+  private checkReconciliation: Promise<void> | undefined;
+  private async reconcileChecks(runId?: string): Promise<void> {
+    // All GitHub check mutations for this PR pass through this serialized owner.
+    while (this.checkReconciliation) await this.checkReconciliation;
+    const pending = new CheckRunReconciliationStore(
+      this.ctx.storage,
+    ).processDue(this.env, new Date().toISOString(), undefined, runId);
+    this.checkReconciliation = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.checkReconciliation === pending)
+        this.checkReconciliation = undefined;
+    }
+    await this.ensureMaintenanceAlarm();
+  }
+  public async reconcileCheckRun(runId: string): Promise<number | undefined> {
+    await this.reconcileChecks(runId);
+    return this.checkRunId(runId as RunId);
+  }
+  public async scheduleCheckRun(
+    runId: string,
+    desired: DesiredCheckRun,
+  ): Promise<number> {
+    const revision = new CheckRunReconciliationStore(this.ctx.storage).schedule(
+      runId,
+      desired,
+    );
+    await this.ensureMaintenanceAlarm();
+    return revision;
+  }
   public override async alarm(): Promise<void> {
     const startedAt = new Date();
     const cleanup = this.dueCleanup(startedAt.toISOString());
@@ -675,6 +705,11 @@ export class ReviewLedgerObject
       }
     }
 
+    await this.reconcileChecks();
+    await new CiEvidenceStore(this.ctx.storage).processDue(
+      this.env,
+      startedAt.toISOString(),
+    );
     await this.processDueWorkflowSupersession(startedAt.toISOString());
 
     await this.processDueProjection(startedAt.toISOString());
@@ -873,6 +908,10 @@ export class ReviewLedgerObject
              SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
              UNION ALL
              SELECT next_attempt_at FROM projection_tasks WHERE state = 'pending'
+             UNION ALL
+             SELECT next_attempt_at FROM check_run_tasks WHERE revision > completed_revision
+             UNION ALL
+             SELECT next_attempt_at FROM ci_publication_tasks WHERE revision > completed_revision
            )) AS next_attempt_at,
            (SELECT MIN(lease_expires_at) FROM projection_tasks
              WHERE state = 'processing' AND lease_expires_at IS NOT NULL) AS lease_expires_at,
@@ -1160,8 +1199,9 @@ export class ReviewLedgerObject
   public savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
+    writerRunId: RunId,
   ): Promise<void> {
-    this.findingStore.savePrFindings(prKey, findings);
+    this.findingStore.savePrFindings(prKey, findings, writerRunId);
     return Promise.resolve();
   }
 
@@ -1219,86 +1259,19 @@ export class ReviewLedgerObject
     return Promise.resolve();
   }
 
-  public saveCiEvidence(
+  public async saveCiEvidence(
     prKey: PrKey,
     headSha: string,
-    evidence: {
-      readonly markdownByLanguage: LocalizedCiMarkdown;
-      readonly workflowRunId?: number;
-      readonly structuredCi?: AdminCiSummary | null | undefined;
-    },
+    evidence: import("@holon/contracts").SavedCiEvidence,
   ): Promise<void> {
-    const structuredCiJson =
-      evidence.structuredCi !== undefined && evidence.structuredCi !== null
-        ? JSON.stringify(evidence.structuredCi)
-        : null;
-    this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec(
-        `INSERT OR REPLACE INTO ci_evidences (
-           pr_key, head_sha, markdown_content, workflow_run_id, structured_ci_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
-        prKey,
-        headSha,
-        JSON.stringify(
-          localizedCiMarkdownSchema.parse(evidence.markdownByLanguage),
-        ),
-        evidence.workflowRunId ?? null,
-        structuredCiJson,
-      );
-    });
-    return Promise.resolve();
+    new CiEvidenceStore(this.ctx.storage).save(prKey, headSha, evidence);
+    await this.ensureMaintenanceAlarm();
   }
-
-  public loadCiEvidence(
-    prKey: PrKey,
-    headSha: string,
-  ): Promise<
-    | {
-        readonly markdownByLanguage: LocalizedCiMarkdown;
-        readonly workflowRunId?: number | undefined;
-        readonly structuredCi?: AdminCiSummary | null | undefined;
-      }
-    | undefined
-  > {
-    const rows = this.ctx.storage.sql
-      .exec<{
-        markdown_content: string;
-        workflow_run_id: number | null;
-        structured_ci_json: string | null;
-      }>(
-        `SELECT markdown_content, workflow_run_id, structured_ci_json FROM ci_evidences WHERE pr_key = ? AND head_sha = ?`,
-        prKey,
-        headSha,
-      )
-      .toArray();
-    const first = rows[0];
-    if (!first) return Promise.resolve(undefined);
-    let structuredCi: AdminCiSummary | null = null;
-    if (first.structured_ci_json) {
-      try {
-        structuredCi = adminCiSummarySchema.parse(
-          JSON.parse(first.structured_ci_json),
-        );
-      } catch (error) {
-        reportError(consoleErrorReporter, "ledger.ci_summary_invalid", error, {
-          component: "control-plane",
-          operation: "ledger.read_ci_summary",
-          prKey,
-        });
-        structuredCi = null;
-      }
-    }
-    return Promise.resolve({
-      markdownByLanguage: localizedCiMarkdownSchema.parse(
-        JSON.parse(first.markdown_content),
-      ),
-      ...(first.workflow_run_id !== null
-        ? { workflowRunId: first.workflow_run_id }
-        : {}),
-      structuredCi,
-    });
+  public loadCiEvidence(prKey: PrKey, headSha: string) {
+    return Promise.resolve(
+      new CiEvidenceStore(this.ctx.storage).load(prKey, headSha),
+    );
   }
-
   public saveRunTelemetry(telemetry: RunTelemetry): Promise<void> {
     const parsed = runTelemetrySchema.parse(telemetry);
     this.ctx.storage.transactionSync(() => {

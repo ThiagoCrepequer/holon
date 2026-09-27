@@ -1,3 +1,4 @@
+import { redactSecrets } from "./redaction.js";
 import type { ReviewLanguage } from "./review-language.js";
 import { reviewMessage } from "./review-messages.js";
 export interface LineCoverage {
@@ -27,6 +28,7 @@ export type CiEvidenceStatus = "available" | "partial" | "not_available";
 
 export interface CiEvidence {
   readonly coverage?: readonly LineCoverage[] | undefined;
+  readonly limitations?: readonly string[] | undefined;
   readonly source?: string | undefined;
   readonly status: CiEvidenceStatus;
   readonly tests?: TestExecutionReport | undefined;
@@ -63,20 +65,29 @@ function findCoverageForPath(
 ): LineCoverage | undefined {
   const normalizedTarget = normalizePathForMatching(path);
 
-  // Exact match
-  const exact = coverageReports.find(
+  const exact = coverageReports.filter(
     (c) => normalizePathForMatching(c.path) === normalizedTarget,
   );
-  if (exact) return exact;
-
-  // Suffix match for cases where coverage paths include absolute repository roots
-  return coverageReports.find((c) => {
-    const norm = normalizePathForMatching(c.path);
-    return (
-      norm.endsWith("/" + normalizedTarget) ||
-      normalizedTarget.endsWith("/" + norm)
-    );
-  });
+  const matches = exact.length
+    ? exact
+    : coverageReports.filter((c) =>
+        normalizePathForMatching(c.path).endsWith("/" + normalizedTarget),
+      );
+  if (
+    !matches.length ||
+    new Set(matches.map((c) => normalizePathForMatching(c.path))).size > 1
+  )
+    return undefined;
+  const hitsByLine: Record<number, number> = {};
+  for (const report of matches)
+    for (const [line, hits] of Object.entries(report.hitsByLine))
+      hitsByLine[Number(line)] = Math.max(hitsByLine[Number(line)] ?? 0, hits);
+  return {
+    path,
+    hitsByLine,
+    totalFound: Object.keys(hitsByLine).length,
+    totalHit: Object.values(hitsByLine).filter((h) => h > 0).length,
+  };
 }
 
 const SOURCE_CODE_EXTENSIONS = new Set([
@@ -281,7 +292,7 @@ export function formatCiEvidenceMarkdown(
       for (const item of changedLinesCoverage.uncoveredByFile.slice(0, 5)) {
         const lineStr = formatLineIntervals(item.lines, 6, language);
         lines.push(
-          `    - \`${item.path}\`: ${reviewMessage(language, "ciLines")} ${lineStr}`,
+          `    - \`${safeCiText(item.path)}\`: ${reviewMessage(language, "ciLines")} ${lineStr}`,
         );
       }
       if (changedLinesCoverage.uncoveredByFile.length > 5) {
@@ -295,13 +306,14 @@ export function formatCiEvidenceMarkdown(
   }
 
   if (evidence.tests !== undefined) {
-    const { durationMs, failed, passed, total } = evidence.tests;
+    const { durationMs, failed, passed, skipped, total } = evidence.tests;
     const durationStr =
       durationMs !== undefined ? ` (${(durationMs / 1000).toFixed(2)}s)` : "";
     lines.push(
       reviewMessage(language, "ciSuite", {
         passed,
         failed,
+        skipped,
         total,
         duration: durationStr,
       }),
@@ -316,14 +328,17 @@ export function formatCiEvidenceMarkdown(
       for (const failure of evidence.tests.failures.slice(0, 5)) {
         const location =
           failure.filePath && failure.line
-            ? ` (\`${failure.filePath}:${failure.line}\`)`
+            ? ` (\`${safeCiText(failure.filePath)}:${failure.line}\`)`
             : failure.filePath
-              ? ` (\`${failure.filePath}\`)`
+              ? ` (\`${safeCiText(failure.filePath)}\`)`
               : "";
-        const cleanMessage =
-          failure.message.split("\n")[0] ??
-          reviewMessage(language, "ciTestFailed");
-        lines.push(`    - **${failure.testName}**${location}: ${cleanMessage}`);
+        const cleanMessage = safeCiText(
+          failure.message.split("\n")[0] ||
+            reviewMessage(language, "ciTestFailed"),
+        );
+        lines.push(
+          `    - **${safeCiText(failure.testName)}**${location}: ${cleanMessage}`,
+        );
       }
       if (evidence.tests.failures.length > 5) {
         lines.push(
@@ -335,6 +350,9 @@ export function formatCiEvidenceMarkdown(
     }
   }
 
+  for (const limitation of evidence.limitations ?? [])
+    lines.push(`- **Limitation**: ${safeCiText(limitation)}`);
+
   if (evidence.workflowName || evidence.workflowRunId) {
     const nameStr =
       evidence.workflowName ?? reviewMessage(language, "ciWorkflow");
@@ -342,7 +360,7 @@ export function formatCiEvidenceMarkdown(
       ? ` (${reviewMessage(language, "ciRun")} #${evidence.workflowRunId})`
       : "";
     lines.push(
-      `- **${reviewMessage(language, "ciSource")}**: ${nameStr}${runStr}`,
+      `- **${reviewMessage(language, "ciSource")}**: ${safeCiText(nameStr)}${runStr}`,
     );
   }
 
@@ -372,3 +390,17 @@ export function appendCiEvidenceToSummary(
 
   return `${originalSummary.trimEnd()}\n\n${evidenceMarkdown}`;
 }
+
+/* eslint-disable no-control-regex -- Strip terminal escapes and control bytes in untrusted CI text. */
+function safeCiText(raw: string): string {
+  const plain = raw
+    .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07))/gu, "")
+    .replace(/[\x00-\x1f\x7f]/gu, " ");
+  return redactSecrets(plain)
+    .slice(0, 500)
+    .replace(/[\\`*_[\]{}()#!|>]/gu, "\\$&")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+/* eslint-enable no-control-regex */

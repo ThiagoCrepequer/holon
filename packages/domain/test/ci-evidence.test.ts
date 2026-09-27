@@ -117,7 +117,7 @@ describe("ci-evidence domain logic", () => {
     );
     expect(formatted).toContain("`src/feature.ts`: lines 15");
     expect(formatted).toContain(
-      "- **Test suite**: 20 passed, 1 failed, 22 total (4.50s)",
+      "- **Test suite**: 20 passed, 1 failed, 1 skipped, 22 total (4.50s)",
     );
     expect(formatted).toContain("Failed tests (1)");
     expect(formatted).toContain(

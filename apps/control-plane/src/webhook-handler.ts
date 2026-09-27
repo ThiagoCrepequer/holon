@@ -1,25 +1,16 @@
 import { identificationRevocationSchema } from "@holon/contracts";
 import { type HealthCheckReport, pullRequestActions } from "@holon/contracts";
+import { followUpMessageSchema } from "@holon/contracts";
 import {
   mapPullRequestWebhook,
   mapReviewCommentWebhook,
   mapReviewThreadWebhook,
   verifyWebhookSignature,
 } from "@holon/github";
-import {
-  consoleErrorReporter,
-  reportError,
-  withErrorReporting,
-} from "@holon/observability";
+import { consoleErrorReporter, reportError } from "@holon/observability";
 import { Hono } from "hono";
 
-import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
-import {
-  handleFeedbackCommentWebhook,
-  handleThreadResolvedWebhook,
-} from "./feedback-handler-service.js";
 import { repositorySchemaResponse } from "./repository-schema-route.js";
-
 const maximumWebhookBytes = 2_000_000;
 
 export class PayloadTooLargeError extends Error {
@@ -276,33 +267,23 @@ export function createWebhookApp() {
         ) {
           const prNumber = (pullRequests[0] as Record<string, unknown>)?.number;
           if (typeof prNumber === "number") {
-            const enrichPromise = withErrorReporting(
-              "webhook.ci_enrichment_failed",
-              consoleErrorReporter,
-              {
-                component: "control-plane",
-                operation: "webhook.ci_enrichment",
-                repositoryId: repoId,
-                pullRequestNumber: prNumber,
-                installationId,
+            const followUp = followUpMessageSchema.parse({
+              event: "ci_enrichment",
+              payload: {
                 deliveryId: delivery,
+                headSha,
+                installationId,
+                pullRequestNumber: prNumber,
+                repository: { id: repoId, name: repoName, owner: repoOwner },
+                workflowName,
+                workflowRunId,
+                workflowRunAttempt:
+                  typeof run.run_attempt === "number" ? run.run_attempt : 1,
               },
-              async () =>
-                await enrichReviewWithCiEvidence(context.env, {
-                  deliveryId: delivery,
-                  headSha,
-                  installationId,
-                  pullRequestNumber: prNumber,
-                  repository: { id: repoId, name: repoName, owner: repoOwner },
-                  workflowName,
-                  workflowRunId,
-                }),
-            );
-            try {
-              context.executionCtx.waitUntil(enrichPromise);
-            } catch {
-              // Safe fallback in test harnesses without ExecutionContext
-            }
+            });
+            await context.env.REVIEW_QUEUE.send(followUp, {
+              contentType: "json",
+            });
             return context.json(
               { accepted: true, deliveryId: delivery, enriched: true },
               202,
@@ -319,27 +300,23 @@ export function createWebhookApp() {
         if (commentEvent.action !== "created") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = withErrorReporting(
-          "webhook.feedback_failed",
-          consoleErrorReporter,
-          {
-            component: "control-plane",
-            operation: "webhook.feedback",
-            deliveryId: delivery,
-          },
-          async () =>
-            await handleFeedbackCommentWebhook(context.env, commentEvent),
+        await context.env.REVIEW_QUEUE.send(
+          followUpMessageSchema.parse({
+            event: "feedback_comment",
+            payload: commentEvent,
+          }),
+          { contentType: "json" },
         );
-        try {
-          context.executionCtx.waitUntil(handlePromise);
-        } catch {
-          // Safe fallback in test harnesses without ExecutionContext
-        }
         return context.json(
           { accepted: true, deliveryId: delivery, feedback: true },
           202,
         );
-      } catch {
+      } catch (error) {
+        if (
+          !(error instanceof TypeError) &&
+          !(error instanceof Error && error.name === "ZodError")
+        )
+          throw error;
         return reject("invalid_payload", 400);
       }
     }
@@ -350,27 +327,23 @@ export function createWebhookApp() {
         if (threadEvent.action !== "resolved") {
           return context.json({ accepted: true, ignored: true }, 202);
         }
-        const handlePromise = withErrorReporting(
-          "webhook.thread_feedback_failed",
-          consoleErrorReporter,
-          {
-            component: "control-plane",
-            operation: "webhook.thread_feedback",
-            deliveryId: delivery,
-          },
-          async () =>
-            await handleThreadResolvedWebhook(context.env, threadEvent),
+        await context.env.REVIEW_QUEUE.send(
+          followUpMessageSchema.parse({
+            event: "feedback_thread",
+            payload: threadEvent,
+          }),
+          { contentType: "json" },
         );
-        try {
-          context.executionCtx.waitUntil(handlePromise);
-        } catch {
-          // Safe fallback in test harnesses without ExecutionContext
-        }
         return context.json(
           { accepted: true, deliveryId: delivery, feedback: true },
           202,
         );
-      } catch {
+      } catch (error) {
+        if (
+          !(error instanceof TypeError) &&
+          !(error instanceof Error && error.name === "ZodError")
+        )
+          throw error;
         return reject("invalid_payload", 400);
       }
     }

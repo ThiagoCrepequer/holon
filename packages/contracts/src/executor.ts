@@ -6,6 +6,7 @@ import {
   repositoryPolicySourceSchema,
   repositoryVerdictStrictnessSchema,
 } from "./repository-policy.js";
+import { resolvedReviewGuidanceSchema } from "./review-guidance.js";
 import {
   gitShaSchema,
   positiveIntegerSchema,
@@ -152,6 +153,7 @@ export const reviewContextFileSchema = z.strictObject({
  */
 export const reviewShardContextSchema = z
   .strictObject({
+    reviewGuidance: resolvedReviewGuidanceSchema.optional(),
     projectIdentification: projectIdentificationResultSchema.optional(),
     changedLines: changedLinesSchema,
     files: z.array(reviewContextFileSchema).max(50),
@@ -204,6 +206,7 @@ export const reviewShardContextSchema = z
 
 export const reviewContextSchema = z
   .strictObject({
+    reviewGuidance: resolvedReviewGuidanceSchema.optional(),
     projectIdentification: projectIdentificationResultSchema.optional(),
     changedLines: changedLinesSchema,
     effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),

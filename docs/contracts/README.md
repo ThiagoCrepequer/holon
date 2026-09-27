@@ -101,3 +101,7 @@ control-plane. O gate verifica schema e identidade gerada do compilador. A
 e `scopeDigest` somente exclusões. Identidade de run exige PR/head/base.
 `AdminRunDetail.historicalRunFindings` contém resultados retidos integrais,
 independentes dos manifests temporários e do limite de publicação inline.
+
+## Contratos do core de review (2026-09-27)
+
+A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `review.documentation` integra o snapshot compilado e seu digest; instruções e compatibilidade seguem o contrato único de configuração. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md).

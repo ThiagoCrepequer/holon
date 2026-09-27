@@ -5,6 +5,7 @@ import {
   repositoryPolicySourceSchema,
   repositoryVerdictStrictnessSchema,
 } from "../repository-policy.js";
+import { documentationReferenceSchema } from "../review-guidance.js";
 import {
   configPathSchema,
   configRootSchema,
@@ -36,6 +37,7 @@ export const resolvedRepositoryConfigSchema = z.strictObject({
   output: reviewOutputPreferencesSchema,
   additionalExcludes: z.array(repositoryPolicyGlobSchema).max(50),
   focus: z.array(reviewFocusSchema).max(5),
+  documentation: z.array(documentationReferenceSchema).max(4),
   verdictStrictness: repositoryVerdictStrictnessSchema,
   instructions: z.array(resolvedGuidanceEntrySchema).max(200),
   references: z.array(resolvedGuidanceEntrySchema).max(32),

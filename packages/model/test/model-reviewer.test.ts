@@ -448,7 +448,11 @@ describe("model review boundary", () => {
     );
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).resolves.toEqual(output);
 
     expect(sdk.generateText).toHaveBeenCalledTimes(2);
@@ -550,7 +554,11 @@ describe("model review boundary", () => {
     );
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).resolves.toEqual({
       ...output,
       isDegraded: true,
@@ -593,7 +601,11 @@ describe("model review boundary", () => {
       );
 
       await expect(
-        generator.generate({ instructions: "system", prompt: "prompt" }),
+        generator.generate({
+          evidenceCandidates: [],
+          instructions: "system",
+          prompt: "prompt",
+        }),
       ).rejects.toMatchObject({
         isRetryable,
         name: expectedName,
@@ -625,7 +637,7 @@ describe("model review boundary", () => {
     sdk.generateText
       .mockResolvedValueOnce({
         finishReason: "stop",
-        text: "",
+        text: "The changed paths preserve their callers contracts.",
         toolCalls: [],
         usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
       })
@@ -649,7 +661,11 @@ describe("model review boundary", () => {
     );
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).resolves.toEqual(output);
   });
 
@@ -677,7 +693,11 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(new sdk.APICallError(502, true));
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).rejects.toMatchObject({ isRetryable: true, statusCode: 502 });
 
     // Recovery throws APICallError
@@ -701,7 +721,11 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(new sdk.APICallError(401, false));
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).rejects.toMatchObject({ isRetryable: false, statusCode: 401 });
 
     // Recovery throws non-API error
@@ -723,7 +747,11 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(new Error("unexpected recovery explosion"));
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).rejects.toThrow("unexpected recovery explosion");
   });
 
@@ -750,7 +778,11 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(new RangeError("unrecoverable fatal memory"));
 
     await expect(
-      generator.generate({ instructions: "system", prompt: "prompt" }),
+      generator.generate({
+        evidenceCandidates: [],
+        instructions: "system",
+        prompt: "prompt",
+      }),
     ).rejects.toThrow("unrecoverable fatal memory");
   });
 
@@ -817,6 +849,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(rescueError);
 
     const result = await generator.generate({
+      evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
     });
@@ -855,6 +888,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = await generator.generate({
+      evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
     });
@@ -894,6 +928,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = (await generator.generate({
+      evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
     })) as { findings: unknown[]; isDegraded?: boolean; summary: string };
@@ -930,6 +965,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = (await generator.generate({
+      evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
     })) as { findings: unknown[]; isDegraded?: boolean; summary: string };
@@ -1024,6 +1060,7 @@ describe("review loss diagnostics", () => {
       );
       const result = redactModelReviewOutput(
         (await generator.generate({
+          evidenceCandidates: [],
           instructions: "system",
           prompt: "prompt",
         })) as ModelReviewOutput,
@@ -1067,6 +1104,7 @@ describe("review loss diagnostics", () => {
       (usage) => usages.push(usage),
     );
     const result = (await generator.generate({
+      evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
     })) as ModelReviewOutput;
@@ -1085,6 +1123,66 @@ describe("review loss diagnostics", () => {
   });
 });
 
+it("does not approve an empty investigation merely because finalization returned valid JSON", async () => {
+  sdk.createProvider.mockReturnValue(sdk.model);
+  sdk.generateText
+    .mockResolvedValueOnce({ finishReason: "stop", text: "", toolCalls: [] })
+    .mockResolvedValueOnce({ finishReason: "stop", output, toolCalls: [] });
+  const generator = new AiSdkReviewGenerator(
+    {
+      accountId: "account",
+      apiToken: "token",
+      gatewayId: "holon",
+      model: "dynamic/pr-review",
+    },
+    { run: async () => ({ content: "", truncated: false }) },
+  );
+  expect(
+    await generator.generate({
+      instructions: "system",
+      prompt: "prompt",
+      evidenceCandidates: [],
+    }),
+  ).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+});
+it("supplies canonical evidence to finalization even when investigation omits the literal quote", async () => {
+  sdk.createProvider.mockReturnValue(sdk.model);
+  sdk.generateText
+    .mockResolvedValueOnce({
+      finishReason: "stop",
+      text: "src/index.ts:10 breaks the non-null return contract.",
+      toolCalls: [],
+    })
+    .mockResolvedValueOnce({ finishReason: "stop", output, toolCalls: [] });
+  const generator = new AiSdkReviewGenerator(
+    {
+      accountId: "account",
+      apiToken: "token",
+      gatewayId: "holon",
+      model: "dynamic/pr-review",
+    },
+    { run: async () => ({ content: "", truncated: false }) },
+  );
+  await generator.generate({
+    instructions: "system",
+    prompt: "metadata",
+    evidenceCandidates: [
+      {
+        path: "src/index.ts",
+        startLine: 10,
+        endLine: 10,
+        excerpt: "return null;",
+      },
+    ],
+  });
+  expect(sdk.generateText.mock.calls[1]?.[0].prompt).toContain(
+    '"excerpt":"return null;"',
+  );
+  expect(sdk.generateText.mock.calls[1]?.[0].tools).toBeUndefined();
+});
 describe("compiled configuration across model phases", () => {
   it.each(["en", "pt-BR", "es"] as const)(
     "keeps %s and scoped guidance through investigation, finalization, recovery and synthesis",

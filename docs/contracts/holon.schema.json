@@ -30,6 +30,31 @@
     "review": {
       "type": "object",
       "properties": {
+        "documentation": {
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "root": {
+                "anyOf": [
+                  { "type": "string", "const": "." },
+                  { "type": "string", "minLength": 1, "maxLength": 1024 }
+                ]
+              },
+              "technology": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "url": { "type": "string", "maxLength": 1000, "format": "uri" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "required": ["root", "technology", "version", "url", "sha256"],
+            "additionalProperties": false
+          }
+        },
         "additional_excludes": {
           "description": "Additional exclusions; universal globs and protected paths are rejected by runtime policy validation.",
           "maxItems": 50,

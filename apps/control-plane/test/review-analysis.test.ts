@@ -7,6 +7,7 @@ import {
   type ReviewShardContext,
   type ReviewContext,
 } from "@holon/contracts";
+import { ModelProviderRequestError } from "@holon/model";
 import { describe, expect, it, vi } from "vitest";
 
 import { analyzeReview } from "../src/review-analysis.js";
@@ -75,9 +76,13 @@ function createMockServices(
   },
 ): ReviewServices {
   return {
+    createShardReviewer() {
+      return { model: this.model, toolBudgetExceeded: () => false };
+    },
     createMutationContext: () => Promise.reject(new Error("unused")),
     createSession: () => Promise.reject(new Error("unused")),
     ensureContext: () => Promise.resolve(),
+    reconcileCheckRun: async () => undefined,
     executor: {
       ...unconfiguredExecutor,
       cleanup: () => Promise.resolve(),
@@ -430,7 +435,7 @@ describe("analyzeReview", () => {
     });
     services.model.review = vi
       .fn()
-      .mockRejectedValue(new Error("Model timeout"));
+      .mockRejectedValue(new ModelProviderRequestError(true, 504));
 
     await expect(analyzeReview(job, services, emit)).rejects.toThrow(
       "All review shards failed during model execution",
@@ -652,6 +657,56 @@ it("retries a failed shard without spending another model call on its successful
   expect(result.scopeStatus).toBe("complete");
 });
 
+it("starts independent shards concurrently and joins them before aggregation", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from({ length: 21 }, (_, i) => ({
+      path: `src/f${i}.ts`,
+      mode: "structural" as const,
+      patch: "@@ -1 +1 @@\n-old\n+new",
+    })),
+  });
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const review = vi.fn(async () => {
+    await barrier;
+    return {
+      output: { findings: [], summary: "Reviewed" },
+      promptTruncated: false,
+    };
+  });
+  services.model.review = review;
+  const pending = analyzeReview(job, services, vi.fn());
+  try {
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(2), {
+      timeout: 200,
+    });
+  } finally {
+    release();
+    await pending;
+  }
+});
+it("never downgrades a ledger failure into a model shard failure", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from({ length: 21 }, (_, i) => ({
+      path: `src/f${i}.ts`,
+      mode: "structural" as const,
+      patch: "@@ -1 +1 @@\n-old\n+new",
+    })),
+  });
+  services.ledger.loadPrFindings = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("ledger unavailable"))
+    .mockResolvedValue([]);
+  await expect(analyzeReview(job, services, vi.fn())).rejects.toThrow(
+    "ledger unavailable",
+  );
+});
 it("preflights later-shard guidance before spending any review inference", async () => {
   const snapshot = await compileRepositoryConfiguration(
     {

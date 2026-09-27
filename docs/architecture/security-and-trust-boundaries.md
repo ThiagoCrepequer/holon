@@ -179,3 +179,7 @@ permissões, gravidade, verificação de evidências ou publicação. O schema p
 contém somente o contrato estático; não expõe configurações de instalações.
 A leitura autenticada de findings integrais é conteúdo privado de resultado;
 o nome histórico `getSanitizedAdminRunDetail` não autoriza logging do payload.
+
+## Endurecimento do core (2026-09-27)
+
+A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).

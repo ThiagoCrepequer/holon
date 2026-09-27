@@ -337,6 +337,23 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       );
     `,
   },
+  {
+    version: 15,
+    statements: `
+      CREATE TABLE check_run_tasks (
+        run_id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL,
+        completed_revision INTEGER NOT NULL, attempts INTEGER NOT NULL, next_attempt_at TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    version: 16,
+    statements: `
+      ALTER TABLE ci_evidences RENAME TO retired_ci_evidences;
+      CREATE TABLE ci_workflow_evidence(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,workflow_run_id INTEGER NOT NULL,attempt INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha,workflow_run_id));
+      CREATE TABLE ci_publication_tasks(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,target TEXT NOT NULL,revision INTEGER NOT NULL,completed_revision INTEGER NOT NULL,attempts INTEGER NOT NULL,next_attempt_at TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha));
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {
