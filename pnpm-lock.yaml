@@ -132,6 +132,9 @@ catalogs:
     typescript:
       specifier: 7.0.2
       version: 7.0.2
+    universal-github-app-jwt:
+      specifier: 2.2.2
+      version: 2.2.2
     vite:
       specifier: 8.2.2
       version: 8.2.2
@@ -298,6 +301,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 5.20260830.1
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.13.3)(@vitest/coverage-istanbul@4.1.11)(@vitest/coverage-v8@4.1.11)(jsdom@29.0.1)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
@@ -423,6 +429,9 @@ importers:
       '@holon/domain':
         specifier: workspace:*
         version: link:../domain
+      '@holon/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@holon/repository-analysis':
         specifier: workspace:*
         version: link:../repository-analysis
@@ -444,6 +453,9 @@ importers:
       '@octokit/plugin-throttling':
         specifier: 'catalog:'
         version: 11.0.5(@octokit/core@7.0.7)
+      universal-github-app-jwt:
+        specifier: 'catalog:'
+        version: 2.2.2
 
   packages/model:
     dependencies:

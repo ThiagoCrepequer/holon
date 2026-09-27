@@ -11,6 +11,7 @@ const sdk = vi.hoisted(() => ({
 vi.mock("@octokit/auth-app", () => ({ createAppAuth: sdk.createAppAuth }));
 vi.mock("@octokit/core", () => ({
   Octokit: class {
+    public readonly hook = { wrap: vi.fn() };
     public constructor(options: unknown) {
       sdk.octokitOptions = options;
     }
@@ -81,7 +82,8 @@ describe("GitHub installation client", () => {
 
     expect(sdk.createAppAuth).toHaveBeenCalledWith({
       appId: 123,
-      privateKey: "private-key",
+      createJwt: expect.any(Function),
+      request: expect.any(Function),
     });
     expect(sdk.auth).toHaveBeenCalledWith({
       installationId: 99,

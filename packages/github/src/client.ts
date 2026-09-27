@@ -1,12 +1,12 @@
 import type { ConfigurationSnapshotReader } from "@holon/application";
 import { gitShaSchema } from "@holon/contracts";
-import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 
 import { readArtifactBody } from "./artifact-body.js";
+import { createDiagnosticAppAuth } from "./authentication.js";
 import { readConfigurationJson } from "./configuration-json.js";
 import { createConfigurationSnapshotReader } from "./configuration-reader.js";
 import {
@@ -14,6 +14,7 @@ import {
   executeGitHubAppAuthenticationRequest,
   executeGitHubRequest,
   GitHubDiffTooLargeError,
+  GitHubConfigurationError,
 } from "./errors.js";
 import type {
   GitHubApi,
@@ -85,10 +86,7 @@ export async function resolveRepositoryInstallation(
   owner: string,
   repo: string,
 ): Promise<number> {
-  const auth = createAppAuth({
-    appId: credentials.appId,
-    privateKey: credentials.privateKey,
-  });
+  const auth = await createDiagnosticAppAuth(credentials);
   const authentication = await executeGitHubAppAuthenticationRequest(
     () => auth({ type: "app" }),
     "app_auth",
@@ -235,15 +233,12 @@ export async function createInstallationSession(
   repositoryId: number,
 ): Promise<GitHubInstallationSession> {
   if (!/^[A-Za-z0-9-]+$/u.test(credentials.appSlug)) {
-    throw new TypeError("GitHub App slug must use GitHub slug characters");
+    throw new GitHubConfigurationError("github_app_slug_invalid");
   }
   if (!Number.isSafeInteger(repositoryId) || repositoryId <= 0) {
     throw new TypeError("repositoryId must be a positive safe integer");
   }
-  const auth = createAppAuth({
-    appId: credentials.appId,
-    privateKey: credentials.privateKey,
-  });
+  const auth = await createDiagnosticAppAuth(credentials);
   const authentication = await executeGitHubAppAuthenticationRequest(
     () =>
       auth({
