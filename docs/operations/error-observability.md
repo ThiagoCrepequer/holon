@@ -174,3 +174,21 @@ com margem; devem ser reavaliados usando as durações registradas.
 Referências verificadas em 2026-09-27:
 [timeouts do AI SDK](https://ai-sdk.dev/docs/ai-sdk-core/settings#timeout) e
 [configuração de retries e timeout de Workflows](https://developers.cloudflare.com/workflows/build/sleeping-and-retrying/).
+
+## Diagnóstico de reviews grandes
+
+`review.coverage_planned` informa arquivos/bytes/linhas elegíveis e selecionados,
+partes planejadas, concorrência e motivos de omissão serializados (somente códigos
+e contagens). `model.output_limits` inclui `omittedSections` e todos os motivos
+locais, inclusive orçamento de ferramentas; seu `eventId` inclui o shard.
+
+`model.investigation_stopped` distingue `completed`, `round_limit`,
+`tool_budget_exhausted`, `empty_analysis`, `output_length`, `model_call_timeout`,
+`phase_budget_exhausted` e `provider_transient_failure`. Inclui rodada concluída,
+chamadas distintas e tempo restante. Compare-o aos eventos de fase para distinguir
+limite de chamadas, rodadas e tempo; `investigation_incomplete` sozinho não prova
+timeout. Eventos não contêm prompts, argumentos das tools, caminhos ou código.
+
+Ondas aparecem como `analysis-wave-N` nos checkpoints, e partes mantêm
+`analyze-shard-N`. O teto de 64 partes é admissão de trabalho; cinco é concorrência.
+Não confundir limite de contexto global com truncamento de todos os prompts.

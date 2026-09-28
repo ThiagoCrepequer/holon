@@ -12,6 +12,7 @@ import {
   SandboxRuntimeError,
   type SandboxPort,
 } from "../src/executor-service.js";
+import { buildReviewArtifacts } from "../src/review-context.js";
 
 const request = executorRequestSchema.parse({
   baseSha: "b".repeat(40),
@@ -1021,7 +1022,7 @@ describe("RepositoryExecutorService", () => {
     expect(sandbox.destroyed).toBe(true);
   });
 
-  it("marks oversized diffs and file reads as truncated", async () => {
+  it("preserves oversized canonical patches for planning while bounding file reads", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const oversizedRequest = executorRequestSchema.parse({
@@ -1037,9 +1038,9 @@ describe("RepositoryExecutorService", () => {
 
     const prepared = await service.prepareRepository(oversizedRequest);
     const context = await loadCurrentContext(service);
-    expect(prepared.truncated).toBe(true);
-    expect(prepared.fileCount).toBe(0);
-    expect(context.files.map((file) => file.patch).join("\n")).toBe("");
+    expect(prepared.truncated).toBe(false);
+    expect(prepared.fileCount).toBe(1);
+    expect(context.files[0]?.patch).toBe(oversizedRequest.canonicalDiff);
     const originalRun = sandbox.run.bind(sandbox);
     sandbox.run = (argv, options) =>
       argv[0] === "sed"
@@ -1097,20 +1098,20 @@ describe("RepositoryExecutorService", () => {
         "diff --git a/src/index.ts b/src/index.ts",
         "--- a/src/index.ts",
         "+++ b/src/index.ts",
-        "@@ -0,0 +1,5001 @@",
-        Array.from({ length: 5_001 }, () => "+x").join("\n"),
+        "@@ -0,0 +1,32001 @@",
+        Array.from({ length: 32_001 }, () => "+x").join("\n"),
       ].join("\n"),
     });
 
     await expect(
       service.prepareRepository(amplifiedRequest),
     ).resolves.toMatchObject({
-      changedLineCount: 5_000,
+      changedLineCount: 32_000,
       truncated: true,
     });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: expect.arrayContaining([
-        { line: 5_000, path: "src/index.ts", side: "RIGHT" },
+        { line: 32_000, path: "src/index.ts", side: "RIGHT" },
       ]),
       truncated: true,
     });
@@ -1119,23 +1120,24 @@ describe("RepositoryExecutorService", () => {
   it("trims long-path coordinates to the serialized context byte limit", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const longPath = `src/${"coordinate".repeat(10)}.ts`;
+    const longPath = `src/${"coordinate".repeat(30)}.ts`;
     const amplifiedRequest = executorRequestSchema.parse({
       ...request,
       canonicalDiff: [
         `diff --git a/${longPath} b/${longPath}`,
         `--- a/${longPath}`,
         `+++ b/${longPath}`,
-        "@@ -0,0 +1,5000 @@",
-        Array.from({ length: 5_000 }, () => "+x").join("\n"),
+        "@@ -0,0 +1,32000 @@",
+        Array.from({ length: 32_000 }, () => "+x").join("\n"),
       ].join("\n"),
     });
 
+    buildReviewArtifacts(amplifiedRequest, []);
     const prepared = await service.prepareRepository(amplifiedRequest);
     const context = await service.loadContext(request.runId);
-    expect(prepared.contextBytes).toBeLessThanOrEqual(500_000);
+    expect(prepared.contextBytes).toBeLessThanOrEqual(8_000_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
-    expect(prepared.changedLineCount).toBeLessThan(5_000);
+    expect(prepared.changedLineCount).toBeLessThan(32_000);
     expect(prepared.truncated).toBe(true);
     expect(context.changedLines).toHaveLength(prepared.changedLineCount);
     expect(context.truncated).toBe(true);

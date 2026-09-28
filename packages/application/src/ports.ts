@@ -43,6 +43,7 @@ export type {
 } from "@holon/contracts";
 
 export interface ModelReviewResult {
+  readonly promptOmissions?: readonly string[];
   readonly output: ModelReviewOutput;
   readonly promptTruncated: boolean;
 }

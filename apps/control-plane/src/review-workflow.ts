@@ -348,7 +348,14 @@ export async function executeReviewWorkflow(
     suffix?: number | string,
   ) =>
     logger.emit(event, {
-      eventId: eventId(workflowInstanceId, event, suffix),
+      eventId: eventId(
+        workflowInstanceId,
+        event,
+        suffix ??
+          (typeof fields.shardIndex === "number"
+            ? fields.shardIndex
+            : undefined),
+      ),
       ...logContext,
       ...fields,
     });
@@ -1283,8 +1290,7 @@ export async function executeReviewWorkflow(
           }
         },
         () => ({
-          findingPath: finding.location.path,
-          line: finding.location.line,
+          findingFingerprint: finding.fingerprint,
           severity: finding.severity,
         }),
         (res) => ({

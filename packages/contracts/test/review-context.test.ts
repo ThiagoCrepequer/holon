@@ -28,14 +28,18 @@ it("counts UTF-8 bytes for aggregate and individual patch limits", () => {
       ...context,
       files: [
         ...context.files,
-        { path: "src/extra.ts", mode: "structural", patch: "x" },
+        {
+          path: "src/extra.ts",
+          mode: "structural",
+          patch: "x".repeat(1_700_001),
+        },
       ],
     }).success,
   ).toBe(false);
   expect(
     reviewContextSchema.safeParse({
       ...context,
-      files: [{ ...context.files[0], patch: "語".repeat(20_000) + "x" }],
+      files: [{ ...context.files[0], patch: "語".repeat(666_666) + "xxx" }],
     }).success,
   ).toBe(false);
 });

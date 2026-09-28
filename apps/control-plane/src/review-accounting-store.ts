@@ -1,5 +1,6 @@
 import {
   analysisAccountingSchema,
+  reviewExecutionLimits,
   analysisUsageSchema,
   runIdSchema,
   type AnalysisUsage,
@@ -41,7 +42,7 @@ export class ReviewAccountingStore {
       !Number.isSafeInteger(totalShards) ||
       index < 0 ||
       index >= totalShards ||
-      totalShards > 5
+      totalShards > reviewExecutionLimits.maxShards
     )
       throw new TypeError("Invalid shard allocation");
     const allocation = 12;

@@ -8,6 +8,7 @@ import {
   verifyFindingsWithCanonicalEvidence,
   type EvidenceRejection,
 } from "@holon/application";
+import { reviewExecutionLimits } from "@holon/contracts";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
   modelReviewOutputSchema,
@@ -159,15 +160,21 @@ async function reviewShards(
       if (
         modelOutput.outputLimitations?.length ||
         reviewResult.promptTruncated ||
-        evidenceRejected
+        evidenceRejected ||
+        budgetExceeded
       )
         emit?.("model.output_limits", {
           shardIndex: shard.index,
           findingsReceived: modelOutput.findings.length,
           evidenceRejectedCount:
             modelOutput.findings.length - verifiedFindings.length,
-          limitationCodes: (modelOutput.outputLimitations ?? []).join(","),
+          limitationCodes: [
+            ...(modelOutput.outputLimitations ?? []),
+            ...(reviewResult.promptTruncated ? ["input_context_omitted"] : []),
+            ...(budgetExceeded ? ["tool_budget_exhausted"] : []),
+          ].join(","),
           inputContextOmitted: reviewResult.promptTruncated,
+          omittedSections: reviewResult.promptOmissions?.join(","),
         });
       results.push({
         findings: modelOutput.findings.filter((finding) =>
@@ -243,7 +250,7 @@ export async function analyzeReview(
     phase: "preparation" | "analysis",
     fn: () => Promise<R>,
   ): Promise<R> => (execution ? execution.runStep(name, phase, fn) : fn());
-  const load = async () => {
+  const loadUncached = async () => {
     await services.ensureContext(2, effectivePolicy);
     const context = await services.loadContext(effectivePolicy);
     const plan = buildReviewPlan(
@@ -270,6 +277,12 @@ export async function analyzeReview(
         : plan,
     };
   };
+  // Coalesce simultaneous reads only; later steps still reload and validate the digest.
+  let loading: ReturnType<typeof loadUncached> | undefined;
+  const load = () =>
+    (loading ??= loadUncached().finally(() => {
+      loading = undefined;
+    }));
   try {
     const runId = createReviewRun(job).id;
     const prKey = createPrKey({
@@ -319,12 +332,31 @@ export async function analyzeReview(
               context.structuralImpact,
               baseline,
               services.getProjectIdentification?.(),
-              context.truncated,
+              false,
               guidance,
             ),
           );
         }
       }
+      emit("review.coverage_planned", {
+        totalEligibleFiles: plan.totalEligibleFiles,
+        totalEligibleBytes: plan.totalEligibleBytes,
+        totalEligibleLines: plan.totalEligibleLines,
+        plannedShards: plan.shards.length,
+        concurrency: reviewExecutionLimits.concurrency,
+        selectedPatchBytes: plan.shards.reduce(
+          (sum, shard) => sum + shard.byteLength,
+          0,
+        ),
+        selectedChangedLines: plan.shards.reduce(
+          (sum, shard) => sum + shard.changedLines.length,
+          0,
+        ),
+        selectedFiles: new Set(
+          plan.shards.flatMap((shard) => shard.files.map((file) => file.path)),
+        ).size,
+        omissionReasons: JSON.stringify(plan.omissionReasons),
+      });
       const patchBytes = contextBytes(context);
       emit("model.input", {
         changedLineCount: context.changedLines.length,
@@ -342,63 +374,90 @@ export async function analyzeReview(
       return {
         shardIds: plan.shards.map((shard) => shard.id),
         planDigest: await planDigest(plan),
-        deadlineAt: Date.now() + reviewTimeBudget.analysisMs,
+        deadlineAt:
+          Date.now() +
+          Math.max(
+            1,
+            Math.ceil(plan.shards.length / reviewExecutionLimits.concurrency),
+          ) *
+            reviewTimeBudget.analysisMs,
       };
     });
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
-    const settled = await Promise.allSettled(
-      planning.shardIds.map(async (shardId, index) => {
-        return await runStep(
-          `analyze-shard-${index + 1}`,
-          "analysis",
-          async () => {
-            const { context, plan } = await load();
-            if (
-              plan.shards[index]?.id !== shardId ||
-              (await planDigest(plan)) !== planning.planDigest
-            )
-              throw new NonRetryableError("Review plan changed during replay");
-            if (Date.now() >= planning.deadlineAt)
-              return {
-                results: [
-                  {
-                    shardId,
-                    shardIndex: index,
-                    status: "failure" as const,
-                    findings: [],
-                    summary: "",
-                    errorReason: "analysis_deadline",
-                  },
-                ],
-                anyPromptTruncated: false,
-              };
-            return reviewShards(
-              job,
-              services,
-              plan,
-              context.structuralImpact,
-              context.truncated || plan.scopeStatus === "partial_by_policy",
-              emit,
-              await services.ledger.loadPrFindings(prKey),
-              index,
-              planning.deadlineAt,
-              effectivePolicy,
-              execution?.configuration,
+    for (
+      let offset = 0;
+      offset < planning.shardIds.length;
+      offset += reviewExecutionLimits.concurrency
+    ) {
+      const wave = await runStep(
+        `analysis-wave-${offset / reviewExecutionLimits.concurrency + 1}`,
+        "preparation",
+        async () => ({
+          deadlineAt: Math.min(
+            planning.deadlineAt,
+            Date.now() + reviewTimeBudget.analysisMs,
+          ),
+        }),
+      );
+      const settled = await Promise.allSettled(
+        planning.shardIds
+          .slice(offset, offset + reviewExecutionLimits.concurrency)
+          .map(async (shardId, position) => {
+            const index = offset + position;
+            return await runStep(
+              `analyze-shard-${index + 1}`,
+              "analysis",
+              async () => {
+                const { context, plan } = await load();
+                if (
+                  plan.shards[index]?.id !== shardId ||
+                  (await planDigest(plan)) !== planning.planDigest
+                )
+                  throw new NonRetryableError(
+                    "Review plan changed during replay",
+                  );
+                if (Date.now() >= wave.deadlineAt)
+                  return {
+                    results: [
+                      {
+                        shardId,
+                        shardIndex: index,
+                        status: "failure" as const,
+                        findings: [],
+                        summary: "",
+                        errorReason: "analysis_deadline",
+                      },
+                    ],
+                    anyPromptTruncated: false,
+                  };
+                return reviewShards(
+                  job,
+                  services,
+                  plan,
+                  context.structuralImpact,
+                  false,
+                  emit,
+                  await services.ledger.loadPrFindings(prKey),
+                  index,
+                  wave.deadlineAt,
+                  effectivePolicy,
+                  execution?.configuration,
+                );
+              },
             );
-          },
-        );
-      }),
-    );
-    // Join every in-flight shard before terminal cleanup. Infrastructure/state
-    // failures retain their cause and cannot become a publishable partial review.
-    for (const result of settled)
-      if (result.status === "rejected") throw result.reason;
-    for (const completed of settled) {
-      if (completed.status !== "fulfilled") continue;
-      const result = completed.value;
-      shardResults.push(...result.results);
-      anyPromptTruncated ||= result.anyPromptTruncated;
+          }),
+      );
+      // Join every in-flight shard before terminal cleanup. Infrastructure/state
+      // failures retain their cause and cannot become a publishable partial review.
+      for (const result of settled)
+        if (result.status === "rejected") throw result.reason;
+      for (const completed of settled) {
+        if (completed.status !== "fulfilled") continue;
+        const result = completed.value;
+        shardResults.push(...result.results);
+        anyPromptTruncated ||= result.anyPromptTruncated;
+      }
     }
     if (
       shardResults.length &&

@@ -6,6 +6,7 @@ import {
   reviewSurfaceSchema,
 } from "./executor.js";
 import { reconciliationSummarySchema } from "./finding-lifecycle.js";
+import { reviewExecutionLimits } from "./review-execution-limits.js";
 import { reviewTextLimits } from "./review-limits.js";
 import { reviewOutputLimitationsSchema } from "./review-output.js";
 import { reviewFindingSchema } from "./review-output.js";
@@ -62,7 +63,7 @@ export type ReviewPlanOmission = z.infer<typeof reviewPlanOmissionSchema>;
 export const reviewPlanSchema = z.strictObject({
   omissionReasons: z.array(reviewPlanOmissionSchema),
   scopeStatus: reviewScopeStatusSchema,
-  shards: z.array(reviewShardSchema).max(20),
+  shards: z.array(reviewShardSchema).max(reviewExecutionLimits.maxShards),
   totalEligibleBytes: z.number().int().nonnegative(),
   totalEligibleFiles: z.number().int().nonnegative(),
   totalEligibleLines: z.number().int().nonnegative(),

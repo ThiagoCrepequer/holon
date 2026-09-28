@@ -103,6 +103,21 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
       JSON.stringify(buildReviewAnalysisCheckpoint(output)),
     ).byteLength,
   ).toBeLessThan(64000);
+  const expanded = buildReviewAnalysisCheckpoint({
+    ...output,
+    activeFindings: Array.from({ length: 512 }, (_, i) => ({
+      ...findings[0]!,
+      fingerprint: `fp:${i.toString(16).padStart(64, "0")}`,
+      location: {
+        ...findings[0]!.location,
+        path: `src/${"長".repeat(1_000)}.ts`,
+      },
+    })),
+  });
+  expect(expanded.activeFindings).toHaveLength(512);
+  expect(
+    new TextEncoder().encode(JSON.stringify(expanded)).length,
+  ).toBeLessThan(128_000);
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
@@ -202,6 +217,42 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
   });
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, -1, 5)).toThrow(
+      "Invalid shard",
+    );
+  });
+});
+
+it("reserves the last shard of a 64-part plan durably without exceeding its own budget", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await ledger.claimRun(
+    {
+      causalVersion: new Date().toISOString(),
+      id: runId,
+      prKey: "github:42:pr:7",
+      createdAt: new Date().toISOString(),
+      state: "queued",
+      attempt: 0,
+    },
+    "large-budget-test",
+  );
+  const results = await Promise.all(
+    Array.from({ length: 13 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 63, 64),
+    ),
+  );
+  expect(results.filter(Boolean)).toHaveLength(12);
+  await evictDurableObject(ledger);
+  await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
+    false,
+  );
+  await expect(ledger.reserveAnalysisToolCall(runId, 0, 64)).resolves.toBe(
+    true,
+  );
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.reserveAnalysisToolCall(runId, 64, 64)).toThrow(
+      "Invalid shard",
+    );
+    expect(() => object.reserveAnalysisToolCall(runId, 0, 65)).toThrow(
       "Invalid shard",
     );
   });

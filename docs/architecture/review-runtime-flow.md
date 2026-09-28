@@ -262,8 +262,8 @@ no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
 feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
 relógio da identificação ficam dentro de steps, preservando resultados em replay.
 
-A análise executa até cinco shards em paralelo sob um deadline comum de 15 minutos,
-fixado no checkpoint de planejamento. O gerador reserva 3 minutos para finalização,
+A análise admite até 64 shards em ondas de até cinco, com deadline de 15 minutos por onda fixado em checkpoint,
+e deadline global proporcional ao número de ondas admitidas. O gerador reserva 3 minutos para finalização,
 3 para recuperação e 2 para consolidação/persistência; a investigação pode consumir
 até 7 minutos. Cada rodada de inferência tem teto de 3 minutos, sempre subordinado
 ao prazo restante da fase. O step de modelo no Workflow tem 17 minutos, com margem
@@ -294,8 +294,11 @@ confirmar destruição do executor.
 ## Seleção e narrativa — ADR-0035
 
 O planner recebe o diff canônico elegível antes de limitar os shards; o executor
-persiste os patches inteiros selecionados no contexto completo (até 300 kB em cinco shards de
-60 kB, 50 arquivos, 5.000 coordenadas e 500 kB de JSON). Toda omissão marca cobertura
+persiste os patches canônicos elegíveis completos no contexto (até 2 MB de patches,
+1.000 arquivos, 32.000 coordenadas e 8 MB de JSON). A ADR-0039 substitui o teto de
+cinco shards: até 64 partes de 24 kB, quatro arquivos e alvo de 192 linhas são
+executadas com concorrência cinco. Hunks extensos são repartidos preservando
+bytes e coordenadas; linhas indivisíveis acima do limite geram omissão explícita. Toda omissão marca cobertura
 parcial. Mesmo sem arquivos selecionados, `truncated` impede classificar a execução
 como ausência de mudanças elegíveis. A publicação de revisão parcial, degradada ou
 com revalidação pendente usa narrativa determinística de incompletude e mantém os
@@ -321,3 +324,11 @@ para o histórico autenticado, não para o checkpoint sanitizado. Consulte a
 ## Endurecimento do core (2026-09-27)
 
 A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+
+A [ADR-0039](../decisions/0039-partition-large-reviews-and-bound-concurrency.md)
+detalha particionamento, ondas e limites residuais. Leituras simultâneas do
+contexto são compartilhadas, mas steps posteriores recarregam e conferem o digest
+do plano. O estado global de cobertura parcial permanece no agregado; cada shard
+sinaliza somente as seções realmente omitidas do seu próprio prompt. A rodada
+final da investigação não recebe ferramentas e fechamentos forçados continuam
+incompletos. Consultas idênticas são reutilizadas dentro da mesma investigação.

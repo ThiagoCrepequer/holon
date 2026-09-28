@@ -62,7 +62,7 @@ export const testGapReasonSchema = z.enum([
 export type TestGapReason = z.infer<typeof testGapReasonSchema>;
 
 export const testGapSignalSchema = z.strictObject({
-  expectedTestPathPattern: z.string().min(1).max(200),
+  expectedTestPathPattern: z.string().min(1).max(1_100),
   reason: testGapReasonSchema,
   sourcePath: repositoryPathSchema,
 });

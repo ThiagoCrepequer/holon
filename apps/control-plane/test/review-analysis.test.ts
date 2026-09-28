@@ -132,7 +132,7 @@ describe("analyzeReview", () => {
       const services = createMockServices(
         {
           changedLines: [],
-          files: Array.from({ length: 21 }, (_, index) => ({
+          files: Array.from({ length: 5 }, (_, index) => ({
             mode: "structural" as const,
             path: `src/file-${index}.ts`,
             patch: `@@ -1 +1 @@\n-old\n+new\n`,
@@ -286,8 +286,8 @@ describe("analyzeReview", () => {
   it.each([true, false])(
     "publishes synthesis or a safe fallback without marking sharding as truncation (failure=%s)",
     async (failure) => {
-      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
-      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
+      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,150 @@\n${"+a;\n".repeat(150)}`;
+      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,150 @@\n${"+b;\n".repeat(150)}`;
 
       const shardContext: ReviewShardContext = {
         changedLines: [
@@ -402,7 +402,7 @@ describe("analyzeReview", () => {
         inputOmitted ? "input_context_omitted" : "summary_truncated",
       );
       expect(review.mock.calls[0]?.[1]).toMatchObject({
-        truncated: inputOmitted,
+        truncated: false,
         structuralImpact: context.structuralImpact,
       });
       expect(emit).toHaveBeenCalledWith(
@@ -413,8 +413,8 @@ describe("analyzeReview", () => {
   );
 
   it("throws when all review shards fail in a multi-shard review", async () => {
-    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,1600 @@\n${"+a;\n".repeat(1600)}`;
-    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,1600 @@\n${"+b;\n".repeat(1600)}`;
+    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,150 @@\n${"+a;\n".repeat(150)}`;
+    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,150 @@\n${"+b;\n".repeat(150)}`;
 
     const shardContext: ReviewShardContext = {
       changedLines: [
@@ -624,7 +624,7 @@ it("retries a failed shard without spending another model call on its successful
   const files = ["a", "b"].map((name) => ({
     path: `src/${name}.ts`,
     mode: "structural" as const,
-    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,1600 @@\n${`+${name};\n`.repeat(1600)}`,
+    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,150 @@\n${`+${name};\n`.repeat(150)}`,
   }));
   const services = createMockServices({
     files,
@@ -676,7 +676,7 @@ it("starts independent shards concurrently and joins them before aggregation", a
   const services = createMockServices({
     changedLines: [],
     truncated: false,
-    files: Array.from({ length: 21 }, (_, i) => ({
+    files: Array.from({ length: 5 }, (_, i) => ({
       path: `src/f${i}.ts`,
       mode: "structural" as const,
       patch: "@@ -1 +1 @@\n-old\n+new",
@@ -708,7 +708,7 @@ it("never downgrades a ledger failure into a model shard failure", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: false,
-    files: Array.from({ length: 21 }, (_, i) => ({
+    files: Array.from({ length: 5 }, (_, i) => ({
       path: `src/f${i}.ts`,
       mode: "structural" as const,
       patch: "@@ -1 +1 @@\n-old\n+new",
@@ -880,4 +880,100 @@ it("publishes an incomplete result when the shared deadline expires before infer
   expect(result.scopeStatus).toBe("partial_by_failure");
   expect(result.verdict).toBe("COMMENT");
   expect(result.summary).toContain("analysis_deadline");
+});
+
+it("runs more than five shards in bounded waves and waits before starting the next wave", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: true,
+    files: Array.from({ length: 25 }, (_, i) => ({
+      path: `src/wave${i}.ts`,
+      mode: "structural" as const,
+      patch: "@@ -1 +1 @@\n-old\n+new",
+    })),
+  });
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let active = 0,
+    peak = 0;
+  const review = vi.fn(async (_job, context) => {
+    expect(context.truncated).toBe(false);
+    active++;
+    peak = Math.max(peak, active);
+    if (review.mock.calls.length <= 5) await barrier;
+    active--;
+    return {
+      output: { findings: [], summary: "Reviewed" },
+      promptTruncated: false,
+    };
+  });
+  services.model.review = review;
+  const pending = analyzeReview(job, services, vi.fn());
+  try {
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(5));
+  } finally {
+    release();
+  }
+  const result = await pending;
+  expect(review).toHaveBeenCalledTimes(7);
+  expect(peak).toBe(5);
+  expect(result.scopeStatus).toBe("partial_by_policy");
+  expect(result.summary).not.toContain("input_context_omitted");
+});
+
+it("replays a completed first wave and successful peers without repeating their model calls", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from({ length: 25 }, (_, i) => ({
+      path: `src/file${String(i).padStart(2, "0")}.ts`,
+      mode: "structural" as const,
+      patch: "@@ -1 +1 @@\n-old\n+new",
+    })),
+  });
+  const calls = new Map<string, number>();
+  services.model.review = vi.fn(async (_job, context) => {
+    const key = context.files[0]!.path;
+    calls.set(key, (calls.get(key) ?? 0) + 1);
+    if (key === "src/file20.ts" && calls.get(key) === 1)
+      throw new Error("temporary ledger dependency failure");
+    return {
+      output: { findings: [], summary: "Checked" },
+      promptTruncated: false,
+    };
+  });
+  const cache = new Map<string, unknown>();
+  const execution = {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
+    async runStep<R>(
+      name: string,
+      _phase: "analysis" | "preparation",
+      fn: () => Promise<R>,
+    ): Promise<R> {
+      if (cache.has(name)) return cache.get(name) as R;
+      const result = await fn();
+      cache.set(name, result);
+      return result;
+    },
+    finish: async (output: import("@holon/contracts").ReconciledReviewOutput) =>
+      output,
+  };
+  await expect(
+    analyzeReview(job, services, () => {}, undefined, execution),
+  ).rejects.toThrow("temporary ledger dependency failure");
+  const firstWave = cache.get("analysis-wave-1");
+  const result = await analyzeReview(
+    job,
+    services,
+    () => {},
+    undefined,
+    execution,
+  );
+  expect(result.totalShards).toBe(7);
+  expect(cache.get("analysis-wave-1")).toBe(firstWave);
+  expect([...calls.values()].reduce((a, b) => a + b, 0)).toBe(8);
+  expect(calls.get("src/file20.ts")).toBe(2);
+  expect(calls.get("src/file24.ts")).toBe(1);
 });
