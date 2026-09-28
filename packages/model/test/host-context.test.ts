@@ -5,6 +5,42 @@ import {
   canonicalEvidenceCandidates,
   selectFinalizationEvidence,
 } from "../src/host-context.js";
+
+it("retains all sparse evidence windows admitted by the larger shard", () => {
+  const candidates = canonicalEvidenceCandidates([
+    {
+      path: "src/a.ts",
+      mode: "structural",
+      patch: `@@ -1,48 +1,96 @@\n${Array.from({ length: 48 }, (_, i) => ` context\n+value${i}`).join("\n")}\n`,
+    },
+  ]);
+  expect(candidates).toHaveLength(48);
+  expect(
+    selectFinalizationEvidence(candidates, "Investigated the whole file"),
+  ).toHaveLength(48);
+});
+
+it("bounds finalization evidence by serialized UTF-8 bytes and prioritizes cited locations", () => {
+  const candidates = Array.from({ length: 100 }, (_, i) => ({
+    path: `src/file${i}.ts`,
+    startLine: i + 1,
+    endLine: i + 1,
+    excerpt: "語".repeat(1100),
+  }));
+  const selected = selectFinalizationEvidence(
+    candidates,
+    "src/file99.ts line 100",
+  );
+  expect(selected[0]).toEqual(candidates[99]);
+  expect(
+    selected.reduce(
+      (sum, item) =>
+        sum + new TextEncoder().encode(JSON.stringify(item)).length,
+      0,
+    ),
+  ).toBeLessThanOrEqual(48_000);
+  expect(selected.length).toBeLessThan(candidates.length);
+});
 it("retains configured compatibility conflicts alongside observed versions", () => {
   const result = JSON.parse(
     compactProjectContext({

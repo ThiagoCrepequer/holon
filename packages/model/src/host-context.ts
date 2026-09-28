@@ -164,7 +164,7 @@ export function selectFinalizationEvidence(
   let bytes = 0;
   for (const candidate of candidates.toSorted((a, b) => score(b) - score(a))) {
     const size = new TextEncoder().encode(JSON.stringify(candidate)).length;
-    if (bytes + size > 24000 || result.length >= 32) continue;
+    if (bytes + size > 48_000 || result.length >= 64) continue;
     result.push(candidate);
     bytes += size;
   }

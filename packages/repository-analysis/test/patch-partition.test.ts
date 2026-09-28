@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
 import { collectChangedLines } from "../src/diff.js";
-import { partitionPatch } from "../src/patch-partition.js";
+import { evidenceWindowCount, partitionPatch } from "../src/patch-partition.js";
 
 it("keeps old and new coordinates across mixed hunks, deletions and no-newline markers", () => {
   const patch =
@@ -16,6 +16,37 @@ it("keeps old and new coordinates across mixed hunks, deletions and no-newline m
   );
   expect(
     result.patches.some((p) => p.includes("-deleted\n\\ No newline")),
+  ).toBe(true);
+});
+
+it("bounds evidence windows and bytes while preserving sparse additions and plus-prefixed code", () => {
+  const patch = `@@ -1,100 +1,200 @@\n${Array.from({ length: 100 }, (_, i) => ` context${i}\n+++value${i};`).join("\n")}\n`;
+  const result = partitionPatch(patch, 5000, 50);
+  expect(result.omittedLines).toBe(0);
+  expect(result.patches.length).toBeGreaterThan(1);
+  expect(result.patches.flatMap((p) => collectChangedLines("a.ts", p))).toEqual(
+    collectChangedLines("a.ts", patch),
+  );
+  for (const part of result.patches) {
+    expect(evidenceWindowCount(part)).toBeLessThanOrEqual(48);
+    expect(collectChangedLines("a.ts", part).length).toBeLessThanOrEqual(50);
+    expect(new TextEncoder().encode(part).length).toBeLessThanOrEqual(5000);
+  }
+});
+
+it("counts large UTF-8 windows without rescanning previously accumulated source", () => {
+  const patch = `@@ -0,0 +1,1000 @@\n${Array.from({ length: 1000 }, (_, i) => `+${i % 3 ? "é".repeat(350) : ""}`).join("\n")}\n`;
+  const result = partitionPatch(patch, 48_000, 384);
+  expect(result.omittedLines).toBe(0);
+  expect(
+    result.patches.flatMap((p) => collectChangedLines("a.ts", p)),
+  ).toHaveLength(1000);
+  expect(
+    result.patches.every(
+      (p) =>
+        evidenceWindowCount(p) <= 48 &&
+        new TextEncoder().encode(p).length <= 48_000,
+    ),
   ).toBe(true);
 });
 it("omits only an indivisible oversized line and preserves following source coordinates", () => {
@@ -34,7 +65,7 @@ it("omits only an indivisible oversized line and preserves following source coor
 it("does not discard deletion-only and metadata-only patches", () => {
   const deletion = "@@ -5,3 +5,0 @@\n-a\n-b\n-c\n";
   const result = partitionPatch(deletion, 100, 1);
-  expect(result.patches).toHaveLength(3);
+  expect(result.patches).toHaveLength(1);
   expect(result.patches.flatMap((p) => collectChangedLines("a.ts", p))).toEqual(
     [],
   );

@@ -14,6 +14,10 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 
 ## Registro
 
+A [ADR-0042 — Equilibrar shards e investigação](0042-balance-review-shards-and-investigation-budgets.md)
+substitui os limites de particionamento e investigação da ADR-0039, preservando
+suas garantias de cobertura, concorrência, replay e publicação.
+
 A [ADR-0040 — Retirar admin e persistência analítica](0040-retire-admin-and-analytical-storage.md)
 substitui as disposições de observabilidade própria e console das ADRs 0023/0029
 e de retenção administrativa das ADRs 0034/0037. As garantias funcionais continuam

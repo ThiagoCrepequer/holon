@@ -134,20 +134,20 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
     "budget-test",
   );
   const reservations = await Promise.all(
-    Array.from({ length: 13 }, () =>
+    Array.from({ length: 25 }, () =>
       ledger.reserveAnalysisToolCall(runId, 0, 5),
     ),
   );
-  expect(reservations.filter(Boolean)).toHaveLength(12);
+  expect(reservations.filter(Boolean)).toHaveLength(24);
   await evictDurableObject(ledger);
   await expect(ledger.reserveAnalysisToolCall(runId, 0, 5)).resolves.toBe(
     false,
   );
   for (const [index, calls] of [
-    [1, 12],
-    [2, 12],
-    [3, 12],
-    [4, 12],
+    [1, 24],
+    [2, 24],
+    [3, 24],
+    [4, 24],
   ]) {
     for (let call = 0; call < calls!; call += 1)
       await expect(
@@ -165,7 +165,7 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
           runId,
         )
         .one().calls,
-    ).toBe(60);
+    ).toBe(120);
   });
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, -1, 5)).toThrow(
@@ -188,11 +188,11 @@ it("reserves the last shard of a 64-part plan durably without exceeding its own 
     "large-budget-test",
   );
   const results = await Promise.all(
-    Array.from({ length: 13 }, () =>
+    Array.from({ length: 25 }, () =>
       ledger.reserveAnalysisToolCall(runId, 63, 64),
     ),
   );
-  expect(results.filter(Boolean)).toHaveLength(12);
+  expect(results.filter(Boolean)).toHaveLength(24);
   await evictDurableObject(ledger);
   await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
     false,

@@ -66,6 +66,18 @@ function extractDirectory(path: string): string {
   return lastSlash === -1 ? "" : path.slice(0, lastSlash);
 }
 
+// Pair mirrored source/test trees within the same project. This is locality,
+// not proof that files with different names are semantically independent.
+function relatedFileKey(path: string): string {
+  return path
+    .replace(
+      /^(?:(apps\/[^/]+\/|packages\/[^/]+\/))?(?:src|test|tests|__tests__)\//u,
+      "$1",
+    )
+    .replace(/\.(?:test|spec)(?=\.[^.]+$)/u, "")
+    .replace(/\.[^./]+$/u, "");
+}
+
 export function buildReviewPlan(
   diffFiles: readonly PullRequestDiffFile[],
   options?: BuildReviewPlanOptions,
@@ -206,76 +218,119 @@ export function buildReviewPlan(
 
   let oversizedFileCount = 0;
 
-  for (const original of balanceReviewModes(prioritizedFiles)) {
-    const partition = partitionPatch(
-      original.file.patch,
-      maxShardDiffBytes,
-      maxShardLines,
+  const relatedGroups = new Map<string, EligibleFile[]>();
+  for (const file of prioritizedFiles) {
+    const key = relatedFileKey(file.file.path);
+    const group = relatedGroups.get(key) ?? [];
+    group.push(file);
+    relatedGroups.set(key, group);
+  }
+  // Balance whole groups so textual coverage cannot separate a source/test pair.
+  const groups = balanceReviewModes(
+    [...relatedGroups.values()].map((group) => group[0]!),
+  ).map((first) => relatedGroups.get(relatedFileKey(first.file.path))!);
+  for (const group of groups) {
+    const groupBytes = group.reduce((sum, file) => sum + file.patchBytes, 0);
+    const groupLines = group.reduce(
+      (sum, file) => sum + file.changedLines.length,
+      0,
     );
-    if (partition.omittedLines) oversizedFileCount++;
-    for (const patch of partition.patches) {
-      const item = {
-        ...original,
-        file: { ...original.file, patch },
-        patchBytes: utf8ByteLength(patch),
-        changedLines: collectChangedLines(original.file.path, patch),
-      };
-      const existingIndex = currentShard.files.findIndex(
-        (file) => file.path === item.file.path,
-      );
-      const bodyStart = patch.search(/^@@ /mu);
-      const appendedPatch =
-        existingIndex >= 0 && bodyStart >= 0 ? patch.slice(bodyStart) : patch;
-      const addedBytes = utf8ByteLength(appendedPatch);
-      const wouldExceedWindows =
-        currentShard.files.reduce(
-          (sum, file) => sum + evidenceWindowCount(file.patch),
-          0,
-        ) +
-          evidenceWindowCount(patch) >
-        24;
-      const wouldExceedBytes =
-        currentShard.files.length > 0 &&
-        currentShard.byteLength + addedBytes > maxShardDiffBytes;
-      const wouldExceedFiles =
-        currentShard.files.length > 0 &&
-        currentShard.files.length + Number(existingIndex < 0) > maxShardFiles;
-      const wouldExceedLines =
-        currentShard.files.length > 0 &&
-        currentShard.changedLines.length + item.changedLines.length >
-          maxShardLines;
-
-      if (
-        wouldExceedBytes ||
-        wouldExceedFiles ||
-        wouldExceedLines ||
-        wouldExceedWindows
-      ) {
-        rawShards.push(currentShard);
-        currentShard = {
-          byteLength: 0,
-          changedLines: [],
-          files: [],
-        };
-      }
-
-      const mergeIndex = currentShard.files.findIndex(
-        (file) => file.path === item.file.path,
-      );
-      if (mergeIndex >= 0) {
-        currentShard.files[mergeIndex] = {
-          ...item.file,
-          patch:
-            currentShard.files[mergeIndex]!.patch +
-            (currentShard.files[mergeIndex]!.patch.endsWith("\n") ? "" : "\n") +
-            appendedPatch,
-        };
-      } else currentShard.files.push(item.file);
-      currentShard.byteLength = currentShard.files.reduce(
-        (sum, file) => sum + utf8ByteLength(file.patch),
+    const groupWindows = group.reduce(
+      (sum, file) => sum + evidenceWindowCount(file.file.patch),
+      0,
+    );
+    const fitsEmptyShard =
+      group.length <= maxShardFiles &&
+      groupBytes <= maxShardDiffBytes &&
+      groupLines <= maxShardLines &&
+      groupWindows <= reviewExecutionLimits.shardEvidenceWindows;
+    const fitsCurrentShard =
+      currentShard.files.length + group.length <= maxShardFiles &&
+      currentShard.byteLength + groupBytes <= maxShardDiffBytes &&
+      currentShard.changedLines.length + groupLines <= maxShardLines &&
+      currentShard.files.reduce(
+        (sum, file) => sum + evidenceWindowCount(file.patch),
         0,
+      ) +
+        groupWindows <=
+        reviewExecutionLimits.shardEvidenceWindows;
+    if (currentShard.files.length && fitsEmptyShard && !fitsCurrentShard) {
+      rawShards.push(currentShard);
+      currentShard = { byteLength: 0, changedLines: [], files: [] };
+    }
+    for (const original of group) {
+      const partition = partitionPatch(
+        original.file.patch,
+        maxShardDiffBytes,
+        maxShardLines,
       );
-      currentShard.changedLines.push(...item.changedLines);
+      if (partition.omittedLines) oversizedFileCount++;
+      for (const patch of partition.patches) {
+        const item = {
+          ...original,
+          file: { ...original.file, patch },
+          patchBytes: utf8ByteLength(patch),
+          changedLines: collectChangedLines(original.file.path, patch),
+        };
+        const existingIndex = currentShard.files.findIndex(
+          (file) => file.path === item.file.path,
+        );
+        const bodyStart = patch.search(/^@@ /mu);
+        const appendedPatch =
+          existingIndex >= 0 && bodyStart >= 0 ? patch.slice(bodyStart) : patch;
+        const addedBytes = utf8ByteLength(appendedPatch);
+        const wouldExceedWindows =
+          currentShard.files.reduce(
+            (sum, file) => sum + evidenceWindowCount(file.patch),
+            0,
+          ) +
+            evidenceWindowCount(patch) >
+          reviewExecutionLimits.shardEvidenceWindows;
+        const wouldExceedBytes =
+          currentShard.files.length > 0 &&
+          currentShard.byteLength + addedBytes > maxShardDiffBytes;
+        const wouldExceedFiles =
+          currentShard.files.length > 0 &&
+          currentShard.files.length + Number(existingIndex < 0) > maxShardFiles;
+        const wouldExceedLines =
+          currentShard.files.length > 0 &&
+          currentShard.changedLines.length + item.changedLines.length >
+            maxShardLines;
+
+        if (
+          wouldExceedBytes ||
+          wouldExceedFiles ||
+          wouldExceedLines ||
+          wouldExceedWindows
+        ) {
+          rawShards.push(currentShard);
+          currentShard = {
+            byteLength: 0,
+            changedLines: [],
+            files: [],
+          };
+        }
+
+        const mergeIndex = currentShard.files.findIndex(
+          (file) => file.path === item.file.path,
+        );
+        if (mergeIndex >= 0) {
+          currentShard.files[mergeIndex] = {
+            ...item.file,
+            patch:
+              currentShard.files[mergeIndex]!.patch +
+              (currentShard.files[mergeIndex]!.patch.endsWith("\n")
+                ? ""
+                : "\n") +
+              appendedPatch,
+          };
+        } else currentShard.files.push(item.file);
+        currentShard.byteLength = currentShard.files.reduce(
+          (sum, file) => sum + utf8ByteLength(file.patch),
+          0,
+        );
+        currentShard.changedLines.push(...item.changedLines);
+      }
     }
   }
 

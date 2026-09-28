@@ -4,6 +4,7 @@ import {
 } from "@holon/application";
 import {
   reviewJobSchema,
+  reviewExecutionLimits,
   type ReviewShardContext,
   type ReviewContext,
 } from "@holon/contracts";
@@ -124,11 +125,14 @@ describe("analyzeReview", () => {
       const services = createMockServices(
         {
           changedLines: [],
-          files: Array.from({ length: 5 }, (_, index) => ({
-            mode: "structural" as const,
-            path: `src/file-${index}.ts`,
-            patch: `@@ -1 +1 @@\n-old\n+new\n`,
-          })),
+          files: Array.from(
+            { length: reviewExecutionLimits.shardFiles + 1 },
+            (_, index) => ({
+              mode: "structural" as const,
+              path: `src/file-${index}.ts`,
+              patch: `@@ -1 +1 @@\n-old\n+new\n`,
+            }),
+          ),
           truncated: reason === "omitted",
         },
         {
@@ -278,8 +282,8 @@ describe("analyzeReview", () => {
   it.each([true, false])(
     "publishes synthesis or a safe fallback without marking sharding as truncation (failure=%s)",
     async (failure) => {
-      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,150 @@\n${"+a;\n".repeat(150)}`;
-      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,150 @@\n${"+b;\n".repeat(150)}`;
+      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,250 @@\n${"+a;\n".repeat(250)}`;
+      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,250 @@\n${"+b;\n".repeat(250)}`;
 
       const shardContext: ReviewShardContext = {
         changedLines: [
@@ -405,8 +409,8 @@ describe("analyzeReview", () => {
   );
 
   it("throws when all review shards fail in a multi-shard review", async () => {
-    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,150 @@\n${"+a;\n".repeat(150)}`;
-    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,150 @@\n${"+b;\n".repeat(150)}`;
+    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,250 @@\n${"+a;\n".repeat(250)}`;
+    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,250 @@\n${"+b;\n".repeat(250)}`;
 
     const shardContext: ReviewShardContext = {
       changedLines: [
@@ -616,7 +620,7 @@ it("retries a failed shard without spending another model call on its successful
   const files = ["a", "b"].map((name) => ({
     path: `src/${name}.ts`,
     mode: "structural" as const,
-    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,150 @@\n${`+${name};\n`.repeat(150)}`,
+    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,250 @@\n${`+${name};\n`.repeat(250)}`,
   }));
   const services = createMockServices({
     files,
@@ -668,11 +672,14 @@ it("starts independent shards concurrently and joins them before aggregation", a
   const services = createMockServices({
     changedLines: [],
     truncated: false,
-    files: Array.from({ length: 5 }, (_, i) => ({
-      path: `src/f${i}.ts`,
-      mode: "structural" as const,
-      patch: "@@ -1 +1 @@\n-old\n+new",
-    })),
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles + 1 },
+      (_, i) => ({
+        path: `src/f${i}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
   });
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {
@@ -700,11 +707,14 @@ it("never downgrades a ledger failure into a model shard failure", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: false,
-    files: Array.from({ length: 5 }, (_, i) => ({
-      path: `src/f${i}.ts`,
-      mode: "structural" as const,
-      patch: "@@ -1 +1 @@\n-old\n+new",
-    })),
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles + 1 },
+      (_, i) => ({
+        path: `src/f${i}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
   });
   services.ledger.loadPrFindings = vi
     .fn()
@@ -878,11 +888,14 @@ it("runs more than five shards in bounded waves and waits before starting the ne
   const services = createMockServices({
     changedLines: [],
     truncated: true,
-    files: Array.from({ length: 25 }, (_, i) => ({
-      path: `src/wave${i}.ts`,
-      mode: "structural" as const,
-      patch: "@@ -1 +1 @@\n-old\n+new",
-    })),
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles * 6 + 1 },
+      (_, i) => ({
+        path: `src/wave${i}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
   });
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {
@@ -919,17 +932,23 @@ it("replays a completed first wave and successful peers without repeating their 
   const services = createMockServices({
     changedLines: [],
     truncated: false,
-    files: Array.from({ length: 25 }, (_, i) => ({
-      path: `src/file${String(i).padStart(2, "0")}.ts`,
-      mode: "structural" as const,
-      patch: "@@ -1 +1 @@\n-old\n+new",
-    })),
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles * 6 + 1 },
+      (_, i) => ({
+        path: `src/file${String(i).padStart(2, "0")}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
   });
   const calls = new Map<string, number>();
   services.model.review = vi.fn(async (_job, context) => {
     const key = context.files[0]!.path;
     calls.set(key, (calls.get(key) ?? 0) + 1);
-    if (key === "src/file20.ts" && calls.get(key) === 1)
+    if (
+      key === `src/file${reviewExecutionLimits.shardFiles * 5}.ts` &&
+      calls.get(key) === 1
+    )
       throw new Error("temporary ledger dependency failure");
     return {
       output: { findings: [], summary: "Checked" },
@@ -966,6 +985,10 @@ it("replays a completed first wave and successful peers without repeating their 
   expect(result.totalShards).toBe(7);
   expect(cache.get("analysis-wave-1")).toBe(firstWave);
   expect([...calls.values()].reduce((a, b) => a + b, 0)).toBe(8);
-  expect(calls.get("src/file20.ts")).toBe(2);
-  expect(calls.get("src/file24.ts")).toBe(1);
+  expect(calls.get(`src/file${reviewExecutionLimits.shardFiles * 5}.ts`)).toBe(
+    2,
+  );
+  expect(calls.get(`src/file${reviewExecutionLimits.shardFiles * 6}.ts`)).toBe(
+    1,
+  );
 });

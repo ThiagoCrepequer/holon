@@ -49,8 +49,8 @@ export function createPartitionedRepositoryToolRunner(
 
 /** Shared across parallel shards; unused time is available to later phases. */
 export const reviewTimeBudget = {
-  analysisMs: 15 * 60_000,
-  investigationMs: 7 * 60_000,
+  analysisMs: 17 * 60_000,
+  investigationMs: 9 * 60_000,
   finalizationMs: 3 * 60_000,
   recoveryMs: 3 * 60_000,
   completionReserveMs: 2 * 60_000,
@@ -58,7 +58,7 @@ export const reviewTimeBudget = {
   minimumRetryMs: 60_000,
   synthesisMs: 90_000,
   persistenceReserveMs: 30_000,
-  workflowStepMs: 17 * 60_000,
+  workflowStepMs: 19 * 60_000,
 } as const;
 
 export type GenerationPhase =
