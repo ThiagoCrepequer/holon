@@ -479,7 +479,7 @@ describe("model review boundary", () => {
     });
 
     expect(calls).toHaveLength(3);
-    expect(phase1Options.stopWhen).toEqual({ steps: 6 });
+    expect(phase1Options.stopWhen).toEqual({ steps: 10 });
     expect(phase1Options.maxRetries).toBe(0);
 
     const phase2Options = sdk.generateText.mock.calls[1]?.[0] as {

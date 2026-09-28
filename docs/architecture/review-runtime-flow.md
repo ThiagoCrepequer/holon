@@ -262,11 +262,11 @@ no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
 feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
 relógio da identificação ficam dentro de steps, preservando resultados em replay.
 
-A análise admite até 64 shards em ondas de até cinco, com deadline de 15 minutos por onda fixado em checkpoint,
+A análise admite até 64 shards em ondas de até cinco, com deadline de 17 minutos por onda fixado em checkpoint,
 e deadline global proporcional ao número de ondas admitidas. O gerador reserva 3 minutos para finalização,
 3 para recuperação e 2 para consolidação/persistência; a investigação pode consumir
-até 7 minutos. Cada rodada de inferência tem teto de 3 minutos, sempre subordinado
-ao prazo restante da fase. O step de modelo no Workflow tem 17 minutos, com margem
+até 9 minutos. Cada rodada de inferência tem teto de 3 minutos, sempre subordinado
+ao prazo restante da fase. O step de modelo no Workflow tem 19 minutos, com margem
 para preparação do shard e persistência; não reinicia automaticamente toda a análise.
 A síntese usa até 90 segundos do mesmo prazo compartilhado e preserva 30 segundos
 para persistência. Esses valores são tetos, não tempos mínimos de espera.
@@ -274,7 +274,7 @@ para persistência. Esses valores são tetos, não tempos mínimos de espera.
 Timeout ou erro transitório do provider permite uma única retomada da investigação,
 somente com pelo menos 60 segundos restantes na fase. Mensagens e resultados de
 ferramentas das rodadas concluídas são mantidos em memória durante o step; a retomada
-não repete essas rodadas nem renova o orçamento de ferramentas. Os seis passos de
+não repete essas rodadas nem renova o orçamento de ferramentas. Os dez passos de
 investigação continuam sendo um limite conjunto. Isso não é um checkpoint durável
 para falhas do runtime. Se a investigação não termina, a finalização recebe apenas o
 progresso concluído e o resultado fica obrigatoriamente degradado. A finalização pode
@@ -284,7 +284,7 @@ e nenhuma aprovação. Erros desconhecidos e falhas de ledger/executor não são
 convertidos em falhas transitórias do modelo. Uso conhecido de rodadas concluídas
 é registrado também quando uma rodada posterior falha; uso da chamada interrompida
 pode permanecer desconhecido.
-Cada shard tem 12 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
+Cada shard tem 24 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências
 sem revalidação impedem aprovação. Respostas de resolução têm marcador e
@@ -296,7 +296,8 @@ confirmar destruição do executor.
 O planner recebe o diff canônico elegível antes de limitar os shards; o executor
 persiste os patches canônicos elegíveis completos no contexto (até 2 MB de patches,
 1.000 arquivos, 32.000 coordenadas e 8 MB de JSON). A ADR-0039 substitui o teto de
-cinco shards: até 64 partes de 24 kB, quatro arquivos e alvo de 192 linhas são
+cinco shards. Os limites atualizados pela [ADR-0042](../decisions/0042-balance-review-shards-and-investigation-budgets.md)
+admitem até 64 partes de 48 kB, oito arquivos, 384 linhas adicionadas e 48 janelas de evidência,
 executadas com concorrência cinco. Hunks extensos são repartidos preservando
 bytes e coordenadas; linhas indivisíveis acima do limite geram omissão explícita. Toda omissão marca cobertura
 parcial. Mesmo sem arquivos selecionados, `truncated` impede classificar a execução

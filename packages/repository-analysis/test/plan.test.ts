@@ -3,6 +3,56 @@ import { describe, expect, it } from "vitest";
 import { splitPullRequestDiff } from "../src/diff.js";
 import { buildReviewPlan } from "../src/plan.js";
 
+it("packs related source and tests together without fragmenting a moderate PR", () => {
+  const paths = Array.from({ length: 16 }, (_, index) => [
+    `packages/core/src/unit${index}.ts`,
+    `packages/core/test/unit${index}.test.ts`,
+  ]).flat();
+  const files = splitPullRequestDiff(
+    paths
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,40 @@\n${Array.from({ length: 40 }, (_, i) => `+export const value${i} = ${i};`).join("\n")}\n`,
+      )
+      .join(""),
+  );
+  const plan = buildReviewPlan(files);
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.totalEligibleLines).toBe(1280);
+  expect(plan.shards.length).toBeLessThanOrEqual(6);
+  expect(plan.shards.flatMap((shard) => shard.changedLines)).toHaveLength(1280);
+  for (let index = 0; index < 16; index++) {
+    const shard = plan.shards.find((part) =>
+      part.files.some(
+        (file) => file.path === `packages/core/src/unit${index}.ts`,
+      ),
+    );
+    expect(shard?.files.map((file) => file.path)).toContain(
+      `packages/core/test/unit${index}.test.ts`,
+    );
+  }
+  expect(buildReviewPlan(files.toReversed())).toEqual(plan);
+});
+
+it("splits oversized related groups and never joins matching names from different projects", () => {
+  const paths = [
+    "apps/a/src/auth.ts",
+    "apps/a/test/auth.test.ts",
+    "apps/b/src/auth.ts",
+    "apps/b/test/auth.spec.ts",
+  ];
+  const files = splitPullRequestDiff(
+    paths.map((path) => patchFor(path)).join(""),
+  );
+  const pairs = buildReviewPlan(files, { maxShardFiles: 2 });
+  expect(
+    pairs.shards.map((shard) => shard.files.map((file) => file.path)),
+  ).toEqual([paths.slice(0, 2), paths.slice(2)]);
+  const singles = buildReviewPlan(files, { maxShardFiles: 1 });
+  expect(singles.shards).toHaveLength(4);
+  expect(singles.scopeStatus).toBe("complete");
+});
+
 describe("buildReviewPlan", () => {
   it("returns unsupported plan when diff only contains binary or ignored files", () => {
     const diff =
@@ -139,7 +189,7 @@ it("partitions a large single hunk without losing canonical added coordinates or
   );
   expect(retained.join("\n")).toBe(body);
   for (const shard of plan.shards)
-    expect(shard.byteLength).toBeLessThanOrEqual(24_000);
+    expect(shard.byteLength).toBeLessThanOrEqual(48_000);
 });
 
 it("packs small hunks of the same file without spending one shard per hunk", () => {

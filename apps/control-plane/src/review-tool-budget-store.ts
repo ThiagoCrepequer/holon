@@ -1,4 +1,8 @@
-import { reviewExecutionLimits, runIdSchema } from "@holon/contracts";
+import {
+  reviewExecutionLimits,
+  reviewInvestigationLimits,
+  runIdSchema,
+} from "@holon/contracts";
 /** Durable reservations enforce tool limits across retries and eviction. */
 export class ReviewToolBudgetStore {
   public constructor(private readonly sql: SqlStorage) {}
@@ -27,7 +31,11 @@ export class ReviewToolBudgetStore {
         runId,
       )
       .toArray()[0]!;
-    if (row.total >= 12 * totalShards || row.shard >= 12) return false;
+    if (
+      row.total >= reviewInvestigationLimits.toolCalls * totalShards ||
+      row.shard >= reviewInvestigationLimits.toolCalls
+    )
+      return false;
     this.sql.exec(
       "INSERT INTO review_tool_budgets(run_id,shard_index,calls) VALUES (?,?,1) ON CONFLICT(run_id,shard_index) DO UPDATE SET calls = calls + 1",
       runId,

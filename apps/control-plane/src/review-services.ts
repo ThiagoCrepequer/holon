@@ -21,6 +21,7 @@ import {
 } from "@holon/contracts";
 import {
   executorRequestSchema,
+  reviewInvestigationLimits,
   preparedRepositorySchema,
   repositoryToolResultSchema,
   reviewContextSchema,
@@ -447,7 +448,9 @@ export function createReviewServices(
                 shardCount,
               ))
             )
-              throw new RepositoryToolBudgetExceededError(12);
+              throw new RepositoryToolBudgetExceededError(
+                reviewInvestigationLimits.toolCalls,
+              );
             await ensureContext(2, policy);
             const result = repositoryToolResultSchema.parse(
               await executor.runTool(job.runId, call),
@@ -475,7 +478,7 @@ export function createReviewServices(
           }
         },
       }),
-      12 * shardCount,
+      reviewInvestigationLimits.toolCalls * shardCount,
     );
     toolBudget.beginShard(shardIndex, shardCount);
     const delegateModel =
@@ -491,12 +494,13 @@ export function createReviewServices(
               repository_id: String(job.envelope.repository.id),
               run_id: job.runId,
               stage: "review",
+              shard_index: String(shardIndex),
             },
             model: env.AI_MODEL_ID,
           },
           toolBudget.runner,
           async (usage) => {
-            logger.emit("model.usage", { ...logContext, ...usage });
+            logger.emit("model.usage", { ...logContext, shardIndex, ...usage });
           },
           "portable",
           ({ event, ...details }) =>

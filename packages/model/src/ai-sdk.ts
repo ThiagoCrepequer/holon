@@ -14,6 +14,7 @@ import {
   readFileArgumentsSchema,
   searchStructureArgumentsSchema,
   searchTextArgumentsSchema,
+  reviewInvestigationLimits,
 } from "@holon/contracts";
 import { reviewMessage } from "@holon/domain";
 import {
@@ -101,7 +102,7 @@ export interface GatewayModelReference {
 export type ModelOutputContract = "domain" | "portable";
 
 const dynamicRoutePattern = /^dynamic\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
-const maximumInvestigationSteps = 6;
+const maximumInvestigationSteps = reviewInvestigationLimits.rounds;
 const recoverableSemanticErrors = new Set([
   "AI_NoObjectGeneratedError",
   "AI_NoOutputGeneratedError",
@@ -300,7 +301,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
     const deadlineAt =
       request.deadlineAt ?? Date.now() + reviewTimeBudget.analysisMs;
-    const model = createGatewayLanguageModel(this.config);
+    const modelForPhase = (phase: string) =>
+      createGatewayLanguageModel({
+        ...this.config,
+        metadata: { ...this.config.metadata, phase },
+      });
+    const model = modelForPhase("investigation");
     let toolCalls = 0;
     let toolBudgetExhausted = false;
     let forcedClosure: "tool_budget_exhausted" | "round_limit" | undefined;
@@ -349,7 +355,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             generateText({
               ...lifecycle,
               instructions: request.instructions,
-              maxOutputTokens: 4_000,
+              maxOutputTokens: reviewInvestigationLimits.outputTokens,
               maxRetries: 0,
               model,
               ...(attempt === 1
@@ -361,11 +367,17 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               ),
               temperature: 0,
               prepareStep: () => {
-                if (toolCalls >= 12 || toolBudgetExhausted)
+                if (
+                  toolCalls >= reviewInvestigationLimits.toolCalls ||
+                  toolBudgetExhausted
+                )
                   forcedClosure = "tool_budget_exhausted";
                 else if (completedRounds >= maximumInvestigationSteps - 1)
                   forcedClosure = "round_limit";
-                return { toolChoice: forcedClosure ? "none" : "auto" };
+                return {
+                  toolChoice: forcedClosure ? "none" : "auto",
+                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
+                };
               },
               tools,
               onStepFinish: (step) => {
@@ -543,7 +555,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             instructions,
             maxOutputTokens: 8_192,
             maxRetries: 0,
-            model,
+            model: modelForPhase(attempt),
             output,
             prompt: finalizationPrompt,
             providerOptions: gatewayModelProviderOptions,

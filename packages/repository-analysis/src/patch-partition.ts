@@ -1,33 +1,44 @@
+import { reviewExecutionLimits } from "@holon/contracts";
+
+interface EvidenceCount {
+  count: number;
+  lines: number;
+  characters: number;
+}
+const emptyEvidence = (): EvidenceCount => ({
+  count: 0,
+  lines: 0,
+  characters: 0,
+});
+function appendEvidence(state: EvidenceCount, line: string): EvidenceCount {
+  if (line.startsWith("-") || line.startsWith("\\ No newline")) return state;
+  const text = line.slice(1);
+  if (!line.startsWith("+") || !text.trim() || text.length > 1200)
+    return { count: state.count, lines: 0, characters: 0 };
+  const newWindow =
+    !state.lines ||
+    state.lines >= 8 ||
+    state.characters + text.length + 1 > 1200;
+  return {
+    count: state.count + Number(newWindow),
+    lines: (newWindow ? 0 : state.lines) + 1,
+    characters: (newWindow ? 0 : state.characters) + text.length + 1,
+  };
+}
+
 /** Conservative capacity estimate aligned with eight-line, 1200-character evidence windows. */
 export function evidenceWindowCount(patch: string): number {
-  let count = 0,
-    lines = 0,
-    characters = 0,
+  let state = emptyEvidence(),
     inHunk = false;
   for (const line of patch.split("\n")) {
     if (line.startsWith("@@ ")) {
       inHunk = true;
-      lines = 0;
-      characters = 0;
+      state = { count: state.count, lines: 0, characters: 0 };
       continue;
     }
-    if (!inHunk || line.startsWith("-") || line.startsWith("\\ No newline"))
-      continue;
-    const text = line.slice(1);
-    if (!line.startsWith("+") || !text.trim() || text.length > 1200) {
-      lines = 0;
-      characters = 0;
-      continue;
-    }
-    if (!lines || lines >= 8 || characters + text.length + 1 > 1200) {
-      count++;
-      lines = 0;
-      characters = 0;
-    }
-    lines++;
-    characters += text.length + 1;
+    if (inHunk) state = appendEvidence(state, line);
   }
-  return count;
+  return state.count;
 }
 
 const bytes = (value: string) => new TextEncoder().encode(value).length;
@@ -38,10 +49,16 @@ export function partitionPatch(
   maxBytes: number,
   maxLines: number,
 ): { patches: string[]; omittedLines: number } {
+  let inHunk = false,
+    addedCount = 0;
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("@@ ")) inHunk = true;
+    else if (inHunk && line.startsWith("+")) addedCount++;
+  }
   if (
     bytes(patch) <= maxBytes &&
-    patch.split("\n").length <= maxLines &&
-    evidenceWindowCount(patch) <= 24
+    addedCount <= maxLines &&
+    evidenceWindowCount(patch) <= reviewExecutionLimits.shardEvidenceWindows
   )
     return { patches: [patch], omittedLines: 0 };
   const starts = [
@@ -49,6 +66,7 @@ export function partitionPatch(
   ];
   if (!starts.length) return { patches: [], omittedLines: 1 };
   const prelude = patch.slice(0, starts[0]!.index);
+  const preludeBytes = bytes(prelude);
   const patches: string[] = [];
   let omittedLines = 0;
   for (const [index, match] of starts.entries()) {
@@ -59,6 +77,9 @@ export function partitionPatch(
       newStart = newLine;
     let oldCount = 0,
       newCount = 0;
+    let chunkBytes = 0,
+      addedLines = 0,
+      evidence = emptyEvidence();
     const render = () =>
       `${prelude}@@ -${oldStart},${oldCount} +${newStart},${newCount} @@\n${chunk.join("\n")}\n`;
     const flush = () => {
@@ -66,6 +87,9 @@ export function partitionPatch(
       chunk = [];
       oldCount = 0;
       newCount = 0;
+      chunkBytes = 0;
+      addedLines = 0;
+      evidence = emptyEvidence();
       oldStart = oldLine;
       newStart = newLine;
     };
@@ -83,14 +107,19 @@ export function partitionPatch(
       if (lines[i + 1]?.startsWith("\\ No newline")) unit.push(lines[++i]!);
       const oldDelta = line.startsWith("+") ? 0 : 1;
       const newDelta = line.startsWith("-") ? 0 : 1;
+      const unitBytes = bytes(unit.join("\n") + "\n");
+      const addedDelta = Number(line.startsWith("+"));
       const fits = () =>
-        bytes(
-          `${prelude}@@ -${oldStart},${oldCount + oldDelta} +${newStart},${newCount + newDelta} @@\n${[...chunk, ...unit].join("\n")}\n`,
-        ) <= maxBytes &&
-        chunk.length + unit.length <= maxLines &&
-        evidenceWindowCount(
-          `@@ -0,0 +1,1 @@\n${[...chunk, ...unit].join("\n")}`,
-        ) <= 24;
+        preludeBytes +
+          chunkBytes +
+          unitBytes +
+          bytes(
+            `@@ -${oldStart},${oldCount + oldDelta} +${newStart},${newCount + newDelta} @@\n`,
+          ) <=
+          maxBytes &&
+        addedLines + addedDelta <= maxLines &&
+        appendEvidence(evidence, line).count <=
+          reviewExecutionLimits.shardEvidenceWindows;
       if (!fits()) flush();
       if (!fits()) {
         omittedLines++;
@@ -101,6 +130,9 @@ export function partitionPatch(
         continue;
       }
       chunk.push(...unit);
+      chunkBytes += unitBytes;
+      addedLines += addedDelta;
+      evidence = appendEvidence(evidence, line);
       oldCount += oldDelta;
       newCount += newDelta;
       oldLine += oldDelta;

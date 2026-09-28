@@ -4,6 +4,32 @@ import { afterEach, expect, it } from "vitest";
 
 afterEach(() => reset());
 
+it("shares the 24-call durable limit across concurrent reservations and recreated clients", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
+  const runId =
+    `github:42:pr:11:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;
+  await ledger.claimRun(
+    {
+      id: runId,
+      prKey: "github:42:pr:11",
+      state: "queued",
+      attempt: 0,
+      createdAt: new Date().toISOString(),
+      causalVersion: new Date().toISOString(),
+    },
+    "budget-test",
+  );
+  const reservations = await Promise.all(
+    Array.from({ length: 36 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 0, 2),
+    ),
+  );
+  expect(reservations.filter(Boolean)).toHaveLength(24);
+  const replay = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
+  expect(await replay.reserveAnalysisToolCall(runId, 0, 2)).toBe(false);
+  expect(await replay.reserveAnalysisToolCall(runId, 1, 2)).toBe(true);
+});
+
 it("keeps review state and tool budgets without administrative storage", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   const runId =
@@ -39,7 +65,7 @@ it("keeps review state and tool budgets without administrative storage", async (
     expect(tables).toContain("pr_findings");
     expect(tables).toContain("cleanup_tasks");
   });
-  for (let index = 0; index < 12; index++)
+  for (let index = 0; index < 24; index++)
     expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(false);
   expect(await ledger.runState(runId)).toBe("queued");
@@ -153,7 +179,8 @@ it("migrates consumed budgets atomically without changing core rows and is repla
         .map((row) => row.name),
     ).not.toContain("summary_json");
   });
-  expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(true);
+  for (let remaining = 0; remaining < 13; remaining++)
+    expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(false);
   expect(await ledger.reserveAnalysisToolCall(runId, 12, 13)).toBe(true);
 });

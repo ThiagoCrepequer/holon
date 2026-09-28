@@ -58,6 +58,77 @@ function generator(
 }
 afterEach(() => vi.useRealTimers());
 
+it("closes tool access at 24 uncached calls and keeps forced completion incomplete", async () => {
+  let calls = 0;
+  const run = vi.fn(async () => ({ content: "source", truncated: false }));
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0)
+        return {
+          ...textResult(""),
+          content: Array.from({ length: 24 }, (_, i) => ({
+            type: "tool-call" as const,
+            toolCallId: `call-${i}`,
+            toolName: "read_file",
+            input: JSON.stringify({ path: `src/f${i}.ts` }),
+          })),
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index === 1) {
+        expect(options.toolChoice).toEqual({ type: "none" });
+        expect(JSON.stringify(options.prompt)).toContain(
+          "0 uncached repository calls remaining",
+        );
+      }
+      return textResult(
+        index === 1 ? "Cannot finish pending checks" : JSON.stringify(output),
+      );
+    },
+  });
+  const result = await generator(model, undefined, run).generate(request);
+  expect(run).toHaveBeenCalledTimes(24);
+  expect(calls).toBe(3);
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete", "tool_budget_exhausted"],
+  });
+});
+
+it("allows a seventh investigation round and reserves output space for reasoning", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index < 7) {
+        expect(options.maxOutputTokens).toBe(12_000);
+        expect(options.toolChoice).toEqual({ type: "auto" });
+        return {
+          ...textResult(""),
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: `call-${index}`,
+              toolName: "read_file",
+              input: JSON.stringify({ path: `src/file${index}.ts` }),
+            },
+          ],
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      }
+      return textResult(
+        index === 7
+          ? "Completed investigation with evidence."
+          : JSON.stringify(output),
+      );
+    },
+  });
+  const result = await generator(model).generate(request);
+  expect(result).toMatchObject({ summary: "Analysis complete" });
+  expect(result).not.toHaveProperty("isDegraded", true);
+  expect(calls).toBe(9);
+});
+
 it("allows a 75 second investigation call within the analysis budget", async () => {
   vi.useFakeTimers();
   let call = 0;
@@ -255,7 +326,7 @@ it("enforces the fixed phase deadline across slow successful rounds", async () =
   const model = new MockLanguageModelV3({
     doGenerate: async ({ abortSignal }) => {
       const index = call++;
-      if (index > 2) return textResult(JSON.stringify(output));
+      if (index > 3) return textResult(JSON.stringify(output));
       return delayed(
         {
           ...textResult("Partial investigation"),
@@ -278,7 +349,7 @@ it("enforces the fixed phase deadline across slow successful rounds", async () =
     request,
   );
   await Promise.all([
-    vi.advanceTimersByTimeAsync(421_000),
+    vi.advanceTimersByTimeAsync(541_000),
     expect(result).resolves.toMatchObject({
       isDegraded: true,
       outputLimitations: ["investigation_incomplete"],
@@ -288,10 +359,10 @@ it("enforces the fixed phase deadline across slow successful rounds", async () =
     expect.objectContaining({
       event: "model.phase_failed",
       reason: "phase_budget_exhausted",
-      durationMs: 420_000,
+      durationMs: 540_000,
     }),
   );
-  expect(call).toBe(4);
+  expect(call).toBe(5);
 });
 
 it("retries a transient provider failure once and preserves the successful recovery", async () => {
@@ -366,7 +437,7 @@ it("reserves the last investigation round for synthesis and reports the exact ex
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
       const index = calls++;
-      if (index < 5)
+      if (index < 9)
         return {
           ...textResult(""),
           content: [
@@ -379,7 +450,7 @@ it("reserves the last investigation round for synthesis and reports the exact ex
           ],
           finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
         };
-      if (index === 5) {
+      if (index === 9) {
         expect(options.toolChoice).toEqual({ type: "none" });
         return textResult(
           "Verified completed work; further investigation remains pending.",
@@ -399,9 +470,9 @@ it("reserves the last investigation round for synthesis and reports the exact ex
     expect.objectContaining({
       event: "model.investigation_stopped",
       reason: "round_limit",
-      round: 6,
-      toolCalls: 5,
+      round: 10,
+      toolCalls: 9,
     }),
   );
-  expect(calls).toBe(7);
+  expect(calls).toBe(11);
 });

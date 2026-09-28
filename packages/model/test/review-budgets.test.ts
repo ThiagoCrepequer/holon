@@ -31,11 +31,11 @@ it("reserves tools for every shard without exceeding the run budget", async () =
 });
 it("reserves comfortable phase budgets and completion time within one deadline", () => {
   const deadline = reviewTimeBudget.analysisMs;
-  expect(generationDeadline(deadline, "investigation", 0)).toBe(420_000);
-  expect(generationDeadline(deadline, "finalization", 420_000)).toBe(600_000);
-  expect(generationDeadline(deadline, "recovery", 600_000)).toBe(780_000);
-  expect(generationDeadline(deadline, "synthesis", 780_000)).toBe(870_000);
-  expect(generationDeadline(deadline, "investigation", 420_000)).toBe(420_000);
+  expect(generationDeadline(deadline, "investigation", 0)).toBe(540_000);
+  expect(generationDeadline(deadline, "finalization", 540_000)).toBe(720_000);
+  expect(generationDeadline(deadline, "recovery", 720_000)).toBe(900_000);
+  expect(generationDeadline(deadline, "synthesis", 900_000)).toBe(990_000);
+  expect(generationDeadline(deadline, "investigation", 540_000)).toBe(540_000);
   expect(() => generationDeadline(Number.NaN, "investigation")).toThrow(
     "Invalid review deadline",
   );
