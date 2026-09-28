@@ -21,10 +21,12 @@ import {
 } from "@holon/contracts";
 import {
   executorRequestSchema,
+  readContextStream,
   preparedRepositorySchema,
   repositoryToolResultSchema,
   reviewContextSchema,
   type ExecutorRequest,
+  type ContextTransfer,
   type GitHubCredentialRequest,
   type PreparedRepository,
   type RepositoryPolicy,
@@ -77,7 +79,7 @@ export interface RepositoryExecutorBinding {
   ): Promise<ProjectIdentificationResult>;
   cleanup(runId: string): Promise<void>;
   hasContext(runId: string): Promise<boolean>;
-  loadContext(runId: string): Promise<ReviewContext>;
+  openContext(runId: string): Promise<ContextTransfer>;
   prepareRepository(request: ExecutorRequest): Promise<PreparedRepository>;
   resolveContainerId(runId: string): Promise<string> | string;
   runTool(
@@ -228,10 +230,7 @@ function prKeyFor(job: ReviewJob) {
 }
 
 export class RepositoryTransientError extends Error {
-  public constructor(
-    reason: "executor" | "repository",
-    options?: ErrorOptions,
-  ) {
+  public constructor(reason: string, options?: ErrorOptions) {
     super(`HOLON_REPOSITORY_TRANSIENT:${reason}`, options);
     this.name = "RepositoryTransientError";
   }
@@ -249,6 +248,10 @@ function normalizeRepositoryFailure(
     throw error;
   }
   if (error instanceof Error) {
+    const diagnostic =
+      /^HOLON_REPOSITORY_(?:TRANSIENT|PERMANENT):(configure-egress|initialize|fetch|checkout|merge-base|diff|block-egress|prepare-context):(command-failed|terminated|timed-out|unavailable|size-limit|integrity-failed|history-incomplete)$/u.exec(
+        error.message,
+      );
     if (
       error.name === "RepositoryTransientError" ||
       error.message.startsWith("HOLON_REPOSITORY_TRANSIENT:")
@@ -259,7 +262,9 @@ function normalizeRepositoryFailure(
         reason: "typed_repository_failure",
         retryable: true,
       });
-      throw new RepositoryTransientError("repository");
+      throw new RepositoryTransientError(
+        diagnostic ? `${diagnostic[1]}:${diagnostic[2]}` : "repository",
+      );
     }
     if (
       error.name === "RepositoryPermanentError" ||
@@ -273,7 +278,9 @@ function normalizeRepositoryFailure(
         reason: "typed_repository_failure",
         retryable: false,
       });
-      throw new NonRetryableError("HOLON_REPOSITORY_NON_RETRYABLE");
+      throw new NonRetryableError(
+        `HOLON_REPOSITORY_NON_RETRYABLE${diagnostic ? `:${diagnostic[1]}:${diagnostic[2]}` : ""}`,
+      );
     }
   }
   logger?.emit("repository.preparation_failed", {
@@ -341,17 +348,8 @@ export function createReviewServices(
         );
       }
 
-      const github = await createSession();
-      const canonicalDiff = await executeGitHubOperation(() =>
-        github.pullRequestDiff(
-          job.envelope.repository.owner,
-          job.envelope.repository.name,
-          job.envelope.pullRequest.number,
-        ),
-      );
       const commonRequest = {
         baseSha: job.envelope.pullRequest.baseSha,
-        canonicalDiff,
         cloneUrl: `https://github.com/${job.envelope.repository.fullName}.git`,
         headSha: job.envelope.pullRequest.headSha,
         pullRequestNumber: job.envelope.pullRequest.number,
@@ -599,7 +597,11 @@ export function createReviewServices(
     createSession: async () => await createSession(),
     ensureContext,
     loadContext: async () =>
-      reviewContextSchema.parse(await executor.loadContext(job.runId)),
+      reviewContextSchema.parse(
+        JSON.parse(
+          await readContextStream(await executor.openContext(job.runId)),
+        ),
+      ),
     useProjectIdentification: (result) => {
       if (shouldEnrichProjects(env.PROJECT_IDENTIFICATION_MODE))
         projectIdentification = result;

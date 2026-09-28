@@ -14,6 +14,10 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 
 ## Registro
 
+A [ADR-0041 — Gerar diff no Sandbox](0041-generate-pr-diff-in-sandbox.md)
+substitui a aquisição/transporte da ADR-0039; seus limites de análise e
+garantias de publicação continuam vigentes.
+
 A [ADR-0040 — Retirar admin e persistência analítica](0040-retire-admin-and-analytical-storage.md)
 substitui as disposições de observabilidade própria e console das ADRs 0023/0029
 e de retenção administrativa das ADRs 0034/0037. As garantias funcionais continuam

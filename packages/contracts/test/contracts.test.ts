@@ -51,8 +51,6 @@ import {
 
 const sha = "a".repeat(40);
 const runId = `github:42:pr:7:head:${sha}:base:${"b".repeat(40)}`;
-const canonicalDiff =
-  "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
 describe("run claim", () => {
   const claim = {
@@ -207,7 +205,7 @@ describe("review job and executor contracts", () => {
         repositoryOwner: "acme",
         repositoryName: "api",
         baseSha: "b".repeat(40),
-        canonicalDiff,
+
         cloneUrl: "https://github.com/acme/api.git",
         headSha: sha,
         pullRequestNumber: 7,
@@ -220,7 +218,7 @@ describe("review job and executor contracts", () => {
   it("requires installation coordinates and effective policy in executor requests", () => {
     const withoutInstallation = {
       baseSha: "b".repeat(40),
-      canonicalDiff,
+
       cloneUrl: "https://github.com/acme/api.git",
       headSha: sha,
       pullRequestNumber: 7,
@@ -284,7 +282,7 @@ describe("review job and executor contracts", () => {
   it("enforces the canonical diff byte budget and clone URL matching", () => {
     const valid = {
       baseSha: "b".repeat(40),
-      canonicalDiff: canonicalDiff,
+
       cloneUrl: "https://github.com/acme/api.git",
       effectivePolicy: {
         additionalExcludes: [],
@@ -345,7 +343,7 @@ describe("review job and executor contracts", () => {
     expect(
       executorRequestSchema.safeParse({
         baseSha: "b".repeat(40),
-        canonicalDiff,
+
         cloneUrl: "https://github.com/acme/api.git",
         headSha: sha,
         pullRequestNumber: 7,
@@ -364,7 +362,7 @@ describe("review job and executor contracts", () => {
     expect(
       executorRequestSchema.safeParse({
         baseSha: "b".repeat(40),
-        canonicalDiff,
+
         cloneUrl,
         headSha: sha,
         pullRequestNumber: 7,

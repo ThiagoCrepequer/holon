@@ -1,4 +1,6 @@
 import {
+  contextStream,
+  projectMetadataAuthoritySchema,
   projectMetadataRequestSchema,
   executorRequestSchema,
   preparedRepositorySchema,
@@ -9,20 +11,26 @@ import {
   type RepositoryToolCall,
   type ReviewContext,
 } from "@holon/contracts";
-import { isMetadataPath } from "@holon/project-identification";
 import {
   buildCheckoutPlan,
   splitPullRequestDiff,
 } from "@holon/repository-analysis";
 
+import {
+  saveContext,
+  loadContextManifest,
+  loadContextPage,
+  loadStoredContext,
+  hasStoredContext,
+} from "./context-storage.js";
 import { createGitHubEgressUrl } from "./egress-policy.js";
 import type { GitHubEgressAuthorization } from "./egress-policy.js";
+import { readLocalDiff, resolveMergeBase } from "./local-diff.js";
 import {
   collectProjectMetadata,
   metadataAuthorityPath,
 } from "./project-metadata.js";
 import {
-  contextPath,
   executeRepositoryTool,
   repositoryPath,
   reviewScopePolicyPath,
@@ -120,6 +128,7 @@ export class RepositoryExecutorService {
     const request = executorRequestSchema.parse(rawRequest);
     const authorization = githubEgressAuthorization(request);
     const sandbox = this.sandboxes.get(request.runId);
+    const deadline = Date.now() + 240_000;
     let stage: RepositoryPreparationStage = "configure-egress";
     try {
       await sandbox.configureGitHubEgress(authorization);
@@ -140,27 +149,14 @@ export class RepositoryExecutorService {
         });
         assertPreparationSuccessful(result, stage);
       }
-      if (
-        splitPullRequestDiff(request.canonicalDiff).some((file) =>
-          [file.oldPath, file.newPath].some(
-            (path) => path !== undefined && isMetadataPath(path),
-          ),
-        )
-      ) {
-        stage = "fetch";
-        // Base metadata is optional; an unavailable object remains an explicit gap.
-        await sandbox.run(
-          [
-            "git",
-            "fetch",
-            "--no-tags",
-            "--depth=1",
-            createGitHubEgressUrl(request.cloneUrl),
-            request.baseSha,
-          ],
-          { cwd: repositoryPath, maxOutputBytes: 20000, timeoutMs: 60000 },
-        );
-      }
+      stage = "merge-base";
+      const mergeBase = await resolveMergeBase(
+        sandbox,
+        request,
+        createGitHubEgressUrl(request.cloneUrl),
+        repositoryPath,
+        deadline,
+      );
       stage = "block-egress";
       await sandbox.blockGitHubEgress();
       stage = "prepare-context";
@@ -173,35 +169,49 @@ export class RepositoryExecutorService {
       if (resolvedHead.stdout.trim() !== request.headSha)
         throw new RepositoryPreparationError(false, stage, "command-failed");
 
+      stage = "diff";
+      const canonicalDiff = await readLocalDiff(
+        sandbox,
+        mergeBase,
+        request.headSha,
+        repositoryPath,
+        deadline,
+      );
+      stage = "prepare-context";
       const repositoryInventory = await collectStructuralRepositoryInventory(
         sandbox,
-        request.canonicalDiff,
+        canonicalDiff,
         request.effectivePolicy.additionalExcludes,
       );
       const artifacts = buildReviewArtifacts(
-        request,
+        { ...request, canonicalDiff },
         repositoryInventory.files,
         repositoryInventory.truncated,
       );
       await sandbox.writeFile(reviewScopePolicyPath, artifacts.policy);
-      await sandbox.writeFile(contextPath, artifacts.serializedContext);
-      await sandbox.writeFile(
-        metadataAuthorityPath,
-        JSON.stringify({
+      await saveContext(sandbox, artifacts.serializedContext);
+      const authority = JSON.stringify(
+        projectMetadataAuthoritySchema.parse({
           runId: request.runId,
           installationId: request.installationId,
           repositoryId: request.repositoryId,
           headSha: request.headSha,
           baseSha: request.baseSha,
           policyDigest: request.effectivePolicy.effectivePolicyDigest,
-          changedPaths: splitPullRequestDiff(request.canonicalDiff).flatMap(
-            (f) =>
-              [f.oldPath, f.newPath].filter(
-                (p): p is string => p !== undefined,
+          changedPaths: [
+            ...new Set(
+              splitPullRequestDiff(canonicalDiff).flatMap((f) =>
+                [f.oldPath, f.newPath].filter(
+                  (p): p is string => p !== undefined,
+                ),
               ),
-          ),
+            ),
+          ],
         }),
       );
+      if (new TextEncoder().encode(authority).byteLength > 2_000_000)
+        throw new RepositoryPreparationError(false, stage, "size-limit");
+      await sandbox.writeFile(metadataAuthorityPath, authority);
       return preparedRepositorySchema.parse({
         changedLineCount: artifacts.context.changedLines.length,
         contextBytes: artifacts.contextBytes,
@@ -224,9 +234,9 @@ export class RepositoryExecutorService {
 
   private async loadAnyContext(runId: string): Promise<ReviewContext> {
     const requestRunId = runIdSchema.parse(runId);
-    const serialized = await this.sandboxes
-      .get(requestRunId)
-      .readFile(contextPath);
+    const serialized = await loadStoredContext(
+      this.sandboxes.get(requestRunId),
+    );
     return reviewContextSchema.parse(JSON.parse(serialized) as unknown);
   }
 
@@ -238,10 +248,17 @@ export class RepositoryExecutorService {
     const requestRunId = runIdSchema.parse(runId);
     const sandbox = this.sandboxes.get(requestRunId);
     const [hasContext, hasPolicy] = await Promise.all([
-      sandbox.exists(contextPath),
+      hasStoredContext(sandbox),
       sandbox.exists(reviewScopePolicyPath),
     ]);
     return hasContext && hasPolicy;
+  }
+
+  public async openContext(runId: string) {
+    const sandbox = this.sandboxes.get(runIdSchema.parse(runId));
+    return contextStream(await loadContextManifest(sandbox), (index, digest) =>
+      loadContextPage(sandbox, index, digest),
+    );
   }
 
   public async runTool(

@@ -1,11 +1,15 @@
+import { createHash } from "node:crypto";
+
 import {
   executorRequestSchema,
+  readContextStream,
   repositoryToolCallSchema,
   reviewContextSchema,
   type ReviewContext,
 } from "@holon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
+import { saveContext } from "../src/context-storage.js";
 import type { GitHubEgressAuthorization } from "../src/egress-policy.js";
 import {
   RepositoryExecutorService,
@@ -14,7 +18,7 @@ import {
 } from "../src/executor-service.js";
 import { buildReviewArtifacts } from "../src/review-context.js";
 
-const request = executorRequestSchema.parse({
+const request = artifactRequest({
   baseSha: "b".repeat(40),
   canonicalDiff: [
     "diff --git a/src/index.ts b/src/index.ts",
@@ -50,6 +54,7 @@ function ripgrepMatch(index: number, path = "src/index.ts"): string {
 }
 
 class FakeSandbox implements SandboxPort {
+  public diff = request.canonicalDiff;
   public configured?: GitHubEgressAuthorization;
   public destroyed = false;
   public egressBlocked = false;
@@ -112,6 +117,38 @@ class FakeSandbox implements SandboxPort {
     readonly truncated: boolean;
   }> {
     this.commands.push([...argv]);
+    if (argv.includes("merge-base"))
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: "b".repeat(40),
+        stderr: "",
+        truncated: false,
+      });
+    if (argv[0] === "node" && argv[2]?.includes("shallowPath"))
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: "complete",
+        stderr: "",
+        truncated: false,
+      });
+    if (argv[0] === "node") {
+      const bytes = Buffer.from(this.diff);
+      const stdout =
+        argv.length === 6
+          ? JSON.stringify({
+              bytes: bytes.length,
+              digest: createHash("sha256").update(bytes).digest("hex"),
+            })
+          : bytes
+              .subarray(Number(argv[4]), Number(argv[4]) + 48000)
+              .toString("base64");
+      return Promise.resolve({
+        exitCode: 0,
+        stdout,
+        stderr: "",
+        truncated: false,
+      });
+    }
     this.commandOptions.push(_options);
     if (argv.includes("rev-parse"))
       return Promise.resolve({
@@ -192,15 +229,20 @@ describe("RepositoryExecutorService", () => {
       ),
     ).toBe(false);
     await expect(
-      service.prepareRepository({
+      prepare(sandbox, service, {
         ...request,
         effectivePolicy: undefined,
       }),
     ).rejects.toThrow();
     expect(sandbox.configured).toBeUndefined();
     await expect(service.hasContext(request.runId)).resolves.toBe(false);
-    await service.prepareRepository(request);
+    await prepare(sandbox, service, request);
     await expect(service.hasContext(request.runId)).resolves.toBe(true);
+    expect(
+      JSON.parse(
+        await readContextStream(await service.openContext(request.runId)),
+      ),
+    ).toEqual(await service.loadContext(request.runId));
   });
 
   it("checks out exact commits, blocks clone egress and persists a bounded structural context", async () => {
@@ -210,7 +252,7 @@ describe("RepositoryExecutorService", () => {
       ["debug", "error", "info", "log", "warn"] as const
     ).map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
 
-    await expect(service.prepareRepository(request)).resolves.toMatchObject({
+    await expect(prepare(sandbox, service, request)).resolves.toMatchObject({
       changedLineCount: 1,
       fileCount: 1,
       runId: request.runId,
@@ -274,7 +316,7 @@ describe("RepositoryExecutorService", () => {
     );
     expect(sandbox.commands.flat()).not.toContain(request.cloneUrl);
     expect(
-      sandbox.files.get("/workspace/holon-review-context.json"),
+      sandbox.files.get("/workspace/holon-context-manifest.json"),
     ).toBeDefined();
     expect(sandbox.commands.flat()).not.toContain("npm");
     expect(sandbox.commandOptions.slice(0, 3)).toEqual([
@@ -299,7 +341,7 @@ describe("RepositoryExecutorService", () => {
   it("prepares and loads the current context without a credential argument", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const currentRequest = executorRequestSchema.parse({
+    const currentRequest = artifactRequest({
       ...request,
       installationId: 99,
       repositoryName: "api",
@@ -307,7 +349,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(currentRequest),
+      prepare(sandbox, service, currentRequest),
     ).resolves.toMatchObject({
       fileCount: 1,
     });
@@ -349,7 +391,7 @@ describe("RepositoryExecutorService", () => {
       "-export function changed() { return 1; }",
       "+export function changed() { return 2; }",
     ].join("\n");
-    const policyRequest = executorRequestSchema.parse({
+    const policyRequest = artifactRequest({
       ...request,
       canonicalDiff,
       effectivePolicy: policy,
@@ -359,7 +401,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(policyRequest),
+      prepare(sandbox, service, policyRequest),
     ).resolves.toMatchObject({
       effectivePolicyDigest: "c".repeat(64),
       fileCount: 1,
@@ -387,7 +429,7 @@ describe("RepositoryExecutorService", () => {
   it("omits sensitive renames and denies their safe-looking destination for the run", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const currentRequest = executorRequestSchema.parse({
+    const currentRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/.env.production b/config.txt",
@@ -406,7 +448,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(currentRequest),
+      prepare(sandbox, service, currentRequest),
     ).resolves.toMatchObject({
       fileCount: 0,
     });
@@ -466,7 +508,7 @@ describe("RepositoryExecutorService", () => {
   it("includes safe textual patches while ignoring binary, lock, generated, vendored and minified files", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const textualRequest = executorRequestSchema.parse({
+    const textualRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/README.md b/README.md",
@@ -507,7 +549,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(textualRequest),
+      prepare(sandbox, service, textualRequest),
     ).resolves.toMatchObject({ changedLineCount: 1, fileCount: 1 });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [{ line: 2, path: "README.md", side: "RIGHT" }],
@@ -533,7 +575,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "initialize",
@@ -553,7 +595,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "initialize",
@@ -575,7 +617,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -596,7 +638,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -618,7 +660,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryTransientError",
       retryable: true,
       stage: "fetch",
@@ -640,7 +682,7 @@ describe("RepositoryExecutorService", () => {
         : originalRun(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       retryable: false,
       stage: "fetch",
@@ -654,7 +696,7 @@ describe("RepositoryExecutorService", () => {
       Promise.reject(new SandboxRuntimeError(true, "timed-out"));
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
     });
@@ -673,7 +715,7 @@ describe("RepositoryExecutorService", () => {
       });
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       message: "HOLON_REPOSITORY_TRANSIENT:initialize:timed-out",
       name: "RepositoryTransientError",
       retryable: true,
@@ -685,7 +727,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     await expect(
-      service.prepareRepository({ ...request, installationId: 0 }),
+      prepare(sandbox, service, { ...request, installationId: 0 }),
     ).rejects.toThrow("installationId");
     expect(sandbox.configured).toBeUndefined();
   });
@@ -746,7 +788,7 @@ describe("RepositoryExecutorService", () => {
   it("reviews deletion-only patches instead of treating them as an empty scope", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const deletionRequest = executorRequestSchema.parse({
+    const deletionRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/src/policy.ts b/src/policy.ts",
@@ -758,7 +800,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(deletionRequest),
+      prepare(sandbox, service, deletionRequest),
     ).resolves.toMatchObject({ changedLineCount: 0, fileCount: 1 });
     await expect(service.loadContext(request.runId)).resolves.toMatchObject({
       changedLines: [],
@@ -775,7 +817,7 @@ describe("RepositoryExecutorService", () => {
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const largeLine = "x".repeat(58_000);
     const documentationLine = "d".repeat(5_000);
-    const mixedRequest = executorRequestSchema.parse({
+    const mixedRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/src/a.ts b/src/a.ts",
@@ -797,7 +839,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(mixedRequest),
+      prepare(sandbox, service, mixedRequest),
     ).resolves.toMatchObject({ fileCount: 3, truncated: false });
     const context = await loadCurrentContext(service);
     expect(context.files.map((file) => file.patch).join("\n")).toContain(
@@ -814,8 +856,8 @@ describe("RepositoryExecutorService", () => {
   it("enforces review exclusions on tool capabilities and search results", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    sandbox.files.set(
-      "/workspace/holon-review-context.json",
+    await saveContext(
+      sandbox,
       JSON.stringify({
         effectivePolicyDigest: "c".repeat(64),
         policySource: "default",
@@ -891,8 +933,8 @@ describe("RepositoryExecutorService", () => {
   it("returns only structural paths from ast-grep streaming output", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    sandbox.files.set(
-      "/workspace/holon-review-context.json",
+    await saveContext(
+      sandbox,
       JSON.stringify({
         effectivePolicyDigest: "c".repeat(64),
         policySource: "default",
@@ -958,7 +1000,7 @@ describe("RepositoryExecutorService", () => {
         : original(argv, options);
     const service = new RepositoryExecutorService({ get: () => sandbox });
 
-    await expect(service.prepareRepository(request)).rejects.toMatchObject({
+    await expect(prepare(sandbox, service, request)).rejects.toMatchObject({
       name: "RepositoryPermanentError",
       stage: "prepare-context",
     });
@@ -1025,7 +1067,7 @@ describe("RepositoryExecutorService", () => {
   it("preserves oversized canonical patches for planning while bounding file reads", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const oversizedRequest = executorRequestSchema.parse({
+    const oversizedRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/src/huge.ts b/src/huge.ts",
@@ -1036,7 +1078,7 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    const prepared = await service.prepareRepository(oversizedRequest);
+    const prepared = await prepare(sandbox, service, oversizedRequest);
     const context = await loadCurrentContext(service);
     expect(prepared.truncated).toBe(false);
     expect(prepared.fileCount).toBe(1);
@@ -1092,7 +1134,7 @@ describe("RepositoryExecutorService", () => {
   it("bounds changed-line coordinate amplification before persisting context", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
-    const amplifiedRequest = executorRequestSchema.parse({
+    const amplifiedRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         "diff --git a/src/index.ts b/src/index.ts",
@@ -1104,7 +1146,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     await expect(
-      service.prepareRepository(amplifiedRequest),
+      prepare(sandbox, service, amplifiedRequest),
     ).resolves.toMatchObject({
       changedLineCount: 32_000,
       truncated: true,
@@ -1121,7 +1163,7 @@ describe("RepositoryExecutorService", () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
     const longPath = `src/${"coordinate".repeat(30)}.ts`;
-    const amplifiedRequest = executorRequestSchema.parse({
+    const amplifiedRequest = artifactRequest({
       ...request,
       canonicalDiff: [
         `diff --git a/${longPath} b/${longPath}`,
@@ -1133,7 +1175,7 @@ describe("RepositoryExecutorService", () => {
     });
 
     buildReviewArtifacts(amplifiedRequest, []);
-    const prepared = await service.prepareRepository(amplifiedRequest);
+    const prepared = await prepare(sandbox, service, amplifiedRequest);
     const context = await service.loadContext(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(8_000_000);
     expect(prepared.changedLineCount).toBeGreaterThan(0);
@@ -1231,3 +1273,20 @@ describe("RepositoryExecutorService", () => {
     });
   });
 });
+
+function artifactRequest(raw: {
+  canonicalDiff: string;
+  [key: string]: unknown;
+}) {
+  const { canonicalDiff, ...input } = raw;
+  return { ...executorRequestSchema.parse(input), canonicalDiff };
+}
+async function prepare(
+  sandbox: FakeSandbox,
+  service: RepositoryExecutorService,
+  raw: Record<string, unknown>,
+) {
+  const { canonicalDiff, ...input } = raw;
+  if (typeof canonicalDiff === "string") sandbox.diff = canonicalDiff;
+  return service.prepareRepository(input);
+}

@@ -17,7 +17,6 @@ import type {
   GitHubCredentialResponse,
   PreparedRepository,
   RepositoryToolCall,
-  ReviewContext,
 } from "@holon/contracts";
 import {
   githubCredentialRequestSchema,
@@ -251,8 +250,8 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     return resolveContainerId(this.env.SANDBOXES, runId);
   }
 
-  public loadContext(runId: string): Promise<ReviewContext> {
-    return this.service().loadContext(runId);
+  public openContext(runId: string) {
+    return this.service().openContext(runId);
   }
 
   public hasContext(runId: string): Promise<boolean> {

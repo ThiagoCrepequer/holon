@@ -39,8 +39,8 @@ function changeType(
 }
 
 /**
- * Splits the canonical GitHub pull-request diff without recomputing it from
- * branch tips. A content line cannot be mistaken for a boundary because Git
+ * Splits a canonical Git pull-request diff. A content line cannot be mistaken
+ * for a boundary because Git
  * prefixes hunk content with a space, plus or minus.
  */
 export function splitPullRequestDiff(

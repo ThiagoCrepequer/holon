@@ -57,8 +57,9 @@ sequenceDiagram
         CO->>CO: terminate prior instances with rollback
         CO->>GH: compile configuration at exact base SHA
         CO->>CO: validate YAML AST + strict policy schema
-        CO->>GH: fetch canonical PR diff
         CO->>AN: step prepare-repository
+        AN->>GH: fetch exact SHAs and PR ref with bounded deepening
+        AN->>AN: verify merge-base and generate local three-dot diff
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
         CO->>RE: steps analyze-shard-N + tool handles
@@ -94,8 +95,8 @@ sequenceDiagram
 3. **Claim:** somente uma run efetiva pode possuir a mesma chave lógica; a
    promoção persiste obsolescência, cleanup aplicável e supersession antes de
    qualquer cancelamento externo.
-4. **Acquire:** o diff canônico é obtido pela API do PR; código é obtido no
-   head exato com token de instalação emitido sob demanda.
+4. **Acquire:** o Sandbox busca head/base exatos com token emitido sob demanda,
+   verifica o ancestral comum e gera localmente o diff de três pontos.
 5. **Investigate:** ferramentas são read-only por padrão e o loop tem orçamento.
 6. **Validate:** a saída do modelo é validada contra contrato estrutural e diff.
 7. **Reconcile:** o par `{headSha, baseSha}` e a autoridade da run são relidos
@@ -145,11 +146,12 @@ refs imediatamente antes da mutação. Após detectar obsolescência, apenas o
 Check Run ancorado ao SHA antigo pode ser concluído como `cancelled`, sem
 resultado da análise.
 
-O control-plane obtém do GitHub o diff canônico bruto e o transporta no request
-do executor, limitado a 2 MB. Esse conteúdo não vira output persistido do
-checkpoint: o executor o divide em patches completos, sem executar
-`git diff baseSha headSha`, e aplica a classificação antes de persistir o
-contexto completo. JS/TS recebe modo `structural`; outros patches textuais elegíveis
+O request do executor contém identidades e política, sem o diff. Conforme
+[ADR-0041](../decisions/0041-generate-pr-diff-in-sandbox.md), o Sandbox aprofunda
+o histórico com limites e gera `git diff mergeBase headSha` após verificar a
+completude do ancestral e bloquear egress. O diff bruto tem teto de 16 MB e é
+recuperado em páginas com integridade SHA-256 antes da classificação. Não vira
+output de checkpoint. JS/TS recebe modo `structural`; outros patches textuais elegíveis
 recebem modo `textual`. Binários, lockfiles, gerados, vendorizados, minificados,
 artefatos de build e caminhos potencialmente sensíveis reconhecidos pelas
 heurísticas são descartados antes do contexto e do modelo.
@@ -175,7 +177,7 @@ Antes da preparação, o control plane lê a política exclusivamente no
 `load-repository-scope`, derivado do snapshot selado, e acompanha toda
 reconstrução do Sandbox; não
 depende de estado em memória entre callbacks. Uma política customizada exige
-`prepareRepository` e `loadContext`, sem downgrade. Exclusões adicionais
+`prepareRepository` e `openContext`, sem downgrade. Exclusões adicionais
 produzem waivers visíveis, mas não interrompem a análise dos shards elegíveis
 restantes; paths protegidos têm precedência sobre essas exclusões.
 
@@ -208,9 +210,11 @@ review incompleta, nunca publicação da investigação livre. Sharding por si s
 não marca truncamento. `model.output_limits` informa códigos de perda, e uso da
 investigação contabiliza todas as etapas via `totalUsage`.
 
-O contexto filtrado é gravado no filesystem efêmero do Sandbox; apenas
-contagens, tamanho e flag de truncamento voltam ao Workflow. A etapa de análise
-relê esse arquivo e retorna somente a saída estruturada e limitada do modelo.
+O contexto filtrado é gravado em páginas imutáveis por digest no filesystem
+efêmero do Sandbox; um manifesto publicado por último indica conclusão. Apenas
+contagens, tamanho e flag de truncamento voltam ao step de preparação. A análise
+consome um único stream RPC, valida tamanho, UTF-8 e SHA-256 e retorna somente a
+saída estruturada e limitada do modelo como checkpoint.
 Antes da leitura e de cada tool call, o control-plane verifica a existência do
 artefato. Se o container tiver sido substituído, repete a preparação exata e
 idempotente com o mesmo par de SHAs.

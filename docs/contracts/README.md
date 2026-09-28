@@ -34,15 +34,17 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 - Exemplos válidos e inválidos acompanham cada schema.
 - Testes de contrato devem provar serialização, validação e rejeição de formatos retirados.
 
-O pedido do executor aceita no máximo 2 MB UTF-8 de diff canônico bruto;
-portanto, o request precede a classificação e pode conter seções que serão
-excluídas. O contexto persistido seleciona até 50 patches textuais elegíveis,
-60 kB por arquivo, 300 kB agregados em até cinco shards e 5.000 linhas alteradas,
-com teto adicional de 500 kB de JSON serializado. Cada arquivo registra modo `structural` para
+O pedido do executor contém identidades e política; rejeita `canonicalDiff`.
+O diff é gerado localmente conforme [ADR-0041](../decisions/0041-generate-pr-diff-in-sandbox.md).
+O contexto admite até 2 MB UTF-8 de patches completos, 1.000 arquivos e 32.000
+coordenadas, com teto de 8 MB serializados. Excedentes são omissões explícitas.
+Cada arquivo registra modo `structural` para
 JS/TS ou `textual` para os demais formatos. Binários, lockfiles, artefatos
 gerados e caminhos potencialmente sensíveis reconhecidos pelas heurísticas não
 entram nesse contexto nem são enviados ao modelo. O contexto preserva cada
-patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
+patch admitido completo; o planner particiona hunks preservando linhas e coordenadas,
+conforme [ADR-0039](../decisions/0039-partition-large-reviews-and-bound-concurrency.md).
+Até 64 shards executam com concorrência de cinco. A mesma política autoriza
 paths e resultados das tools. A saída por shard contém até oito findings, quatro evidências
 por finding e resumo de até 10.000 unidades UTF-16 (ADR-0033).
 
@@ -59,10 +61,13 @@ registra no scope; o nome determinístico passado a `idFromName` não é o
 `containerId`. Installation ID é obrigatório e exige escopo previamente autorizado.
 
 O pedido adiciona a política efetiva e o executor persiste
-`ReviewContext` com `ReviewScopePolicy`. A leitura usa `loadContext` para toda
+`ReviewContext` com `ReviewScopePolicy`. A leitura usa `openContext`, retornando
+manifesto limitado e stream de bytes para toda
 política. O modelo recebe `ReviewShardContext`; nenhum deles aceita formatos antigos.
-A seleção ocorre no planner antes da persistência, conforme
-[ADR-0035](../decisions/0035-plan-complete-context-before-sharding.md). `sourceDigest` identifica os bytes UTF-8 originais;
+O consumidor confere o tamanho e o SHA-256 antes de validar o contexto; páginas
+de armazenamento têm no máximo 32.000 unidades UTF-16, sem cortar Unicode.
+O stream é consumido dentro do callback, nunca retornado como checkpoint.
+`sourceDigest` identifica os bytes UTF-8 originais;
 `effectivePolicyDigest` identifica o JSON canônico aplicado. Ambos são hashes
 SHA-256 e aparecem na telemetria e no Check Run sem expor o conteúdo da
 configuração.

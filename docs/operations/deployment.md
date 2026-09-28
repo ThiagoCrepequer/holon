@@ -14,6 +14,24 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
 
 ## Recursos
 
+### Atualização do diff local e stream RPC
+
+A [ADR-0041](../decisions/0041-generate-pr-diff-in-sandbox.md) altera o request
+de preparação e substitui a leitura RPC por `openContext`. Drene as execuções
+em andamento e suspenda novas admissões durante a janela de atualização;
+publique executor e control-plane da mesma revisão antes de reabrir admissões.
+Não retome Workflows antigos contra esse contrato. Valide um novo PR pequeno e
+outro com mais de 20.000 linhas, conferindo status inicial, conclusão, achados
+inline, integridade da cobertura e cleanup. Esse procedimento exige autorização
+operacional; build/dry-run local não demonstra o smoke remoto.
+
+O diff bruto acima de 16 MB e histórico insuficiente em 4.096 commits falham
+explicitamente. Patches elegíveis acima de 2 MB e demais limites da ADR-0039
+produzem limitações visíveis, nunca aprovação por ausência de achados. O step
+de preparação admite dez minutos; geração e transferência continuam limitadas.
+
+### Provisionamento
+
 1. No AI Gateway `holon`, adicione a chave OpenRouter em Provider Keys/BYOK,
    habilite Authenticated Gateway e publique a versão desejada do Dynamic Route
    `pr-review`. Confirme no editor que todos os modelos ativos selecionam

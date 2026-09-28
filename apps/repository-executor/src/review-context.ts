@@ -75,7 +75,7 @@ function serializeBoundedContext(context: ReviewContext): {
 }
 
 export function buildReviewArtifacts(
-  request: ExecutorRequest,
+  request: ExecutorRequest & { readonly canonicalDiff: string },
   repositoryFiles: readonly {
     readonly content: string;
     readonly path: string;
@@ -95,6 +95,8 @@ export function buildReviewArtifacts(
       isNonBinaryPullRequestPatch(file.patch) &&
       classifyPullRequestDiffFile(file, additionalExcludes) === undefined,
   ).length;
+  let admittedBytes = 0;
+  let patchesOmitted = false;
   const reviewFiles = diffFiles
     .flatMap((file) => {
       const mode = classifyPullRequestDiffFile(file, additionalExcludes);
@@ -102,8 +104,18 @@ export function buildReviewArtifacts(
         ? [{ mode, path: file.path, patch: file.patch }]
         : [];
     })
+    .filter((file) => {
+      const bytes = new TextEncoder().encode(file.patch).byteLength;
+      if (admittedBytes + bytes > reviewExecutionLimits.contextPatchBytes) {
+        patchesOmitted = true;
+        return false;
+      }
+      admittedBytes += bytes;
+      return true;
+    })
     .slice(0, reviewExecutionLimits.contextFiles);
   let truncated =
+    patchesOmitted ||
     diffFiles.filter(
       (file) =>
         classifyPullRequestDiffFile(file, additionalExcludes) !== undefined,

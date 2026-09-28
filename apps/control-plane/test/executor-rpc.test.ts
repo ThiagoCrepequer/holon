@@ -1,4 +1,4 @@
-import { reviewJobSchema } from "@holon/contracts";
+import { reviewJobSchema, readContextStream } from "@holon/contracts";
 import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createReviewServices } from "../src/review-services.js";
 import { defaultScopePolicy } from "./configuration-fixtures.js";
 import { configurationReader } from "./configuration-fixtures.js";
-import { unconfiguredExecutor } from "./executor-fixture.js";
+import { unconfiguredExecutor, pagedContext } from "./executor-fixture.js";
 
 const canonicalPatch = [
   "diff --git a/src/index.ts b/src/index.ts",
@@ -59,6 +59,12 @@ function installationSession() {
 }
 
 describe("current executor RPC contract", () => {
+  it("transfers a context larger than a Workflow checkpoint through a real service-binding stream", async () => {
+    const transfer = await env.REPOSITORY_EXECUTOR.openContext(job.runId);
+    expect(transfer.manifest.bytes).toBeGreaterThan(1_048_576);
+    expect(transfer.manifest.pages).toBeGreaterThan(32);
+    expect(await readContextStream(transfer)).toBe("x".repeat(1_600_000));
+  });
   it("validates retry bounds and preserves a non-retryable repository result", async () => {
     const permanent = new NonRetryableError("permanent");
     const services = createReviewServices(
@@ -86,6 +92,10 @@ describe("current executor RPC contract", () => {
     ).rejects.toBe(permanent);
   });
   it("prepares and reads context using the current RPC contracts", async () => {
+    const session = installationSession();
+    const pullRequestDiff = vi
+      .spyOn(session, "pullRequestDiff")
+      .mockRejectedValue(new Error("GitHub diff exceeded 20000 lines"));
     const policy = {
       additionalExcludes: ["vendor/**"],
       baseSha: "b".repeat(40),
@@ -123,12 +133,12 @@ describe("current executor RPC contract", () => {
       env,
       job,
       {
-        createSession: () => Promise.resolve(installationSession()),
+        createSession: () => Promise.resolve(session),
         executor: {
           ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          loadContext,
+          ...pagedContext(loadContext),
           prepareRepository,
           runTool: () => Promise.resolve({ content: "", truncated: false }),
         },
@@ -143,6 +153,13 @@ describe("current executor RPC contract", () => {
       effectivePolicyDigest: policy.effectivePolicyDigest,
     });
     expect(prepareRepository).toHaveBeenCalledOnce();
+    expect(prepareRepository.mock.calls[0]?.[0]).not.toHaveProperty(
+      "canonicalDiff",
+    );
+    expect(
+      JSON.stringify(prepareRepository.mock.calls[0]?.[0]).length,
+    ).toBeLessThan(10_000);
+    expect(pullRequestDiff).not.toHaveBeenCalled();
 
     const loaded = await services.loadContext();
     expect(loaded).toMatchObject({
@@ -230,11 +247,11 @@ describe("current executor RPC contract", () => {
           'The RPC receiver does not implement the method "prepareRepository".',
         );
       },
-      loadContext: async () => {
+      ...pagedContext(async () => {
         throw new TypeError(
           'The RPC receiver does not implement the method "loadContext".',
         );
-      },
+      }),
     };
     const services = createReviewServices(
       env,
@@ -271,17 +288,19 @@ describe("current executor RPC contract", () => {
               runId: job.runId,
               truncated: false,
             }),
-            loadContext: vi.fn().mockResolvedValue({
-              schemaVersion,
-              effectivePolicyDigest: "c".repeat(64),
-              policySource: "default",
-              sourceDigest: null,
-              verdictStrictness: "default",
-              waiversCount: 0,
-              changedLines: [],
-              files: [],
-              truncated: false,
-            }),
+            ...pagedContext(
+              vi.fn().mockResolvedValue({
+                schemaVersion,
+                effectivePolicyDigest: "c".repeat(64),
+                policySource: "default",
+                sourceDigest: null,
+                verdictStrictness: "default",
+                waiversCount: 0,
+                changedLines: [],
+                files: [],
+                truncated: false,
+              }),
+            ),
           },
         },
         { emit: () => {} },

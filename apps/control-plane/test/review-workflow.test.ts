@@ -31,7 +31,7 @@ import {
   configurationReader,
   defaultScopePolicy,
 } from "./configuration-fixtures.js";
-import { unconfiguredExecutor } from "./executor-fixture.js";
+import { unconfiguredExecutor, pagedContext } from "./executor-fixture.js";
 
 afterEach(() => reset());
 
@@ -373,7 +373,7 @@ function runtime(
       ...unconfiguredExecutor,
       cleanup,
       hasContext: () => Promise.resolve(true),
-      loadContext: () =>
+      ...pagedContext(() =>
         Promise.resolve({
           ...(options.context ?? context),
           effectivePolicyDigest: "c".repeat(64),
@@ -382,6 +382,7 @@ function runtime(
           verdictStrictness: "default",
           waiversCount: 0,
         }),
+      ),
       prepareRepository,
       ...(options.containerId === null ? {} : { resolveContainerId }),
       runTool: () => Promise.resolve({ content: "", truncated: false }),

@@ -29,7 +29,7 @@ const request = executorRequestSchema.parse({
     verdictStrictness: "default",
   },
   baseSha: "b".repeat(40),
-  canonicalDiff: "",
+
   cloneUrl: "https://github.com/acme/api.git",
   headSha: "a".repeat(40),
   pullRequestNumber: 7,

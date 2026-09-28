@@ -27,3 +27,4 @@ export * from "./repository-config/compiler-identity.js";
 export * from "./repository-config/input.js";
 
 export * from "./review-execution-limits.js";
+export * from "./context-transfer.js";

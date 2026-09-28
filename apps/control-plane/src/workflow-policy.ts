@@ -10,7 +10,7 @@ export const stateStep = {
 
 export const repositoryStep = {
   retries: { backoff: "exponential", delay: "5 seconds", limit: 2 },
-  timeout: "2 minutes",
+  timeout: "10 minutes",
 } as const;
 
 export const modelStep = {

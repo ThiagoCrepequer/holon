@@ -7,7 +7,7 @@ function patch(path: string) {
   return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,100 @@\n+${Array.from({ length: 100 }, (_, i) => `line${i}: ${"x".repeat(500)}`).join("\n+")}\n`;
 }
 function artifacts(paths: string[]) {
-  const request: ExecutorRequest = {
+  const request: ExecutorRequest & { canonicalDiff: string } = {
     baseSha: "b".repeat(40),
     headSha: "a".repeat(40),
     cloneUrl: "https://github.com/acme/api.git",
@@ -30,6 +30,23 @@ function artifacts(paths: string[]) {
   return buildReviewArtifacts(request, []);
 }
 describe("plan before context selection", () => {
+  it("marks omissions at the total patch budget while preserving every admitted patch", () => {
+    const result = artifacts(
+      Array.from({ length: 45 }, (_, i) => `src/module${i}.ts`),
+    );
+    expect(result.context.truncated).toBe(true);
+    expect(result.context.files.length).toBeLessThan(45);
+    expect(result.context.files.length).toBeGreaterThan(0);
+    expect(
+      result.context.files.reduce(
+        (bytes, file) =>
+          bytes + new TextEncoder().encode(file.patch).byteLength,
+        0,
+      ),
+    ).toBeLessThanOrEqual(2_000_000);
+    for (const file of result.context.files)
+      expect(file.patch).toBe(patch(file.path));
+  });
   it("retains whole patches beyond 120 kB when the bounded shard plan fits", () => {
     const paths = [
       "apps/core.ts",

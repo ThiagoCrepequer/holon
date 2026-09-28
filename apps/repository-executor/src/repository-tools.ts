@@ -11,6 +11,7 @@ import {
   matchesAnyPathGlob,
 } from "@holon/repository-analysis";
 
+import { loadStoredContext } from "./context-storage.js";
 import {
   assertReviewScopePathAllowed,
   parseReviewScopePolicy,
@@ -21,7 +22,6 @@ import { SandboxRuntimeError } from "./sandbox-errors.js";
 import type { SandboxCommandResult, SandboxPort } from "./sandbox-port.js";
 
 export const repositoryPath = "/workspace/repository";
-export const contextPath = "/workspace/holon-review-context.json";
 export const reviewScopePolicyPath = "/workspace/holon-review-scope.json";
 
 function assertSuccessful(result: SandboxCommandResult): void {
@@ -173,7 +173,7 @@ export async function executeRepositoryTool(
   }
   if (call.name === "search_structure") {
     const context = reviewContextSchema.parse(
-      JSON.parse(await sandbox.readFile(contextPath)) as unknown,
+      JSON.parse(await loadStoredContext(sandbox)) as unknown,
     );
     if (!hasStructuralReviewFiles(context)) {
       throw new TypeError(

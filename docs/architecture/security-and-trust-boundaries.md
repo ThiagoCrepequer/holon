@@ -104,9 +104,12 @@ O executor implementado não executa scripts do repositório:
 - fork bombs, processos em background e serviços expostos são proibidos;
 - submódulos não são obtidos; filtros Git LFS são desativados no checkout.
 
-O diff canônico bruto, limitado a 2 MB, cruza o request do executor antes da
-classificação. Ele permanece temporário, não vira checkpoint persistido e não é
-enviado integralmente ao modelo. Antes de persistir contexto, a política separa
+O diff bruto é gerado no Sandbox a partir de ancestral comum verificado e head
+exato, sem external diff nem textconv. Seu teto é 16 MB; páginas e contexto são
+verificados por tamanho e SHA-256. Não cruza o request de preparação, não vira
+checkpoint persistido e não é enviado integralmente ao modelo. Histórico
+insuficiente ou ambíguo interrompe a preparação. O fetch usa o mesmo broker e
+egress restrito, bloqueado antes da geração. Antes de persistir contexto, a política separa
 JS/TS estrutural de outros patches Git não binários elegíveis, inclusive
 remoções, renames e metadata-only. Patches binários e caminhos reconhecidos como
 lockfiles, código gerado, vendor, minificados, sourcemaps, build ou

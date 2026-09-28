@@ -312,7 +312,6 @@ const githubCloneUrlSchema = z
 
 const executorRequestShape = {
   baseSha: gitShaSchema,
-  canonicalDiff: z.string().max(2_000_000),
   cloneUrl: githubCloneUrlSchema,
   headSha: gitShaSchema,
   pullRequestNumber: positiveIntegerSchema,
@@ -367,13 +366,6 @@ export const executorRequestSchema = z
   })
   .superRefine((request, context) => {
     validateRunCoordinates(request, context);
-    if (utf8ByteLength(request.canonicalDiff) > 2_000_000) {
-      context.addIssue({
-        code: "custom",
-        message: "canonicalDiff exceeds the 2000000-byte budget",
-        path: ["canonicalDiff"],
-      });
-    }
     const expectedCloneUrl = `https://github.com/${request.repositoryOwner}/${request.repositoryName}.git`;
     if (request.cloneUrl !== expectedCloneUrl) {
       context.addIssue({
