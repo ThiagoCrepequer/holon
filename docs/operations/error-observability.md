@@ -174,3 +174,18 @@ com margem; devem ser reavaliados usando as durações registradas.
 Referências verificadas em 2026-09-27:
 [timeouts do AI SDK](https://ai-sdk.dev/docs/ai-sdk-core/settings#timeout) e
 [configuração de retries e timeout de Workflows](https://developers.cloudflare.com/workflows/build/sleeping-and-retrying/).
+
+### Rejeição de referências de evidência
+
+`model.evidence_reference_rejected` identifica falhas ao resolver a saída da
+finalização contra o catálogo do shard. Campos: `runId`, `workflowInstanceId`,
+`shardIndex`, `candidateKind`, `findingIndex`, `evidenceIndex` quando aplicável e
+`reason`. Os motivos são `unknown_anchor_reference`,
+`unknown_evidence_reference` e `anchor_not_in_evidence`. O índice é baseado em
+zero e também identifica candidatos de resolução quando `candidateKind` é
+`resolution`. O evento não inclui IDs do catálogo, caminhos, trechos ou prosa do
+modelo. Referências inválidas degradam a revisão; não significam ausência de bugs.
+
+O evento `model.evidence_rejected` continua cobrindo o gate canônico posterior.
+`evidence_catalog_omitted` na limitação do resultado indica que o catálogo
+atingiu seu limite antes de incluir todos os candidatos do shard.

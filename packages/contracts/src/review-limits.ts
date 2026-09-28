@@ -36,12 +36,22 @@ export const reviewOutputLimitationCodes = [
   "finalization_failed",
   "tool_budget_exhausted",
   "evidence_rejected",
+  "evidence_reference_invalid",
+  "evidence_catalog_omitted",
 ] as const;
 
 export function reviewOutputLimitations(raw: unknown): string[] {
   if (typeof raw !== "object" || raw === null) return [];
   const value = raw as Record<string, unknown>;
-  const codes = new Set<string>();
+  const codes = new Set<string>(
+    Array.isArray(value.outputLimitations)
+      ? value.outputLimitations.filter(
+          (code): code is string =>
+            typeof code === "string" &&
+            (reviewOutputLimitationCodes as readonly string[]).includes(code),
+        )
+      : [],
+  );
   const inspect = (
     object: Record<string, unknown>,
     keys: readonly (keyof typeof reviewTextLimits)[],
@@ -57,21 +67,23 @@ export function reviewOutputLimitations(raw: unknown): string[] {
     }
   };
   inspect(value, ["summary"]);
-  if (Array.isArray(value.findings)) {
-    if (value.findings.length > reviewTextLimits.findings)
-      codes.add("findings_omitted");
-    for (const finding of value.findings.slice(0, reviewTextLimits.findings)) {
-      if (typeof finding !== "object" || finding === null) continue;
-      inspect(finding, ["diagnostic", "suggestion"]);
-      if (Array.isArray(finding.evidence)) {
-        if (finding.evidence.length > reviewTextLimits.evidence)
-          codes.add("evidence_omitted");
-        for (const evidence of finding.evidence.slice(
-          0,
-          reviewTextLimits.evidence,
-        )) {
-          if (typeof evidence === "object" && evidence !== null)
-            inspect(evidence, ["excerpt", "reason"]);
+  for (const group of [value.findings, value.resolutions]) {
+    if (Array.isArray(group)) {
+      if (group.length > reviewTextLimits.findings)
+        codes.add("findings_omitted");
+      for (const finding of group.slice(0, reviewTextLimits.findings)) {
+        if (typeof finding !== "object" || finding === null) continue;
+        inspect(finding, ["diagnostic", "suggestion"]);
+        if (Array.isArray(finding.evidence)) {
+          if (finding.evidence.length > reviewTextLimits.evidence)
+            codes.add("evidence_omitted");
+          for (const evidence of finding.evidence.slice(
+            0,
+            reviewTextLimits.evidence,
+          )) {
+            if (typeof evidence === "object" && evidence !== null)
+              inspect(evidence, ["excerpt", "reason"]);
+          }
         }
       }
     }

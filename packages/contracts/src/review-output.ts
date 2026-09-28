@@ -88,22 +88,6 @@ export const modelReviewOutputSchema = z.strictObject({
  * field invariants remain in modelReviewOutputSchema and are checked after the
  * transport value is normalized.
  */
-const resilientPositiveInteger = z.preprocess(
-  (val) =>
-    typeof val === "string" && /^\d+$/u.test(val.trim())
-      ? Number(val.trim())
-      : val,
-  positiveIntegerSchema,
-);
-
-const resilientNullablePositiveInteger = z.preprocess(
-  (val) =>
-    typeof val === "string" && /^\d+$/u.test(val.trim())
-      ? Number(val.trim())
-      : val,
-  positiveIntegerSchema.nullable(),
-);
-
 const resilientConfidence = z.preprocess(
   (val) =>
     typeof val === "string" && /^(?:0(?:\.\d+)?|1(?:\.0+)?)$/u.test(val.trim())
@@ -121,13 +105,6 @@ const boundedText = (maximum: number, minimum = 1, marker = "…") =>
     z.string().min(minimum).max(maximum),
   );
 const resilientDiagnostic = boundedText(reviewTextLimits.diagnostic, 30);
-const resilientExcerpt = z.preprocess(
-  (value) =>
-    typeof value === "string"
-      ? limitReviewText(value, reviewTextLimits.excerpt, "")
-      : value,
-  z.string().min(1).max(reviewTextLimits.excerpt),
-);
 const resilientReason = boundedText(reviewTextLimits.reason);
 const resilientSuggestion = z.preprocess(
   (value) =>
@@ -151,52 +128,62 @@ const resilientSeverity = z.preprocess(
  * preprocessors ensure minor LLM output imperfections (length, extra fields, string numbers)
  * are gracefully sanitized rather than failing the review.
  */
+export const evidenceReferenceIdSchema = z.string().regex(/^ev:[a-f0-9]{64}$/u);
+export const canonicalEvidenceEntrySchema = z
+  .strictObject({
+    id: evidenceReferenceIdSchema,
+    path: repositoryPathSchema,
+    startLine: positiveIntegerSchema,
+    endLine: positiveIntegerSchema,
+    excerpt: z.string().min(1).max(reviewTextLimits.excerpt),
+  })
+  .refine(
+    (entry) =>
+      entry.endLine >= entry.startLine && entry.endLine - entry.startLine < 8,
+    { message: "Invalid canonical evidence range" },
+  );
+export type CanonicalEvidenceEntry = z.infer<
+  typeof canonicalEvidenceEntrySchema
+>;
+
+const referenceEvidence = z.preprocess(
+  (value) =>
+    Array.isArray(value) ? value.slice(0, reviewTextLimits.evidence) : value,
+  z
+    .array(
+      z.strictObject({
+        id: evidenceReferenceIdSchema,
+        reason: resilientReason,
+      }),
+    )
+    .min(1)
+    .max(reviewTextLimits.evidence),
+);
+const referenceLocation = z.strictObject({
+  anchorId: evidenceReferenceIdSchema,
+});
+const referenceFinding = z
+  .object({
+    confidence: resilientConfidence,
+    diagnostic: resilientDiagnostic,
+    evidence: referenceEvidence,
+    location: referenceLocation,
+    severity: resilientSeverity,
+    suggestion: resilientSuggestion,
+  })
+  .strip();
+const referenceResolution = referenceFinding
+  .omit({ severity: true, suggestion: true })
+  .extend({ fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u) });
 const reviewTransportFields = z
   .object({
-    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
+    resolutions: z.array(referenceResolution).max(8).optional(),
     findings: z.preprocess(
-      (val) =>
-        Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : val,
-      z
-        .array(
-          z
-            .object({
-              confidence: resilientConfidence,
-              diagnostic: resilientDiagnostic,
-              evidence: z.preprocess(
-                (val) =>
-                  Array.isArray(val)
-                    ? val.slice(0, reviewTextLimits.evidence)
-                    : [],
-                z
-                  .array(
-                    z
-                      .object({
-                        endLine: resilientNullablePositiveInteger,
-                        excerpt: resilientExcerpt,
-                        path: repositoryPathSchema,
-                        reason: resilientReason,
-                        startLine: resilientPositiveInteger,
-                      })
-                      .strip(),
-                  )
-                  .min(1)
-                  .max(reviewTextLimits.evidence),
-              ),
-              location: z
-                .object({
-                  line: resilientPositiveInteger,
-                  path: repositoryPathSchema,
-                  side: z.literal("RIGHT"),
-                  startLine: resilientNullablePositiveInteger,
-                })
-                .strip(),
-              severity: resilientSeverity,
-              suggestion: resilientSuggestion,
-            })
-            .strip(),
-        )
-        .max(reviewTextLimits.findings),
+      (value) =>
+        Array.isArray(value)
+          ? value.slice(0, reviewTextLimits.findings)
+          : value,
+      z.array(referenceFinding).max(reviewTextLimits.findings),
     ),
     isDegraded: z.boolean().optional(),
     summary: resilientSummary,
@@ -204,49 +191,17 @@ const reviewTransportFields = z
   })
   .strip();
 
+/** Model output carries references, never source text or coordinates. */
 export const modelReviewTransportSchema = z.preprocess((value) => {
   if (typeof value !== "object" || value === null) return value;
-  return { ...value, outputLimitations: reviewOutputLimitations(value) };
+  const outputLimitations = reviewOutputLimitations(value);
+  return {
+    ...value,
+    outputLimitations,
+    ...(outputLimitations.length ? { isDegraded: true } : {}),
+  };
 }, reviewTransportFields);
-
-export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
-  return modelReviewOutputFromTransport(
-    modelReviewTransportSchema.parse(value),
-  );
-}
-
-export function modelReviewOutputFromTransport(
-  raw: z.output<typeof modelReviewTransportSchema>,
-): ModelReviewOutput {
-  const transport = reviewTransportFields.parse(raw);
-  return modelReviewOutputSchema.parse({
-    ...(transport.resolutions !== undefined
-      ? { resolutions: transport.resolutions }
-      : {}),
-    findings: transport.findings.map((finding) => ({
-      ...finding,
-      evidence: finding.evidence.map((evidence) => ({
-        ...evidence,
-        ...(evidence.endLine === null ? { endLine: undefined } : {}),
-      })),
-      location: {
-        ...finding.location,
-        ...(finding.location.startLine === null
-          ? { startLine: undefined }
-          : {}),
-      },
-      ...(finding.suggestion === null ? { suggestion: undefined } : {}),
-    })),
-    ...(transport.isDegraded !== undefined
-      ? { isDegraded: transport.isDegraded }
-      : {}),
-    summary: transport.summary,
-    ...(transport.outputLimitations?.length ? { isDegraded: true } : {}),
-    ...(transport.outputLimitations?.length
-      ? { outputLimitations: transport.outputLimitations }
-      : {}),
-  });
-}
+export type ModelReviewTransport = z.output<typeof modelReviewTransportSchema>;
 
 export const runStateSchema = z.enum([
   "queued",

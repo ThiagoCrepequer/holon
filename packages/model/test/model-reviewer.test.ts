@@ -631,7 +631,7 @@ describe("model review boundary", () => {
     expect(isNonRetryableModelError("unknown failure")).toBe(false);
   });
 
-  it("supports domain output contract with direct schema parsing", async () => {
+  it("accepts an empty review through the current reference contract", async () => {
     sdk.createProvider.mockReturnValue(sdk.model);
     sdk.generateText
       .mockResolvedValueOnce({
@@ -656,7 +656,6 @@ describe("model review boundary", () => {
       },
       { run: () => Promise.resolve({ content: "", truncated: false }) },
       undefined,
-      "domain",
     );
 
     await expect(

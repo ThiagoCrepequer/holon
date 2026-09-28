@@ -587,7 +587,6 @@ export function createReviewServices(
             });
             logger.emit("model.usage", { ...logContext, ...usage });
           },
-          "portable",
           ({ event, ...details }) =>
             logger.emit(event, {
               ...logContext,
@@ -595,6 +594,14 @@ export function createReviewServices(
               shardIndex,
               modelRoute: env.AI_MODEL_ID,
               ...details,
+            }),
+          (rejection) =>
+            logger.emit("model.evidence_reference_rejected", {
+              ...logContext,
+              eventId: `${logContext.workflowInstanceId ?? job.runId}:model.evidence_reference_rejected:${shardIndex}:${rejection.candidateKind}:${rejection.findingIndex}`,
+              severity: "warning",
+              shardIndex,
+              ...rejection,
             }),
         ),
       );

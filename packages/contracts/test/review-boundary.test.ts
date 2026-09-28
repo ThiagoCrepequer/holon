@@ -1,28 +1,23 @@
 import { expect, it } from "vitest";
 
-import { parseModelReviewTransport } from "../src/review-output.js";
+import { modelReviewTransportSchema } from "../src/review-output.js";
 
 const finding = {
   confidence: 0.9,
   diagnostic: "Removing the guard allows an unauthorized write.",
   severity: "high",
-  location: { path: "a.ts", line: 10, side: "RIGHT", startLine: null },
-  evidence: [
-    {
-      path: "a.ts",
-      startLine: 10,
-      endLine: null,
-      excerpt: "write()",
-      reason: "The guard is absent.",
-    },
-  ],
+  location: { anchorId: `ev:${"a".repeat(64)}` },
+  evidence: [{ id: `ev:${"a".repeat(64)}`, reason: "The guard is absent." }],
   suggestion: null,
 };
 it.each([undefined, null, {}, "none"])(
   "rejects invalid findings rather than certifying a clean review: %j",
   (findings) => {
     expect(() =>
-      parseModelReviewTransport({ summary: "Review completed", findings }),
+      modelReviewTransportSchema.parse({
+        summary: "Review completed",
+        findings,
+      }),
     ).toThrow();
   },
 );
@@ -30,7 +25,7 @@ it.each(["85%", "0.9garbage", "2", "-1", "Infinity"])(
   "does not inflate confidence from %s",
   (confidence) => {
     expect(() =>
-      parseModelReviewTransport({
+      modelReviewTransportSchema.parse({
         summary: "Review completed",
         findings: [{ ...finding, confidence }],
       }),
@@ -39,11 +34,13 @@ it.each(["85%", "0.9garbage", "2", "-1", "Infinity"])(
 );
 it("accepts explicit silence and an exact numeric confidence representation", () => {
   expect(
-    parseModelReviewTransport({ summary: "No proven defects", findings: [] })
-      .findings,
+    modelReviewTransportSchema.parse({
+      summary: "No proven defects",
+      findings: [],
+    }).findings,
   ).toEqual([]);
   expect(
-    parseModelReviewTransport({
+    modelReviewTransportSchema.parse({
       summary: "Review",
       findings: [{ ...finding, confidence: "0.85" }],
     }).findings[0]?.confidence,

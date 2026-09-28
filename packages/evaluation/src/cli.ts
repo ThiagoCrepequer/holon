@@ -57,7 +57,9 @@ async function main(): Promise<void> {
     policyVersion: "review-policy-v1",
     promptVersion: "review-prompt-v1",
     subjectVersion:
-      mode === "recorded" ? "recorded-output-v3" : "live-structured-output-v1",
+      mode === "recorded"
+        ? "recorded-output-v3"
+        : "live-host-evidence-references",
   });
   const subject =
     mode === "live"

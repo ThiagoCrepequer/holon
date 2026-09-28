@@ -17,7 +17,6 @@ import {
   isProtectedPath,
   modelReviewOutputSchema,
   modelReviewTransportSchema,
-  parseModelReviewTransport,
   preparedRepositorySchema,
   publicationRecordSchema,
   repositoryConfigInputSchema,
@@ -774,99 +773,35 @@ describe("model output and publication ledger", () => {
     ).toBe(false);
   });
 
-  it("normalizes a provider-portable nullable transport before domain validation", () => {
-    const transported = modelReviewTransportSchema.parse({
-      findings: output.findings.map((finding) => ({
-        ...finding,
-        evidence: finding.evidence.map((evidence) => ({
-          ...evidence,
-          endLine: null,
-        })),
-        location: { ...finding.location, startLine: null },
-        suggestion: finding.suggestion ?? null,
-      })),
-      summary: output.summary,
-    });
-
-    expect(parseModelReviewTransport(transported)).toEqual(output);
-    expect(() =>
-      parseModelReviewTransport({
-        ...transported,
-        findings: transported.findings.map((finding) => ({
-          ...finding,
-          evidence: finding.evidence.map((evidence) => ({
-            ...evidence,
-            endLine: evidence.startLine - 1,
-          })),
-        })),
-      }),
-    ).toThrow(/endLine must not precede/u);
-  });
-
-  it("coerces and clamps imperfect LLM outputs in modelReviewTransportSchema", () => {
-    const rawImperfection = {
-      extraRootField: "unexpected",
-      findings: [
-        {
-          confidence: "0.85",
-          diagnostic: "A causal explanation of a verified regression.",
-          evidence: [
-            {
-              endLine: "10", // string number
-              excerpt: "e".repeat(350), // preserved under the larger limit
-              extraEvidenceField: 123,
-              path: "src/file.ts",
-              reason: "r".repeat(250), // preserved under the larger limit
-              startLine: "5", // string number
-            },
-            {
-              endLine: null,
-              excerpt: "second evidence",
-              path: "src/file.ts",
-              reason: "second reason",
-              startLine: 20,
-            },
-            {
-              endLine: null,
-              excerpt: "third evidence", // retained under the larger evidence budget
-              path: "src/file.ts",
-              reason: "third reason",
-              startLine: 30,
-            },
-          ],
-          extraFindingField: true,
-          location: {
-            line: "5", // string number
-            path: "src/file.ts",
-            side: "RIGHT",
-            startLine: "5", // string number
-          },
-          severity: "HIGH", // uppercase, should be normalized
-          suggestion: "   ", // empty whitespace, should become null
-        },
-      ],
-      summary: "s".repeat(2700), // retained under the larger summary budget
+  it("accepts only reference-based evidence and anchors at the model boundary", () => {
+    const id = `ev:${"a".repeat(64)}`;
+    const finding = {
+      confidence: "0.85",
+      diagnostic: "The inclusive comparison permits an extra attempt.",
+      evidence: [{ id, reason: "Boundary comparison" }],
+      location: { anchorId: id },
+      severity: "HIGH",
+      suggestion: "   ",
     };
-
-    const parsed = modelReviewTransportSchema.parse(rawImperfection);
-    expect(parsed.summary.length).toBe(2700);
-    expect(parsed.summary).toBe(rawImperfection.summary);
-    const firstFinding = parsed.findings[0]!;
-    const firstEvidence = firstFinding.evidence[0]!;
-    expect(firstFinding.diagnostic.length).toBeGreaterThanOrEqual(30);
-    expect(firstFinding.evidence.length).toBe(3);
-    expect(firstEvidence.excerpt.length).toBe(350);
-    expect(firstEvidence.reason.length).toBe(250);
-    expect(firstEvidence.startLine).toBe(5);
-    expect(firstEvidence.endLine).toBe(10);
-    expect(firstFinding.location.line).toBe(5);
-    expect(firstFinding.severity).toBe("high");
-    expect(firstFinding.suggestion).toBeNull();
-    // Verify extra fields stripped
-    expect((parsed as Record<string, unknown>).extraRootField).toBeUndefined();
-    expect(
-      (firstFinding as Record<string, unknown>).extraFindingField,
-    ).toBeUndefined();
+    const parsed = modelReviewTransportSchema.parse({
+      findings: [finding],
+      summary: "Review completed",
+      extraRootField: true,
+    });
+    expect(parsed.findings[0]).toMatchObject({
+      confidence: 0.85,
+      severity: "high",
+      suggestion: null,
+      evidence: [{ id }],
+      location: { anchorId: id },
+    });
+    expect(parsed).not.toHaveProperty("extraRootField");
+    expect(() =>
+      modelReviewTransportSchema.parse({
+        findings: [{ ...finding, location: { ...finding.location, line: 12 } }],
+        summary: "Review",
+      }),
+    ).toThrow();
   });
 
   it("keeps the largest valid model result below the Workflow step limit", () => {
@@ -898,7 +833,7 @@ describe("model output and publication ledger", () => {
       isDegraded: true,
       summary: "Degraded analysis fallback text",
     };
-    const parsed = parseModelReviewTransport(degradedTransport);
+    const parsed = modelReviewTransportSchema.parse(degradedTransport);
     expect(parsed.isDegraded).toBe(true);
     expect(parsed.summary).toBe("Degraded analysis fallback text");
     expect(parsed.findings).toEqual([]);

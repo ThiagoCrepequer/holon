@@ -52,7 +52,6 @@ function generator(
     },
     { run },
     undefined,
-    "domain",
     observer,
   );
 }

@@ -1,4 +1,5 @@
 import type {
+  CanonicalEvidenceEntry,
   ProjectIdentificationResult,
   ReviewContextFile,
 } from "@holon/contracts";
@@ -119,8 +120,14 @@ export function canonicalEvidenceCandidates(
       }
       if (!line || raw.startsWith("-")) continue;
       if (raw.startsWith("+") || raw.startsWith(" ")) {
-        const text = redactSecrets(raw.slice(1));
-        if (raw.startsWith("+") && text.trim() && text.length <= 1200) {
+        const sourceText = raw.slice(1);
+        const text = redactSecrets(sourceText);
+        if (
+          raw.startsWith("+") &&
+          text === sourceText &&
+          text.trim() &&
+          text.length <= 1200
+        ) {
           if (
             window &&
             window.endLine === line - 1 &&
@@ -157,16 +164,57 @@ export function selectFinalizationEvidence(
   candidates: readonly CanonicalEvidenceCandidate[],
   investigation: string,
 ): readonly CanonicalEvidenceCandidate[] {
+  const mentionedLines = new Set(
+    Array.from(investigation.matchAll(/\b\d+\b/gu), (match) =>
+      Number(match[0]),
+    ),
+  );
   const score = (candidate: CanonicalEvidenceCandidate) =>
     Number(investigation.includes(candidate.path)) * 2 +
-    Number(new RegExp(`\\b${candidate.startLine}\\b`, "u").test(investigation));
+    Number(
+      [...mentionedLines].some(
+        (line) => line >= candidate.startLine && line <= candidate.endLine,
+      ),
+    );
   const result: CanonicalEvidenceCandidate[] = [];
-  let bytes = 0;
-  for (const candidate of candidates.toSorted((a, b) => score(b) - score(a))) {
-    const size = new TextEncoder().encode(JSON.stringify(candidate)).length;
+  let bytes = 2; // JSON array delimiters.
+  const unique = [
+    ...new Map(
+      candidates.map((candidate) => [JSON.stringify(candidate), candidate]),
+    ).values(),
+  ];
+  for (const candidate of unique.toSorted((a, b) => score(b) - score(a))) {
+    // IDs have a fixed encoded width; include the actual JSON fields and comma.
+    const size =
+      jsonBytes({ ...candidate, id: `ev:${"0".repeat(64)}` }) +
+      Number(result.length > 0);
     if (bytes + size > 24000 || result.length >= 32) continue;
     result.push(candidate);
     bytes += size;
   }
   return result;
+}
+
+/** IDs bind path, coordinates and bytes; resolution still uses a request-local allowlist. */
+export async function createFinalizationEvidenceCatalog(
+  candidates: readonly CanonicalEvidenceCandidate[],
+  investigation: string,
+): Promise<readonly CanonicalEvidenceEntry[]> {
+  const selected = selectFinalizationEvidence(candidates, investigation);
+  const catalog = await Promise.all(
+    selected.map(async (entry) => {
+      const bytes = new TextEncoder().encode(
+        JSON.stringify([
+          entry.path,
+          entry.startLine,
+          entry.endLine,
+          entry.excerpt,
+        ]),
+      );
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const id = `ev:${Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("")}`;
+      return { ...entry, id };
+    }),
+  );
+  return [...new Map(catalog.map((entry) => [entry.id, entry])).values()];
 }

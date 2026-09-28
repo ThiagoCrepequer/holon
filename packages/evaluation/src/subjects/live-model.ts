@@ -20,7 +20,6 @@ export interface LiveModelSubjectConfig extends Omit<
   "metadata"
 > {
   readonly evaluationRunId: string;
-  readonly harness?: "structured-output" | "structured-output-portable";
   readonly sourceRevision: string;
 }
 
@@ -81,7 +80,7 @@ export function createEvaluationModelReviewer(
       evaluation_run_id: config.evaluationRunId,
       source_revision: config.sourceRevision,
       stage: "evaluation",
-      harness: config.harness ?? "structured-output",
+      harness: "host-evidence-references",
     },
     model: config.model,
   };
@@ -90,12 +89,7 @@ export function createEvaluationModelReviewer(
     12,
   );
   return new GatewayModelReviewer(
-    new AiSdkReviewGenerator(
-      generatorConfig,
-      tools,
-      onUsage,
-      config.harness === "structured-output" ? "domain" : "portable",
-    ),
+    new AiSdkReviewGenerator(generatorConfig, tools, onUsage),
   );
 }
 

@@ -321,3 +321,26 @@ para o histórico autenticado, não para o checkpoint sanitizado. Consulte a
 ## Endurecimento do core (2026-09-27)
 
 A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+
+### Evidências por referência na finalização
+
+O transporte do modelo usa `evidence: [{ id, reason }]` e `location: { anchorId }`.
+O host constrói o catálogo a partir das linhas adicionadas do patch canônico do
+shard: janelas contíguas de até oito linhas e 1.200 caracteres, com IDs SHA-256
+ligados ao caminho, coordenadas e bytes do trecho. Linhas alteradas pela redação
+de segredos não entram no catálogo. A seleção prioriza caminhos e linhas citados
+na investigação, limitada a 32 entradas e 24.000 bytes incluindo IDs. Se o limite
+omite candidatos, `evidence_catalog_omitted` impede uma conclusão completa.
+
+A finalização, a recuperação e o resgate de JSON usam o mesmo catálogo e schema.
+O modelo não pode fornecer texto de código nem coordenadas nesse transporte.
+O host resolve apenas referências presentes no catálogo local e exige que a
+âncora apareça nas evidências do próprio candidato. Referência desconhecida ou
+âncora sem evidência descarta o candidato inteiro, preserva os demais e registra
+`evidence_reference_invalid`, mantendo a revisão incompleta. Isso vale tanto
+para achados quanto para resoluções de achados anteriores.
+
+Após a resolução, o gate canônico continua verificando evidências e linhas.
+Referências garantem a origem literal do trecho, não a correção semântica do
+diagnóstico. O contrato persistido de achados permanece igual; o transporte de
+finalização anterior é substituído, sem fallback ou migração de estado.
