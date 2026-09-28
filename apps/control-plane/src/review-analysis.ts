@@ -42,9 +42,9 @@ import type { ReviewServices } from "./review-services.js";
 import { buildShardReviewContext } from "./review-shard-context.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
-export interface ReviewAnalysisExecution<T> {
+export interface ReviewAnalysisExecution<T extends Rpc.Serializable<T>> {
   readonly configuration: RunConfigurationRef;
-  runStep<R>(
+  runStep<R extends Rpc.Serializable<R>>(
     name: string,
     phase: "preparation" | "analysis",
     callback: () => Promise<R>,
@@ -231,21 +231,21 @@ export function analyzeReview(
   emit: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
 ): Promise<ReconciledReviewOutput>;
-export function analyzeReview<T>(
+export function analyzeReview<T extends Rpc.Serializable<T>>(
   job: ReviewJob,
   services: ReviewServices,
   emit: EmitReviewEvent,
   effectivePolicy: RepositoryPolicy | undefined,
   execution: ReviewAnalysisExecution<T>,
 ): Promise<T>;
-export async function analyzeReview(
+export async function analyzeReview<T extends Rpc.Serializable<T>>(
   job: ReviewJob,
   services: ReviewServices,
   emit: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
-  execution?: ReviewAnalysisExecution<unknown>,
-): Promise<unknown> {
-  const runStep = <R>(
+  execution?: ReviewAnalysisExecution<T>,
+): Promise<T | ReconciledReviewOutput> {
+  const runStep = <R extends Rpc.Serializable<R>>(
     name: string,
     phase: "preparation" | "analysis",
     fn: () => Promise<R>,

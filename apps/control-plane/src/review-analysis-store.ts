@@ -1,6 +1,4 @@
 import {
-  adminFindingSummarySchema,
-  type AdminFindingSummary,
   buildReviewAnalysisCheckpoint,
   reconciledReviewOutputSchema,
   runIdSchema,
@@ -32,33 +30,6 @@ export class ReviewAnalysisStore {
         .toArray()[0];
       if (run === undefined || !["running", "publishing"].includes(run.state))
         throw new Error("Analysis run is not active");
-      // Retain user-visible verified results independently of temporary analysis.
-      const summaries = output.activeFindings.map((finding) =>
-        adminFindingSummarySchema.parse({
-          details: {
-            confidence: finding.confidence,
-            suggestion: finding.suggestion,
-            evidence: finding.evidence,
-          },
-          identityAmbiguous: finding.identityAmbiguous,
-          diagnostic: finding.diagnostic,
-          filePath: finding.location.path,
-          fingerprint: finding.fingerprint,
-          line: finding.location.line,
-          severity: finding.severity,
-          status: finding.status,
-          updatedAt: new Date().toISOString(),
-        }),
-      );
-      const retainedBytes = new TextEncoder().encode(JSON.stringify(summaries));
-      for (let offset = 0; offset < retainedBytes.length; offset += 64_000) {
-        this.storage.sql.exec(
-          "INSERT INTO review_finding_artifacts(run_id, part, payload) VALUES (?, ?, ?)",
-          runId,
-          offset / 64_000,
-          retainedBytes.slice(offset, offset + 64_000).buffer,
-        );
-      }
       const bytes = new TextEncoder().encode(JSON.stringify(output));
       for (let offset = 0; offset < bytes.length; offset += 64_000) {
         this.storage.sql.exec(
@@ -70,23 +41,6 @@ export class ReviewAnalysisStore {
       }
       return buildReviewAnalysisCheckpoint(output);
     });
-  }
-
-  public retainedFindings(rawRunId: string): AdminFindingSummary[] | null {
-    const runId = runIdSchema.parse(rawRunId);
-    const rows = this.storage.sql
-      .exec<{ payload: ArrayBuffer }>(
-        "SELECT payload FROM review_finding_artifacts WHERE run_id = ? ORDER BY part",
-        runId,
-      )
-      .toArray();
-    if (!rows.length) return null;
-    const decoder = new TextDecoder("utf-8", { fatal: true });
-    const json =
-      rows
-        .map((row) => decoder.decode(row.payload, { stream: true }))
-        .join("") + decoder.decode();
-    return adminFindingSummarySchema.array().parse(JSON.parse(json));
   }
 
   public load(rawRunId: string): ReconciledReviewOutput {

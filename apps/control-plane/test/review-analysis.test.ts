@@ -89,11 +89,6 @@ function createMockServices(
       hasContext: () => Promise.resolve(true),
       runTool: () => Promise.resolve({ content: "", truncated: false }),
     },
-    getAccumulatedUsage: () => ({
-      inputTokens: 10,
-      outputTokens: 10,
-      toolCallsCount: 1,
-    }),
     ledger: {
       loadRunConfiguration: () => defaultRunConfiguration(job),
       loadPrFindings: () => Promise.resolve([]),
@@ -116,9 +111,6 @@ function createMockServices(
     readCurrentRefs: () =>
       Promise.resolve({ baseSha: "b".repeat(40), headSha: "a".repeat(40) }),
     registerCredentialScope: () => Promise.resolve(),
-    telemetry: {
-      emit: () => undefined,
-    } as unknown as ReviewServices["telemetry"],
     workflow: {
       get: () => Promise.reject(new Error("unused")),
     },

@@ -46,3 +46,51 @@ export type TestFailure = z.infer<typeof testFailureSchema>;
 export type TestExecutionReport = z.infer<typeof testExecutionReportSchema>;
 export type CiEvidenceStatus = z.infer<typeof ciEvidenceStatusSchema>;
 export type CiEvidence = z.infer<typeof ciEvidenceSchema>;
+
+export const ciSummarySchema = z.strictObject({
+  durationMs: z.number().int().nonnegative().safe().nullable(),
+  failed: z.number().int().nonnegative().safe(),
+  passed: z.number().int().nonnegative().safe(),
+  skipped: z.number().int().nonnegative().safe(),
+  status: ciEvidenceStatusSchema,
+  total: z.number().int().nonnegative().safe(),
+  workflowName: z.string().trim().min(1).max(100).nullable(),
+});
+
+export type CiSummary = z.infer<typeof ciSummarySchema>;
+/**
+ * Truncates a string to at most maxBytes in UTF-8, preserving code point
+ * boundaries and appending an ellipsis if truncation occurred.
+ */
+export function truncateUtf8Bytes(
+  str: string,
+  maxBytes: number,
+  ellipsis = "…",
+): string {
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(str);
+  if (encoded.length <= maxBytes) {
+    return str;
+  }
+
+  const ellipsisBytes = encoder.encode(ellipsis);
+  if (ellipsisBytes.length > maxBytes) {
+    return "";
+  }
+
+  const availableBytes = maxBytes - ellipsisBytes.length;
+  let byteCount = 0;
+  let result = "";
+
+  // Iterating with for..of iterates by Unicode code point, preventing split surrogate pairs
+  for (const char of str) {
+    const charBytes = encoder.encode(char).length;
+    if (byteCount + charBytes > availableBytes) {
+      break;
+    }
+    byteCount += charBytes;
+    result += char;
+  }
+
+  return result + ellipsis;
+}

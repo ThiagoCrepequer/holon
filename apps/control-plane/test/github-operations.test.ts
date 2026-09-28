@@ -9,38 +9,15 @@ import {
 } from "../src/github-operations.js";
 
 describe("GitHub operation diagnostics", () => {
-  it("reports the typed original error before mapping it to a Workflow error", async () => {
-    const entries: Array<{
-      event: string;
-      code: string | undefined;
-      operation: string | undefined;
-    }> = [];
+  it("preserves classification when mapping to a Workflow error", async () => {
     const error = new GitHubRequestError("invalid_response", false);
     await expect(
-      executeGitHubOperation(() => Promise.reject(error), Date.now, {
-        context: { operation: "github.create_installation_session" },
-        reporter: {
-          report: (event, original, context) =>
-            entries.push({
-              event,
-              code:
-                original instanceof GitHubRequestError
-                  ? original.code
-                  : undefined,
-              operation: context?.operation,
-            }),
-        },
-      }),
+      executeGitHubOperation(() => Promise.reject(error)),
     ).rejects.toMatchObject({
       message: "HOLON_GITHUB_NON_RETRYABLE:invalid_response",
+      code: "invalid_response",
+      retryable: false,
     });
-    expect(entries).toEqual([
-      {
-        event: "github.operation_failed",
-        code: "invalid_response",
-        operation: "github.create_installation_session",
-      },
-    ]);
   });
 });
 

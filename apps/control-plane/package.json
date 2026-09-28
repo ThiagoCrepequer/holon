@@ -17,7 +17,6 @@
     "@holon/domain": "workspace:*",
     "@holon/github": "workspace:*",
     "@holon/model": "workspace:*",
-    "@holon/observability": "workspace:*",
     "@holon/project-identification": "workspace:*",
     "@holon/repository-analysis": "workspace:*",
     "@holon/repository-config": "workspace:*",

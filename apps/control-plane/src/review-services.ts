@@ -13,8 +13,6 @@ import type {
   ModelReviewer,
   ReviewDecisionLedger,
   ReviewPublisher,
-  RunTelemetryLedger,
-  TelemetryEmitter,
 } from "@holon/application";
 import {
   projectIdentificationResultSchema,
@@ -26,7 +24,6 @@ import {
   preparedRepositorySchema,
   repositoryToolResultSchema,
   reviewContextSchema,
-  type AdminRunProjectionEvent,
   type ExecutorRequest,
   type GitHubCredentialRequest,
   type PreparedRepository,
@@ -36,14 +33,10 @@ import {
   type ReviewContext,
   type ReviewJob,
   type RunClaimResult,
-  type StepExecutionNode,
-  type StepPhase,
 } from "@holon/contracts";
 import type {
   ReconciledReviewOutput,
   ReviewAnalysisCheckpoint,
-  AnalysisUsage,
-  AnalysisAccounting,
 } from "@holon/contracts";
 import { createPrKey, type RunId, type RunState } from "@holon/domain";
 import {
@@ -59,7 +52,6 @@ import {
   RepositoryToolBudgetExceededError,
   createRedactingRepositoryToolRunner,
 } from "@holon/model";
-import { safeErrorDetails } from "@holon/observability";
 import {
   interpretProjects,
   detectorRevision,
@@ -77,11 +69,6 @@ import {
 } from "./github-operations.js";
 import { errorKind, type StructuredLogger } from "./observability.js";
 import { configurationScopePolicy } from "./run-configuration-resolver.js";
-import {
-  AnalyticsEngineTelemetryEmitter,
-  CompositeTelemetryEmitter,
-  StructuredLogTelemetryEmitter,
-} from "./telemetry-emitter.js";
 import type { WorkflowController } from "./workflow-superseding.js";
 
 export interface RepositoryExecutorBinding {
@@ -104,8 +91,7 @@ export interface WorkflowLedger
     PublicationLedger,
     ReviewDecisionLedger,
     CiEvidenceLedger,
-    FindingLifecycleLedger,
-    RunTelemetryLedger {
+    FindingLifecycleLedger {
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
   saveRunConfiguration(
@@ -120,18 +106,13 @@ export interface WorkflowLedger
     output: ReconciledReviewOutput,
   ): Promise<ReviewAnalysisCheckpoint>;
   loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput>;
-  recordAnalysisUsage(
-    runId: string,
-    eventId: string,
-    usage: AnalysisUsage,
-  ): Promise<void>;
 
   reserveAnalysisToolCall(
     runId: string,
     index: number,
     totalShards: number,
   ): Promise<boolean>;
-  loadAnalysisAccounting(runId: string): Promise<AnalysisAccounting>;
+
   loadFindingFeedbacks(
     prKey: Parameters<FindingLifecycleLedger["loadPrFindings"]>[0],
   ): Promise<readonly import("@holon/domain").FindingFeedbackRecord[]>;
@@ -152,9 +133,7 @@ export interface WorkflowLedger
     occurredAt: string,
     requiresCleanup: boolean,
   ): Promise<boolean>;
-  recordProjectionTask(event: AdminRunProjectionEvent): Promise<void>;
-  markProjectionTaskCompleted(runId: RunId): Promise<void>;
-  scheduleProjectionRetry(runId: RunId, errorKind: string): Promise<void>;
+
   registerCredentialScope(request: GitHubCredentialRequest): Promise<void>;
   runState(runId: RunId): Promise<RunState | undefined> | RunState | undefined;
   transitionAndRequestCleanup(
@@ -164,33 +143,6 @@ export interface WorkflowLedger
     occurredAt: string,
     operationId: string,
   ): Promise<void>;
-  recordStepAttemptStart?(
-    runId: string,
-    stepName: string,
-    phase: StepPhase,
-    attempt: number,
-    startedAt: string,
-    sanitizedInput?: Record<string, unknown> | null,
-    waitBeforeRetryMs?: number | null,
-    stepOrder?: number | null,
-  ): Promise<void>;
-  recordStepAttemptComplete?(
-    runId: string,
-    stepName: string,
-    attempt: number,
-    endedAt: string,
-    durationMs: number,
-    sanitizedOutput?: Record<string, unknown> | null,
-  ): Promise<void>;
-  recordStepAttemptFailure?(
-    runId: string,
-    stepName: string,
-    attempt: number,
-    endedAt: string,
-    durationMs: number,
-    errorCode: string,
-  ): Promise<void>;
-  getStepExecutions?(runId: string): Promise<StepExecutionNode[]>;
 }
 
 export interface ReviewRuntime {
@@ -199,7 +151,7 @@ export interface ReviewRuntime {
     connect: () => Promise<GitHubInstallationSession>,
   ) => Promise<number | undefined>;
   readonly identificationModel?: import("@holon/application").ProjectIdentificationModel;
-  readonly adminProjectionQueue?: Queue<unknown>;
+
   readonly createModel?: (
     toolRunner: ReturnType<
       typeof createPartitionedRepositoryToolRunner
@@ -212,7 +164,6 @@ export interface ReviewRuntime {
   readonly executor?: RepositoryExecutorBinding;
   readonly logger?: StructuredLogger;
   readonly now?: () => string;
-  readonly telemetry?: TelemetryEmitter;
   readonly wait?: (delayMilliseconds: number) => Promise<void>;
   readonly workflow?: WorkflowController;
 }
@@ -224,10 +175,6 @@ export interface GitHubMutationContext {
     readonly baseSha: string;
     readonly headSha: string;
   }>;
-}
-
-function isAdminProjectionEnabled(env: Cloudflare.Env): boolean {
-  return env.ADMIN_PROJECTION_ENABLED === "true";
 }
 
 export interface ReviewServices {
@@ -247,19 +194,11 @@ export interface ReviewServices {
     discoveryOnly?: boolean,
     deadlineAt?: number,
   ): Promise<ProjectIdentificationResult | null>;
-  readonly adminProjectionQueue?: Queue<unknown> | undefined;
+
   readonly executor: RepositoryExecutorBinding;
   readonly ledger: WorkflowLedger;
   readonly model: ModelReviewer;
-  readonly modelRoute?: string | undefined;
-  readonly toolsBudget?: number | undefined;
-  readonly telemetry: TelemetryEmitter;
   readonly workflow: WorkflowController;
-  getAccumulatedUsage(): {
-    readonly inputTokens: number;
-    readonly outputTokens: number;
-    readonly toolCallsCount: number;
-  };
   reconcileCheckRun(runId: string): Promise<number | undefined>;
   createMutationContext(): Promise<GitHubMutationContext>;
   createSession(): Promise<GitHubInstallationSession>;
@@ -317,7 +256,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryTransientError",
-        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
+        reason: "typed_repository_failure",
         retryable: true,
       });
       throw new RepositoryTransientError("repository");
@@ -331,7 +270,7 @@ function normalizeRepositoryFailure(
       logger?.emit("repository.preparation_failed", {
         ...logContext,
         errorKind: "RepositoryPermanentError",
-        reason: safeErrorDetails(error).errorCode ?? "typed_repository_failure",
+        reason: "typed_repository_failure",
         retryable: false,
       });
       throw new NonRetryableError("HOLON_REPOSITORY_NON_RETRYABLE");
@@ -354,8 +293,6 @@ export function createReviewServices(
   logContext: Readonly<Record<string, number | string>>,
 ): ReviewServices {
   let projectIdentification: ProjectIdentificationResult | undefined;
-  let identificationInputTokens = 0,
-    identificationOutputTokens = 0;
   const executor: RepositoryExecutorBinding =
     runtime.executor ?? env.REPOSITORY_EXECUTOR;
   const ledger = env.REVIEW_LEDGERS.getByName(
@@ -363,37 +300,22 @@ export function createReviewServices(
   ) as unknown as WorkflowLedger;
   const wait = runtime.wait ?? ((delay) => scheduler.wait(delay));
   const createSession = async () =>
-    await executeGitHubOperation(
-      async () => {
-        if (runtime.createSession) {
-          return await runtime.createSession(
-            job.envelope.installationId,
-            job.envelope.repository.id,
-          );
-        }
-        const keyring = resolveControlPlaneKeyring(env);
-        const keyringOptions = createKeyringTelemetryOptions(
-          logger,
-          logContext,
-        );
-        return await createInstallationSessionWithKeyring(
-          keyring,
+    await executeGitHubOperation(async () => {
+      if (runtime.createSession) {
+        return await runtime.createSession(
           job.envelope.installationId,
           job.envelope.repository.id,
-          keyringOptions,
         );
-      },
-      Date.now,
-      {
-        context: {
-          operation: "github.create_installation_session",
-          runId: job.runId,
-          repositoryId: job.envelope.repository.id,
-          pullRequestNumber: job.envelope.pullRequest.number,
-          installationId: job.envelope.installationId,
-        },
-      },
-    );
+      }
+      const keyring = resolveControlPlaneKeyring(env);
+      const keyringOptions = createKeyringTelemetryOptions(logger, logContext);
+      return await createInstallationSessionWithKeyring(
+        keyring,
+        job.envelope.installationId,
+        job.envelope.repository.id,
+        keyringOptions,
+      );
+    }, Date.now);
 
   const resolveCredentialContainerId = async (): Promise<string> => {
     const containerId = await executor.resolveContainerId(job.runId);
@@ -474,9 +396,6 @@ export function createReviewServices(
     throw lastError;
   };
 
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let toolCallsCount = 0;
   let contextPreparation: Promise<void> | undefined;
   const ensureContext = (
     maximumAttempts: number,
@@ -529,7 +448,6 @@ export function createReviewServices(
               ))
             )
               throw new RepositoryToolBudgetExceededError(12);
-            toolCallsCount += 1;
             await ensureContext(2, policy);
             const result = repositoryToolResultSchema.parse(
               await executor.runTool(job.runId, call),
@@ -578,13 +496,6 @@ export function createReviewServices(
           },
           toolBudget.runner,
           async (usage) => {
-            inputTokens += usage.inputTokens ?? 0;
-            outputTokens += usage.outputTokens ?? 0;
-            await ledger.recordAnalysisUsage(job.runId, crypto.randomUUID(), {
-              inputTokens: usage.inputTokens ?? 0,
-              outputTokens: usage.outputTokens ?? 0,
-              toolCallsCount: 0,
-            });
             logger.emit("model.usage", { ...logContext, ...usage });
           },
           "portable",
@@ -625,13 +536,6 @@ export function createReviewServices(
     };
   };
   const model = createShardReviewer(0, 1).model;
-
-  const telemetry =
-    runtime.telemetry ??
-    new CompositeTelemetryEmitter([
-      new AnalyticsEngineTelemetryEmitter(env.ANALYTICS_ENGINE),
-      new StructuredLogTelemetryEmitter(logger),
-    ]);
 
   const mutationContext = async (): Promise<GitHubMutationContext> => {
     const github = await createSession();
@@ -683,22 +587,11 @@ export function createReviewServices(
   };
 
   return {
-    adminProjectionQueue:
-      runtime.adminProjectionQueue ??
-      (isAdminProjectionEnabled(env) ? env.ADMIN_PROJECTION_QUEUE : undefined),
     executor,
     ledger,
     model,
-    modelRoute: env.AI_MODEL_ID,
-    toolsBudget: 12,
     createShardReviewer,
-    telemetry,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
-    getAccumulatedUsage: () => ({
-      inputTokens: inputTokens + identificationInputTokens,
-      outputTokens: outputTokens + identificationOutputTokens,
-      toolCallsCount,
-    }),
     createMutationContext: mutationContext,
     reconcileCheckRun: runtime.reconcileCheckRun
       ? (runId) => runtime.reconcileCheckRun!(runId, createSession)
@@ -708,8 +601,6 @@ export function createReviewServices(
     loadContext: async () =>
       reviewContextSchema.parse(await executor.loadContext(job.runId)),
     useProjectIdentification: (result) => {
-      identificationInputTokens = result.usage?.inputTokens ?? 0;
-      identificationOutputTokens = result.usage?.outputTokens ?? 0;
       if (shouldEnrichProjects(env.PROJECT_IDENTIFICATION_MODE))
         projectIdentification = result;
     },
@@ -851,25 +742,13 @@ export function createReviewServices(
     },
     readCurrentRefs: async () => {
       const github = await createSession();
-      return await executeGitHubOperation(
-        async () => {
-          return await github.currentPullRequestRefs(
-            job.envelope.repository.owner,
-            job.envelope.repository.name,
-            job.envelope.pullRequest.number,
-          );
-        },
-        Date.now,
-        {
-          context: {
-            operation: "github.pull_request_refs",
-            runId: job.runId,
-            repositoryId: job.envelope.repository.id,
-            pullRequestNumber: job.envelope.pullRequest.number,
-            installationId: job.envelope.installationId,
-          },
-        },
-      );
+      return await executeGitHubOperation(async () => {
+        return await github.currentPullRequestRefs(
+          job.envelope.repository.owner,
+          job.envelope.repository.name,
+          job.envelope.pullRequest.number,
+        );
+      }, Date.now);
     },
     registerCredentialScope: async () => {
       await ledger.registerCredentialScope({

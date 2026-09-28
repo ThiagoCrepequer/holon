@@ -214,7 +214,7 @@ it("publishes the latest human severity even when feedback arrives after analysi
   );
 });
 
-it("reconstructs persisted versions, usage and start time when callbacks are replayed after the identification deadline", async () => {
+it("reconstructs persisted versions when callbacks are replayed after the identification deadline", async () => {
   const initialTime = Date.now();
   const clock = vi.spyOn(Date, "now").mockReturnValue(initialTime);
   const identification = await identifySnapshot({
@@ -228,11 +228,6 @@ it("reconstructs persisted versions, usage and start time when callbacks are rep
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   const review = vi.fn(
     async (_job: ReviewJob, _context: ReviewShardContext) => {
-      await ledger.recordAnalysisUsage(job.runId, "test-model-call", {
-        inputTokens: 100,
-        outputTokens: 20,
-        toolCallsCount: 0,
-      });
       return {
         output: { findings: [], summary: "No issues." },
         promptTruncated: false,
@@ -265,12 +260,9 @@ it("reconstructs persisted versions, usage and start time when callbacks are rep
     cachedSteps(cache),
     configured,
   );
-  const first = await ledger.loadRunTelemetry(job.runId);
-  expect(first?.tokens.inputTokens).toBe(100);
   clock.mockReturnValue(initialTime + 180_000);
   cache.delete("analyze-shard-1");
   cache.delete("analyze-review");
-  cache.delete("save-run-telemetry");
   await executeReviewWorkflow(
     settings,
     event("cached-replay"),
@@ -283,9 +275,13 @@ it("reconstructs persisted versions, usage and start time when callbacks are rep
       projects: [{ technologies: [{ name: "react" }] }],
     },
   });
-  const replayed = await ledger.loadRunTelemetry(job.runId);
-  expect(replayed?.tokens.inputTokens).toBe(100);
-  expect(replayed?.queueWaitMs).toBe(first?.queueWaitMs);
+  // cachedSteps pauses terminalization to retain the replay artifact.
+  expect(await ledger.runState(job.runId as RunId)).toBe("publishing");
+  expect(
+    setup.posts.filter((post) =>
+      post.route.includes("/pulls/{pull_number}/reviews"),
+    ),
+  ).toHaveLength(1);
 });
 
 function session(
@@ -464,10 +460,7 @@ describe("ReviewWorkflow", () => {
             )
             .one().count,
         ).toBe(0);
-        expect(
-          (await object.getSanitizedAdminRunDetail(job.runId))?.configuration
-            ?.output.language,
-        ).toBe(language);
+        expect(await object.findRunConfiguration(job.runId)).toEqual(ref);
       });
     },
   );
@@ -545,11 +538,11 @@ describe("ReviewWorkflow", () => {
         )?.event,
       ).toBe("REQUEST_CHANGES");
       const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-      const detail = await ledger.getSanitizedAdminRunDetail(job.runId);
-      expect(detail?.historicalRunFindings).toHaveLength(2);
-      expect(detail?.historicalRunFindings?.[0]?.details?.evidence).toEqual(
-        finding.evidence,
-      );
+      expect(await ledger.loadPrFindings("github:42:pr:7")).toHaveLength(2);
+      expect((await ledger.loadPrFindings("github:42:pr:7"))[0]).toMatchObject({
+        diagnostic: finding.diagnostic,
+        severity: finding.severity,
+      });
       expect(
         (await ledger.loadLatestReviewDecision("github:42:pr:7"))?.output,
       ).toMatchObject({ language: "es", maxInlineComments: cap });
@@ -2048,32 +2041,6 @@ describe("ReviewWorkflow", () => {
     expect(body).toContain("Coverage: 92.5%");
   });
 
-  it("emits slo.breached event when execution or queue wait exceeds SLO threshold", async () => {
-    const events: Array<{ event: string; fields: Record<string, unknown> }> =
-      [];
-    const setup = runtime({
-      head: () => "a".repeat(40),
-      logger: {
-        emit: (eventName, fields) => {
-          events.push({ event: eventName, fields });
-        },
-      },
-      now: () => "2026-08-29T12:10:00.000Z", // 10 minutes after event
-    });
-
-    const result = await executeReviewWorkflow(
-      env,
-      event("slo-breach-workflow"),
-      immediateStep([]),
-      setup.value,
-    );
-
-    expect(result.outcome).toBe("completed");
-    const breach = events.find((e) => e.event === "slo.breached");
-    expect(breach).toBeDefined();
-    expect(breach?.fields.violations).toBeDefined();
-  });
-
   it("handles terminalization failure and failure notice failure gracefully in workflow catch", async () => {
     const events: Array<{ event: string; fields: Record<string, unknown> }> =
       [];
@@ -2093,17 +2060,13 @@ describe("ReviewWorkflow", () => {
         "Ledger storage error",
       ),
     };
-    const sendProjection = vi.fn(() => Promise.resolve());
-    const projectionQueue = {
-      send: sendProjection,
-    } as unknown as Queue<unknown>;
 
     await expect(
       executeReviewWorkflow(
         env,
         event("terminal-failure-workflow"),
         immediateStep([], undefined, stepErrors),
-        { ...setup.value, adminProjectionQueue: projectionQueue },
+        setup.value,
       ),
     ).rejects.toThrow("HOLON_GITHUB_TRANSIENT:transport");
 
@@ -2111,7 +2074,6 @@ describe("ReviewWorkflow", () => {
       events.some((e) => e.event === "review.terminalization_failed"),
     ).toBe(true);
     expect(events.some((e) => e.event === "review.failed")).toBe(true);
-    expect(sendProjection).not.toHaveBeenCalled();
   });
 
   it("emits structured repository.preparation_failed diagnostics when prepareRepository fails", async () => {
@@ -2199,85 +2161,21 @@ describe("ReviewWorkflow", () => {
     expect(synthesizeCalled).toBe(true);
   });
 
-  it("isolates admin projection queue failures and does not fail the review", async () => {
-    let projectionFailedEmitted = false;
-    const sendMock = vi.fn(() =>
-      Promise.reject(new Error("Queue unavailable")),
-    );
-    const failingQueue = {
-      send: sendMock,
-    } as unknown as Queue<unknown>;
-
-    const setup = runtime({
-      head: () => "a".repeat(40),
-      logger: {
-        emit: (eventName) => {
-          if (eventName === "admin.projection_failed") {
-            projectionFailedEmitted = true;
-          }
-        },
-      },
-    });
-
-    const runtimeWithFailingQueue: ReviewRuntime = {
-      ...setup.value,
-      adminProjectionQueue: failingQueue,
-    };
+  it("completes without administrative projection steps", async () => {
+    const setup = runtime();
+    const stepNames: string[] = [];
 
     const result = await executeReviewWorkflow(
       env,
-      event("failing-queue-run"),
-      immediateStep([]),
-      runtimeWithFailingQueue,
-    );
-
-    expect(result.outcome).toBe("completed");
-    expect(projectionFailedEmitted).toBe(true);
-    expect(sendMock).toHaveBeenCalled();
-  });
-
-  it("does not project when the rollout flag is disabled", async () => {
-    const setup = runtime();
-    const send = vi.fn();
-    const stepNames: string[] = [];
-    const envWithoutQueue = {
-      ...env,
-      ADMIN_PROJECTION_ENABLED: "false",
-      ADMIN_PROJECTION_QUEUE: { send },
-    } as unknown as Cloudflare.Env;
-
-    const result = await executeReviewWorkflow(
-      envWithoutQueue,
       event("no-queue-run"),
       immediateStep(stepNames),
       setup.value,
     );
 
     expect(result.outcome).toBe("completed");
-    expect(send).not.toHaveBeenCalled();
     expect(
       stepNames.some((stepName) => stepName.includes("admin-projection")),
     ).toBe(false);
-  });
-
-  it("projects when the rollout flag is enabled", async () => {
-    const setup = runtime();
-    const send = vi.fn(() => Promise.resolve());
-    const envWithQueue = {
-      ...env,
-      ADMIN_PROJECTION_ENABLED: "true",
-      ADMIN_PROJECTION_QUEUE: { send },
-    } as unknown as Cloudflare.Env;
-
-    const result = await executeReviewWorkflow(
-      envWithQueue,
-      event("enabled-queue-run"),
-      immediateStep([]),
-      setup.value,
-    );
-
-    expect(result.outcome).toBe("completed");
-    expect(send).toHaveBeenCalledOnce();
   });
 });
 
@@ -2381,7 +2279,7 @@ it("waits durably for an existing cache owner then reuses its result", async () 
   expect(identify).not.toHaveBeenCalled();
 });
 
-it("schedules durable cleanup before failed accounting can interrupt terminalization", async () => {
+it("schedules durable cleanup and preserves the original analysis failure", async () => {
   const setup = runtime({
     model: () => ({
       review: async () => {
@@ -2394,15 +2292,12 @@ it("schedules durable cleanup before failed accounting can interrupt terminaliza
     executeReviewWorkflow(
       env,
       event("failed-accounting"),
-      immediateStep(steps, undefined, {
-        "failed-snapshot-accounting": new Error("accounting unavailable"),
-      }),
+      immediateStep(steps),
       setup.value,
     ),
-  ).rejects.toThrow("accounting unavailable");
-  expect(
-    steps.indexOf("mark-review-terminal-and-schedule-cleanup"),
-  ).toBeLessThan(steps.indexOf("failed-snapshot-accounting"));
+  ).rejects.toThrow("analysis infrastructure unavailable");
+  expect(steps).toContain("mark-review-terminal-and-schedule-cleanup");
+  expect(steps.some((name) => /accounting|telemetry/.test(name))).toBe(false);
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   expect(await ledger.runState(job.runId as RunId)).toBe("failed_terminal");
   await runInDurableObject(ledger, (_object, state) => {

@@ -5,11 +5,6 @@ import {
   type WebhookEnvelope,
 } from "@holon/contracts";
 import { createPrKey, createRunId } from "@holon/domain";
-import {
-  consoleErrorReporter,
-  reportError,
-  type ErrorReporter,
-} from "@holon/observability";
 
 export interface WorkflowCreator {
   createBatch(
@@ -46,7 +41,6 @@ async function deterministicWorkflowId(runId: string): Promise<string> {
 interface PendingWorkflow {
   readonly id: string;
   readonly job: ReviewJob;
-  readonly messageIndex: number;
   readonly messages: QueueMessagePort[];
 }
 
@@ -85,23 +79,8 @@ function retry(group: PendingWorkflow): void {
 async function reconcileWorkflow(
   workflow: WorkflowCreator,
   group: PendingWorkflow,
-  reporter: ErrorReporter,
-  batchError: unknown,
 ): Promise<void> {
-  const context = {
-    component: "control-plane",
-    operation: "queue.workflow_dispatch",
-    workflowInstanceId: group.id,
-    runId: group.job.runId,
-    repositoryId: group.job.envelope.repository.id,
-    pullRequestNumber: group.job.envelope.pullRequest.number,
-    messageIndex: group.messageIndex,
-  };
   if (await workflowExists(workflow, group.id)) {
-    reportError(reporter, "queue.workflow_dispatch_recovered", batchError, {
-      ...context,
-      disposition: "recovered",
-    });
     acknowledge(group);
     return;
   }
@@ -109,25 +88,14 @@ async function reconcileWorkflow(
     // createBatch is idempotent in the production Workflows API: an existing
     // ID is omitted from the result rather than treated as an error.
     await workflow.createBatch([workflowOptions(group)]);
-    reportError(reporter, "queue.workflow_dispatch_recovered", batchError, {
-      ...context,
-      disposition: "recovered",
-    });
+
     acknowledge(group);
-  } catch (error) {
+  } catch {
     // A dispatch can fail after the instance was durably created. Reconcile
     // once more before spending a Queue retry or sending the message to DLQ.
     if (await workflowExists(workflow, group.id)) {
-      reportError(reporter, "queue.workflow_dispatch_recovered", error, {
-        ...context,
-        disposition: "recovered",
-      });
       acknowledge(group);
     } else {
-      reportError(reporter, "queue.workflow_dispatch_failed", error, {
-        ...context,
-        disposition: "retry",
-      });
       retry(group);
     }
   }
@@ -136,14 +104,12 @@ async function reconcileWorkflow(
 export async function dispatchReviewMessages(
   messages: readonly QueueMessagePort[],
   workflow: WorkflowCreator,
-  reporter: ErrorReporter = consoleErrorReporter,
 ): Promise<void> {
   const accepted: Array<{
     readonly job: ReviewJob;
     readonly message: QueueMessagePort;
-    readonly messageIndex: number;
   }> = [];
-  for (const [messageIndex, message] of messages.entries()) {
+  for (const message of messages) {
     let job: ReviewJob;
     try {
       const envelope: WebhookEnvelope = webhookEnvelopeSchema.parse(
@@ -162,28 +128,22 @@ export async function dispatchReviewMessages(
           envelope.pullRequest.baseSha,
         ),
       });
-    } catch (error) {
+    } catch {
       // Invalid messages cannot become valid through redelivery. Acknowledge
       // them so poison payloads do not consume the queue retry budget.
-      reportError(reporter, "queue.message_invalid", error, {
-        component: "control-plane",
-        operation: "queue.validate",
-        messageId: message.id,
-        messageIndex,
-        disposition: "ack",
-      });
+
       message.ack();
       continue;
     }
-    accepted.push({ job, message, messageIndex });
+    accepted.push({ job, message });
   }
   if (accepted.length === 0) return;
   const groups = new Map<string, PendingWorkflow>();
-  for (const { job, message, messageIndex } of accepted) {
+  for (const { job, message } of accepted) {
     const id = await deterministicWorkflowId(job.runId);
     const existing = groups.get(id);
     if (existing === undefined) {
-      groups.set(id, { id, job, messageIndex, messages: [message] });
+      groups.set(id, { id, job, messages: [message] });
     } else {
       existing.messages.push(message);
     }
@@ -192,17 +152,12 @@ export async function dispatchReviewMessages(
   try {
     await workflow.createBatch(pending.map(workflowOptions));
     for (const group of pending) acknowledge(group);
-  } catch (error) {
-    reportError(reporter, "queue.batch_dispatch_failed", error, {
-      component: "control-plane",
-      operation: "queue.create_batch",
-      batchSize: pending.length,
-    });
+  } catch {
     // A batch rejection is ambiguous and may be partial. Isolate every ID so
     // an existing or successfully recreated Workflow never retries with a
     // genuinely unavailable one.
     for (const group of pending) {
-      await reconcileWorkflow(workflow, group, reporter, error);
+      await reconcileWorkflow(workflow, group);
     }
   }
 }

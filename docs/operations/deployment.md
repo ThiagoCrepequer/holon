@@ -19,20 +19,15 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    `pr-review`. Confirme no editor que todos os modelos ativos selecionam
    OpenRouter e suportam tool calling e structured outputs. Modelos sem esses
    dois contratos não devem permanecer nem como último fallback.
-2. Crie as filas de revisão e as filas de projeção analítica com DLQs:
+2. Crie as filas de revisão com sua DLQ:
 
    ```bash
    pnpm exec wrangler queues create holon-review-jobs-dlq
    pnpm exec wrangler queues create holon-review-jobs
-   pnpm exec wrangler queues create holon-admin-projections-dlq --delivery-delay-secs 0 --message-retention-period-secs 345600
-   pnpm exec wrangler queues create holon-admin-projections --delivery-delay-secs 0 --message-retention-period-secs 345600
    ```
 
-3. Crie o banco de dados Cloudflare D1 para o read model administrativo:
-
-   ```bash
-   pnpm exec wrangler d1 create holon-admin-d1
-   ```
+3. O admin e seu D1 analítico foram retirados; para ambientes existentes, seguir
+   a [retirada operacional](admin-retirement.md) antes desta atualização.
 
 4. Configure o GitHub App conforme [github-app.md](github-app.md).
 5. Configure no control plane os nomes externos listados em
@@ -50,29 +45,20 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    pnpm --filter @holon/repository-executor deploy:bootstrap
    ```
 
-7. Faça deploy do control plane dual-stack. Em ambiente já provisionado, este é
-   o primeiro deploy da atualização: ele oferece o broker e o `AdminReadEntrypoint`,
-   mantendo producer desativado por flag até o consumidor estar ativo:
+7. Faça deploy do control plane, que oferece o broker:
 
    ```bash
    pnpm --filter @holon/control-plane deploy
    ```
 
-8. Execute as migrations D1 do read model e faça deploy do `apps/admin`:
-
-   ```bash
-   pnpm --filter @holon/admin d1:migrate:remote
-   pnpm --filter @holon/admin deploy
-   ```
-
-9. Faça deploy do executor final com o binding para o entrypoint nomeado do
+8. Faça deploy do executor final com o binding para o entrypoint nomeado do
    broker:
 
    ```bash
    pnpm --filter @holon/repository-executor deploy
    ```
 
-O Wrangler aplica as migrations do Durable Object SQLite e do D1, registrando Workflows,
+O Wrangler aplica as migrations de classes Durable Object, registrando Workflows,
 Queue bindings e os service bindings definidos nos `wrangler.jsonc`. Não
 abra tráfego no bootstrap; confirme os deploys finais antes do smoke.
 
@@ -142,8 +128,8 @@ Fontes verificadas em 2026-08-30:
 15. Solicite duas páginas consecutivas de um arquivo grande e confirme que cada
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
-16. Publique executor, control-plane e admin da mesma revisão, admitindo indisponibilidade
-    durante a atualização. Preparação, contexto e detalhe admin exigem os contratos atuais; não há downgrade. Confirme uso do broker sem token
+16. Publique executor e control-plane da mesma revisão, admitindo indisponibilidade
+    durante a atualização. Preparação e contexto exigem os contratos atuais; não há downgrade. Confirme uso do broker sem token
     em parâmetros do executor. Não retome Workflows antigos como forma de validar
     o novo contrato; inicie uma execução nova após concluir os deploys.
 17. Entregue eventos sintéticos B e depois A para o mesmo PR, com `updatedAt`
@@ -209,12 +195,12 @@ falha e obsolescência. A prova local não substitui esse smoke. Referência:
 
 Antes de um deploy autorizado, parar a admissão e concluir ou terminalizar as
 runs existentes, confirmando cleanup dos containers com o código que as criou.
-Atualizar control-plane, executor e admin para a mesma revisão. Não retomar
+Atualizar control-plane e executor para a mesma revisão. Não retomar
 checkpoints, artefatos de análise ou mensagens de fila do formato anterior.
 
 A política YAML passa a omitir o campo de versão. O único nome aceito para a
 chave principal do App é `GITHUB_APP_PRIVATE_KEY_CURRENT`. Contextos, jobs,
-projeções e detalhes admin seguem os schemas atuais, sem aliases ou conversão.
+e contratos do core seguem os schemas atuais, sem aliases ou conversão.
 Findings persistidos exigem identidade de evidência e confiança; runs exigem
 relógio causal explícito. Marcadores/event IDs novos não reconciliam publicações
 no formato antigo: validar com novas runs/PRs sintéticos.

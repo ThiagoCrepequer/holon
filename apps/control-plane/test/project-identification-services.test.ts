@@ -86,7 +86,7 @@ it("discovers both immutable snapshots then reuses a verified cache entry", asyn
     usage: { inputTokens: 100, outputTokens: 20, modelCalls: 1 },
   });
   expect(service.getProjectIdentification!()?.snapshotSha).toBe(sha);
-  expect(service.getAccumulatedUsage()).toMatchObject({
+  expect(service.getProjectIdentification!()?.usage).toMatchObject({
     inputTokens: 100,
     outputTokens: 20,
   });

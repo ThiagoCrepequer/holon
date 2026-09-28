@@ -128,7 +128,6 @@ local/Git, gera schema e verifica drift, sem acesso aos deployables.
 | `@holon/repository-config`   | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
 | `@holon/config-cli`          | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
 | `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
-| `@holon/ui`                  | Design system: tokens semânticos Tailwind, componentes acessíveis e primitivas Base UI             | `@base-ui/react`, Tailwind CSS; sem domínio/apps     |
 
 O adapter live usa ferramentas sintéticas indisponíveis por contrato: ele mede
 prompt e modelo somente com o contexto autocontido do caso. O smoke remoto
@@ -147,21 +146,14 @@ subpasta interna.
 - `queue`: consome o envelope normalizado e inicia ou reconcilia uma run;
 - classe `ReviewWorkflow` com checkpoints granulares, retries e terminalização
   após esgotamento;
-- classe `AdminReadEntrypoint`: RPC interno `ping` e `getRunDetail` para consulta administrativa;
 - composicao dos adapters reais por bindings e secrets gerados pelo Wrangler.
-
-`apps/admin` exporta um único módulo Workers (`workers/app.ts`) compondo:
-
-- `fetch`: SSR com React Router v8, endpoints e CSP com nonces dinâmicos;
-- `queue`: consumidor at-least-once de projeções analíticas para o D1 com quarentena;
-- `scheduled`: retenção temporal de registros analíticos e quarentena;
-- consumo via Service Binding `ADMIN_READ_API` para RPC de detalhes do run.
 
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
-O runtime operacional adiciona `apps/admin` como terceiro deployable de produção
-(ADR-0029), estritamente read-only e protegido por Cloudflare Access.
+O admin, UI e pacote de observabilidade foram removidos pela
+[ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
+Logs nativos simples não mantêm projeções, custos nem dashboards.
 
 `apps/repository-executor` recebe pedidos tipados, cria workspace isolado,
 classifica patches e aplica a mesma elegibilidade a tools, persiste contexto
@@ -243,24 +235,23 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 
 ## Politica de bibliotecas
 
-| Biblioteca/capacidade        | Estado                    | Limite                                          |
-| ---------------------------- | ------------------------- | ----------------------------------------------- |
-| Hono                         | Selecionada               | Somente adapter HTTP                            |
-| Zod 4                        | Selecionada               | Fronteiras; nao substituir tipos de dominio     |
-| Octokit modular              | Selecionada               | Somente `@holon/github`                         |
-| AI SDK + AI Gateway provider | Selecionada               | Somente `@holon/model`, atras de porta          |
-| `diff`                       | Selecionada               | Adapter proprio e fixtures obrigatorias         |
-| Cloudflare Workflows         | Selecionada               | Coordenação durável com retries delimitados     |
-| Cloudflare Sandbox SDK       | Selecionada `@next`       | Versão exata e imagem correspondente fixadas    |
-| React Router v8              | Selecionada               | Framework full-stack SSR no Worker `apps/admin` |
-| `@base-ui/react`             | Selecionada               | Primitivas headless acessíveis em `@holon/ui`   |
-| Tailwind CSS v4              | Selecionada               | Estilização semântica e tokens via `@holon/ui`  |
-| Recharts                     | Selecionada               | Gráficos de tendências com equivalente tabular  |
-| `jose`                       | Selecionada               | Validação estrita de Access JWT e JWKS          |
-| Dependency Cruiser           | Adiada                    | Introduzir se regras de pacote nao bastarem     |
-| Knip                         | Adiada                    | Introduzir quando houver massa de exports/deps  |
-| Agents SDK e Think           | Rejeitados / Não adotados | Descomissionados após ADR-0017 / ADR-0018       |
-| MCP e RAG                    | Adiados                   | Fora do MVP one-shot                            |
+| Biblioteca/capacidade        | Estado                    | Limite                                         |
+| ---------------------------- | ------------------------- | ---------------------------------------------- |
+| Hono                         | Selecionada               | Somente adapter HTTP                           |
+| Zod 4                        | Selecionada               | Fronteiras; nao substituir tipos de dominio    |
+| Octokit modular              | Selecionada               | Somente `@holon/github`                        |
+| AI SDK + AI Gateway provider | Selecionada               | Somente `@holon/model`, atras de porta         |
+| `diff`                       | Selecionada               | Adapter proprio e fixtures obrigatorias        |
+| Cloudflare Workflows         | Selecionada               | Coordenação durável com retries delimitados    |
+| Cloudflare Sandbox SDK       | Selecionada `@next`       | Versão exata e imagem correspondente fixadas   |
+| `@base-ui/react`             | Selecionada               | Primitivas headless acessíveis em `@holon/ui`  |
+| Tailwind CSS v4              | Selecionada               | Estilização semântica e tokens via `@holon/ui` |
+| Recharts                     | Selecionada               | Gráficos de tendências com equivalente tabular |
+| `jose`                       | Selecionada               | Validação estrita de Access JWT e JWKS         |
+| Dependency Cruiser           | Adiada                    | Introduzir se regras de pacote nao bastarem    |
+| Knip                         | Adiada                    | Introduzir quando houver massa de exports/deps |
+| Agents SDK e Think           | Rejeitados / Não adotados | Descomissionados após ADR-0017 / ADR-0018      |
+| MCP e RAG                    | Adiados                   | Fora do MVP one-shot                           |
 
 ## Regras para agentes de codigo
 

@@ -354,6 +354,31 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       CREATE TABLE ci_publication_tasks(pr_key TEXT NOT NULL,head_sha TEXT NOT NULL,target TEXT NOT NULL,revision INTEGER NOT NULL,completed_revision INTEGER NOT NULL,attempts INTEGER NOT NULL,next_attempt_at TEXT NOT NULL,PRIMARY KEY(pr_key,head_sha));
     `,
   },
+  {
+    version: 17,
+    statements: `
+      CREATE TABLE review_tool_budgets (
+        run_id TEXT NOT NULL,
+        shard_index INTEGER NOT NULL CHECK(shard_index >= 0),
+        calls INTEGER NOT NULL CHECK(calls >= 0),
+        PRIMARY KEY(run_id, shard_index)
+      );
+      INSERT INTO review_tool_budgets(run_id, shard_index, calls)
+        SELECT run_id,
+          CAST(substr(event_id, 6, instr(substr(event_id, 6), ':') - 1) AS INTEGER),
+          SUM(tool_calls)
+        FROM analysis_usage WHERE event_id LIKE 'tool:%:%'
+        GROUP BY run_id,
+          CAST(substr(event_id, 6, instr(substr(event_id, 6), ':') - 1) AS INTEGER);
+      DROP TABLE analysis_usage;
+      DROP TABLE projection_tasks;
+      DROP TABLE run_telemetry;
+      DROP TABLE step_attempts;
+      DROP TABLE step_executions;
+      DROP TABLE review_finding_artifacts;
+      ALTER TABLE run_configurations DROP COLUMN summary_json;
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

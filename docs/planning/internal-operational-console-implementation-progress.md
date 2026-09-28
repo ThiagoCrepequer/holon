@@ -1,7 +1,7 @@
 ---
 id: PLAN-ADMIN-PROGRESS-001
 kind: planning
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-04
@@ -11,6 +11,9 @@ related:
 ---
 
 # Registro Persistente de Progresso: Console Operacional Interno do Holon
+
+> Registro histórico anterior à [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
+> A implementação aqui descrita foi retirada do monorepo.
 
 Este documento rastreia o progresso contínuo e verificável da implementação do Console Operacional Interno (`apps/admin`), D1 read model, outbox durável no ledger, Queue consumer, design system `@holon/ui`, dashboard e ferramentas operacionais, conforme definido no plano canônico `docs/planning/internal-operational-console-plan.md`.
 

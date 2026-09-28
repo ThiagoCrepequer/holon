@@ -5,16 +5,9 @@
   "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "ADMIN_PROJECTION_ENABLED": "true",
     "PROJECT_IDENTIFICATION_MODE": "observe",
     "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
   },
-  "analytics_engine_datasets": [
-    {
-      "binding": "ANALYTICS_ENGINE",
-      "dataset": "holon_telemetry_events",
-    },
-  ],
   "durable_objects": {
     "bindings": [
       {
@@ -49,10 +42,6 @@
       {
         "binding": "REVIEW_QUEUE",
         "queue": "holon-review-jobs",
-      },
-      {
-        "binding": "ADMIN_PROJECTION_QUEUE",
-        "queue": "holon-admin-projections",
       },
     ],
     "consumers": [

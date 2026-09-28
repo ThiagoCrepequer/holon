@@ -1,5 +1,4 @@
 import { followUpMessageSchema, type FollowUpMessage } from "@holon/contracts";
-import { consoleErrorReporter, reportError } from "@holon/observability";
 
 import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
 import {
@@ -37,12 +36,7 @@ export async function dispatchFollowUpMessages(
     try {
       await process(parsed.data);
       message.ack();
-    } catch (error) {
-      reportError(consoleErrorReporter, "queue.follow_up_failed", error, {
-        component: "control-plane",
-        operation: parsed.data.event,
-        deliveryId: parsed.data.payload.deliveryId,
-      });
+    } catch {
       message.retry();
     }
   }

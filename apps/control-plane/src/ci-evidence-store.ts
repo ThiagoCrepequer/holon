@@ -1,9 +1,9 @@
 import {
-  adminCiSummarySchema,
+  ciSummarySchema,
   gitShaSchema,
   prKeySchema,
   savedCiEvidenceSchema,
-  type AdminCiSummary,
+  type CiSummary,
   type SavedCiEvidence,
   type ReviewLanguage,
 } from "@holon/contracts";
@@ -21,7 +21,6 @@ import {
   createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
 } from "@holon/github";
-import { consoleErrorReporter, reportError } from "@holon/observability";
 
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
@@ -101,7 +100,7 @@ export class CiEvidenceStore {
     prKey: string,
     headSha: string,
     language: ReviewLanguage,
-  ): { markdown: string; structuredCi: AdminCiSummary | null } | undefined {
+  ): { markdown: string; structuredCi: CiSummary | null } | undefined {
     const rows = this.storage.sql
       .exec<{ payload: string }>(
         "SELECT payload FROM ci_workflow_evidence WHERE pr_key=? AND head_sha=? ORDER BY workflow_run_id DESC LIMIT 20",
@@ -140,8 +139,8 @@ export class CiEvidenceStore {
     );
     const sum = (key: "total" | "passed" | "failed" | "skipped") =>
       summaries.reduce((n, s) => n + s[key], 0);
-    const structuredCi: AdminCiSummary | null = summaries.length
-      ? adminCiSummarySchema.parse({
+    const structuredCi: CiSummary | null = summaries.length
+      ? ciSummarySchema.parse({
           total: sum("total"),
           passed: sum("passed"),
           failed: sum("failed"),
@@ -249,12 +248,7 @@ export class CiEvidenceStore {
         row.head_sha,
         row.revision,
       );
-    } catch (error) {
-      reportError(consoleErrorReporter, "ci.publication_failed", error, {
-        component: "control-plane",
-        operation: "ci.publish",
-        prKey: row.pr_key,
-      });
+    } catch {
       this.storage.sql.exec(
         "UPDATE ci_publication_tasks SET attempts=attempts+1,next_attempt_at=? WHERE pr_key=? AND head_sha=? AND revision=?",
         new Date(

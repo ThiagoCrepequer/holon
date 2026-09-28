@@ -1,13 +1,17 @@
 ---
 id: OPERATIONS-ERROR-OBSERVABILITY
 kind: reference
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-27
 ---
 
 # Diagnóstico de erros nos Workers
+
+> Histórico anterior à ADR-0040. O pacote de observabilidade e seus wrappers
+> foram removidos. Há somente logs nativos simples; este catálogo não descreve
+> mais a cobertura atual. Consulte [retirada operacional](admin-retirement.md).
 
 As configurações dos três Workers habilitam logs de invocação da Cloudflare com
 amostragem integral. Um handler novo recebe automaticamente registro de
