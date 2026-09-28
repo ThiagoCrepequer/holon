@@ -62,8 +62,16 @@ export interface RepositoryToolResult {
   readonly truncated: boolean;
 }
 
+export interface RepositoryToolExecution {
+  readonly abortSignal?: AbortSignal | undefined;
+  readonly deadlineAt?: number | undefined;
+}
+
 export interface RepositoryToolRunner {
-  run(call: RepositoryToolCall): Promise<RepositoryToolResult>;
+  run(
+    call: RepositoryToolCall,
+    execution?: RepositoryToolExecution,
+  ): Promise<RepositoryToolResult>;
 }
 
 export class RepositoryToolBudgetExceededError extends Error {
@@ -82,11 +90,11 @@ export function createBoundedRepositoryToolRunner(
   }
   let calls = 0;
   return {
-    async run(call) {
+    async run(call, execution) {
       if (calls >= maximumCalls)
         throw new RepositoryToolBudgetExceededError(maximumCalls);
       calls += 1;
-      return await delegate.run(call);
+      return await delegate.run(call, execution);
     },
   };
 }
@@ -95,8 +103,8 @@ export function createRedactingRepositoryToolRunner(
   delegate: RepositoryToolRunner,
 ): RepositoryToolRunner {
   return {
-    async run(call) {
-      const result = await delegate.run(call);
+    async run(call, execution) {
+      const result = await delegate.run(call, execution);
       return { ...result, content: redactSecrets(result.content) };
     },
   };

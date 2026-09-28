@@ -14,7 +14,9 @@ export const reviewExecutionLimits = {
 
 /** Hard investigation limits shared by the model, service and durable ledger. */
 export const reviewInvestigationLimits = {
-  rounds: 10,
+  rounds: 25,
+  stagnantRounds: 3,
+  totalOutputTokens: 120_000,
   toolCalls: 24,
   outputTokens: 12_000,
 } as const;

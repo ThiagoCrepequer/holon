@@ -1,3 +1,7 @@
+import {
+  repositoryExecutionLimits,
+  type RepositoryToolOperation,
+} from "@holon/contracts";
 import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
@@ -81,10 +85,12 @@ export interface RepositoryExecutorBinding {
   loadContext(runId: string): Promise<ReviewContext>;
   prepareRepository(request: ExecutorRequest): Promise<PreparedRepository>;
   resolveContainerId(runId: string): Promise<string> | string;
-  runTool(
+  acquireReviewLease(runId: string, deadlineAt: number): Promise<void>;
+  startTool(
     runId: string,
     call: RepositoryToolCall,
-  ): Promise<RepositoryToolResult>;
+    deadlineAt: number,
+  ): Promise<RepositoryToolOperation>;
 }
 
 export interface WorkflowLedger
@@ -182,7 +188,6 @@ export interface ReviewServices {
   createShardReviewer(
     index: number,
     totalShards: number,
-    policy?: RepositoryPolicy,
   ): {
     readonly model: ModelReviewer;
     toolBudgetExceeded(): boolean;
@@ -412,16 +417,13 @@ export function createReviewServices(
       if (contextPreparation === pending) contextPreparation = undefined;
     });
   };
-  const createShardReviewer = (
-    shardIndex: number,
-    shardCount: number,
-    policy?: RepositoryPolicy,
-  ) => {
+  const createShardReviewer = (shardIndex: number, shardCount: number) => {
     let infrastructureFailure: unknown;
     let toolSequence = 0;
     const toolBudget = createPartitionedRepositoryToolRunner(
       createRedactingRepositoryToolRunner({
-        run: async (call) => {
+        run: async (call, execution) => {
+          execution?.abortSignal?.throwIfAborted();
           const startedAt = Date.now();
           const toolCallIndex = ++toolSequence;
           const emitTool = (event: string, reason?: string) => {
@@ -451,21 +453,58 @@ export function createReviewServices(
               throw new RepositoryToolBudgetExceededError(
                 reviewInvestigationLimits.toolCalls,
               );
-            await ensureContext(2, policy);
-            const result = repositoryToolResultSchema.parse(
-              await executor.runTool(job.runId, call),
+            execution?.abortSignal?.throwIfAborted();
+            const deadlineAt = Math.min(
+              execution?.deadlineAt ?? Infinity,
+              Date.now() + repositoryExecutionLimits.toolMs,
             );
+            // Preparation is a workflow concern, never hidden in a model tool call.
+            const operation = await executor.startTool(
+              job.runId,
+              call,
+              deadlineAt,
+            );
+            let cancellation: Promise<void> | undefined;
+            const cancel = () => {
+              cancellation ??= operation.cancel();
+              cancellation.catch(() => {});
+            };
+            const signal = execution?.abortSignal;
+            signal?.addEventListener("abort", cancel, { once: true });
+            let result: RepositoryToolResult;
+            try {
+              if (signal?.aborted) {
+                cancel();
+                signal.throwIfAborted();
+              }
+              result = repositoryToolResultSchema.parse(
+                await operation.result(),
+              );
+              signal?.throwIfAborted();
+            } finally {
+              signal?.removeEventListener("abort", cancel);
+              try {
+                await cancellation;
+              } finally {
+                operation[Symbol.dispose]();
+              }
+            }
             emitTool("repository.tool_finished");
             return result;
           } catch (error) {
             const reason =
               error instanceof RepositoryToolBudgetExceededError
                 ? "tool_budget_exhausted"
-                : error instanceof Error && error.name === "TimeoutError"
+                : error instanceof Error &&
+                    (error.name === "TimeoutError" ||
+                      ("reason" in error && error.reason === "timed-out"))
                   ? "repository_tool_timeout"
                   : "repository_tool_failed";
             emitTool("repository.tool_failed", reason);
-            if (!(error instanceof RepositoryToolBudgetExceededError))
+            if (
+              !(error instanceof RepositoryToolBudgetExceededError) &&
+              !execution?.abortSignal?.aborted
+            )
               infrastructureFailure = Object.assign(
                 new Error("Repository infrastructure failed", { cause: error }),
                 {

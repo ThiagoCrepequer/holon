@@ -11,5 +11,16 @@ export const unconfiguredExecutor: RepositoryExecutorBinding = {
   loadContext: unexpectedExecutorCall,
   prepareRepository: unexpectedExecutorCall,
   resolveContainerId: unexpectedExecutorCall,
-  runTool: unexpectedExecutorCall,
+  startTool: unexpectedExecutorCall,
+  acquireReviewLease: async () => {},
 };
+
+export function toolOperation(
+  run: (...args: never[]) => Promise<{ content: string; truncated: boolean }>,
+): RepositoryExecutorBinding["startTool"] {
+  return async () => ({
+    result: () => run(),
+    cancel: async () => {},
+    [Symbol.dispose]: () => {},
+  });
+}

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createReviewServices } from "../src/review-services.js";
 import { defaultScopePolicy } from "./configuration-fixtures.js";
 import { configurationReader } from "./configuration-fixtures.js";
+import { toolOperation } from "./executor-fixture.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
@@ -71,7 +72,11 @@ describe("current executor RPC contract", () => {
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
           prepareRepository: () => Promise.reject(permanent),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
+          startTool: toolOperation(async () => ({
+            content: "",
+            truncated: false,
+          })),
+          acquireReviewLease: async () => {},
         },
       },
       { emit: () => undefined },
@@ -130,7 +135,11 @@ describe("current executor RPC contract", () => {
           hasContext: () => Promise.resolve(true),
           loadContext,
           prepareRepository,
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
+          startTool: toolOperation(async () => ({
+            content: "",
+            truncated: false,
+          })),
+          acquireReviewLease: async () => {},
         },
       },
       { emit: () => undefined },
@@ -165,7 +174,11 @@ describe("current executor RPC contract", () => {
           ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
+          startTool: toolOperation(async () => ({
+            content: "",
+            truncated: false,
+          })),
+          acquireReviewLease: async () => {},
         },
       },
       { emit: () => undefined },
@@ -208,7 +221,11 @@ describe("current executor RPC contract", () => {
           ...unconfiguredExecutor,
           cleanup: () => Promise.resolve(),
           hasContext: () => Promise.resolve(true),
-          runTool: () => Promise.resolve({ content: "", truncated: false }),
+          startTool: toolOperation(async () => ({
+            content: "",
+            truncated: false,
+          })),
+          acquireReviewLease: async () => {},
         },
       },
       { emit: () => undefined },
@@ -224,7 +241,8 @@ describe("current executor RPC contract", () => {
       ...unconfiguredExecutor,
       cleanup: async () => {},
       hasContext: async () => true,
-      runTool: async () => ({ content: "", truncated: false }),
+      startTool: toolOperation(async () => ({ content: "", truncated: false })),
+      acquireReviewLease: async () => {},
       prepareRepository: async () => {
         throw new TypeError(
           'The RPC receiver does not implement the method "prepareRepository".',
@@ -263,7 +281,11 @@ describe("current executor RPC contract", () => {
             ...unconfiguredExecutor,
             cleanup: async () => {},
             hasContext: async () => true,
-            runTool: async () => ({ content: "", truncated: false }),
+            startTool: toolOperation(async () => ({
+              content: "",
+              truncated: false,
+            })),
+            acquireReviewLease: async () => {},
             prepareRepository: vi.fn().mockResolvedValue({
               changedLineCount: 0,
               contextBytes: 1,

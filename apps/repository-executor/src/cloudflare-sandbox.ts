@@ -23,6 +23,7 @@ import {
   githubCredentialRequestSchema,
   githubCredentialResponseSchema,
 } from "@holon/contracts";
+import { type RepositoryToolOperation } from "@holon/contracts";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
@@ -32,9 +33,13 @@ import {
   type GitHubEgressAuthorization,
 } from "./egress-policy.js";
 import { RepositoryExecutorService } from "./executor-service.js";
+import { RepositoryToolTask } from "./repository-tool-task.js";
+import { executeRepositoryTool } from "./repository-tools.js";
 import { SandboxRuntimeError } from "./sandbox-errors.js";
 import { createSandboxId, resolveContainerId } from "./sandbox-identity.js";
+import { SandboxLease, type LeaseState } from "./sandbox-lease.js";
 import type { SandboxPort, SandboxProvider } from "./sandbox-port.js";
+import { ToolExecution } from "./tool-execution.js";
 
 export interface GitHubCredentialBroker {
   getInstallationToken(
@@ -84,6 +89,32 @@ async function runSandboxOperation<T>(operation: () => Promise<T>): Promise<T> {
 
 export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
   public override enableInternet = false;
+  private readonly reviewLease = new SandboxLease({
+    now: Date.now,
+    load: () => this.ctx.storage.get<LeaseState>("holonReviewLease"),
+    save: (state) => this.ctx.storage.put("holonReviewLease", state),
+    schedule: async (deadlineAt) => {
+      await this.schedule(
+        new Date(Math.ceil(deadlineAt / 1000) * 1000),
+        "expireReviewLease",
+      );
+    },
+    keepAlive: (enabled) => this.setKeepAlive(enabled),
+    destroy: () => super.destroy(),
+    cancelSchedules: () => this.deleteSchedules("expireReviewLease"),
+  });
+  public acquireReviewLease(deadlineAt: number): Promise<void> {
+    return this.reviewLease.acquire(deadlineAt);
+  }
+  public assertReviewLease(deadlineAt: number): Promise<void> {
+    return this.reviewLease.assertActive(deadlineAt);
+  }
+  public expireReviewLease(): Promise<void> {
+    return this.reviewLease.expire();
+  }
+  public closeReviewLease(): Promise<void> {
+    return this.reviewLease.close();
+  }
 }
 
 async function authenticatedGithubHandler(
@@ -136,7 +167,18 @@ HolonSandbox.outboundHandlers = {
 export class CloudflareSandboxPort implements SandboxPort {
   public constructor(
     private readonly sandbox: ReturnType<typeof getSandbox<HolonSandbox>>,
+    private readonly execution?: ToolExecution,
   ) {}
+
+  private wait<T>(
+    start: () => Promise<T>,
+    discard?: (value: T) => Promise<unknown>,
+    stage?: string,
+  ): Promise<T> {
+    return this.execution
+      ? this.execution.wait(start, discard, stage)
+      : start();
+  }
 
   public configureGitHubEgress(
     authorization: GitHubEgressAuthorization,
@@ -156,13 +198,24 @@ export class CloudflareSandboxPort implements SandboxPort {
 
   public async exists(path: string): Promise<boolean> {
     return await runSandboxOperation(
-      async () => (await this.sandbox.exists(path)).exists,
+      async () =>
+        (
+          await this.wait(
+            () => this.sandbox.exists(path),
+            undefined,
+            "context_exists",
+          )
+        ).exists,
     );
   }
 
   public async readFile(path: string): Promise<string> {
     return await runSandboxOperation(async () => {
-      const result = await this.sandbox.readFile(path, { encoding: "utf8" });
+      const result = await this.wait(
+        () => this.sandbox.readFile(path, { encoding: "utf8" }),
+        undefined,
+        "read_file",
+      );
       return result.content;
     });
   }
@@ -187,21 +240,36 @@ export class CloudflareSandboxPort implements SandboxPort {
   ) {
     let process: Awaited<ReturnType<typeof this.sandbox.exec>> | undefined;
     try {
-      process = await this.sandbox.exec(argv as [string, ...string[]], {
-        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-        ...(options.timeoutMs === undefined
-          ? {}
-          : { timeout: options.timeoutMs }),
-      });
-      const output = await process.output({
-        encoding: "utf8",
-        ...(options.maxOutputBytes === undefined
-          ? {}
-          : { maxBytes: options.maxOutputBytes }),
-        ...(options.timeoutMs === undefined
-          ? {}
-          : { timeout: options.timeoutMs }),
-      });
+      process = await this.wait(
+        () =>
+          this.sandbox.exec(argv as [string, ...string[]], {
+            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+            ...(options.timeoutMs === undefined
+              ? {}
+              : { timeout: options.timeoutMs }),
+          }),
+        (late) =>
+          this.execution
+            ? this.execution.cleanup(() => late.kill())
+            : late.kill(),
+        "command_start",
+      );
+      const activeProcess = process;
+      const output = await this.wait(
+        () =>
+          activeProcess.output({
+            encoding: "utf8",
+            ...(this.execution ? { signal: this.execution.signal } : {}),
+            ...(options.maxOutputBytes === undefined
+              ? {}
+              : { maxBytes: options.maxOutputBytes }),
+            ...(options.timeoutMs === undefined
+              ? {}
+              : { timeout: options.timeoutMs }),
+          }),
+        undefined,
+        "command_output",
+      );
       return {
         exitCode: output.exitCode,
         stderr: output.stderr,
@@ -211,7 +279,12 @@ export class CloudflareSandboxPort implements SandboxPort {
       };
     } catch (error) {
       try {
-        await process?.kill();
+        if (process) {
+          const activeProcess = process;
+          if (this.execution)
+            await this.execution.cleanup(() => activeProcess.kill());
+          else await activeProcess.kill();
+        }
       } catch {
         // The process may already have exited or the container may be gone.
       }
@@ -229,6 +302,10 @@ export class CloudflareSandboxProvider implements SandboxProvider {
         normalizeId: true,
         // Tool calls recreate the checkout if this ephemeral context slept.
         sleepAfter: "30s",
+        containerTimeouts: {
+          instanceGetTimeoutMS: 30_000,
+          portReadyTimeoutMS: 60_000,
+        },
       }),
     );
   }
@@ -263,12 +340,51 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     return this.service().discoverProjectMetadata(request);
   }
 
-  public runTool(runId: string, call: RepositoryToolCall) {
-    return this.service().runTool(runId, call);
+  public startTool(
+    runId: string,
+    call: RepositoryToolCall,
+    deadlineAt: number,
+  ): RepositoryToolOperation {
+    const execution = new ToolExecution(
+      deadlineAt,
+      (work) => this.ctx.waitUntil(work),
+      (fields) => {
+        console.info(
+          JSON.stringify({
+            event: "repository.tool_operation",
+            runId,
+            ...fields,
+          }),
+        );
+      },
+    );
+    const sandbox = getSandbox(this.env.SANDBOXES, createSandboxId(runId));
+    return new RepositoryToolTask(execution, async () => {
+      await execution.wait(
+        () => sandbox.assertReviewLease(deadlineAt),
+        undefined,
+        "lease_check",
+      );
+      return executeRepositoryTool(
+        new CloudflareSandboxPort(sandbox, execution),
+        runId,
+        call,
+      );
+    });
+  }
+
+  public acquireReviewLease(runId: string, deadlineAt: number): Promise<void> {
+    return getSandbox(
+      this.env.SANDBOXES,
+      createSandboxId(runId),
+    ).acquireReviewLease(deadlineAt);
   }
 
   public cleanup(runId: string): Promise<void> {
-    return this.service().cleanup(runId);
+    return getSandbox(
+      this.env.SANDBOXES,
+      createSandboxId(runId),
+    ).closeReviewLease();
   }
 }
 

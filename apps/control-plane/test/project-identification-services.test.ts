@@ -9,6 +9,7 @@ import {
   type RepositoryExecutorBinding,
 } from "../src/review-services.js";
 import { defaultScopePolicy } from "./configuration-fixtures.js";
+import { toolOperation } from "./executor-fixture.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 afterEach(() => reset());
 const sha = "a".repeat(40),
@@ -56,7 +57,11 @@ function setup(
         ...unconfiguredExecutor,
         hasContext: async () => true,
         cleanup: async () => {},
-        runTool: async () => ({ content: "", truncated: false }),
+        startTool: toolOperation(async () => ({
+          content: "",
+          truncated: false,
+        })),
+        acquireReviewLease: async () => {},
         discoverProjectMetadata: discover,
       },
     },
