@@ -2,6 +2,8 @@ import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { afterEach, expect, it, vi } from "vitest";
 
+import type { RepositoryToolRunner } from "../src/reviewer.js";
+
 const provider = vi.hoisted(() => ({ model: vi.fn() }));
 vi.mock("@ai-sdk/openai-compatible", () => ({
   createOpenAICompatible: () => provider.model,
@@ -40,7 +42,10 @@ const request = {
 function generator(
   model: MockLanguageModelV3,
   observer?: (event: GenerationEvent) => void,
-  run = async () => ({ content: "private tool result", truncated: false }),
+  run: RepositoryToolRunner["run"] = async () => ({
+    content: "private tool result",
+    truncated: false,
+  }),
 ) {
   provider.model.mockReturnValue(model);
   return new TwoPhaseReviewGenerator(
@@ -215,7 +220,7 @@ it("resumes from completed tool rounds after timeout and logs only operational m
   expect(events).toContainEqual(
     expect.objectContaining({
       event: "model.phase_failed",
-      reason: "model_call_timeout",
+      reason: "generation_step_timeout",
       phase: "investigation",
       round: 2,
     }),
@@ -431,13 +436,13 @@ it("does not invoke synthesis after its shared deadline", async () => {
   expect(model.doGenerateCalls).toHaveLength(0);
 });
 
-it("reserves the last investigation round for synthesis and reports the exact exhaustion reason", async () => {
+it("closes repeated cached requests after three rounds without progress", async () => {
   let calls = 0;
   const events: GenerationEvent[] = [];
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
       const index = calls++;
-      if (index < 9)
+      if (index < 4)
         return {
           ...textResult(""),
           content: [
@@ -445,12 +450,12 @@ it("reserves the last investigation round for synthesis and reports the exact ex
               type: "tool-call" as const,
               toolCallId: `call-${index}`,
               toolName: "read_file",
-              input: JSON.stringify({ path: `src/file${index}.ts` }),
+              input: JSON.stringify({ path: "src/same.ts" }),
             },
           ],
           finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
         };
-      if (index === 9) {
+      if (index === 4) {
         expect(options.toolChoice).toEqual({ type: "none" });
         return textResult(
           "Verified completed work; further investigation remains pending.",
@@ -469,9 +474,128 @@ it("reserves the last investigation round for synthesis and reports the exact ex
   expect(events).toContainEqual(
     expect.objectContaining({
       event: "model.investigation_stopped",
-      reason: "round_limit",
-      round: 10,
+      reason: "no_progress",
+      round: 5,
+      toolCalls: 1,
+    }),
+  );
+  expect(calls).toBe(6);
+});
+
+it("continues twelve productive rounds without forcing an incomplete review", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      const index = calls++;
+      if (index < 12)
+        return {
+          ...textResult(""),
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: `call-${index}`,
+              toolName: "read_file",
+              input: JSON.stringify({ path: `src/f${index}.ts` }),
+            },
+          ],
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+        };
+      return textResult(
+        index === 12 ? "Investigation complete" : JSON.stringify(output),
+      );
+    },
+  });
+  const result = await generator(model).generate(request);
+  expect(result).not.toHaveProperty("isDegraded", true);
+  expect(calls).toBe(14);
+});
+
+it("propagates cancellation to repository tools instead of waiting for their full duration", async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  let aborted = false;
+  const model = new MockLanguageModelV3({
+    doGenerate: async () =>
+      calls++ === 0
+        ? {
+            ...textResult(""),
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "slow",
+                toolName: "read_file",
+                input: JSON.stringify({ path: "src/slow.ts" }),
+              },
+            ],
+            finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          }
+        : textResult(
+            calls === 2 ? "Investigation incomplete" : JSON.stringify(output),
+          ),
+  });
+  const events: GenerationEvent[] = [];
+  const run: RepositoryToolRunner["run"] = async (_call, options) => {
+    try {
+      return await delayed(
+        { content: "source", truncated: false },
+        360_000,
+        options?.abortSignal,
+      );
+    } catch (error) {
+      aborted = true;
+      throw error;
+    }
+  };
+  const pending = generator(model, (event) => events.push(event), run).generate(
+    request,
+  );
+  await vi.advanceTimersByTimeAsync(180_001);
+  expect(aborted).toBe(true);
+  await vi.advanceTimersByTimeAsync(360_000);
+  await pending;
+});
+
+it("reserves synthesis output before the cumulative output budget is exhausted", async () => {
+  let calls = 0;
+  const events: GenerationEvent[] = [];
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index < 9)
+        return {
+          ...textResult(""),
+          usage: {
+            inputTokens: textResult("").usage.inputTokens,
+            outputTokens: {
+              ...textResult("").usage.outputTokens,
+              total: 12_000,
+            },
+          },
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: `large-${index}`,
+              toolName: "read_file",
+              input: JSON.stringify({ path: `src/f${index}.ts` }),
+            },
+          ],
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+        };
+      if (index === 9) expect(options.toolChoice).toEqual({ type: "none" });
+      return textResult(
+        index === 9 ? "Further investigation pending" : JSON.stringify(output),
+      );
+    },
+  });
+  const result = await generator(model, (event) => events.push(event)).generate(
+    request,
+  );
+  expect(result).toHaveProperty("isDegraded", true);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      reason: "output_budget_exhausted",
       toolCalls: 9,
+      round: 10,
     }),
   );
   expect(calls).toBe(11);

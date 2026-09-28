@@ -84,3 +84,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0038 — Análise paralela e publicação durável](0038-harden-parallel-review-and-publication.md) — decisão vigente para concorrência, recuperação, CI e contexto complementar.
 
 - [ADR-0039 — Particionar reviews grandes e limitar concorrência](0039-partition-large-reviews-and-bound-concurrency.md) — substitui o planejamento/agendamento da ADR-0038; preserva suas outras garantias.
+
+- [ADR-0043 — Coordenar investigação, cancelamento e ciclo do Sandbox](0043-bound-investigation-and-sandbox-lifecycle.md) — substitui a política de investigação da ADR-0042.

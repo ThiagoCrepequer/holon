@@ -20,6 +20,8 @@ export interface GenerationEvent {
   readonly round?: number;
   readonly toolCalls?: number;
   readonly durationMs?: number;
+  readonly roundDurationMs?: number;
+  readonly timeoutScope?: "generation_step" | "phase";
   readonly timeoutMs?: number;
   readonly remainingMs: number;
   readonly reason?: string;
@@ -115,7 +117,7 @@ export async function executeGeneration<T>(
     const classified = controller.signal.aborted
       ? controller.signal.reason
       : error instanceof Error && error.name === "TimeoutError"
-        ? new ModelGenerationTimeoutError(phase, "model_call_timeout")
+        ? new ModelGenerationTimeoutError(phase, "generation_step_timeout")
         : error;
     const reason =
       classified instanceof ModelGenerationTimeoutError
@@ -127,6 +129,8 @@ export async function executeGeneration<T>(
           : "generation_failed";
     emit("model.phase_failed", {
       round,
+      roundDurationMs: Date.now() - roundStartedAt,
+      timeoutScope: controller.signal.aborted ? "phase" : "generation_step",
       durationMs: Date.now() - startedAt,
       timeoutMs,
       reason,

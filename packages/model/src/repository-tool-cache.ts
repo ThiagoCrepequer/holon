@@ -8,13 +8,14 @@ export function createRepositoryToolCache(
 ): RepositoryToolRunner {
   const results = new Map<string, Promise<RepositoryToolResult>>();
   return {
-    run(raw) {
+    run(raw, execution) {
+      execution?.abortSignal?.throwIfAborted();
       const call = repositoryToolCallSchema.parse(raw);
       const key = JSON.stringify(call);
       const existing = results.get(key);
       if (existing) return existing;
       const pending = Promise.resolve()
-        .then(() => delegate.run(call))
+        .then(() => delegate.run(call, execution))
         .catch((error: unknown) => {
           results.delete(key);
           throw error;

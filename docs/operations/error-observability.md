@@ -154,7 +154,7 @@ saldo da fase em milissegundos. O contexto adiciona run/Workflow/PR, shard e rot
 de modelo configurada. Nenhum evento contém prompt, mensagens da investigação,
 respostas de ferramenta ou texto de exceção. Falhas do logger não alteram a revisão.
 
-Em `model.phase_failed`, `model_call_timeout` indica o limite de uma rodada;
+Em `model.phase_failed`, `generation_step_timeout` indica o limite de uma rodada;
 `phase_budget_exhausted` indica o fim do prazo da fase;
 `insufficient_recovery_budget` indica que não há 60 segundos para iniciar recuperação.
 `provider_transient`, `provider_permanent` e `generation_failed` distinguem falhas
@@ -187,7 +187,7 @@ e contagens). `model.output_limits` inclui `omittedSections` e todos os motivos
 locais, inclusive orçamento de ferramentas; seu `eventId` inclui o shard.
 
 `model.investigation_stopped` distingue `completed`, `round_limit`,
-`tool_budget_exhausted`, `empty_analysis`, `output_length`, `model_call_timeout`,
+`tool_budget_exhausted`, `empty_analysis`, `output_length`, `generation_step_timeout`,
 `phase_budget_exhausted` e `provider_transient_failure`. Inclui rodada concluída,
 chamadas distintas e tempo restante. Compare-o aos eventos de fase para distinguir
 limite de chamadas, rodadas e tempo; `investigation_incomplete` sozinho não prova
@@ -196,3 +196,10 @@ timeout. Eventos não contêm prompts, argumentos das tools, caminhos ou código
 Ondas aparecem como `analysis-wave-N` nos checkpoints, e partes mantêm
 `analyze-shard-N`. O teto de 64 partes é admissão de trabalho; cinco é concorrência.
 Não confundir limite de contexto global com truncamento de todos os prompts.
+
+A partir da ADR-0043, `model.phase_failed` inclui `roundDurationMs` e
+`timeoutScope` (`generation_step` ou `phase`). `durationMs` continua medindo a
+tentativa inteira. Uma rodada inclui inferência e ferramentas, portanto seu
+timeout não prova lentidão do provider. Correlacione `repository.tool_operation`
+pelo runId: `lease_check`, `read_file`, `command_start` e `command_output`.
+O evento registra espera cancelada ou encerrada, sem argumentos ou conteúdo.

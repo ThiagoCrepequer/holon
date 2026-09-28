@@ -198,26 +198,38 @@ export function createGatewayLanguageModel(
   return provider(modelId);
 }
 
-export function createRepositoryModelTools(toolsRunner: RepositoryToolRunner) {
+export function createRepositoryModelTools(
+  toolsRunner: RepositoryToolRunner,
+  deadlineAt?: () => number,
+) {
   return {
     read_file: tool({
       description:
         "Read at most 500 lines from a repository-relative source file.",
-      execute: (arguments_) =>
-        toolsRunner.run({ arguments: arguments_, name: "read_file" }),
+      execute: (arguments_, { abortSignal }) =>
+        toolsRunner.run(
+          { arguments: arguments_, name: "read_file" },
+          { abortSignal, deadlineAt: deadlineAt?.() },
+        ),
       inputSchema: readFileArgumentsSchema,
     }),
     search_structure: tool({
       description:
         "Search JavaScript or TypeScript syntax using an ast-grep pattern.",
-      execute: (arguments_) =>
-        toolsRunner.run({ arguments: arguments_, name: "search_structure" }),
+      execute: (arguments_, { abortSignal }) =>
+        toolsRunner.run(
+          { arguments: arguments_, name: "search_structure" },
+          { abortSignal, deadlineAt: deadlineAt?.() },
+        ),
       inputSchema: searchStructureArgumentsSchema,
     }),
     search_text: tool({
       description: "Search exact text in the repository with bounded results.",
-      execute: (arguments_) =>
-        toolsRunner.run({ arguments: arguments_, name: "search_text" }),
+      execute: (arguments_, { abortSignal }) =>
+        toolsRunner.run(
+          { arguments: arguments_, name: "search_text" },
+          { abortSignal, deadlineAt: deadlineAt?.() },
+        ),
       inputSchema: searchTextArgumentsSchema,
     }),
   };
@@ -309,12 +321,22 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     const model = modelForPhase("investigation");
     let toolCalls = 0;
     let toolBudgetExhausted = false;
-    let forcedClosure: "tool_budget_exhausted" | "round_limit" | undefined;
+    let forcedClosure:
+      | "tool_budget_exhausted"
+      | "round_limit"
+      | "no_progress"
+      | "output_budget_exhausted"
+      | undefined;
+    let stagnantRounds = 0;
+    let previousToolCalls = 0;
+    let totalOutputTokens = 0;
+    let roundDeadlineAt = deadlineAt;
     const cachedTools = createRepositoryToolCache({
-      run: async (call) => {
+      run: async (call, execution) => {
+        execution?.abortSignal?.throwIfAborted();
         toolCalls++;
         try {
-          return await this.toolsRunner.run(call);
+          return await this.toolsRunner.run(call, execution);
         } catch (error) {
           if (
             error instanceof Error &&
@@ -325,7 +347,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         }
       },
     });
-    const tools = createRepositoryModelTools(cachedTools);
+    const tools = createRepositoryModelTools(
+      cachedTools,
+      () => roundDeadlineAt,
+    );
 
     // Phase 1: Investigative Tool Loop (freeform diagnostic text)
     let investigationText = "";
@@ -367,11 +392,25 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               ),
               temperature: 0,
               prepareStep: () => {
+                roundDeadlineAt = Math.min(
+                  investigationDeadlineAt,
+                  Date.now() + reviewTimeBudget.callMs,
+                );
                 if (
                   toolCalls >= reviewInvestigationLimits.toolCalls ||
                   toolBudgetExhausted
                 )
                   forcedClosure = "tool_budget_exhausted";
+                else if (
+                  stagnantRounds >= reviewInvestigationLimits.stagnantRounds
+                )
+                  forcedClosure = "no_progress";
+                else if (
+                  totalOutputTokens >=
+                  reviewInvestigationLimits.totalOutputTokens -
+                    reviewInvestigationLimits.outputTokens
+                )
+                  forcedClosure = "output_budget_exhausted";
                 else if (completedRounds >= maximumInvestigationSteps - 1)
                   forcedClosure = "round_limit";
                 return {
@@ -383,6 +422,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               onStepFinish: (step) => {
                 lifecycle.onStepFinish();
                 completedRounds++;
+                totalOutputTokens += step.usage.outputTokens ?? 0;
+                stagnantRounds =
+                  step.toolCalls.length > 0 && toolCalls === previousToolCalls
+                    ? stagnantRounds + 1
+                    : 0;
+                previousToolCalls = toolCalls;
                 messages.push(...step.response.messages);
                 if (step.text.trim()) completedTexts.push(step.text);
                 completedInputTokens += step.usage.inputTokens ?? 0;
@@ -392,6 +437,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             }),
         ).catch(async (error: unknown) => {
           const failed = failedGenerationUsage(error, "investigation");
+          totalOutputTokens += failed.outputTokens ?? 0;
           await this.onUsage?.({
             ...failed,
             inputTokens: completedInputTokens + (failed.inputTokens ?? 0),

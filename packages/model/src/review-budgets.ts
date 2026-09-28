@@ -1,6 +1,7 @@
 import {
   RepositoryToolBudgetExceededError,
   type RepositoryToolRunner,
+  type RepositoryToolExecution,
 } from "./reviewer.js";
 
 export function createPartitionedRepositoryToolRunner(
@@ -29,14 +30,14 @@ export function createPartitionedRepositoryToolRunner(
     },
     exceeded: () => exhausted,
     runner: {
-      async run(call) {
+      async run(call, execution?: RepositoryToolExecution) {
         if (remaining <= 0) {
           exhausted = true;
           throw new RepositoryToolBudgetExceededError(limit);
         }
         remaining -= 1;
         try {
-          return await delegate.run(call);
+          return await delegate.run(call, execution);
         } catch (error) {
           if (error instanceof RepositoryToolBudgetExceededError)
             exhausted = true;
@@ -67,7 +68,7 @@ export type GenerationPhase =
   | "recovery"
   | "synthesis";
 export type GenerationTimeoutReason =
-  | "model_call_timeout"
+  | "generation_step_timeout"
   | "phase_budget_exhausted";
 
 export class ModelGenerationTimeoutError extends Error {

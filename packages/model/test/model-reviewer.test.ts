@@ -464,22 +464,37 @@ describe("model review boundary", () => {
       readonly stopWhen: unknown;
       readonly tools: Record<
         string,
-        { execute(input: unknown): Promise<unknown> }
+        {
+          execute(
+            input: unknown,
+            context: { abortSignal: AbortSignal },
+          ): Promise<unknown>;
+        }
       >;
     };
-    await phase1Options.tools.read_file!.execute({ path: "src/index.ts" });
-    await phase1Options.tools.search_text!.execute({
-      maxResults: 5,
-      query: "symbol",
-    });
-    await phase1Options.tools.search_structure!.execute({
-      language: "typescript",
-      maxResults: 5,
-      pattern: "$A",
-    });
+    const toolContext = { abortSignal: new AbortController().signal };
+    await phase1Options.tools.read_file!.execute(
+      { path: "src/index.ts" },
+      toolContext,
+    );
+    await phase1Options.tools.search_text!.execute(
+      {
+        maxResults: 5,
+        query: "symbol",
+      },
+      toolContext,
+    );
+    await phase1Options.tools.search_structure!.execute(
+      {
+        language: "typescript",
+        maxResults: 5,
+        pattern: "$A",
+      },
+      toolContext,
+    );
 
     expect(calls).toHaveLength(3);
-    expect(phase1Options.stopWhen).toEqual({ steps: 10 });
+    expect(phase1Options.stopWhen).toEqual({ steps: 25 });
     expect(phase1Options.maxRetries).toBe(0);
 
     const phase2Options = sdk.generateText.mock.calls[1]?.[0] as {

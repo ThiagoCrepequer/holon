@@ -17,6 +17,7 @@ import {
   configurationReader,
   defaultRunConfiguration,
 } from "./configuration-fixtures.js";
+import { toolOperation } from "./executor-fixture.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 const canonicalPatch = [
@@ -88,7 +89,8 @@ function createMockServices(
       ...unconfiguredExecutor,
       cleanup: () => Promise.resolve(),
       hasContext: () => Promise.resolve(true),
-      runTool: () => Promise.resolve({ content: "", truncated: false }),
+      startTool: toolOperation(async () => ({ content: "", truncated: false })),
+      acquireReviewLease: async () => {},
     },
     ledger: {
       loadRunConfiguration: () => defaultRunConfiguration(job),

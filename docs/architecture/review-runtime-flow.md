@@ -274,8 +274,10 @@ para persistência. Esses valores são tetos, não tempos mínimos de espera.
 Timeout ou erro transitório do provider permite uma única retomada da investigação,
 somente com pelo menos 60 segundos restantes na fase. Mensagens e resultados de
 ferramentas das rodadas concluídas são mantidos em memória durante o step; a retomada
-não repete essas rodadas nem renova o orçamento de ferramentas. Os dez passos de
-investigação continuam sendo um limite conjunto. Isso não é um checkpoint durável
+não repete essas rodadas nem renova o orçamento de ferramentas. Os 25 passos de
+investigação continuam sendo um limite conjunto. Três rodadas com apenas consultas
+em cache encerram por falta de progresso; 120.000 tokens de saída conhecida
+acumulada incluem a reserva de 12.000 para encerramento. Isso não é um checkpoint durável
 para falhas do runtime. Se a investigação não termina, a finalização recebe apenas o
 progresso concluído e o resultado fica obrigatoriamente degradado. A finalização pode
 fazer uma única recuperação sem ferramentas, inclusive após timeout, se restam pelo
@@ -333,3 +335,18 @@ do plano. O estado global de cobertura parcial permanece no agregado; cada shard
 sinaliza somente as seções realmente omitidas do seu próprio prompt. A rodada
 final da investigação não recebe ferramentas e fechamentos forçados continuam
 incompletos. Consultas idênticas são reutilizadas dentro da mesma investigação.
+
+### Concessão de Sandbox e cancelamento de ferramentas
+
+Conforme a [ADR-0043](../decisions/0043-bound-investigation-and-sandbox-lifecycle.md),
+cada onda concede keepAlive até seu deadline persistido (máximo de 17 minutos).
+O Durable Object agenda a expiração com `schedule()` antes de habilitar keepAlive,
+confere callbacks antigos e repete destruição falha. Cleanup terminal fecha a
+concessão; ferramentas não a renovam. Fora dessa concessão, o idle continua em 30 segundos.
+
+A capacidade RPC `startTool` transporta um deadline absoluto de até 90 segundos.
+`cancel` e descarte propagam o cancelamento até o processo específico. Leituras
+tardias são descartadas e handles tardios são encerrados; o container dos demais
+shards não é destruído. A recuperação do checkout acontece antes da análise,
+nunca dentro de uma ferramenta. `repository.tool_operation` registra somente
+etapa, duração, resultado operacional e runId.

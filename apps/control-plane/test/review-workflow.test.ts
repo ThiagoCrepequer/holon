@@ -32,6 +32,7 @@ import {
   configurationReader,
   defaultScopePolicy,
 } from "./configuration-fixtures.js";
+import { toolOperation } from "./executor-fixture.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";
 
 afterEach(() => reset());
@@ -385,7 +386,8 @@ function runtime(
         }),
       prepareRepository,
       ...(options.containerId === null ? {} : { resolveContainerId }),
-      runTool: () => Promise.resolve({ content: "", truncated: false }),
+      startTool: toolOperation(async () => ({ content: "", truncated: false })),
+      acquireReviewLease: async () => {},
     },
     logger: options.logger ?? { emit: () => undefined },
     now: options.now ?? (() => "2026-08-29T12:00:05.000Z"),
@@ -2359,7 +2361,7 @@ it("parallel shard tools share one preparation and retain independent budgets", 
           ready = true;
           return result;
         },
-        runTool,
+        startTool: toolOperation(runTool),
       },
       createModel: (toolRunner) => ({
         review: async () => {
@@ -2378,12 +2380,19 @@ it("parallel shard tools share one preparation and retain independent budgets", 
     {},
   );
   const policy = await defaultScopePolicy(job.envelope.pullRequest.baseSha);
-  const a = services.createShardReviewer(0, 2, policy);
-  const b = services.createShardReviewer(1, 2, policy);
-  const tasks = [a.model.review(job, context), b.model.review(job, context)];
+  const a = services.createShardReviewer(0, 2);
+  const b = services.createShardReviewer(1, 2);
+  const preparation = [
+    services.ensureContext(2, policy),
+    services.ensureContext(2, policy),
+  ];
   await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
   release();
-  await Promise.all(tasks);
+  await Promise.all(preparation);
+  await Promise.all([
+    a.model.review(job, context),
+    b.model.review(job, context),
+  ]);
   expect(prepare).toHaveBeenCalledOnce();
   expect(runTool).toHaveBeenCalledTimes(2);
   expect(a.toolBudgetExceeded()).toBe(false);
@@ -2404,9 +2413,9 @@ it("keeps repository tool timeouts fatal and logs safe tool metadata", async () 
       executor: {
         ...setup.value.executor!,
         hasContext: async () => true,
-        runTool: async () => {
+        startTool: toolOperation(async () => {
           throw new DOMException("private error", "TimeoutError");
-        },
+        }),
       },
       createModel: (tools) => ({
         review: async () => {
@@ -2443,4 +2452,65 @@ it("keeps repository tool timeouts fatal and logs safe tool metadata", async () 
     }),
   );
   expect(JSON.stringify(emit.mock.calls)).not.toMatch(/private/);
+});
+
+it("cancels and disposes a remote tool when the model step aborts", async () => {
+  const { createReviewServices } = await import("../src/review-services.js");
+  const setup = runtime();
+  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
+    createReviewRun(job),
+    "cancel-tools",
+  );
+  const controller = new AbortController();
+  let rejectResult!: (error: Error) => void;
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const cancel = vi.fn(async () => {
+    rejectResult(new DOMException("Cancelled", "AbortError"));
+  });
+  const dispose = vi.fn();
+  const startTool = vi.fn(async () => ({
+    result: () =>
+      new Promise<{ content: string; truncated: boolean }>((_, reject) => {
+        rejectResult = reject;
+        started();
+      }),
+    cancel,
+    [Symbol.dispose]: dispose,
+  }));
+  const services = createReviewServices(
+    env,
+    job,
+    {
+      ...setup.value,
+      executor: { ...setup.value.executor!, startTool },
+      createModel: (tools) => ({
+        review: async () => {
+          await tools.run(
+            {
+              name: "read_file",
+              arguments: { path: "src/index.ts", startLine: 1, endLine: 10 },
+            },
+            { abortSignal: controller.signal, deadlineAt: Date.now() + 60_000 },
+          );
+          return {
+            output: { findings: [], summary: "complete" },
+            promptTruncated: false,
+          };
+        },
+      }),
+    },
+    { emit: () => {} },
+    {},
+  );
+  const pending = services.createShardReviewer(0, 1).model.review(job, context);
+  const rejected = expect(pending).rejects.toThrow();
+  await ready;
+  controller.abort();
+  await rejected;
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(startTool).toHaveBeenCalledOnce();
 });

@@ -107,7 +107,6 @@ async function reviewShards(
     const reviewer = services.createShardReviewer(
       shard.index,
       plan.shards.length,
-      effectivePolicy,
     );
     const snapshot =
       configuration === undefined
@@ -409,6 +408,11 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               `analyze-shard-${index + 1}`,
               "analysis",
               async () => {
+                if (Date.now() < wave.deadlineAt)
+                  await services.executor.acquireReviewLease(
+                    job.runId,
+                    wave.deadlineAt,
+                  );
                 const { context, plan } = await load();
                 if (
                   plan.shards[index]?.id !== shardId ||
