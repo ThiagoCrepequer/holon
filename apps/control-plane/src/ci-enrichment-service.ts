@@ -2,7 +2,7 @@ import type { CiEvidenceLedger } from "@holon/application";
 import { ingestCiArtifactZips } from "@holon/application";
 import {
   truncateUtf8Bytes,
-  type AdminCiSummary,
+  type CiSummary,
   type CiEnrichmentInput,
 } from "@holon/contracts";
 import {
@@ -17,7 +17,6 @@ import {
   type GitHubInstallationSession,
   type KeyringOperationOptions,
 } from "@holon/github";
-import { consoleErrorReporter, reportError } from "@holon/observability";
 import {
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -142,15 +141,6 @@ export async function enrichReviewWithCiEvidence(
     source: "github-actions",
     workflowName: input.workflowName,
     workflowRunId: input.workflowRunId,
-    onPartialError: (kind, index, error) =>
-      reportError(consoleErrorReporter, "ci.artifact_partial_failure", error, {
-        component: "control-plane",
-        operation: `ci.${kind}`,
-        deliveryId: input.deliveryId,
-        repositoryId: input.repository.id,
-        pullRequestNumber: input.pullRequestNumber,
-        messageIndex: index,
-      }),
   });
 
   const evidence =
@@ -230,7 +220,7 @@ export async function enrichReviewWithCiEvidence(
 
   // 5. Always persist CI evidence in the PR's Durable Object SQLite ledger
   const rawWorkflowName = input.workflowName ?? evidence.workflowName;
-  const structuredCi: AdminCiSummary = {
+  const structuredCi: CiSummary = {
     durationMs: evidence.tests?.durationMs ?? null,
     failed: evidence.tests?.failed ?? 0,
     passed: evidence.tests?.passed ?? 0,

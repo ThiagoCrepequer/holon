@@ -1,13 +1,16 @@
 ---
 id: ARCH-INTERNAL-CONSOLE-UI
 kind: architecture
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-09
 ---
 
 # Interface do console operacional
+
+> Histórico: o console e `packages/ui` foram removidos pela
+> [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
 
 O dashboard de `apps/admin` segue a referência clara fornecida em 2026-09-09:
 canvas cinza, área de trabalho branca, sidebar cinza suave, bordas discretas,

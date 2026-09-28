@@ -2,7 +2,7 @@ import {
   diagnosticMessages,
   nativeErrorCode,
   type DiagnosticReason,
-} from "@holon/observability";
+} from "./diagnostics.js";
 export type GitHubOperationPhase =
   | "app_auth"
   | "installation_auth"

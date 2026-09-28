@@ -1,12 +1,10 @@
 import {
   configurationReference,
-  sanitizedConfigurationSummary,
   verifyConfigurationSnapshot,
   RepositoryConfigurationError,
 } from "@holon/application";
 import {
   repositoryConfigLimits,
-  runConfigurationSummarySchema,
   runConfigurationRefSchema,
   runConfigurationSnapshotSchema,
   type RunConfigurationRef,
@@ -55,11 +53,10 @@ export class RunConfigurationStore {
       )
         throw new RepositoryConfigurationError("run_unavailable");
       this.storage.sql.exec(
-        "INSERT INTO run_configurations(run_id, config_digest, reference_json, summary_json) VALUES (?, ?, ?, ?)",
+        "INSERT INTO run_configurations(run_id, config_digest, reference_json) VALUES (?, ?, ?)",
         snapshot.identity.runId,
         snapshot.configDigest,
         JSON.stringify(reference),
-        JSON.stringify(sanitizedConfigurationSummary(snapshot)),
       );
       for (let offset = 0; offset < bytes.length; offset += 64_000)
         this.storage.sql.exec(
@@ -112,17 +109,6 @@ export class RunConfigurationStore {
     return row === undefined
       ? undefined
       : runConfigurationRefSchema.parse(JSON.parse(row.reference_json));
-  }
-  summary(runId: string) {
-    const row = this.storage.sql
-      .exec<{ summary_json: string }>(
-        "SELECT summary_json FROM run_configurations WHERE run_id = ?",
-        runId,
-      )
-      .toArray()[0];
-    return row === undefined
-      ? null
-      : runConfigurationSummarySchema.parse(JSON.parse(row.summary_json));
   }
   cleanup(runId: string): void {
     this.storage.sql.exec(

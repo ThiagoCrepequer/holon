@@ -18,7 +18,6 @@
     "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
-    "@holon/observability": "workspace:*",
     "@holon/project-identification": "workspace:*",
     "@holon/repository-analysis": "workspace:*"
   },

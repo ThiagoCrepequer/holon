@@ -14,6 +14,11 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 
 ## Registro
 
+A [ADR-0040 — Retirar admin e persistência analítica](0040-retire-admin-and-analytical-storage.md)
+substitui as disposições de observabilidade própria e console das ADRs 0023/0029
+e de retenção administrativa das ADRs 0034/0037. As garantias funcionais continuam
+vigentes; os textos anteriores são preservados como histórico.
+
 | ADR                                                                                   | Título                                                                     | Status       | Data       |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------ | ---------- |
 | [ADR-0001](0001-adopt-incremental-mvp-architecture.md)                                | Adotar arquitetura incremental para o MVP                                  | `accepted`   | 2026-08-29 |

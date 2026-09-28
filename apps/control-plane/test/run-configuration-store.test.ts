@@ -70,10 +70,10 @@ it("persists a bounded reference and losslessly restores private UTF-8 chunks af
     ).toBeGreaterThan(1);
     expect(
       state.storage.sql
-        .exec<{ summary_json: string }>(
-          "SELECT summary_json FROM run_configurations",
+        .exec<{ reference_json: string }>(
+          "SELECT reference_json FROM run_configurations",
         )
-        .one().summary_json,
+        .one().reference_json,
     ).not.toContain("private-instruction");
   });
   await evictDurableObject(ledger);

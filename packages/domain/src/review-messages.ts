@@ -182,9 +182,9 @@ export const reviewMessages = {
     es: "[Detalles adicionales omitidos.]",
   },
   publicationCounts: {
-    en: "Findings: {total} active; {inline} eligible new inline comments; {remaining} without a new inline comment. All findings remain in the console.",
+    en: "Findings: {total} active; {inline} eligible new inline comments; {remaining} without a new inline comment.",
     "pt-BR":
-      "Achados: {total} ativos; {inline} novos comentários inline elegíveis; {remaining} sem novo comentário inline. Todos os achados permanecem no console.",
+      "Achados: {total} ativos; {inline} novos comentários inline elegíveis; {remaining} sem novo comentário inline.",
     es: "Hallazgos: {total} activos; {inline} nuevos comentarios inline elegibles; {remaining} sin nuevo comentario inline. Todos los hallazgos permanecen en la consola.",
   },
   suggestedAction: {

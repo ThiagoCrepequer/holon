@@ -21,9 +21,7 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 | `executor.ts`          | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados |
 | `repository-policy.ts` | YAML normalizado, digests, exclusões e rigor de veredito                      |
 | `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação            |
-| `admin-projection.ts`  | Eventos de projeção assíncrona, hash RFC 8785 e validação temporal            |
-| `admin-run-detail.ts`  | DTO de detalhe read-only para o console operacional via RPC                   |
-| `admin-cursor.ts`      | Schemas e codificação/decodificação segura de cursores de paginação D1        |
+| `health.ts`            | Contrato do healthcheck funcional                                             |
 | `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados   |
 
 ## Regras

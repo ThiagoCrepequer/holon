@@ -1,7 +1,7 @@
 ---
 id: PLAN-ADMIN-CONSOLE-001
 kind: planning
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-04
@@ -17,6 +17,9 @@ related:
 ---
 
 # Plano de Implementação: Console Operacional Interno do Holon e Design System `@holon/ui`
+
+> Plano histórico encerrado pela [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
+> O console e o design system foram removidos; não executar este plano.
 
 ## 0. Como executar este plano
 

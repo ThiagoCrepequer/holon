@@ -1,13 +1,16 @@
 ---
 id: OPERATIONS-INTERNAL-CONSOLE-RUNBOOK
 kind: runbook
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-04
 ---
 
 # Runbook de Operação do Console Interno
+
+> Histórico anterior à ADR-0040. O admin, sua CLI e seus bindings foram removidos;
+> este runbook não se aplica à versão atual. Consulte [retirada operacional](admin-retirement.md).
 
 Este runbook orienta a equipe de engenharia e sustentação na resposta a incidentes, reprocessamento de Dead Letter Queue (DLQ), rotação de chaves criptográficas e políticas de retenção de dados do Console Operacional Interno do Holon.
 

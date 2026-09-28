@@ -7,7 +7,6 @@ import {
   mapReviewThreadWebhook,
   verifyWebhookSignature,
 } from "@holon/github";
-import { consoleErrorReporter, reportError } from "@holon/observability";
 import { Hono } from "hono";
 
 import { repositorySchemaResponse } from "./repository-schema-route.js";
@@ -53,10 +52,6 @@ export async function readBoundedRequestBody(
 export function createWebhookApp() {
   const app = new Hono<{ Bindings: Cloudflare.Env }>();
   app.onError((error, context) => {
-    reportError(consoleErrorReporter, "webhook.unhandled_error", error, {
-      component: "control-plane",
-      operation: "http.webhook",
-    });
     return context.json({ error: "internal_error" }, 500);
   });
 
@@ -116,19 +111,6 @@ export function createWebhookApp() {
     const delivery = context.req.header("x-github-delivery") ?? "";
     const event = context.req.header("x-github-event") ?? "";
     const reject = (code: string, status: 400 | 401 | 413) => {
-      reportError(
-        consoleErrorReporter,
-        "webhook.rejected",
-        {
-          name: "WebhookRejection",
-          code,
-        },
-        {
-          component: "control-plane",
-          operation: "webhook.validate",
-          deliveryId: delivery,
-        },
-      );
       return context.json({ error: code }, status);
     };
     let rawBytes: Uint8Array;
@@ -369,14 +351,7 @@ export function createWebhookApp() {
     }
     try {
       await context.env.REVIEW_QUEUE.send(envelope, { contentType: "json" });
-    } catch (error) {
-      reportError(consoleErrorReporter, "webhook.queue_send_failed", error, {
-        component: "control-plane",
-        operation: "webhook.queue_send",
-        repositoryId: envelope.repository.id,
-        pullRequestNumber: envelope.pullRequest.number,
-        deliveryId: delivery,
-      });
+    } catch {
       return context.json({ error: "queue_unavailable" }, 503);
     }
     return context.json(

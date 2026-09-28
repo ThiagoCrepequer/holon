@@ -13,56 +13,7 @@ import { afterEach, expect, it } from "vitest";
 afterEach(() => reset());
 const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;
-it("retains usage and completed attempt timings across replay and eviction", async () => {
-  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-  await ledger.claimRun(
-    {
-      causalVersion: new Date().toISOString(),
-      id: runId,
-      prKey: "github:42:pr:7",
-      createdAt: new Date().toISOString(),
-      state: "queued",
-      attempt: 0,
-    },
-    "usage-test",
-  );
-  await ledger.recordAnalysisUsage(runId, "call-one", {
-    inputTokens: 100,
-    outputTokens: 20,
-    toolCallsCount: 2,
-  });
-  await ledger.recordAnalysisUsage(runId, "call-one", {
-    inputTokens: 100,
-    outputTokens: 20,
-    toolCallsCount: 2,
-  });
-  await ledger.recordAnalysisUsage(runId, "call-two", {
-    inputTokens: 50,
-    outputTokens: 10,
-    toolCallsCount: 1,
-  });
-  await ledger.recordStepAttemptComplete(
-    runId,
-    "analyze-shard-1",
-    1,
-    new Date().toISOString(),
-    42,
-  );
-  await evictDurableObject(ledger);
-  await expect(ledger.loadAnalysisAccounting(runId)).resolves.toMatchObject({
-    inputTokens: 150,
-    outputTokens: 30,
-    toolCallsCount: 3,
-    stepTimings: [
-      {
-        stepName: "analyze-shard-1",
-        attempt: 1,
-        durationMs: 42,
-        status: "success",
-      },
-    ],
-  });
-});
+
 it("checkpoints only a small manifest and round-trips large review evidence after eviction", async () => {
   const findings = Array.from({ length: 40 }, (_, i) => ({
     evidenceFingerprint: i.toString(16).padStart(64, "0"),
@@ -164,14 +115,8 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
     expect(() => object.loadReviewAnalysis(runId)).toThrow("unavailable");
   });
   await evictDurableObject(ledger);
-  const retained = await ledger.getSanitizedAdminRunDetail(runId);
-  expect(retained?.historicalRunFindings).toHaveLength(40);
-  expect(retained?.historicalRunFindings?.[39]).toMatchObject({
-    diagnostic: findings[39]!.diagnostic,
-    details: {
-      suggestion: findings[39]!.suggestion,
-      evidence: findings[39]!.evidence,
-    },
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.loadReviewAnalysis(runId)).toThrow("unavailable");
   });
 });
 
@@ -212,8 +157,15 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
       ledger.reserveAnalysisToolCall(runId, index!, 5),
     ).resolves.toBe(false);
   }
-  await expect(ledger.loadAnalysisAccounting(runId)).resolves.toMatchObject({
-    toolCallsCount: 60,
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT SUM(calls) AS calls FROM review_tool_budgets WHERE run_id=?",
+          runId,
+        )
+        .one().calls,
+    ).toBe(60);
   });
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, -1, 5)).toThrow(

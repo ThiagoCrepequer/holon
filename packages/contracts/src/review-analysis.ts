@@ -10,18 +10,6 @@ import { reviewExecutionLimits } from "./review-execution-limits.js";
 import { reviewTextLimits } from "./review-limits.js";
 import { aggregatedReviewResultSchema } from "./review-plan.js";
 import { structuralImpactReportSchema } from "./structural-analysis.js";
-import { stepTimingSchema } from "./telemetry.js";
-
-export const analysisUsageSchema = z.strictObject({
-  inputTokens: z.number().int().nonnegative(),
-  outputTokens: z.number().int().nonnegative(),
-  toolCallsCount: z.number().int().nonnegative(),
-});
-export const analysisAccountingSchema = analysisUsageSchema.extend({
-  stepTimings: z.array(stepTimingSchema),
-});
-export type AnalysisUsage = z.infer<typeof analysisUsageSchema>;
-export type AnalysisAccounting = z.infer<typeof analysisAccountingSchema>;
 
 export const reconciledReviewOutputSchema = aggregatedReviewResultSchema.extend(
   {

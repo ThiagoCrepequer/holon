@@ -14,9 +14,7 @@ allowBuilds:
 catalog:
   "@ai-sdk/openai-compatible": 3.0.40
   "@ai-sdk/provider-utils": 5.0.33
-  "@base-ui/react": 1.7.0
   "@cloudflare/sandbox": 0.13.0-next.751.1
-  "@cloudflare/vite-plugin": 1.54.0
   "@cloudflare/vitest-plugin": 1.1.2
   "@cloudflare/workers-types": 5.20260830.1
   "@octokit/auth-app": 8.3.0
@@ -26,38 +24,19 @@ catalog:
   "@octokit/plugin-retry": 8.1.1
   "@octokit/plugin-throttling": 11.0.5
   "@octokit/webhooks-methods": 6.0.0
-  "@react-router/cloudflare": 8.3.1
-  "@react-router/dev": 8.3.1
-  "@react-router/fs-routes": 8.3.1
-  "@tailwindcss/vite": 4.3.3
-  "@testing-library/react": 16.3.3
-  "@testing-library/user-event": 14.6.7
   "@types/node": 24.13.3
-  "@types/react": 19.2.18
-  "@types/react-dom": 19.2.7
   "@vitest/coverage-istanbul": 4.1.11
   "@vitest/coverage-v8": 4.1.11
   ai: 7.0.84
-  "axe-core": 4.13.0
-  clsx: 2.1.1
   diff: 9.0.0
   hono: 4.13.5
-  jose: 6.2.10
-  jsdom: 29.0.1
   oxfmt: 0.65.0
   oxlint: 1.80.0
   oxlint-tsgolint: 7.0.2001
-  react: 19.2.8
-  "react-dom": 19.2.8
-  "react-router": 8.3.1
-  recharts: 3.10.1
-  "tailwind-merge": 3.6.0
-  tailwindcss: 4.3.3
   tsx: 4.23.13
   turbo: 2.10.12
   typescript: 7.0.2
   universal-github-app-jwt: 2.2.2
-  vite: 8.2.2
   vitest: 4.1.11
   wrangler: 4.127.1
   yaml: 2.9.0

@@ -80,17 +80,6 @@ projects:
         Preserve SHA exato, egress restrito e política única de paths nas tools.
         Verifique isolamento, limites de leitura e destruição do Sandbox.
 
-  - name: admin
-    root: apps/admin
-    description: Console de operação autenticado.
-    compatibility:
-      frameworks:
-        react: "19.x"
-    instructions:
-      - |
-        Confira autorização em loaders/RPCs, paginação e estados de erro.
-        Preserve teclado, foco, responsividade e escape de evidências.
-
   - name: domain
     root: packages/domain
     description: Políticas puras de review.
@@ -171,29 +160,6 @@ projects:
         Preserve isolamento e fixtures determinísticas que respeitem os
         contratos sem mascarar falhas de autorização, estado ou limites.
 
-  - name: ui
-    root: packages/ui
-    description: Componentes e tokens visuais.
-    compatibility:
-      frameworks:
-        react: "19.x"
-        tailwindcss: "4.x"
-    instructions:
-      - |
-        Confira acessibilidade, foco e estados disabled/loading. Preserve
-        consumidores, contraste, tokens e comportamento responsivo.
-
-  - name: admin-cli
-    root: tooling/admin-cli
-    description: Comandos administrativos.
-    compatibility:
-      runtimes:
-        node: ">=24 <25"
-    instructions:
-      - |
-        Confira argumentos, destino, autorização de efeitos remotos,
-        idempotência de replay e saída sanitizada.
-
   - name: config-cli
     root: tooling/config-cli
     description: Validação local e JSON Schema.
@@ -271,14 +237,6 @@ path_rules:
       - |
         Confira bindings, egress, autenticação e comandos do deployable.
         Diferencie verificações locais de operações que mudam estado remoto.
-
-  - paths:
-      - "apps/admin/app/**"
-      - "packages/ui/src/**"
-    instructions:
-      - |
-        Confira teclado, foco, telas estreitas e estados de carregamento/erro.
-        Evidências devem ser escapadas e consultadas com autorização.
 
   - paths:
       - "packages/model/src/**"

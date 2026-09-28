@@ -1,14 +1,12 @@
 import type { LocalizedCiMarkdown } from "@holon/contracts";
 import type { ReviewOutputPreferences } from "@holon/contracts";
 import type {
-  AdminCiSummary,
+  CiSummary,
   CreateCheckRunInput,
   ModelReviewOutput,
   ReviewShardContext,
   ReviewJob,
   RunClaimResult,
-  RunTelemetry,
-  StepTiming,
   TrackedFinding,
   UpdateCheckRunInput,
 } from "@holon/contracts";
@@ -98,7 +96,7 @@ export interface CiEvidenceLedger {
     | {
         readonly markdownByLanguage: LocalizedCiMarkdown;
         readonly workflowRunId?: number | undefined;
-        readonly structuredCi?: AdminCiSummary | null | undefined;
+        readonly structuredCi?: CiSummary | null | undefined;
       }
     | undefined
   >;
@@ -116,11 +114,6 @@ export interface FindingLifecycleLedger {
     findings: readonly TrackedFinding[],
     writerRunId: RunId,
   ): Promise<void>;
-}
-
-export interface RunTelemetryLedger {
-  loadRunTelemetry(runId: string): Promise<RunTelemetry | undefined>;
-  saveRunTelemetry(telemetry: RunTelemetry): Promise<void>;
 }
 
 export interface ReviewDecisionContext {
@@ -182,11 +175,6 @@ export interface ReviewDecisionLedger {
     runId: RunId,
     decision: Omit<ReviewDecisionContext, "checkRunId" | "runId">,
   ): Promise<void>;
-}
-
-export interface TelemetryEmitter {
-  emitRunTelemetry(telemetry: RunTelemetry): Promise<void> | void;
-  emitStepTiming(step: StepTiming): Promise<void> | void;
 }
 
 export interface PublishCommentInput {

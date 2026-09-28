@@ -1,11 +1,4 @@
 import { GitHubRequestError } from "@holon/github";
-import {
-  consoleErrorReporter,
-  reportError,
-  safeErrorDetails,
-  type ErrorContext,
-  type ErrorReporter,
-} from "@holon/observability";
 import { NonRetryableError } from "cloudflare:workflows";
 
 const minimumRetryDelayMs = 1_000;
@@ -86,24 +79,10 @@ function rateLimitDelayMs(
 export async function executeGitHubOperation<T>(
   operation: () => Promise<T>,
   nowMilliseconds: () => number = Date.now,
-  diagnostics: {
-    readonly context?: ErrorContext;
-    readonly reporter?: ErrorReporter;
-  } = {},
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    reportError(
-      diagnostics.reporter ?? consoleErrorReporter,
-      "github.operation_failed",
-      error,
-      {
-        component: "control-plane",
-        operation: "github.operation",
-        ...diagnostics.context,
-      },
-    );
     if (error instanceof NonRetryableError) throw error;
     if (error instanceof GitHubTransientError) throw error;
     if (error instanceof GitHubRequestError) {
@@ -171,15 +150,12 @@ function preserveDiagnostics<T extends Error>(
   target: T,
   source: GitHubRequestError,
 ): T {
-  const details = safeErrorDetails(source);
   return Object.assign(target, {
     code: source.code,
-    phase: details.errorPhase,
-    statusCode: details.statusCode,
-    retryable: details.retryable,
-    originName: details.causeName,
-    reason: details.errorReason,
-    originCode: details.originCode,
-    githubRequestId: details.githubRequestId,
+    phase: source.phase,
+    statusCode: source.statusCode,
+    retryable: source.retryable,
+    reason: source.reason,
+    githubRequestId: source.githubRequestId,
   });
 }

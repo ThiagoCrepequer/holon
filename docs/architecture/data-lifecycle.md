@@ -17,27 +17,23 @@ related:
 # Ciclo de vida dos dados
 
 Este documento define classes de dados, princípios e as políticas de retenção
-aprovadas para o pipeline de review e o read model do Console Operacional Interno (ADR-0029).
+aprovadas para o pipeline de review. A ADR-0040 retirou a persistência analítica.
 
 ## Classes de dados
 
-| Classe               | Exemplos                                            | Persistência pretendida                                                         |
-| -------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Identidade           | installation ID, repository ID, PR number, head SHA | Enquanto a instalação existir e conforme auditoria                              |
-| Evento               | delivery ID, tipo, timestamp, envelope normalizado  | Workflow: 1 dia sucesso, 3 dias erro; demais ainda aberta                       |
-| Diff canônico bruto  | Request temporário do executor, limitado a 2 MB     | Somente durante preparação; não vira checkpoint ou prompt                       |
-| Contexto filtrado    | Patches elegíveis, arquivos lidos, AST temporária   | Somente durante a run no MVP                                                    |
-| Evidência            | Trechos usados para sustentar finding               | Mínima e com retenção limitada                                                  |
-| IA                   | Prompt, resposta, tokens, modelo e latência         | Metadados por padrão; conteúdo conforme política explícita                      |
-| Configuração         | Snapshot compilado, manifesto e digests             | Textos temporários no DO; resumo e digests retidos                              |
-| Publicação           | finding ID, GitHub comment ID, coordenadas e estado | Enquanto necessário para reconciliação/auditoria                                |
-| Segredo              | Chaves e tokens                                     | Secret binding; token JIT não persistido e repo-scoped                          |
-| Read Model Operacion | Runs agregadas, custos, tempos e vereditos (D1)     | 180 dias no D1 (`admin_runs`), limpeza diária agendada em lotes de 500          |
-| Quarentena Projeção  | Hashes e erro de mensagens inválidas (sem payload)  | 30 dias no D1 (`admin_projection_quarantine`)                                   |
-| Outbox Projeção      | Tarefas de envio no ledger (`projection_tasks`)     | 7 dias concluídas (`completed`), 30 dias esgotadas (`exhausted`)                |
-| Fila e DLQ Projeção  | Envelopes de projeção na fila                       | 96 horas (345.600 segundos) na fila principal e DLQ                             |
-| Tendências A.Engine  | Métricas aproximadas com sampling                   | Retenção nativa da plataforma (apresentada como 90 dias na UI)                  |
-| Avaliação sintética  | IDs, prompt derivado do corpus V3 e saída validada  | Workflow com retenção de 1 dia; Agent destruído por callback durável após 1 dia |
+| Classe              | Exemplos                                                    | Persistência pretendida                                                         |
+| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Identidade          | installation ID, repository ID, PR number, head SHA         | Enquanto a instalação existir e conforme auditoria                              |
+| Evento              | delivery ID, tipo, timestamp, envelope normalizado          | Workflow: 1 dia sucesso, 3 dias erro; demais ainda aberta                       |
+| Diff canônico bruto | Request temporário do executor, limitado a 2 MB             | Somente durante preparação; não vira checkpoint ou prompt                       |
+| Contexto filtrado   | Patches elegíveis, arquivos lidos, AST temporária           | Somente durante a run no MVP                                                    |
+| Evidência           | Trechos usados para sustentar finding                       | Mínima e com retenção limitada                                                  |
+| IA                  | Prompt, resposta, tokens, modelo e latência                 | Metadados por padrão; conteúdo conforme política explícita                      |
+| Configuração        | Snapshot compilado, manifesto e digests                     | Textos temporários no DO; resumo e digests retidos                              |
+| Publicação          | finding ID, GitHub comment ID, coordenadas e estado         | Enquanto necessário para reconciliação/auditoria                                |
+| Segredo             | Chaves e tokens                                             | Secret binding; token JIT não persistido e repo-scoped                          |
+| Orçamento de tools  | Reservas consumidas por run e shard (`review_tool_budgets`) | Ledger funcional; impede exceder limites após retry                             |
+| Avaliação sintética | IDs, prompt derivado do corpus V3 e saída validada          | Workflow com retenção de 1 dia; Agent destruído por callback durável após 1 dia |
 
 ## Princípios
 
@@ -94,22 +90,18 @@ autoriza persistir a saída agregada privada no SQLite do DO do PR em chunks de
 inclusive em falha e obsolescência. Falha de cleanup mantém a obrigação e o
 artefato até nova tentativa bem-sucedida. Essa exclusão não remove os resultados
 individuais dos shards retidos pela plataforma Workflows nem comentários GitHub.
-`analysis_usage` guarda apenas IDs e contadores de uso; não contém prompts,
-patches ou respostas livres. O prazo geral do ledger permanece pendente.
+`review_tool_budgets` guarda somente reservas funcionais por run/shard, sem
+prompts, patches ou respostas livres. O prazo geral do ledger permanece pendente.
 
 ## Configuração e resultados retidos — 2026-09-09
 
 Pela [ADR-0037](../decisions/0037-compile-repository-configuration-per-run.md),
 `run_configuration_artifacts` guarda o snapshot privado em chunks de 64.000 bytes;
 o cleanup terminal remove os chunks, inclusive sem Sandbox. `run_configurations`
-conserva manifesto/resumo sem descrições ou instruções. `decision_output_json` e
+conserva o manifesto sem descrições ou instruções. `decision_output_json` e
 `decision_medium_threshold` preservam a apresentação e política de feedback.
 
-`review_finding_artifacts` retém exclusivamente resultados verificados: diagnóstico,
-sugestão, confiança, localização e evidências, além da identidade/status do finding.
-A gravação é atômica com o artefato temporário de análise. O cleanup remove a
-análise, mas conserva esses resultados integrais para o console autenticado,
-inclusive cap zero. Esses dados privados não entram no read model D1, em logs
-ou nas saídas sanitizadas das etapas. Não existe TTL novo implícito: a retenção
-geral e deleção por instalação do ledger continuam questões pendentes antes do
-piloto privado. O prazo de 180 dias de D1 não deve ser inferido para o DO.
+A migration 17 remove os históricos exclusivos do admin conforme
+[ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
+Findings funcionais em `pr_findings`, feedback e publicações permanecem.
+Retenção geral e deleção por instalação do ledger continuam pendentes antes do piloto.

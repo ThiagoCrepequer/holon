@@ -1,7 +1,6 @@
 import { createPrivateKey } from "node:crypto";
 
 import { createInstallationSession } from "@holon/github";
-import { safeErrorDetails } from "@holon/observability";
 import { expect, it, vi } from "vitest";
 
 import { executeGitHubOperation } from "../src/github-operations.js";
@@ -33,11 +32,9 @@ it("identifies the real Workers PKCS1 signing rejection through the Workflow ada
       42,
     ),
   ).catch((failure) => failure);
-  expect(safeErrorDetails(error)).toMatchObject({
-    errorPhase: "jwt_signing",
-    errorReason: "github_key_pkcs1_unsupported",
-    errorMessage:
-      "The JWT signer requires a PKCS#8 PEM; the supplied key uses PKCS#1.",
+  expect(error).toMatchObject({
+    phase: "jwt_signing",
+    reason: "github_key_pkcs1_unsupported",
   });
   expect(JSON.stringify(write.mock.calls)).not.toContain(pem);
   expect(JSON.stringify(error)).not.toContain(pem);
@@ -86,9 +83,9 @@ it("signs PKCS8 in Workers and preserves an HTTP rejection through the Workflow"
       42,
     ),
   ).catch((failure) => failure);
-  expect(safeErrorDetails(error)).toMatchObject({
-    errorPhase: "installation_token_request",
-    errorReason: "github_auth_rejected",
+  expect(error).toMatchObject({
+    phase: "installation_token_request",
+    reason: "github_auth_rejected",
     statusCode: 401,
     githubRequestId: "ABCD:1234:5678:90AB",
   });

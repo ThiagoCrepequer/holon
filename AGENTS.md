@@ -29,11 +29,11 @@ só, funcionamento com uma GitHub App, repositório privado, conta Cloudflare ou
 provedor de modelo reais. Relatos de smokes remotos são amostras datadas e não
 devem ser generalizados.
 
-Há três aplicações Workers de produção: `apps/control-plane`,
-`apps/repository-executor` e `apps/admin`. Workflows coordena execução e
+Há duas aplicações Workers de produção: `apps/control-plane` e
+`apps/repository-executor`. Workflows coordena execução e
 retries; um Durable Object SQLite por PR mantém o ledger; o executor usa
-Cloudflare Sandbox com egress negado por padrão. O admin é uma superfície
-operacional somente leitura protegida por Cloudflare Access. A arquitetura
+Cloudflare Sandbox com egress negado por padrão. O admin e a persistência
+analítica foram retirados pela ADR-0040. A arquitetura
 vigente está em `docs/architecture/` e nos ADRs aceitos.
 
 ## Comandos do projeto
@@ -155,7 +155,7 @@ fronteira interna mais simples resolver o problema.
 Skills portadas para `.agents/skills/` são carregadas sob demanda. Consulte a
 `SKILL.md` relevante antes de aplicá-la e mantenha sua licença e arquivos de
 atribuição. Use-as como métodos auxiliares; valide suas sugestões contra o
-design system existente em `packages/ui`, os contratos e decisões do Holon.
+código existente, os contratos e decisões do Holon.
 
 - `ip-as-logo`: somente para solicitações de mascote/IP visual; não altera a
   identidade do produto por iniciativa própria.

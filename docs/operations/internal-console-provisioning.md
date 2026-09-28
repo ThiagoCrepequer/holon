@@ -1,13 +1,16 @@
 ---
 id: OPERATIONS-INTERNAL-CONSOLE-PROVISIONING
 kind: runbook
-status: current
+status: deprecated
 owners:
   - core-team
 last-reviewed: 2026-09-04
 ---
 
 # Provisionamento do Console Operacional Interno
+
+> Histórico anterior à ADR-0040. Não executar os comandos abaixo: o console foi
+> removido. Consulte [retirada operacional](admin-retirement.md).
 
 Este runbook documenta os requisitos de infraestrutura, procedimentos de provisionamento e configuração de bindings e segredos para o Console Operacional Interno do Holon (`apps/admin`).
 

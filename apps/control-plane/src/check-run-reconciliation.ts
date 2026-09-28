@@ -10,7 +10,6 @@ import {
   createInstallationSessionWithKeyring,
   GitHubReviewPublisher,
 } from "@holon/github";
-import { consoleErrorReporter, reportError } from "@holon/observability";
 import { z } from "zod";
 
 import { resolveControlPlaneKeyring } from "./github-credentials.js";
@@ -180,12 +179,7 @@ export class CheckRunReconciliationStore {
         row.run_id,
       );
       this.complete(row.run_id, row.revision);
-    } catch (error) {
-      reportError(consoleErrorReporter, "check.reconciliation_failed", error, {
-        component: "control-plane",
-        operation: "check.reconcile",
-        runId: row.run_id,
-      });
+    } catch {
       const delay = Math.min(300000, 1000 * 2 ** Math.min(row.attempts + 1, 9));
       this.storage.sql.exec(
         "UPDATE check_run_tasks SET attempts=attempts+1,next_attempt_at=? WHERE run_id=? AND revision=?",

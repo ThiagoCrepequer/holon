@@ -109,9 +109,9 @@ em tabela própria; terminalização e criação da tarefa acontecem atomicament
 Um alarm tenta uma tarefa pending por vez, registra tentativas e remove o
 credential scope somente após o executor confirmar cleanup.
 
-`run_telemetry` persiste a fonte da política e os digests da fonte e da política
-efetiva. O output durável do step de resolução é reutilizado em retries e em
-reconstruções do Sandbox, evitando depender de estado isolado em memória.
+O snapshot funcional de configuração preserva a política e seus digests.
+O output durável do step de resolução é reutilizado em retries e reconstruções
+do Sandbox, evitando depender de estado isolado em memória.
 
 Cada run persiste o snapshot canônico usado na decisão (`headSha`, escopo,
 shards analisados, degradação e Check Run ID). Findings persistem também a
@@ -137,13 +137,15 @@ supersession não remove o histórico da run nem sua tarefa de cleanup.
 ## Persistência da análise — ADR-0034
 
 A migration 13 adiciona `pr_findings.evidence_fingerprint`,
-`review_analysis_artifacts` e `analysis_usage`. A primeira gravação do artefato
+`review_analysis_artifacts` e, originalmente, `analysis_usage`. A migration 17
+substitui os contadores por reservas funcionais em `review_tool_budgets`.
+A primeira gravação do artefato
 é imutável por run; o manifesto do checkpoint exclui histórico e evidências.
 Gravação de findings reaplica feedback na mesma transação. O matching
 secundário exige unicidade; registros legados preservam o ID primário.
 
-Reservas de tools e deduplicação de eventos de uso ocorrem no DO. Tempos vêm de
-`step_attempts`; snapshots terminais persistem contadores e tempos observados.
+Reservas de tools ocorrem atomicamente no DO. Não são persistidos tempos por
+etapa nem snapshots de telemetria (ADR-0040).
 Resoluções usam o mesmo protocolo de claim/marcador/reconciliação de publicação,
 com identidade por fingerprint e head. Veja a
 [ADR-0034](../decisions/0034-make-review-checkpoints-and-revalidation-durable.md)

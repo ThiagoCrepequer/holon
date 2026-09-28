@@ -23,12 +23,6 @@ import {
   githubCredentialRequestSchema,
   githubCredentialResponseSchema,
 } from "@holon/contracts";
-import {
-  consoleErrorReporter,
-  reportError,
-  withErrorReporting,
-  withErrorReportingSync,
-} from "@holon/observability";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import {
@@ -84,15 +78,6 @@ async function runSandboxOperation<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    reportError(
-      consoleErrorReporter,
-      "executor.sandbox_operation_failed",
-      error,
-      {
-        component: "repository-executor",
-        operation: "sandbox.operation",
-      },
-    );
     throw mapSandboxSdkError(error);
   }
 }
@@ -129,19 +114,7 @@ async function authenticatedGithubHandler(
       ),
     );
     installationToken = response.token;
-  } catch (error) {
-    reportError(
-      consoleErrorReporter,
-      "executor.credential_broker_failed",
-      error,
-      {
-        component: "repository-executor",
-        operation: "github.credential_broker",
-        runId: authorization.runId,
-        repositoryId: authorization.repositoryId,
-        installationId: authorization.installationId,
-      },
-    );
+  } catch {
     return new Response("Credential service unavailable", { status: 503 });
   }
   const authenticated = authenticateGitHubRequest(
@@ -268,68 +241,34 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     );
   }
 
-  private observed<T>(
-    operation: string,
-    runId: string | undefined,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    return withErrorReporting(
-      "executor.rpc_failed",
-      consoleErrorReporter,
-      { component: "repository-executor", operation, runId },
-      fn,
-    );
-  }
-
   public prepareRepository(
     request: ExecutorRequest,
   ): Promise<PreparedRepository> {
-    return this.observed("executor.prepare_repository", request.runId, () =>
-      this.service().prepareRepository(request),
-    );
+    return this.service().prepareRepository(request);
   }
 
   public resolveContainerId(runId: string): string {
-    return withErrorReportingSync(
-      "executor.rpc_failed",
-      consoleErrorReporter,
-      {
-        component: "repository-executor",
-        operation: "executor.resolve_container_id",
-        runId,
-      },
-      () => resolveContainerId(this.env.SANDBOXES, runId),
-    );
+    return resolveContainerId(this.env.SANDBOXES, runId);
   }
 
   public loadContext(runId: string): Promise<ReviewContext> {
-    return this.observed("executor.load_context", runId, () =>
-      this.service().loadContext(runId),
-    );
+    return this.service().loadContext(runId);
   }
 
   public hasContext(runId: string): Promise<boolean> {
-    return this.observed("executor.has_context", runId, () =>
-      this.service().hasContext(runId),
-    );
+    return this.service().hasContext(runId);
   }
 
   public discoverProjectMetadata(request: unknown) {
-    return this.observed("executor.discover_project_metadata", undefined, () =>
-      this.service().discoverProjectMetadata(request),
-    );
+    return this.service().discoverProjectMetadata(request);
   }
 
   public runTool(runId: string, call: RepositoryToolCall) {
-    return this.observed("executor.run_tool", runId, () =>
-      this.service().runTool(runId, call),
-    );
+    return this.service().runTool(runId, call);
   }
 
   public cleanup(runId: string): Promise<void> {
-    return this.observed("executor.cleanup", runId, () =>
-      this.service().cleanup(runId),
-    );
+    return this.service().cleanup(runId);
   }
 }
 
