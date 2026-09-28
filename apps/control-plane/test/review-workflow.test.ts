@@ -2484,3 +2484,58 @@ it("parallel shard tools share one preparation and retain independent budgets", 
   expect(a.toolBudgetExceeded()).toBe(false);
   expect(b.toolBudgetExceeded()).toBe(false);
 });
+
+it("keeps repository tool timeouts fatal and logs safe tool metadata", async () => {
+  const { createReviewServices } = await import("../src/review-services.js");
+  const setup = runtime();
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await ledger.claimRun(createReviewRun(job), "tool-timeout");
+  const emit = vi.fn();
+  const services = createReviewServices(
+    env,
+    job,
+    {
+      ...setup.value,
+      executor: {
+        ...setup.value.executor!,
+        hasContext: async () => true,
+        runTool: async () => {
+          throw new DOMException("private error", "TimeoutError");
+        },
+      },
+      createModel: (tools) => ({
+        review: async () => {
+          try {
+            await tools.run({
+              name: "read_file",
+              arguments: { path: "private.ts" },
+            });
+          } catch {
+            /* The SDK may convert tool errors to model context. */
+          }
+          return {
+            output: { findings: [], summary: "Clean" },
+            promptTruncated: false,
+          };
+        },
+      }),
+    },
+    { emit },
+    {},
+  );
+  await expect(
+    services.createShardReviewer(0, 1).model.review(job, context),
+  ).rejects.toMatchObject({
+    name: "RepositoryToolError",
+    code: "repository_tool_timeout",
+  });
+  expect(emit).toHaveBeenCalledWith(
+    "repository.tool_failed",
+    expect.objectContaining({
+      reason: "repository_tool_timeout",
+      toolName: "read_file",
+      shardIndex: 0,
+    }),
+  );
+  expect(JSON.stringify(emit.mock.calls)).not.toMatch(/private/);
+});

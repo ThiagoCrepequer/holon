@@ -16,14 +16,26 @@ import {
   searchTextArgumentsSchema,
 } from "@holon/contracts";
 import { reviewMessage } from "@holon/domain";
-import { APICallError, Output, generateText, stepCountIs } from "ai";
+import {
+  APICallError,
+  Output,
+  generateText,
+  stepCountIs,
+  type ModelMessage,
+} from "ai";
 
 import {
   outputLanguageInstructions,
   preflightConfigurationPrompt,
 } from "./configuration-guidance.js";
+import {
+  executeGeneration,
+  isTransientGenerationError,
+  observeGeneration,
+  type GenerationObserver,
+} from "./generation-execution.js";
 import { selectFinalizationEvidence } from "./host-context.js";
-import { generationTimeout } from "./review-budgets.js";
+import { generationDeadline, reviewTimeBudget } from "./review-budgets.js";
 import type {
   RepositoryToolRunner,
   ReviewGenerationRequest,
@@ -277,10 +289,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     private readonly toolsRunner: RepositoryToolRunner,
     private readonly onUsage?: (usage: ModelUsage) => unknown,
     private readonly outputContract: ModelOutputContract = "portable",
+    private readonly observer?: GenerationObserver,
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
-    const deadlineAt = request.deadlineAt ?? Date.now() + 150_000;
+    const deadlineAt =
+      request.deadlineAt ?? Date.now() + reviewTimeBudget.analysisMs;
     const model = createGatewayLanguageModel(this.config);
     const tools = createRepositoryModelTools(this.toolsRunner);
 
@@ -289,55 +303,119 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     const generationLimits: Array<
       "generation_length" | "investigation_incomplete"
     > = [];
-    try {
-      const investigationResult = await generateText({
-        instructions: request.instructions,
-        timeout: generationTimeout(deadlineAt, "investigation"),
-        maxOutputTokens: 4_000,
-        maxRetries: 0,
-        model,
-        prompt: request.prompt,
-        providerOptions: gatewayModelProviderOptions,
-        stopWhen: stepCountIs(maximumInvestigationSteps),
-        temperature: 0,
-        tools,
-      }).catch(async (error: unknown) => {
-        await this.onUsage?.(failedGenerationUsage(error, "investigation"));
-        throw error;
-      });
-
-      if (investigationResult.finishReason === "length")
-        generationLimits.push("generation_length");
-      if (investigationResult.finishReason === "tool-calls")
-        generationLimits.push("investigation_incomplete");
-      const investigationUsage =
-        investigationResult.totalUsage ?? investigationResult.usage;
-      await this.onUsage?.({
-        attempt: "investigation",
-        finishReason: investigationResult.finishReason,
-        inputTokens: investigationUsage?.inputTokens,
-        outputTokens: investigationUsage?.outputTokens,
-        toolCallCount:
-          investigationResult.steps?.reduce(
-            (total, step) => total + step.toolCalls.length,
+    const investigationDeadlineAt = generationDeadline(
+      deadlineAt,
+      "investigation",
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: request.prompt },
+    ];
+    let completedRounds = 0;
+    const completedTexts: string[] = [];
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let completedInputTokens = 0;
+      let completedOutputTokens = 0;
+      let completedToolCalls = 0;
+      try {
+        const investigationResult = await executeGeneration(
+          "investigation",
+          attempt,
+          investigationDeadlineAt,
+          this.observer,
+          (lifecycle) =>
+            generateText({
+              ...lifecycle,
+              instructions: request.instructions,
+              maxOutputTokens: 4_000,
+              maxRetries: 0,
+              model,
+              ...(attempt === 1
+                ? { prompt: request.prompt }
+                : { messages: [...messages] }),
+              providerOptions: gatewayModelProviderOptions,
+              stopWhen: stepCountIs(
+                maximumInvestigationSteps - completedRounds,
+              ),
+              temperature: 0,
+              tools,
+              onStepFinish: (step) => {
+                lifecycle.onStepFinish();
+                completedRounds++;
+                messages.push(...step.response.messages);
+                if (step.text.trim()) completedTexts.push(step.text);
+                completedInputTokens += step.usage.inputTokens ?? 0;
+                completedOutputTokens += step.usage.outputTokens ?? 0;
+                completedToolCalls += step.toolCalls.length;
+              },
+            }),
+        ).catch(async (error: unknown) => {
+          const failed = failedGenerationUsage(error, "investigation");
+          await this.onUsage?.({
+            ...failed,
+            inputTokens: completedInputTokens + (failed.inputTokens ?? 0),
+            outputTokens: completedOutputTokens + (failed.outputTokens ?? 0),
+            totalTokens:
+              completedInputTokens +
+              completedOutputTokens +
+              (failed.totalTokens ?? 0),
+            toolCallCount: completedToolCalls,
+          });
+          throw error;
+        });
+        if (investigationResult.finishReason === "length")
+          generationLimits.push("generation_length");
+        if (investigationResult.finishReason === "tool-calls")
+          generationLimits.push("investigation_incomplete");
+        const usage =
+          investigationResult.totalUsage ?? investigationResult.usage;
+        await this.onUsage?.({
+          attempt: "investigation",
+          finishReason: investigationResult.finishReason,
+          inputTokens: usage?.inputTokens,
+          outputTokens: usage?.outputTokens,
+          totalTokens: usage?.totalTokens,
+          toolCallCount:
+            investigationResult.steps?.reduce(
+              (total, step) => total + step.toolCalls.length,
+              0,
+            ) ??
+            investigationResult.toolCalls?.length ??
             0,
-          ) ??
-          investigationResult.toolCalls?.length ??
-          0,
-        totalTokens: investigationUsage?.totalTokens,
-      });
-
-      investigationText = investigationResult.text ?? "";
-      if (!investigationText.trim())
-        generationLimits.push("investigation_incomplete");
-    } catch (error) {
-      if (APICallError.isInstance(error)) {
-        throw new ModelProviderRequestError(
-          error.isRetryable,
-          error.statusCode,
-        );
+        });
+        investigationText = completedTexts.length
+          ? completedTexts.join("\n\n")
+          : (investigationResult.text ?? "");
+        if (!investigationText.trim())
+          generationLimits.push("investigation_incomplete");
+        break;
+      } catch (error) {
+        if (
+          isTransientGenerationError(error) &&
+          attempt === 1 &&
+          completedRounds < maximumInvestigationSteps &&
+          investigationDeadlineAt - Date.now() >=
+            reviewTimeBudget.minimumRetryMs
+        ) {
+          observeGeneration(this.observer, {
+            event: "model.recovery_scheduled",
+            phase: "investigation",
+            attempt: 2,
+            remainingMs: investigationDeadlineAt - Date.now(),
+          });
+          continue;
+        }
+        if (isTransientGenerationError(error)) {
+          investigationText = completedTexts.join("\n\n");
+          generationLimits.push("investigation_incomplete");
+          break;
+        }
+        if (APICallError.isInstance(error))
+          throw new ModelProviderRequestError(
+            error.isRetryable,
+            error.statusCode,
+          );
+        throw error;
       }
-      throw error;
     }
 
     // Phase 2: Dedicated Structured Finalization Step
@@ -387,18 +465,25 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               schema: modelReviewOutputSchema,
             });
 
-      const finalizationResult = await generateText({
-        instructions,
-        timeout: generationTimeout(deadlineAt, attempt),
-        maxOutputTokens: 8_192,
-        maxRetries: 0,
-        model,
-        output,
-        prompt: finalizationPrompt,
-        providerOptions: gatewayModelProviderOptions,
-        stopWhen: stepCountIs(1),
-        temperature: 0,
-      }).catch(async (error: unknown) => {
+      const finalizationResult = await executeGeneration(
+        attempt,
+        attempt === "recovery" ? 2 : 1,
+        generationDeadline(deadlineAt, attempt),
+        this.observer,
+        (lifecycle) =>
+          generateText({
+            ...lifecycle,
+            instructions,
+            maxOutputTokens: 8_192,
+            maxRetries: 0,
+            model,
+            output,
+            prompt: finalizationPrompt,
+            providerOptions: gatewayModelProviderOptions,
+            stopWhen: stepCountIs(1),
+            temperature: 0,
+          }),
+      ).catch(async (error: unknown) => {
         const usage = failedGenerationUsage(error, attempt);
         await this.onUsage?.(usage);
         if (usage.finishReason === "length")
@@ -467,7 +552,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     try {
       return await runFinalization("finalization");
     } catch (error) {
-      if (APICallError.isInstance(error)) {
+      if (APICallError.isInstance(error) && !error.isRetryable) {
         throw new ModelProviderRequestError(
           error.isRetryable,
           error.statusCode,
@@ -492,17 +577,50 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       }
 
       if (
-        !(error instanceof Error) ||
-        !recoverableSemanticErrors.has(error.name)
+        !isTransientGenerationError(error) &&
+        (!(error instanceof Error) ||
+          !recoverableSemanticErrors.has(error.name))
       ) {
         throw error;
       }
     }
 
+    if (
+      generationDeadline(deadlineAt, "recovery") - Date.now() <
+      reviewTimeBudget.minimumRetryMs
+    ) {
+      observeGeneration(this.observer, {
+        event: "model.phase_failed",
+        phase: "recovery",
+        attempt: 2,
+        remainingMs: Math.max(
+          0,
+          generationDeadline(deadlineAt, "recovery") - Date.now(),
+        ),
+        reason: "insufficient_recovery_budget",
+      });
+      return {
+        findings: [],
+        isDegraded: true,
+        outputLimitations: [
+          ...new Set([...generationLimits, "finalization_failed"]),
+        ],
+        summary: reviewMessage(
+          request.output?.language ?? "en",
+          "finalizationFailed",
+        ),
+      };
+    }
+    observeGeneration(this.observer, {
+      event: "model.recovery_scheduled",
+      phase: "recovery",
+      attempt: 2,
+      remainingMs: generationDeadline(deadlineAt, "recovery") - Date.now(),
+    });
     try {
       return await runFinalization("recovery");
     } catch (error) {
-      if (APICallError.isInstance(error)) {
+      if (APICallError.isInstance(error) && !error.isRetryable) {
         throw new ModelProviderRequestError(
           error.isRetryable,
           error.statusCode,
@@ -526,7 +644,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           : parsed;
       }
 
-      if (error instanceof Error && recoverableSemanticErrors.has(error.name)) {
+      if (
+        isTransientGenerationError(error) ||
+        (error instanceof Error && recoverableSemanticErrors.has(error.name))
+      ) {
         return {
           findings: [],
           isDegraded: true,
@@ -552,6 +673,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       path: string;
     }[] = [],
     output?: ReviewOutputPreferences,
+    deadlineAt = Date.now() +
+      reviewTimeBudget.synthesisMs +
+      reviewTimeBudget.persistenceReserveMs,
   ): Promise<string> {
     const validSummaries = summaries
       .map((s) => s.trim())
@@ -582,16 +706,23 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         synthesisPrompt,
       );
     try {
-      const result = await generateText({
-        instructions: `You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose. ${outputLanguageInstructions(output)}`,
-        maxOutputTokens: 4_000,
-        maxRetries: 0,
-        model,
-        prompt: synthesisPrompt,
-        timeout: { totalMs: 30_000, stepMs: 30_000 },
-        providerOptions: gatewayModelProviderOptions,
-        temperature: 0,
-      });
+      const result = await executeGeneration(
+        "synthesis",
+        1,
+        generationDeadline(deadlineAt, "synthesis"),
+        this.observer,
+        (lifecycle) =>
+          generateText({
+            ...lifecycle,
+            instructions: `You are Holon's review synthesizer. Output only the merged, non-redundant executive review summary in clear GitHub markdown prose. ${outputLanguageInstructions(output)}`,
+            maxOutputTokens: 4_000,
+            maxRetries: 0,
+            model,
+            prompt: synthesisPrompt,
+            providerOptions: gatewayModelProviderOptions,
+            temperature: 0,
+          }),
+      );
 
       await this.onUsage?.({
         attempt: "synthesis",

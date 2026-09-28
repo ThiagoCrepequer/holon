@@ -1,4 +1,5 @@
 import type { ReviewJob } from "@holon/contracts";
+import { reviewTimeBudget } from "@holon/model";
 
 import { githubRetryDelay } from "./github-operations.js";
 
@@ -15,7 +16,7 @@ export const repositoryStep = {
 export const modelStep = {
   retries: { backoff: "constant", delay: "1 second", limit: 0 },
   sensitive: "output",
-  timeout: "10 minutes",
+  timeout: reviewTimeBudget.workflowStepMs,
 } as const;
 
 export const publicationStep = {

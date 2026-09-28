@@ -262,8 +262,28 @@ no ledger. Publicações leem esse artefato dentro de seus callbacks e reaplicam
 feedback humano atual. Tempos e uso são reconstruídos do ledger; decisões por
 relógio da identificação ficam dentro de steps, preservando resultados em replay.
 
-A análise executa até cinco shards em paralelo sob um deadline comum de 600 segundos,
-reservando tempo para finalização/recuperação; síntese tem 30 segundos adicionais.
+A análise executa até cinco shards em paralelo sob um deadline comum de 15 minutos,
+fixado no checkpoint de planejamento. O gerador reserva 3 minutos para finalização,
+3 para recuperação e 2 para consolidação/persistência; a investigação pode consumir
+até 7 minutos. Cada rodada de inferência tem teto de 3 minutos, sempre subordinado
+ao prazo restante da fase. O step de modelo no Workflow tem 17 minutos, com margem
+para preparação do shard e persistência; não reinicia automaticamente toda a análise.
+A síntese usa até 90 segundos do mesmo prazo compartilhado e preserva 30 segundos
+para persistência. Esses valores são tetos, não tempos mínimos de espera.
+
+Timeout ou erro transitório do provider permite uma única retomada da investigação,
+somente com pelo menos 60 segundos restantes na fase. Mensagens e resultados de
+ferramentas das rodadas concluídas são mantidos em memória durante o step; a retomada
+não repete essas rodadas nem renova o orçamento de ferramentas. Os seis passos de
+investigação continuam sendo um limite conjunto. Isso não é um checkpoint durável
+para falhas do runtime. Se a investigação não termina, a finalização recebe apenas o
+progresso concluído e o resultado fica obrigatoriamente degradado. A finalização pode
+fazer uma única recuperação sem ferramentas, inclusive após timeout, se restam pelo
+menos 60 segundos no orçamento reservado. Se não conclui, retorna `finalization_failed`
+e nenhuma aprovação. Erros desconhecidos e falhas de ledger/executor não são
+convertidos em falhas transitórias do modelo. Uso conhecido de rodadas concluídas
+é registrado também quando uma rodada posterior falha; uso da chamada interrompida
+pode permanecer desconhecido.
 Cada shard tem 12 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências

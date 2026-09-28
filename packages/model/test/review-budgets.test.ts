@@ -2,7 +2,8 @@ import { expect, it, vi } from "vitest";
 
 import {
   createPartitionedRepositoryToolRunner,
-  generationTimeout,
+  generationDeadline,
+  reviewTimeBudget,
 } from "../src/review-budgets.js";
 it("reserves tools for every shard without exceeding the run budget", async () => {
   const run = vi.fn(async () => ({ content: "ok", truncated: false }));
@@ -28,13 +29,17 @@ it("reserves tools for every shard without exceeding the run budget", async () =
   expect(counts).toEqual([3, 3, 2, 2, 2]);
   expect(run).toHaveBeenCalledTimes(12);
 });
-it("reserves time for finalization and recovery and rejects an expired deadline", () => {
-  expect(generationTimeout(100_000, "investigation", 0).totalMs).toBe(60_000);
-  expect(generationTimeout(100_000, "finalization", 60_000).totalMs).toBe(
-    20_000,
+it("reserves comfortable phase budgets and completion time within one deadline", () => {
+  const deadline = reviewTimeBudget.analysisMs;
+  expect(generationDeadline(deadline, "investigation", 0)).toBe(420_000);
+  expect(generationDeadline(deadline, "finalization", 420_000)).toBe(600_000);
+  expect(generationDeadline(deadline, "recovery", 600_000)).toBe(780_000);
+  expect(generationDeadline(deadline, "synthesis", 780_000)).toBe(870_000);
+  expect(generationDeadline(deadline, "investigation", 420_000)).toBe(420_000);
+  expect(() => generationDeadline(Number.NaN, "investigation")).toThrow(
+    "Invalid review deadline",
   );
-  expect(generationTimeout(100_000, "recovery", 80_000).totalMs).toBe(20_000);
-  expect(() => generationTimeout(100_000, "investigation", 100_000)).toThrow();
+  expect(reviewTimeBudget.workflowStepMs).toBeGreaterThan(deadline);
 });
 
 it("propagates durable budget exhaustion even after a local runner is recreated", async () => {

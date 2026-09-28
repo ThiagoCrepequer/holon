@@ -47,18 +47,63 @@ export function createPartitionedRepositoryToolRunner(
   };
 }
 
-export function generationTimeout(
+/** Shared across parallel shards; unused time is available to later phases. */
+export const reviewTimeBudget = {
+  analysisMs: 15 * 60_000,
+  investigationMs: 7 * 60_000,
+  finalizationMs: 3 * 60_000,
+  recoveryMs: 3 * 60_000,
+  completionReserveMs: 2 * 60_000,
+  callMs: 3 * 60_000,
+  minimumRetryMs: 60_000,
+  synthesisMs: 90_000,
+  persistenceReserveMs: 30_000,
+  workflowStepMs: 17 * 60_000,
+} as const;
+
+export type GenerationPhase =
+  | "investigation"
+  | "finalization"
+  | "recovery"
+  | "synthesis";
+export type GenerationTimeoutReason =
+  | "model_call_timeout"
+  | "phase_budget_exhausted";
+
+export class ModelGenerationTimeoutError extends Error {
+  constructor(
+    public readonly phase: GenerationPhase,
+    public readonly reason: GenerationTimeoutReason,
+  ) {
+    super(`HOLON_MODEL_TIMEOUT:${phase}:${reason}`);
+    this.name = "ModelGenerationTimeoutError";
+  }
+}
+
+export function generationDeadline(
   deadlineAt: number,
-  phase: "investigation" | "finalization" | "recovery",
+  phase: GenerationPhase,
   now = Date.now(),
-) {
-  const remaining = Math.floor(deadlineAt - now);
-  if (!Number.isFinite(remaining) || remaining <= 0)
-    throw new Error("Review generation deadline exceeded");
-  const fraction =
-    phase === "investigation" ? 0.6 : phase === "finalization" ? 0.5 : 1;
-  return {
-    totalMs: Math.max(1, Math.floor(remaining * fraction)),
-    stepMs: Math.min(30_000, remaining),
-  };
+): number {
+  if (!Number.isFinite(deadlineAt))
+    throw new TypeError("Invalid review deadline");
+  const reserve =
+    phase === "investigation"
+      ? reviewTimeBudget.finalizationMs +
+        reviewTimeBudget.recoveryMs +
+        reviewTimeBudget.completionReserveMs
+      : phase === "finalization"
+        ? reviewTimeBudget.recoveryMs + reviewTimeBudget.completionReserveMs
+        : phase === "recovery"
+          ? reviewTimeBudget.completionReserveMs
+          : reviewTimeBudget.persistenceReserveMs;
+  const allowance =
+    phase === "investigation"
+      ? reviewTimeBudget.investigationMs
+      : phase === "finalization"
+        ? reviewTimeBudget.finalizationMs
+        : phase === "recovery"
+          ? reviewTimeBudget.recoveryMs
+          : reviewTimeBudget.synthesisMs;
+  return Math.min(deadlineAt - reserve, now + allowance);
 }
