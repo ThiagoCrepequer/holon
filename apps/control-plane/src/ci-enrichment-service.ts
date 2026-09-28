@@ -12,6 +12,8 @@ import {
 } from "@holon/domain";
 import {
   createInstallationSessionWithKeyring,
+  GitHubDiffTooLargeError,
+  GitHubRequestError,
   type GitHubAppCredentials,
   type GitHubAppKeyring,
   type GitHubInstallationSession,
@@ -143,7 +145,7 @@ export async function enrichReviewWithCiEvidence(
     workflowRunId: input.workflowRunId,
   });
 
-  const evidence =
+  let evidence =
     artifacts.length > 3
       ? {
           ...parsedEvidence,
@@ -173,28 +175,48 @@ export async function enrichReviewWithCiEvidence(
     input.pullRequestNumber,
   );
   let changedCoverage;
-  if (refsBefore.headSha === input.headSha && evidence.coverage) {
-    const diff = await session.pullRequestDiff(
-      input.repository.owner,
-      input.repository.name,
-      input.pullRequestNumber,
-    );
+  const coverage = evidence.coverage;
+  if (refsBefore.headSha === input.headSha && coverage) {
+    let diff: string | undefined;
+    try {
+      diff = await session.pullRequestDiff(
+        input.repository.owner,
+        input.repository.name,
+        input.pullRequestNumber,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof GitHubDiffTooLargeError) &&
+        !(error instanceof GitHubRequestError && error.statusCode === 406)
+      )
+        throw error;
+      evidence = {
+        ...evidence,
+        status: "partial",
+        limitations: [
+          ...(evidence.limitations ?? []),
+          "Changed-line coverage unavailable: the PR diff exceeded the API response limits. Test results and repository coverage were preserved.",
+        ],
+      };
+      logger.emit("ci_enrichment_diff_unavailable", {
+        workflowRunId: input.workflowRunId,
+        reason: "diff_response_limit",
+      });
+    }
     const refsAfter = await session.currentPullRequestRefs(
       input.repository.owner,
       input.repository.name,
       input.pullRequestNumber,
     );
     if (
+      diff !== undefined &&
       refsAfter.headSha === refsBefore.headSha &&
       refsAfter.baseSha === refsBefore.baseSha
     ) {
       const changedLines = splitPullRequestDiff(diff)
         .filter((file) => isNonBinaryPullRequestPatch(file.patch))
         .flatMap((file) => collectChangedLines(file.path, file.patch));
-      changedCoverage = calculateChangedLinesCoverage(
-        changedLines,
-        evidence.coverage,
-      );
+      changedCoverage = calculateChangedLinesCoverage(changedLines, coverage);
     }
   }
 

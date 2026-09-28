@@ -1,3 +1,4 @@
+import { GitHubDiffTooLargeError, GitHubRequestError } from "@holon/github";
 import { zipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 
@@ -151,47 +152,70 @@ describe("CI Enrichment Service", () => {
     expect(result).toEqual({ enriched: false, reason: "no_valid_reports" });
   });
 
-  it("persists CI evidence to ledger when review summary cannot be located yet (CI finishes before review)", async () => {
-    const lcov = "SF:src/index.ts\nDA:1,3\nend_of_record\n";
-    const zip = zipSync({
-      "coverage.lcov": new TextEncoder().encode(lcov),
-    });
+  it.each(["available", "local-size-limit", "github-406", "transient"])(
+    "preserves CI evidence with diff %s",
+    async (diffCase) => {
+      const lcov = "SF:src/index.ts\nDA:1,3\nend_of_record\n";
+      const zip = zipSync({
+        "coverage.lcov": new TextEncoder().encode(lcov),
+      });
 
-    const saveCiEvidenceMock = vi.fn().mockResolvedValue(undefined);
+      const saveCiEvidenceMock = vi.fn().mockResolvedValue(undefined);
 
-    const deps: CiEnrichmentDependencies = {
-      createSession: vi.fn().mockResolvedValue({
-        api: {},
-        currentPullRequestRefs: vi.fn().mockResolvedValue({
-          headSha: baseInput.headSha,
-          baseSha: "b".repeat(40),
+      const deps: CiEnrichmentDependencies = {
+        createSession: vi.fn().mockResolvedValue({
+          api: {},
+          currentPullRequestRefs: vi.fn().mockResolvedValue({
+            headSha: baseInput.headSha,
+            baseSha: "b".repeat(40),
+          }),
+          downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
+          expectedAuthorLogin: "holon-reviewer[bot]",
+          listWorkflowRunArtifacts: vi
+            .fn()
+            .mockResolvedValue([
+              { id: 10, name: "coverage", sizeInBytes: 100 },
+            ]),
+          pullRequestDiff: async () => {
+            if (diffCase === "local-size-limit")
+              throw new GitHubDiffTooLargeError();
+            if (diffCase === "github-406")
+              throw new GitHubRequestError("upstream_permanent", false, 406);
+            if (diffCase === "transient")
+              throw new GitHubRequestError("upstream_transient", true, 503);
+            return "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -0,0 +1,1 @@\n+const x = 1;\n";
+          },
         }),
-        downloadArtifactZip: vi.fn().mockResolvedValue(zip.buffer),
-        expectedAuthorLogin: "holon-reviewer[bot]",
-        listWorkflowRunArtifacts: vi
-          .fn()
-          .mockResolvedValue([{ id: 10, name: "coverage", sizeInBytes: 100 }]),
-        pullRequestDiff: vi
-          .fn()
-          .mockResolvedValue(
-            "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -0,0 +1,1 @@\n+const x = 1;\n",
-          ),
-      }),
-      ledger: {
-        loadCiEvidence: vi.fn(),
-        loadLatestReviewDecision: vi.fn(),
-        saveCiEvidence: saveCiEvidenceMock,
-      },
-    };
+        ledger: {
+          loadCiEvidence: vi.fn(),
+          loadLatestReviewDecision: vi.fn(),
+          saveCiEvidence: saveCiEvidenceMock,
+        },
+      };
 
-    const result = await enrichReviewWithCiEvidence(fakeEnv, baseInput, deps);
-    expect(result).toEqual({ enriched: true, reason: "saved_pending_review" });
-    expect(saveCiEvidenceMock).toHaveBeenCalledTimes(1);
-    expect(saveCiEvidenceMock.mock.calls[0]?.[1]).toBe(baseInput.headSha);
-    expect(
-      saveCiEvidenceMock.mock.calls[0]?.[2]?.markdownByLanguage.en,
-    ).toContain("### 🧪 CI Test & Coverage Evidence");
-  });
+      if (diffCase === "transient") {
+        await expect(
+          enrichReviewWithCiEvidence(fakeEnv, baseInput, deps),
+        ).rejects.toBeInstanceOf(GitHubRequestError);
+        expect(saveCiEvidenceMock).not.toHaveBeenCalled();
+        return;
+      }
+      const result = await enrichReviewWithCiEvidence(fakeEnv, baseInput, deps);
+      expect(result).toEqual({
+        enriched: true,
+        reason: "saved_pending_review",
+      });
+      expect(saveCiEvidenceMock).toHaveBeenCalledTimes(1);
+      expect(saveCiEvidenceMock.mock.calls[0]?.[1]).toBe(baseInput.headSha);
+      expect(
+        saveCiEvidenceMock.mock.calls[0]?.[2]?.markdownByLanguage.en,
+      ).toContain("### 🧪 CI Test & Coverage Evidence");
+      if (diffCase !== "available")
+        expect(
+          saveCiEvidenceMock.mock.calls[0]?.[2]?.markdownByLanguage.en,
+        ).toContain("Changed-line coverage unavailable");
+    },
+  );
 });
 
 // Publication, default publisher, and unchanged-body regressions are in
