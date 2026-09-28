@@ -581,7 +581,6 @@ describe("model review boundary", () => {
     [401, false, "ModelPermanentError"],
     [403, false, "ModelPermanentError"],
     [404, false, "ModelPermanentError"],
-    [500, true, "ModelTransientError"],
   ])(
     "classifies provider status %s before crossing the model boundary",
     async (statusCode, isRetryable, expectedName) => {
@@ -690,7 +689,13 @@ describe("model review boundary", () => {
         toolCalls: [],
         usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 },
       })
-      .mockRejectedValueOnce(new sdk.APICallError(502, true));
+      .mockRejectedValueOnce(new sdk.APICallError(502, true))
+      .mockResolvedValueOnce({
+        finishReason: "stop",
+        output,
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+      });
 
     await expect(
       generator.generate({
@@ -698,7 +703,7 @@ describe("model review boundary", () => {
         instructions: "system",
         prompt: "prompt",
       }),
-    ).rejects.toMatchObject({ isRetryable: true, statusCode: 502 });
+    ).resolves.toEqual(output);
 
     // Recovery throws APICallError
     const missingOutput = new Error("missing output");

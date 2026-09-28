@@ -51,6 +51,7 @@ export interface ReviewGenerator {
       path: string;
     }[],
     output?: ReviewOutputPreferences,
+    deadlineAt?: number,
   ): Promise<string>;
 }
 
@@ -319,6 +320,7 @@ export class GatewayModelReviewer implements ModelReviewer {
     _job: ReviewJob,
     input: {
       readonly output?: ReviewOutputPreferences | undefined;
+      readonly deadlineAt?: number | undefined;
       readonly shardSummaries: readonly string[];
       readonly verifiedFindings: readonly {
         diagnostic: string;
@@ -332,6 +334,7 @@ export class GatewayModelReviewer implements ModelReviewer {
         input.shardSummaries,
         input.verifiedFindings,
         input.output,
+        input.deadlineAt,
       );
     }
     return input.shardSummaries.join("\n\n");

@@ -27,6 +27,7 @@ import {
   reconcileFindings,
   type TrackedFinding,
 } from "@holon/domain";
+import { reviewTimeBudget } from "@holon/model";
 import {
   ModelProviderRequestError,
   nonRetryableModelFailureCode,
@@ -341,7 +342,7 @@ export async function analyzeReview(
       return {
         shardIds: plan.shards.map((shard) => shard.id),
         planDigest: await planDigest(plan),
-        deadlineAt: Date.now() + 600_000,
+        deadlineAt: Date.now() + reviewTimeBudget.analysisMs,
       };
     });
     const shardResults: ShardReviewResult[] = [];
@@ -401,7 +402,8 @@ export async function analyzeReview(
     }
     if (
       shardResults.length &&
-      shardResults.every((result) => result.status === "failure")
+      shardResults.every((result) => result.status === "failure") &&
+      shardResults.some((result) => result.errorReason !== "analysis_deadline")
     )
       throw new Error("All review shards failed during model execution");
     return await runStep("analyze-review", "analysis", async () => {
@@ -551,6 +553,7 @@ export async function analyzeReview(
       ) {
         try {
           unifiedSummary = await services.model.synthesizeReviewSummary(job, {
+            deadlineAt: planning.deadlineAt,
             output:
               execution === undefined
                 ? undefined

@@ -53,6 +53,7 @@ export interface ModelReviewer {
     job: ReviewJob,
     input: {
       readonly output?: ReviewOutputPreferences | undefined;
+      readonly deadlineAt?: number | undefined;
       readonly shardSummaries: readonly string[];
       readonly verifiedFindings: readonly {
         diagnostic: string;

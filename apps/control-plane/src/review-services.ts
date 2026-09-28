@@ -498,9 +498,28 @@ export function createReviewServices(
     policy?: RepositoryPolicy,
   ) => {
     let infrastructureFailure: unknown;
+    let toolSequence = 0;
     const toolBudget = createPartitionedRepositoryToolRunner(
       createRedactingRepositoryToolRunner({
         run: async (call) => {
+          const startedAt = Date.now();
+          const toolCallIndex = ++toolSequence;
+          const emitTool = (event: string, reason?: string) => {
+            try {
+              logger.emit(event, {
+                ...logContext,
+                eventId: `${logContext.workflowInstanceId ?? job.runId}:${event}:${shardIndex}:${toolCallIndex}`,
+                shardIndex,
+                toolName: call.name,
+                toolCallIndex,
+                durationMs: Date.now() - startedAt,
+                reason,
+              });
+            } catch {
+              /* Telemetry cannot alter infrastructure failures. */
+            }
+          };
+          emitTool("repository.tool_started");
           try {
             if (
               !(await ledger.reserveAnalysisToolCall(
@@ -512,14 +531,27 @@ export function createReviewServices(
               throw new RepositoryToolBudgetExceededError(12);
             toolCallsCount += 1;
             await ensureContext(2, policy);
-            return repositoryToolResultSchema.parse(
+            const result = repositoryToolResultSchema.parse(
               await executor.runTool(job.runId, call),
             );
+            emitTool("repository.tool_finished");
+            return result;
           } catch (error) {
+            const reason =
+              error instanceof RepositoryToolBudgetExceededError
+                ? "tool_budget_exhausted"
+                : error instanceof Error && error.name === "TimeoutError"
+                  ? "repository_tool_timeout"
+                  : "repository_tool_failed";
+            emitTool("repository.tool_failed", reason);
             if (!(error instanceof RepositoryToolBudgetExceededError))
-              infrastructureFailure = new Error(
-                "Repository infrastructure failed",
-                { cause: error },
+              infrastructureFailure = Object.assign(
+                new Error("Repository infrastructure failed", { cause: error }),
+                {
+                  name: "RepositoryToolError",
+                  code: reason,
+                  phase: "repository_tool",
+                },
               );
             throw error;
           }
@@ -555,6 +587,15 @@ export function createReviewServices(
             });
             logger.emit("model.usage", { ...logContext, ...usage });
           },
+          "portable",
+          ({ event, ...details }) =>
+            logger.emit(event, {
+              ...logContext,
+              eventId: `${logContext.workflowInstanceId ?? job.runId}:${event}:${shardIndex}:${details.phase}:${details.attempt}:${details.round ?? 0}`,
+              shardIndex,
+              modelRoute: env.AI_MODEL_ID,
+              ...details,
+            }),
         ),
       );
 

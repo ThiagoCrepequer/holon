@@ -852,3 +852,32 @@ it("keeps evidence rejection semantics when the diagnostic sink fails", async ()
   expect(result.verdict).toBe("COMMENT");
   expect(result.summary).toContain("evidence_rejected");
 });
+
+it("publishes an incomplete result when the shared deadline expires before inference", async () => {
+  const services = createMockServices({
+    files: [
+      { mode: "structural", path: "src/index.ts", patch: canonicalPatch },
+    ],
+    changedLines: [{ path: "src/index.ts", line: 10, side: "RIGHT" }],
+    truncated: false,
+  });
+  const review = vi.spyOn(services.model, "review");
+  const result = await analyzeReview(job, services, () => {}, undefined, {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
+    async runStep<R>(
+      name: string,
+      _phase: "analysis" | "preparation",
+      fn: () => Promise<R>,
+    ): Promise<R> {
+      const stepResult = await fn();
+      if (name === "plan-review")
+        Object.assign(stepResult as object, { deadlineAt: 0 });
+      return stepResult;
+    },
+    finish: async (output) => output,
+  });
+  expect(review).not.toHaveBeenCalled();
+  expect(result.scopeStatus).toBe("partial_by_failure");
+  expect(result.verdict).toBe("COMMENT");
+  expect(result.summary).toContain("analysis_deadline");
+});

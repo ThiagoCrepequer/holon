@@ -140,3 +140,37 @@ esse log não muda a aceitação nem a decisão de retry. O evento agregado
 `model.output_limits` continua informando a quantidade de candidatos rejeitados.
 Esses motivos somente estarão disponíveis para execuções feitas com a nova
 instrumentação; não podem ser reconstruídos dos contadores antigos.
+
+## Orçamentos e timeout da análise (2026-09-27)
+
+`model.phase_started`, `model.phase_finished`, `model.phase_failed`,
+`model.round_started`, `model.round_finished` e `model.recovery_scheduled`
+registram fase, tentativa, rodada quando aplicável, duração, limite aplicado e
+saldo da fase em milissegundos. O contexto adiciona run/Workflow/PR, shard e rota
+de modelo configurada. Nenhum evento contém prompt, mensagens da investigação,
+respostas de ferramenta ou texto de exceção. Falhas do logger não alteram a revisão.
+
+Em `model.phase_failed`, `model_call_timeout` indica o limite de uma rodada;
+`phase_budget_exhausted` indica o fim do prazo da fase;
+`insufficient_recovery_budget` indica que não há 60 segundos para iniciar recuperação.
+`provider_transient`, `provider_permanent` e `generation_failed` distinguem falhas
+HTTP classificadas e falhas não classificadas da geração. `remainingMs` se refere
+à fase, não a um orçamento renovado a cada tentativa. Veja os tetos e reservas em
+[fluxo de execução](../architecture/review-runtime-flow.md).
+
+`repository.tool_started`, `repository.tool_finished` e `repository.tool_failed`
+registram nome da ferramenta, shard e duração, sem argumentos ou conteúdo.
+`repository_tool_timeout` permanece uma falha de infraestrutura
+(`RepositoryToolError`), separada de `ModelGenerationTimeoutError`. Esgotamento
+de ferramentas usa `tool_budget_exhausted`. O timeout externo do Workflow continua
+visível no histórico do step na Cloudflare; ele pode impedir a execução de callbacks
+finais, portanto um evento de início sem término também exige consultar esse histórico.
+
+Os testes usam o AI SDK instalado e relógio simulado para exercitar cancelamento,
+continuidade de mensagens, recuperação e esgotamento. Não representam medições de
+latência do provider em produção. Os tetos iniciais são uma escolha operacional
+com margem; devem ser reavaliados usando as durações registradas.
+
+Referências verificadas em 2026-09-27:
+[timeouts do AI SDK](https://ai-sdk.dev/docs/ai-sdk-core/settings#timeout) e
+[configuração de retries e timeout de Workflows](https://developers.cloudflare.com/workflows/build/sleeping-and-retrying/).
