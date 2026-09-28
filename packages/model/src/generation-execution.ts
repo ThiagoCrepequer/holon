@@ -9,6 +9,7 @@ import {
 export interface GenerationEvent {
   readonly event:
     | "model.investigation_stopped"
+    | "model.investigation_progress"
     | "model.phase_started"
     | "model.phase_finished"
     | "model.phase_failed"
@@ -19,6 +20,18 @@ export interface GenerationEvent {
   readonly attempt: number;
   readonly round?: number;
   readonly toolCalls?: number;
+  readonly reasoningTokens?: number | undefined;
+  readonly outputTokens?: number | undefined;
+  readonly repositoryRequests?: number;
+  readonly cacheHits?: number;
+  readonly coveringReadHits?: number;
+  readonly truncatedResults?: number;
+  readonly readCalls?: number;
+  readonly searchCalls?: number;
+  readonly reviewedChecks?: number;
+  readonly pendingChecks?: number;
+  readonly blockedChecks?: number;
+  readonly closing?: boolean;
   readonly durationMs?: number;
   readonly roundDurationMs?: number;
   readonly timeoutScope?: "generation_step" | "phase";

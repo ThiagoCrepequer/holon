@@ -62,7 +62,7 @@ sequenceDiagram
         AN-->>CO: small metadata; context stays in Sandbox
         CO->>AN: verify context; reprepare if the Sandbox was replaced
         CO->>RE: steps analyze-shard-N + tool handles
-        loop at most six investigation steps
+        loop at most 25 investigation steps
             RE->>AN: read/search/parse allowed content
             AN-->>RE: evidence with provenance
             RE->>AI: prompt redigido + selected evidence
@@ -332,9 +332,21 @@ A [ADR-0039](../decisions/0039-partition-large-reviews-and-bound-concurrency.md)
 detalha particionamento, ondas e limites residuais. Leituras simultâneas do
 contexto são compartilhadas, mas steps posteriores recarregam e conferem o digest
 do plano. O estado global de cobertura parcial permanece no agregado; cada shard
-sinaliza somente as seções realmente omitidas do seu próprio prompt. A rodada
-final da investigação não recebe ferramentas e fechamentos forçados continuam
-incompletos. Consultas idênticas são reutilizadas dentro da mesma investigação.
+sinaliza somente as seções realmente omitidas do seu próprio prompt. O encerramento
+não recebe ferramentas de repositório; usa `review_checkpoint` conforme a
+[ADR-0044](../decisions/0044-track-review-investigation-progress.md). Fechamentos
+por limite duro continuam incompletos. O cache reutiliza consultas equivalentes e
+subintervalos cobertos por leituras completas, sem redação que desloque linhas.
+
+A investigação acompanha cada arquivo como pendente, revisado ou bloqueado,
+priorizando achados anteriores e pistas de segurança/contratos. O checkpoint final
+encerra o loop sem uma resposta narrativa adicional. Checkpoints junto de leituras
+não avançam a cobertura daquela rodada. Pendências e bloqueios impedem aprovação.
+Ao restarem no máximo 270 segundos, a próxima rodada recebe somente o checkpoint
+para encerrar dentro do prazo de nove minutos; isso reserva margem sem aumentar
+os prazos globais. As últimas quatro chamadas ao executor são orientadas a
+verificações pendentes, mantendo o teto de 24. O acompanhamento fica em memória
+no step; nenhum conteúdo de checkpoint é incluído nos logs.
 
 ### Concessão de Sandbox e cancelamento de ferramentas
 

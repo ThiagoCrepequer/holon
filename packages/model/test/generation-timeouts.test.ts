@@ -38,6 +38,7 @@ const request = {
   instructions: "Review",
   prompt: "private patch",
   evidenceCandidates: [],
+  investigationPaths: [],
 };
 function generator(
   model: MockLanguageModelV3,
@@ -599,4 +600,222 @@ it("reserves synthesis output before the cumulative output budget is exhausted",
     }),
   );
   expect(calls).toBe(11);
+});
+
+const checkpointResult = (finished = true, status = "reviewed") => ({
+  ...textResult(""),
+  content: [
+    {
+      type: "tool-call" as const,
+      toolCallId: "checkpoint",
+      toolName: "review_checkpoint",
+      input: JSON.stringify({
+        checks: [
+          {
+            id: "file-0",
+            status,
+            note: "Compared changed contract and relevant callers",
+          },
+        ],
+        summary: "No confirmed defect",
+        finished,
+      }),
+    },
+  ],
+  finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+});
+it("completes through a checkpoint without an extra narrative model call", async () => {
+  let calls = 0;
+  const events: GenerationEvent[] = [];
+  const model = new MockLanguageModelV3({
+    doGenerate: async () =>
+      calls++ === 0 ? checkpointResult() : textResult(JSON.stringify(output)),
+  });
+  const result = await generator(model, (event) => events.push(event)).generate(
+    { ...request, investigationPaths: ["src/a.ts"] },
+  );
+  expect(calls).toBe(2);
+  expect(result).not.toMatchObject({ isDegraded: true });
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.investigation_progress",
+      reviewedChecks: 1,
+      pendingChecks: 0,
+      toolCalls: 0,
+      reasoningTokens: 0,
+    }),
+  );
+  expect(JSON.stringify(events)).not.toContain("src/a.ts");
+});
+it.each(["pending", "blocked"])(
+  "preserves %s coverage even when finalization claims a clean review",
+  async (status) => {
+    let calls = 0;
+    const model = new MockLanguageModelV3({
+      doGenerate: async () =>
+        calls++ === 0
+          ? checkpointResult(true, status)
+          : textResult(JSON.stringify(output)),
+    });
+    const result = await generator(model).generate({
+      ...request,
+      investigationPaths: ["src/a.ts"],
+    });
+    expect(result).toMatchObject({
+      isDegraded: true,
+      outputLimitations: ["investigation_incomplete"],
+    });
+  },
+);
+it("does not accept completion emitted together with unread repository results", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      const index = calls++;
+      if (index === 0) {
+        const checkpoint = checkpointResult();
+        return {
+          ...checkpoint,
+          content: [
+            ...checkpoint.content,
+            {
+              type: "tool-call" as const,
+              toolCallId: "read",
+              toolName: "read_file",
+              input: JSON.stringify({ path: "src/a.ts" }),
+            },
+          ],
+        };
+      }
+      return textResult(index === 1 ? "All done" : JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(calls).toBe(3);
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+});
+it("reserves closure before another long generation can consume the phase deadline", async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0)
+        return delayed(
+          {
+            ...textResult(""),
+            content: [
+              {
+                type: "tool-call" as const,
+                toolCallId: "read",
+                toolName: "read_file",
+                input: JSON.stringify({ path: "src/a.ts" }),
+              },
+            ],
+            finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+          },
+          150_000,
+          options.abortSignal,
+        );
+      if (index === 1) {
+        expect(options.tools?.map((t) => t.name)).toEqual([
+          "review_checkpoint",
+        ]);
+        expect(options.toolChoice).toEqual({
+          type: "tool",
+          toolName: "review_checkpoint",
+        });
+        expect(options.maxOutputTokens).toBe(8192);
+        return checkpointResult(true, "pending");
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  // Shared remaining analysis time leaves six minutes for investigation.
+  const pending = generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+    deadlineAt: Date.now() + 14 * 60_000,
+  });
+  await vi.advanceTimersByTimeAsync(150_000);
+  expect(await pending).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+  expect(calls).toBe(3);
+});
+
+it("discards a premature checkpoint when its repository round is cancelled", async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0) {
+        const checkpoint = checkpointResult();
+        return {
+          ...checkpoint,
+          content: [
+            ...checkpoint.content,
+            {
+              type: "tool-call" as const,
+              toolCallId: "slow-read",
+              toolName: "read_file",
+              input: JSON.stringify({ path: "src/a.ts" }),
+            },
+          ],
+        };
+      }
+      if (index === 1) return textResult("Could not verify the pending file");
+      expect(JSON.stringify(options.prompt)).not.toContain(
+        "No confirmed defect",
+      );
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const pending = generator(model, undefined, async (_call, execution) =>
+    delayed(
+      { content: "late", truncated: false },
+      210_000,
+      execution?.abortSignal,
+    ),
+  ).generate({ ...request, investigationPaths: ["src/a.ts"] });
+  await vi.advanceTimersByTimeAsync(180_000);
+  expect(await pending).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+  expect(calls).toBe(3);
+});
+it("keeps length-truncated checkpoint generation incomplete", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      calls++;
+      if (options.responseFormat?.type === "json")
+        return textResult(JSON.stringify(output));
+      return {
+        ...checkpointResult(),
+        finishReason: { unified: "length" as const, raw: "length" },
+      };
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: expect.arrayContaining([
+      "generation_length",
+      "investigation_incomplete",
+    ]),
+  });
+  expect(calls).toBe(2);
 });
