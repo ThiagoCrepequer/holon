@@ -1,21 +1,64 @@
-# Skills compartilhadas do projeto
+# Skills do projeto
 
-As skills abaixo foram copiadas para o formato aberto Agent Skills e são
-carregadas sob demanda pelo Codex. O conteúdo upstream é mantido sem adaptação;
-verifique dependências e instruções específicas do host antes de executar seus
-fluxos. Os links apontam para a fonte consultada em 2026-09-28.
+Estas skills seguem o formato aberto Agent Skills e são descobertas pelo Codex
+em `.agents/skills/`. São carregadas sob demanda: escolha as que se aplicam à
+tarefa em vez de carregar todo o catálogo. As cópias preservam o conteúdo
+upstream; confirme dependências e instruções específicas do host antes de
+executar fluxos externos. As origens foram verificadas em 2026-09-28.
 
-| Diretório                                                                                                                  | Origem                                                                          | Uso neste projeto                                                                                                                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ip-as-logo`                                                                                                               | [s1dashu/ip-as-logo-skill](https://github.com/s1dashu/ip-as-logo-skill)         | Mascotes e personagens IP, somente quando solicitados. Inclui licença upstream.                                                                                                                                                         |
-| `review`, `qa`, `cso`, `plan-eng-review`                                                                                   | [garrytan/gstack](https://github.com/garrytan/gstack)                           | Revisão, QA, segurança e planejamento de engenharia. Alguns fluxos dependem do setup, scripts, browser ou outros hosts do gstack; a cópia da skill não instala essas dependências.                                                      |
-| `layout-grid`, `responsive-design`, `visual-hierarchy`, `design-token`, `accessibility-audit`, `critique-visual-hierarchy` | [Owl-Listener/designer-skills](https://github.com/Owl-Listener/designer-skills) | UI web/admin, responsividade, design tokens, acessibilidade e crítica visual. A coleção upstream é publicada como plugins Claude Code/Gemini CLI; estes diretórios individuais foram selecionados por conterem instruções autocontidas. |
+## Qual skill usar
 
-## Licenças
+### Design e implementação de UI
 
-- `ip-as-logo/LICENSE`: MIT, s1dashu.
-- `LICENSES/gstack-MIT.txt`: MIT, Garry Tan. Aplicável às quatro skills gstack.
-- `LICENSES/designer-skills-MIT.txt`: MIT, MC Dean. Aplicável às seis skills de design.
+| Cenário | Skills recomendadas | Como usar |
+| --- | --- | --- |
+| Procurar padrões reais antes de desenhar uma tela ou fluxo | `ui-radar` | Pesquise exemplos comparáveis e extraia padrões relevantes para o produto; trate referências como inspiração, não como especificação. |
+| Criar, redesenhar ou melhorar uma interface | `ui-design` + `anti-ui-slop` | Use `ui-design` para orientar a exploração, composição e implementação. Use `anti-ui-slop` para firmar uma direção específica do produto, cobrir estados e revisar o acabamento. |
+| Organizar colunas, margens e gutters de uma página | `layout-grid` | Defina a grade e os breakpoints estruturais antes de ajustar o espaçamento interno dos componentes. |
+| Definir ou reorganizar cores, espaçamento, tipografia e elevação | `design-token` | Use ao estabelecer a camada de tokens; respeite primeiro os tokens e padrões existentes em `packages/ui`. |
+| Fazer a mesma UI funcionar em telas e métodos de entrada diferentes | `responsive-design` | Revise layouts e interações para tamanhos de tela, toque, teclado e demais contextos aplicáveis. Combine com `layout-grid` quando a estrutura da grade também mudar. |
+| Estabelecer ordem de leitura numa nova composição | `visual-hierarchy` | Defina onde o olhar deve chegar primeiro e ajuste escala, peso, cor, espaço e posição. |
+| Diagnosticar hierarquia visual numa tela existente | `critique-visual-hierarchy` | Avalie ponto de entrada, percurso do olhar, distribuição de peso e ênfase a partir da tela renderizada. |
+| Auditar acessibilidade de uma interface existente | `accessibility-audit` | Faça uma auditoria com achados priorizados e passos de correção; complemente com testes comportamentais quando a tarefa exigir. |
+| Conferir código UI contra regras web atuais | `web-design-guidelines` | Faça uma revisão final por arquivos ou padrões. A skill busca as regras atuais antes da auditoria; requer acesso à URL indicada em `SKILL.md`. |
+| Criar ou revisar um mascote/personagem de marca | `ip-as-logo` | Use apenas quando a tarefa pedir um personagem visual; a skill é focada em imagens quadradas simples, não em ícones funcionais ou no sistema de UI. |
 
-Quando atualizar uma skill, confira novamente a estrutura, o conteúdo, as
-dependências e a licença no upstream. Atualize esta lista se o conjunto mudar.
+### Engenharia, revisão e segurança
+
+| Cenário | Skill | Observação |
+| --- | --- | --- |
+| Revisar um PR antes de integrar | `review` | Revisão pré-integração; mantenha os critérios de arquitetura e os contratos do Holon como autoridade. |
+| Validar fluxos de uma aplicação web | `qa` | Use em tarefas de QA; confirme os requisitos de browser e ferramentas externas descritos pela própria skill. |
+| Avaliar riscos de segurança | `cso` | Auditoria de segurança; o nível de profundidade pode depender da configuração e dos recursos gstack disponíveis. |
+| Revisar um plano técnico como liderança de engenharia | `plan-eng-review` | Use para desafiar escopo, sequenciamento, riscos e critérios de conclusão antes de implementar. |
+
+## Fluxo recomendado para uma UI no Holon
+
+1. Consulte os padrões e tokens existentes em `packages/ui` e a tela ou rota que
+   será alterada.
+2. Para uma tela nova ou um redesenho, use `ui-radar` para buscar referências;
+   então `ui-design` e `anti-ui-slop` para orientar e criticar a solução.
+3. Aplique apenas as skills estruturais necessárias: `layout-grid`,
+   `visual-hierarchy`, `design-token` ou `responsive-design`.
+4. Depois de implementar, valide a interface nos estados e tamanhos relevantes;
+   use `accessibility-audit` e `web-design-guidelines` quando o escopo incluir
+   revisão de acessibilidade ou conformidade geral.
+
+Não trate recomendações genéricas como motivo para ignorar o sistema visual ou
+os contratos já adotados no produto. Não aplique várias skills redundantes à
+mesma pergunta: comece pela skill cujo cenário corresponde ao trabalho e traga
+as demais apenas quando cobrirem outra dimensão.
+
+## Origens e licenças
+
+| Skills | Origem | Licença / notas |
+| --- | --- | --- |
+| `ip-as-logo` | [s1dashu/ip-as-logo-skill](https://github.com/s1dashu/ip-as-logo-skill) | MIT; licença incluída na pasta da skill. |
+| `review`, `qa`, `cso`, `plan-eng-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | MIT; aviso em `LICENSES/gstack-MIT.txt`. Algumas rotinas dependem de setup, scripts, browser ou outros hosts que não são instalados junto com a cópia. |
+| `layout-grid`, `responsive-design`, `visual-hierarchy`, `design-token`, `accessibility-audit`, `critique-visual-hierarchy` | [Owl-Listener/designer-skills](https://github.com/Owl-Listener/designer-skills) | MIT; aviso em `LICENSES/designer-skills-MIT.txt`. Skills individuais autocontidas selecionadas da coleção. |
+| `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines) | Skill importada do upstream; as regras da auditoria são buscadas de [web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) a cada uso. O repositório de skills não apresenta arquivo de licença na raiz consultada; confira os termos upstream antes de redistribuir ou alterar a cópia. |
+| `ui-design`, `ui-radar`, `anti-ui-slop` | [uizze/uizze](https://github.com/uizze/uizze/tree/main/skills) | Skills UIZZE incluídas nesta atualização. `ui-design` e `anti-ui-slop` preservam os avisos e metadados de licença distribuídos com a cópia; `ui-radar` contém somente o `SKILL.md`, então confira os termos no upstream antes de redistribuir. |
+
+Ao atualizar uma skill, confira a estrutura, o conteúdo, as dependências e os
+termos de licença no upstream. Atualize este guia quando o conjunto ou o fluxo
+de escolha mudar.
