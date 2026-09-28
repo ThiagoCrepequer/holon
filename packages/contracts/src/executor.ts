@@ -6,6 +6,7 @@ import {
   repositoryPolicySourceSchema,
   repositoryVerdictStrictnessSchema,
 } from "./repository-policy.js";
+import { reviewExecutionLimits } from "./review-execution-limits.js";
 import { resolvedReviewGuidanceSchema } from "./review-guidance.js";
 import {
   gitShaSchema,
@@ -208,9 +209,17 @@ export const reviewContextSchema = z
   .strictObject({
     reviewGuidance: resolvedReviewGuidanceSchema.optional(),
     projectIdentification: projectIdentificationResultSchema.optional(),
-    changedLines: changedLinesSchema,
+    changedLines: z
+      .array(changedLinesSchema.element)
+      .max(reviewExecutionLimits.contextLines),
     effectivePolicyDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-    files: z.array(reviewContextFileSchema).max(50),
+    files: z
+      .array(
+        reviewContextFileSchema.extend({
+          patch: z.string().min(1).max(reviewExecutionLimits.contextPatchBytes),
+        }),
+      )
+      .max(reviewExecutionLimits.contextFiles),
     policySource: repositoryPolicySourceSchema,
     sourceDigest: z
       .string()
@@ -238,18 +247,18 @@ export const reviewContextSchema = z
       (total, file) => total + utf8ByteLength(file.patch),
       0,
     );
-    if (patchBytes > 300_000) {
+    if (patchBytes > reviewExecutionLimits.contextPatchBytes) {
       refinement.addIssue({
         code: "custom",
-        message: "review context patches exceed the 300000-byte budget",
+        message: "review context patches exceed the 2000000-byte budget",
         path: ["files"],
       });
     }
     for (const [index, file] of context.files.entries()) {
-      if (utf8ByteLength(file.patch) > 60_000)
+      if (utf8ByteLength(file.patch) > reviewExecutionLimits.contextPatchBytes)
         refinement.addIssue({
           code: "custom",
-          message: "review context file exceeds the 60000-byte budget",
+          message: "review context file exceeds the 2000000-byte budget",
           path: ["files", index, "patch"],
         });
     }
@@ -273,9 +282,17 @@ export const reviewContextSchema = z
     }
   });
 const preparedRepositoryShape = {
-  changedLineCount: z.number().int().nonnegative().max(5_000),
-  contextBytes: positiveIntegerSchema.max(500_000),
-  fileCount: z.number().int().nonnegative().max(50),
+  changedLineCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(reviewExecutionLimits.contextLines),
+  contextBytes: positiveIntegerSchema.max(reviewExecutionLimits.contextBytes),
+  fileCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(reviewExecutionLimits.contextFiles),
   runId: runIdSchema,
   truncated: z.boolean(),
 } as const;

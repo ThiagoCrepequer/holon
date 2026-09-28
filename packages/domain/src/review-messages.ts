@@ -99,10 +99,10 @@ export const reviewMessages = {
     es: "No se encontraron archivos compatibles o no binarios en el diff del pull request.",
   },
   oversized_patches: {
-    en: "{count} eligible file(s) omitted whole because their patches exceed the {bytes}-byte limit per shard.",
+    en: "{count} eligible file(s) contain lines or metadata that cannot fit the {bytes}-byte partition budget; those units were omitted.",
     "pt-BR":
-      "{count} arquivos elegíveis foram omitidos por inteiro porque seus patches excedem o limite de {bytes} bytes por parte.",
-    es: "Se omitieron {count} archivos elegibles completos porque sus patches superan el límite de {bytes} bytes por parte.",
+      "{count} arquivos elegíveis contêm linhas ou metadados que não cabem no orçamento de {bytes} bytes por parte; essas unidades foram omitidas.",
+    es: "{count} archivos elegibles contienen líneas o metadatos que no caben en {bytes} bytes por parte; esas unidades fueron omitidas.",
   },
   file_limit: {
     en: "{count} eligible file(s) omitted by the 50-file limit across shards.",

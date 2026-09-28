@@ -73,3 +73,5 @@ formato é uma adaptação enxuta de Markdown Architectural Decision Records.
 - [ADR-0037 — Compilar configuração imutável por execução](0037-compile-repository-configuration-per-run.md) — decisão vigente para autoridade, snapshots, identidade head/base e apresentação.
 
 - [ADR-0038 — Análise paralela e publicação durável](0038-harden-parallel-review-and-publication.md) — decisão vigente para concorrência, recuperação, CI e contexto complementar.
+
+- [ADR-0039 — Particionar reviews grandes e limitar concorrência](0039-partition-large-reviews-and-bound-concurrency.md) — substitui o planejamento/agendamento da ADR-0038; preserva suas outras garantias.

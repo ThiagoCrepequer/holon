@@ -6,7 +6,8 @@ import {
 } from "./finding-lifecycle.js";
 import { reviewOutputPreferencesSchema } from "./repository-config/input.js";
 import { repositoryPolicySourceSchema } from "./repository-policy.js";
-import { limitReviewText } from "./review-limits.js";
+import { reviewExecutionLimits } from "./review-execution-limits.js";
+import { reviewTextLimits } from "./review-limits.js";
 import { aggregatedReviewResultSchema } from "./review-plan.js";
 import { structuralImpactReportSchema } from "./structural-analysis.js";
 import { stepTimingSchema } from "./telemetry.js";
@@ -48,7 +49,7 @@ export type ReconciledReviewOutput = z.infer<
   typeof reconciledReviewOutputSchema
 >;
 
-/** Only publication coordinates and bounded metadata cross a Workflow checkpoint. */
+/** Only publication identifiers and bounded metadata cross a Workflow checkpoint. */
 export const reviewAnalysisCheckpointSchema = reconciledReviewOutputSchema
   .omit({
     findings: true,
@@ -60,20 +61,14 @@ export const reviewAnalysisCheckpointSchema = reconciledReviewOutputSchema
   .extend({
     activeFindings: z
       .array(
-        reconciledFindingSchema
-          .pick({
-            identityAmbiguous: true,
-            confidence: true,
-            fingerprint: true,
-            location: true,
-            severity: true,
-            status: true,
-            previousCommentId: true,
-          })
-          .extend({ diagnostic: z.string().max(300) }),
+        reconciledFindingSchema.pick({ fingerprint: true, severity: true }),
       )
-      .max(40),
-    resolvedFindingsCount: z.number().int().nonnegative().max(40),
+      .max(reviewExecutionLimits.maxShards * reviewTextLimits.findings),
+    resolvedFindingsCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(reviewExecutionLimits.maxShards * reviewTextLimits.findings),
   });
 export type ReviewAnalysisCheckpoint = z.infer<
   typeof reviewAnalysisCheckpointSchema
@@ -91,27 +86,10 @@ export function buildReviewAnalysisCheckpoint(
   } = output;
   return reviewAnalysisCheckpointSchema.parse({
     ...metadata,
-    activeFindings: activeFindings.map(
-      ({
-        identityAmbiguous,
-        confidence,
-        fingerprint,
-        location,
-        severity,
-        status,
-        previousCommentId,
-        diagnostic,
-      }) => ({
-        identityAmbiguous,
-        confidence,
-        fingerprint,
-        location,
-        severity,
-        status,
-        previousCommentId,
-        diagnostic: limitReviewText(diagnostic, 300),
-      }),
-    ),
+    activeFindings: activeFindings.map(({ fingerprint, severity }) => ({
+      fingerprint,
+      severity,
+    })),
     resolvedFindingsCount: resolvedFindings.length,
   });
 }

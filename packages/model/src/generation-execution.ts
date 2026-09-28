@@ -8,6 +8,7 @@ import {
 
 export interface GenerationEvent {
   readonly event:
+    | "model.investigation_stopped"
     | "model.phase_started"
     | "model.phase_finished"
     | "model.phase_failed"
@@ -17,6 +18,7 @@ export interface GenerationEvent {
   readonly phase: GenerationPhase;
   readonly attempt: number;
   readonly round?: number;
+  readonly toolCalls?: number;
   readonly durationMs?: number;
   readonly timeoutMs?: number;
   readonly remainingMs: number;

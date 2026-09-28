@@ -92,7 +92,7 @@ it("omits an oversized file completely without starving later eligible patches",
   );
 });
 
-it("bounds selected files across all shards and records omitted eligible files", () => {
+it("retains 51 eligible files instead of applying the obsolete global file cap", () => {
   const plan = buildReviewPlan(
     splitPullRequestDiff(
       Array.from({ length: 51 }, (_, i) =>
@@ -101,9 +101,61 @@ it("bounds selected files across all shards and records omitted eligible files",
     ),
   );
   expect(plan.totalEligibleFiles).toBe(51);
-  expect(plan.shards.flatMap((s) => s.files)).toHaveLength(50);
-  expect(plan.scopeStatus).toBe("partial_by_policy");
-  expect(plan.omissionReasons).toContainEqual(
-    expect.objectContaining({ code: "file_limit" }),
+  expect(plan.shards.flatMap((s) => s.files)).toHaveLength(51);
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.omissionReasons).toEqual([]);
+});
+
+it("covers more than five shards and fifty files under the default work budget", () => {
+  const plan = buildReviewPlan(
+    splitPullRequestDiff(
+      Array.from({ length: 61 }, (_, i) => patchFor(`src/f${i}.ts`)).join(""),
+    ),
   );
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.shards.length).toBeGreaterThan(5);
+  expect(
+    new Set(plan.shards.flatMap((s) => s.files.map((f) => f.path))).size,
+  ).toBe(61);
+});
+it("partitions a large single hunk without losing canonical added coordinates or bytes", () => {
+  const body = Array.from(
+    { length: 800 },
+    (_, i) => `+const item${i} = "${"é".repeat(60)}";`,
+  ).join("\n");
+  const patch = `diff --git a/src/large.ts b/src/large.ts\n--- a/src/large.ts\n+++ b/src/large.ts\n@@ -0,0 +1,800 @@\n${body}\n`;
+  const plan = buildReviewPlan(splitPullRequestDiff(patch));
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.shards.length).toBeGreaterThan(1);
+  expect(plan.shards.flatMap((s) => s.changedLines.map((l) => l.line))).toEqual(
+    Array.from({ length: 800 }, (_, i) => i + 1),
+  );
+  const retained = plan.shards.flatMap((s) =>
+    s.files.flatMap((f) =>
+      f.patch
+        .split("\n")
+        .filter((l) => l.startsWith("+") && !l.startsWith("+++")),
+    ),
+  );
+  expect(retained.join("\n")).toBe(body);
+  for (const shard of plan.shards)
+    expect(shard.byteLength).toBeLessThanOrEqual(24_000);
+});
+
+it("packs small hunks of the same file without spending one shard per hunk", () => {
+  const patch = `diff --git a/src/hunks.ts b/src/hunks.ts\n--- a/src/hunks.ts\n+++ b/src/hunks.ts\n${Array.from({ length: 200 }, (_, i) => `@@ -${i * 10 + 1},1 +${i * 10 + 1},1 @@\n-old\n+new  \n`).join("")}`;
+  const plan = buildReviewPlan(splitPullRequestDiff(patch));
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.shards.length).toBeLessThan(12);
+  expect(plan.shards.flatMap((s) => s.changedLines).map((l) => l.line)).toEqual(
+    Array.from({ length: 200 }, (_, i) => i * 10 + 1),
+  );
+  expect(plan.shards.every((s) => s.files.length === 1)).toBe(true);
+  expect(
+    plan.shards.flatMap((s) =>
+      s.files.flatMap((f) =>
+        f.patch.split("\n").filter((line) => line.startsWith("+new")),
+      ),
+    ),
+  ).toEqual(Array(200).fill("+new  "));
 });

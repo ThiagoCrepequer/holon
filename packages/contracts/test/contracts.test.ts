@@ -545,7 +545,7 @@ describe("bounded repository tools", () => {
         files: [
           {
             ...policyContext.files[0],
-            patch: "x".repeat(120_001),
+            patch: "x".repeat(2_000_001),
           },
         ],
       }).success,

@@ -1,5 +1,6 @@
 import {
   reviewContextSchema,
+  reviewExecutionLimits,
   type ExecutorRequest,
   type ReviewContext,
   type ReviewPlan,
@@ -19,8 +20,8 @@ import {
   serializeReviewScopePolicy,
 } from "./review-scope-policy.js";
 
-const maximumChangedLines = 5_000;
-const maximumContextBytes = 500_000;
+const maximumChangedLines = reviewExecutionLimits.contextLines;
+const maximumContextBytes = reviewExecutionLimits.contextBytes;
 
 export interface ReviewArtifacts {
   readonly context: ReviewContext;
@@ -94,8 +95,19 @@ export function buildReviewArtifacts(
       isNonBinaryPullRequestPatch(file.patch) &&
       classifyPullRequestDiffFile(file, additionalExcludes) === undefined,
   ).length;
-  const reviewFiles = plan.shards.flatMap((shard) => shard.files);
-  let truncated = plan.scopeStatus === "partial_by_policy";
+  const reviewFiles = diffFiles
+    .flatMap((file) => {
+      const mode = classifyPullRequestDiffFile(file, additionalExcludes);
+      return mode && isNonBinaryPullRequestPatch(file.patch)
+        ? [{ mode, path: file.path, patch: file.patch }]
+        : [];
+    })
+    .slice(0, reviewExecutionLimits.contextFiles);
+  let truncated =
+    diffFiles.filter(
+      (file) =>
+        classifyPullRequestDiffFile(file, additionalExcludes) !== undefined,
+    ).length > reviewFiles.length;
 
   const changedLines: Array<{
     line: number;

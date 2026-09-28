@@ -35,7 +35,12 @@ import {
   type GenerationObserver,
 } from "./generation-execution.js";
 import { selectFinalizationEvidence } from "./host-context.js";
-import { generationDeadline, reviewTimeBudget } from "./review-budgets.js";
+import { createRepositoryToolCache } from "./repository-tool-cache.js";
+import {
+  ModelGenerationTimeoutError,
+  generationDeadline,
+  reviewTimeBudget,
+} from "./review-budgets.js";
 import type {
   RepositoryToolRunner,
   ReviewGenerationRequest,
@@ -296,12 +301,30 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     const deadlineAt =
       request.deadlineAt ?? Date.now() + reviewTimeBudget.analysisMs;
     const model = createGatewayLanguageModel(this.config);
-    const tools = createRepositoryModelTools(this.toolsRunner);
+    let toolCalls = 0;
+    let toolBudgetExhausted = false;
+    let forcedClosure: "tool_budget_exhausted" | "round_limit" | undefined;
+    const cachedTools = createRepositoryToolCache({
+      run: async (call) => {
+        toolCalls++;
+        try {
+          return await this.toolsRunner.run(call);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.name === "RepositoryToolBudgetExceededError"
+          )
+            toolBudgetExhausted = true;
+          throw error;
+        }
+      },
+    });
+    const tools = createRepositoryModelTools(cachedTools);
 
     // Phase 1: Investigative Tool Loop (freeform diagnostic text)
     let investigationText = "";
     const generationLimits: Array<
-      "generation_length" | "investigation_incomplete"
+      "generation_length" | "investigation_incomplete" | "tool_budget_exhausted"
     > = [];
     const investigationDeadlineAt = generationDeadline(
       deadlineAt,
@@ -337,6 +360,13 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                 maximumInvestigationSteps - completedRounds,
               ),
               temperature: 0,
+              prepareStep: () => {
+                if (toolCalls >= 12 || toolBudgetExhausted)
+                  forcedClosure = "tool_budget_exhausted";
+                else if (completedRounds >= maximumInvestigationSteps - 1)
+                  forcedClosure = "round_limit";
+                return { toolChoice: forcedClosure ? "none" : "auto" };
+              },
               tools,
               onStepFinish: (step) => {
                 lifecycle.onStepFinish();
@@ -364,8 +394,14 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         });
         if (investigationResult.finishReason === "length")
           generationLimits.push("generation_length");
-        if (investigationResult.finishReason === "tool-calls")
+        if (
+          forcedClosure ||
+          toolBudgetExhausted ||
+          investigationResult.finishReason === "tool-calls"
+        )
           generationLimits.push("investigation_incomplete");
+        if (forcedClosure === "tool_budget_exhausted" || toolBudgetExhausted)
+          generationLimits.push("tool_budget_exhausted");
         const usage =
           investigationResult.totalUsage ?? investigationResult.usage;
         await this.onUsage?.({
@@ -387,6 +423,25 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           : (investigationResult.text ?? "");
         if (!investigationText.trim())
           generationLimits.push("investigation_incomplete");
+        observeGeneration(this.observer, {
+          event: "model.investigation_stopped",
+          phase: "investigation",
+          attempt,
+          remainingMs: Math.max(0, investigationDeadlineAt - Date.now()),
+          round: completedRounds,
+          toolCalls,
+          reason:
+            forcedClosure ??
+            (toolBudgetExhausted
+              ? "tool_budget_exhausted"
+              : investigationResult.finishReason === "tool-calls"
+                ? "round_limit"
+                : investigationResult.finishReason === "length"
+                  ? "output_length"
+                  : !investigationText.trim()
+                    ? "empty_analysis"
+                    : "completed"),
+        });
         break;
       } catch (error) {
         if (
@@ -406,6 +461,18 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         }
         if (isTransientGenerationError(error)) {
           investigationText = completedTexts.join("\n\n");
+          observeGeneration(this.observer, {
+            event: "model.investigation_stopped",
+            phase: "investigation",
+            attempt,
+            remainingMs: Math.max(0, investigationDeadlineAt - Date.now()),
+            round: completedRounds,
+            toolCalls,
+            reason:
+              error instanceof ModelGenerationTimeoutError
+                ? error.reason
+                : "provider_transient_failure",
+          });
           generationLimits.push("investigation_incomplete");
           break;
         }

@@ -359,3 +359,49 @@ it("does not invoke synthesis after its shared deadline", async () => {
   expect(result).not.toContain("Should not be called");
   expect(model.doGenerateCalls).toHaveLength(0);
 });
+
+it("reserves the last investigation round for synthesis and reports the exact exhaustion reason", async () => {
+  let calls = 0;
+  const events: GenerationEvent[] = [];
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index < 5)
+        return {
+          ...textResult(""),
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: `call-${index}`,
+              toolName: "read_file",
+              input: JSON.stringify({ path: `src/file${index}.ts` }),
+            },
+          ],
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index === 5) {
+        expect(options.toolChoice).toEqual({ type: "none" });
+        return textResult(
+          "Verified completed work; further investigation remains pending.",
+        );
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model, (event) => events.push(event)).generate(
+    request,
+  );
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.investigation_stopped",
+      reason: "round_limit",
+      round: 6,
+      toolCalls: 5,
+    }),
+  );
+  expect(calls).toBe(7);
+});

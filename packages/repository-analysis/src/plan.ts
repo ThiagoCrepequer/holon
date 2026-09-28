@@ -1,5 +1,6 @@
 import {
   reviewPlanSchema,
+  reviewExecutionLimits,
   type ReviewContextFile,
   type ReviewFileMode,
   type ReviewPlan,
@@ -12,6 +13,7 @@ import {
   isNonBinaryPullRequestPatch,
   type PullRequestDiffFile,
 } from "./diff.js";
+import { evidenceWindowCount, partitionPatch } from "./patch-partition.js";
 import { classifyPullRequestDiffFile } from "./policy.js";
 import { mapReviewSurface } from "./surface.js";
 
@@ -68,10 +70,13 @@ export function buildReviewPlan(
   diffFiles: readonly PullRequestDiffFile[],
   options?: BuildReviewPlanOptions,
 ): ReviewPlan {
-  const maxShardDiffBytes = options?.maxShardDiffBytes ?? 60_000;
-  const maxShardFiles = options?.maxShardFiles ?? 20;
-  const maxShardLines = options?.maxShardLines ?? 1_500;
-  const maxShards = options?.maxShards ?? 5;
+  const maxShardDiffBytes =
+    options?.maxShardDiffBytes ?? reviewExecutionLimits.shardPatchBytes;
+  const maxShardFiles =
+    options?.maxShardFiles ?? reviewExecutionLimits.shardFiles;
+  const maxShardLines =
+    options?.maxShardLines ?? reviewExecutionLimits.shardLines;
+  const maxShards = options?.maxShards ?? reviewExecutionLimits.maxShards;
 
   let unsupportedFilesCount = 0;
   let policyExcludedFilesCount = options?.policyExcludedFilesCount ?? 0;
@@ -199,46 +204,78 @@ export function buildReviewPlan(
     files: [],
   };
 
-  let selectedFileCount = 0;
   let oversizedFileCount = 0;
-  let omittedByFileLimit = 0;
-  for (const item of balanceReviewModes(prioritizedFiles)) {
-    if (item.patchBytes > maxShardDiffBytes) {
-      oversizedFileCount += 1;
-      continue;
-    }
-    if (selectedFileCount >= 50) {
-      omittedByFileLimit += 1;
-      continue;
-    }
-    selectedFileCount += 1;
-    const wouldExceedBytes =
-      currentShard.files.length > 0 &&
-      currentShard.byteLength + item.patchBytes > maxShardDiffBytes;
-    const wouldExceedFiles =
-      currentShard.files.length > 0 &&
-      currentShard.files.length + 1 > maxShardFiles;
-    const wouldExceedLines =
-      currentShard.files.length > 0 &&
-      currentShard.changedLines.length + item.changedLines.length >
-        maxShardLines;
 
-    if (wouldExceedBytes || wouldExceedFiles || wouldExceedLines) {
-      rawShards.push(currentShard);
-      currentShard = {
-        byteLength: 0,
-        changedLines: [],
-        files: [],
+  for (const original of balanceReviewModes(prioritizedFiles)) {
+    const partition = partitionPatch(
+      original.file.patch,
+      maxShardDiffBytes,
+      maxShardLines,
+    );
+    if (partition.omittedLines) oversizedFileCount++;
+    for (const patch of partition.patches) {
+      const item = {
+        ...original,
+        file: { ...original.file, patch },
+        patchBytes: utf8ByteLength(patch),
+        changedLines: collectChangedLines(original.file.path, patch),
       };
-    }
-
-    currentShard.files.push(item.file);
-    currentShard.byteLength += item.patchBytes;
-    const remainingShardLines = 5_000 - currentShard.changedLines.length;
-    if (remainingShardLines > 0) {
-      currentShard.changedLines.push(
-        ...item.changedLines.slice(0, remainingShardLines),
+      const existingIndex = currentShard.files.findIndex(
+        (file) => file.path === item.file.path,
       );
+      const bodyStart = patch.search(/^@@ /mu);
+      const appendedPatch =
+        existingIndex >= 0 && bodyStart >= 0 ? patch.slice(bodyStart) : patch;
+      const addedBytes = utf8ByteLength(appendedPatch);
+      const wouldExceedWindows =
+        currentShard.files.reduce(
+          (sum, file) => sum + evidenceWindowCount(file.patch),
+          0,
+        ) +
+          evidenceWindowCount(patch) >
+        24;
+      const wouldExceedBytes =
+        currentShard.files.length > 0 &&
+        currentShard.byteLength + addedBytes > maxShardDiffBytes;
+      const wouldExceedFiles =
+        currentShard.files.length > 0 &&
+        currentShard.files.length + Number(existingIndex < 0) > maxShardFiles;
+      const wouldExceedLines =
+        currentShard.files.length > 0 &&
+        currentShard.changedLines.length + item.changedLines.length >
+          maxShardLines;
+
+      if (
+        wouldExceedBytes ||
+        wouldExceedFiles ||
+        wouldExceedLines ||
+        wouldExceedWindows
+      ) {
+        rawShards.push(currentShard);
+        currentShard = {
+          byteLength: 0,
+          changedLines: [],
+          files: [],
+        };
+      }
+
+      const mergeIndex = currentShard.files.findIndex(
+        (file) => file.path === item.file.path,
+      );
+      if (mergeIndex >= 0) {
+        currentShard.files[mergeIndex] = {
+          ...item.file,
+          patch:
+            currentShard.files[mergeIndex]!.patch +
+            (currentShard.files[mergeIndex]!.patch.endsWith("\n") ? "" : "\n") +
+            appendedPatch,
+        };
+      } else currentShard.files.push(item.file);
+      currentShard.byteLength = currentShard.files.reduce(
+        (sum, file) => sum + utf8ByteLength(file.patch),
+        0,
+      );
+      currentShard.changedLines.push(...item.changedLines);
     }
   }
 
@@ -256,10 +293,6 @@ export function buildReviewPlan(
       count: oversizedFileCount,
       bytes: maxShardDiffBytes,
     });
-  }
-  if (omittedByFileLimit > 0) {
-    scopeStatus = "partial_by_policy";
-    omissionReasons.push({ code: "file_limit", count: omittedByFileLimit });
   }
   if (policyExcludedFilesCount > 0) {
     scopeStatus = "partial_by_policy";

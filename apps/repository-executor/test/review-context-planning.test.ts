@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildReviewArtifacts } from "../src/review-context.js";
 
 function patch(path: string) {
-  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1 @@\n+${"x".repeat(50_000)}\n`;
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,100 @@\n+${Array.from({ length: 100 }, (_, i) => `line${i}: ${"x".repeat(500)}`).join("\n+")}\n`;
 }
 function artifacts(paths: string[]) {
   const request: ExecutorRequest = {
@@ -40,23 +40,30 @@ describe("plan before context selection", () => {
     expect(result.context.files.map((f) => f.path)).toEqual(paths);
     expect(result.context.files.map((f) => f.patch)).toEqual(paths.map(patch));
     expect(result.context.truncated).toBe(false);
-    expect(result.plan.shards).toHaveLength(3);
+    expect(result.plan.shards.length).toBeGreaterThan(3);
     expect(result.contextBytes).toBeLessThanOrEqual(500_000);
     expect(result.context.changedLines).toEqual(
-      paths.map((path) => ({ path, line: 1, side: "RIGHT" })),
+      paths.flatMap((path) =>
+        Array.from({ length: 100 }, (_, i) => ({
+          path,
+          line: i + 1,
+          side: "RIGHT",
+        })),
+      ),
     );
   });
-  it("retains exactly the bounded plan and reports an omitted sixth shard", () => {
+  it("retains full canonical context across more than five planned shards", () => {
     const result = artifacts(
       Array.from({ length: 6 }, (_, i) => `src/module${i}.ts`),
     );
-    expect(result.plan.shards).toHaveLength(5);
-    expect(result.context.files).toHaveLength(5);
-    expect(result.context.files).toEqual(
-      result.plan.shards.flatMap((s) => s.files),
-    );
-    expect(result.context.truncated).toBe(true);
-    expect(result.plan.scopeStatus).toBe("partial_by_policy");
+    expect(result.plan.shards.length).toBeGreaterThan(5);
+    expect(result.context.files).toHaveLength(6);
+    expect(
+      new Set(result.plan.shards.flatMap((s) => s.files.map((f) => f.path)))
+        .size,
+    ).toBe(6);
+    expect(result.context.truncated).toBe(false);
+    expect(result.plan.scopeStatus).toBe("complete");
     expect(result.contextBytes).toBeLessThanOrEqual(500_000);
   });
 });

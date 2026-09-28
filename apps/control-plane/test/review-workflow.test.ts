@@ -1548,8 +1548,8 @@ describe("ReviewWorkflow", () => {
   });
 
   it("orchestrates multi-shard review with partial shard failure", async () => {
-    // 22 files will produce 2 shards with maxShardFiles = 20
-    const files = Array.from({ length: 22 }, (_, index) => ({
+    // 6 files produce 2 shards with maxShardFiles = 4
+    const files = Array.from({ length: 6 }, (_, index) => ({
       mode: "structural" as const,
       patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
       path: `src/file${index}.ts`,
@@ -1597,7 +1597,7 @@ describe("ReviewWorkflow", () => {
   });
 
   it("isolates non-retryable model failure in individual shard and completes review partially", async () => {
-    const files = Array.from({ length: 22 }, (_, index) => ({
+    const files = Array.from({ length: 6 }, (_, index) => ({
       mode: "structural" as const,
       patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
       path: `src/file${index}.ts`,
@@ -2150,7 +2150,7 @@ describe("ReviewWorkflow", () => {
   });
 
   it("synthesizes multi-shard summaries into a unified executive summary when all shards succeed", async () => {
-    const files = Array.from({ length: 22 }, (_, index) => ({
+    const files = Array.from({ length: 6 }, (_, index) => ({
       mode: "structural" as const,
       patch: `diff --git a/src/file${index}.ts b/src/file${index}.ts\n--- a/src/file${index}.ts\n+++ b/src/file${index}.ts\n@@ -10,1 +10,1 @@\n-old\n+const x${index} = fn();\n`,
       path: `src/file${index}.ts`,
