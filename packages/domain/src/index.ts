@@ -11,7 +11,7 @@ export * from "./verdict.js";
 
 export { minimumFindingConfidence } from "./finding.js";
 
-export { redactSecrets } from "./redaction.js";
+export { redactSecrets, redactedSecret } from "./redaction.js";
 export * from "./configuration-scope.js";
 
 export { reviewText } from "./review-language.js";
