@@ -188,7 +188,7 @@ locais, inclusive orçamento de ferramentas; seu `eventId` inclui o shard.
 
 `model.investigation_stopped` distingue `completed`, `round_limit`,
 `tool_budget_exhausted`, `empty_analysis`, `output_length`, `generation_step_timeout`,
-`phase_budget_exhausted` e `provider_transient_failure`. Inclui rodada concluída,
+`phase_budget_exhausted`, `checks_unresolved` e `provider_transient_failure`. Inclui rodada concluída,
 chamadas distintas e tempo restante. Compare-o aos eventos de fase para distinguir
 limite de chamadas, rodadas e tempo; `investigation_incomplete` sozinho não prova
 timeout. Eventos não contêm prompts, argumentos das tools, caminhos ou código.
@@ -203,3 +203,20 @@ tentativa inteira. Uma rodada inclui inferência e ferramentas, portanto seu
 timeout não prova lentidão do provider. Correlacione `repository.tool_operation`
 pelo runId: `lease_check`, `read_file`, `command_start` e `command_output`.
 O evento registra espera cancelada ou encerrada, sem argumentos ou conteúdo.
+
+Conforme a [ADR-0044](../decisions/0044-track-review-investigation-progress.md),
+`model.investigation_progress` registra por rodada `durationMs`, `reason`
+(finish reason), `outputTokens` e `reasoningTokens` quando o provider os fornece.
+`repositoryRequests`, `toolCalls`, `cacheHits`, `coveringReadHits` e
+`truncatedResults`, `readCalls` e `searchCalls` são contagens acumuladas da investigação, inclusive retomadas;
+use diferenças entre rodadas, não some os valores acumulados. Checkpoints não
+consomem chamadas de repositório. `reviewedChecks`, `pendingChecks` e
+`blockedChecks` indicam cobertura declarada, não validação independente; `closing`
+indica que o host reservou a rodada para encerramento. Os campos ausentes de
+usage significam informação indisponível, não zero tokens.
+
+Compare latência de rodada com as operações do executor. Muitos acertos em cache
+sugerem repetição de consultas; muitas chamadas sem cache exigem avaliar se as
+perguntas causais eram necessárias. As métricas não registram argumentos nem
+permitem reconstruir o código revisado. Corpo indisponível no Gateway não deve
+motivar habilitar coleta de prompts para medir redundância.

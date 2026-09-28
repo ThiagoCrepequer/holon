@@ -52,6 +52,7 @@ export function createPartitionedRepositoryToolRunner(
 export const reviewTimeBudget = {
   analysisMs: 17 * 60_000,
   investigationMs: 9 * 60_000,
+  investigationClosureMs: 90_000,
   finalizationMs: 3 * 60_000,
   recoveryMs: 3 * 60_000,
   completionReserveMs: 2 * 60_000,

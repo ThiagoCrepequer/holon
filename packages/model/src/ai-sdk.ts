@@ -36,6 +36,10 @@ import {
   type GenerationObserver,
 } from "./generation-execution.js";
 import { selectFinalizationEvidence } from "./host-context.js";
+import {
+  createInvestigationProgress,
+  investigationCheckpointSchema,
+} from "./investigation-progress.js";
 import { createRepositoryToolCache } from "./repository-tool-cache.js";
 import {
   ModelGenerationTimeoutError,
@@ -319,6 +323,12 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         metadata: { ...this.config.metadata, phase },
       });
     const model = modelForPhase("investigation");
+    const progress = createInvestigationProgress(request.investigationPaths);
+    const tracked = request.investigationPaths.length > 0;
+    let closing = false;
+    let previousRevision = 0;
+    let stepStartedAt = Date.now();
+    let roundInFlight = false;
     let toolCalls = 0;
     let toolBudgetExhausted = false;
     let forcedClosure:
@@ -347,12 +357,17 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         }
       },
     });
-    const tools = createRepositoryModelTools(
-      cachedTools,
-      () => roundDeadlineAt,
-    );
+    const tools = {
+      ...createRepositoryModelTools(cachedTools, () => roundDeadlineAt),
+      review_checkpoint: tool({
+        description:
+          "Record compact verified conclusions and coverage. Mark reviewed only after checking changed behavior and necessary callers/tests. Preserve unresolved questions as pending or blocked. Set finished when ready for finalization. Submit separately AFTER reading repository tool results; never in the same batch as reads/searches. Include concrete defect diagnoses and canonical path/line anchors in summary; do not repeat source code or speculate.",
+        inputSchema: investigationCheckpointSchema,
+        execute: (input) => progress.record(input),
+      }),
+    };
 
-    // Phase 1: Investigative Tool Loop (freeform diagnostic text)
+    // Phase 1: Investigate with explicit coverage and bounded checkpoints.
     let investigationText = "";
     const generationLimits: Array<
       "generation_length" | "investigation_incomplete" | "tool_budget_exhausted"
@@ -387,11 +402,15 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                 ? { prompt: request.prompt }
                 : { messages: [...messages] }),
               providerOptions: gatewayModelProviderOptions,
-              stopWhen: stepCountIs(
-                maximumInvestigationSteps - completedRounds,
-              ),
+              stopWhen: [
+                stepCountIs(maximumInvestigationSteps - completedRounds),
+                () => progress.finished(),
+              ],
               temperature: 0,
               prepareStep: () => {
+                stepStartedAt = Date.now();
+                progress.beginRound();
+                roundInFlight = true;
                 roundDeadlineAt = Math.min(
                   investigationDeadlineAt,
                   Date.now() + reviewTimeBudget.callMs,
@@ -413,21 +432,87 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                   forcedClosure = "output_budget_exhausted";
                 else if (completedRounds >= maximumInvestigationSteps - 1)
                   forcedClosure = "round_limit";
+                closing =
+                  tracked &&
+                  (Boolean(forcedClosure) ||
+                    investigationDeadlineAt - Date.now() <=
+                      reviewTimeBudget.callMs +
+                        reviewTimeBudget.investigationClosureMs);
                 return {
-                  toolChoice: forcedClosure ? "none" : "auto",
-                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
+                  ...(closing
+                    ? {
+                        activeTools: ["review_checkpoint" as const],
+                        maxOutputTokens: 8_192,
+                      }
+                    : {}),
+                  toolChoice: closing
+                    ? {
+                        type: "tool" as const,
+                        toolName: "review_checkpoint" as const,
+                      }
+                    : forcedClosure
+                      ? "none"
+                      : "auto",
+                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
                 };
               },
               tools,
               onStepFinish: (step) => {
                 lifecycle.onStepFinish();
+                roundInFlight = false;
                 completedRounds++;
+                if (step.finishReason === "length")
+                  generationLimits.push(
+                    "generation_length",
+                    "investigation_incomplete",
+                  );
                 totalOutputTokens += step.usage.outputTokens ?? 0;
+                if (
+                  step.toolCalls.filter(
+                    (call) => call.toolName === "review_checkpoint",
+                  ).length > 1 ||
+                  (step.toolCalls.some(
+                    (call) => call.toolName === "review_checkpoint",
+                  ) &&
+                    step.toolCalls.some(
+                      (call) => call.toolName !== "review_checkpoint",
+                    ))
+                )
+                  progress.invalidateCompletion();
                 stagnantRounds =
-                  step.toolCalls.length > 0 && toolCalls === previousToolCalls
+                  step.toolCalls.length > 0 &&
+                  toolCalls === previousToolCalls &&
+                  progress.revision() === previousRevision
                     ? stagnantRounds + 1
                     : 0;
                 previousToolCalls = toolCalls;
+                previousRevision = progress.revision();
+                observeGeneration(this.observer, {
+                  event: "model.investigation_progress",
+                  phase: "investigation",
+                  attempt,
+                  round: completedRounds,
+                  remainingMs: Math.max(
+                    0,
+                    investigationDeadlineAt - Date.now(),
+                  ),
+                  durationMs: Date.now() - stepStartedAt,
+                  reason: step.finishReason,
+                  reasoningTokens:
+                    step.usage.outputTokenDetails?.reasoningTokens,
+                  outputTokens: step.usage.outputTokens,
+                  repositoryRequests: cachedTools.metrics().requests,
+                  cacheHits: cachedTools.metrics().hits,
+                  coveringReadHits: cachedTools.metrics().coveringReadHits,
+                  toolCalls: cachedTools.metrics().executorCalls,
+                  truncatedResults: cachedTools.metrics().truncatedResults,
+                  readCalls: cachedTools.metrics().readCalls,
+                  searchCalls: cachedTools.metrics().searchCalls,
+                  reviewedChecks: progress.counts().reviewed,
+                  pendingChecks: progress.counts().pending,
+                  blockedChecks: progress.counts().blocked,
+                  closing,
+                });
                 messages.push(...step.response.messages);
                 if (step.text.trim()) completedTexts.push(step.text);
                 completedInputTokens += step.usage.inputTokens ?? 0;
@@ -436,6 +521,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               },
             }),
         ).catch(async (error: unknown) => {
+          if (roundInFlight) {
+            progress.invalidateCompletion();
+            roundInFlight = false;
+          }
           const failed = failedGenerationUsage(error, "investigation");
           totalOutputTokens += failed.outputTokens ?? 0;
           await this.onUsage?.({
@@ -455,7 +544,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         if (
           forcedClosure ||
           toolBudgetExhausted ||
-          investigationResult.finishReason === "tool-calls"
+          (investigationResult.finishReason === "tool-calls" &&
+            !progress.complete()) ||
+          (tracked && !progress.complete())
         )
           generationLimits.push("investigation_incomplete");
         if (forcedClosure === "tool_budget_exhausted" || toolBudgetExhausted)
@@ -476,9 +567,11 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             investigationResult.toolCalls?.length ??
             0,
         });
-        investigationText = completedTexts.length
-          ? completedTexts.join("\n\n")
-          : (investigationResult.text ?? "");
+        investigationText = progress.finished()
+          ? progress.summary()
+          : completedTexts.length
+            ? completedTexts.join("\n\n")
+            : (investigationResult.text ?? "");
         if (!investigationText.trim())
           generationLimits.push("investigation_incomplete");
         observeGeneration(this.observer, {
@@ -492,13 +585,16 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             forcedClosure ??
             (toolBudgetExhausted
               ? "tool_budget_exhausted"
-              : investigationResult.finishReason === "tool-calls"
-                ? "round_limit"
-                : investigationResult.finishReason === "length"
-                  ? "output_length"
-                  : !investigationText.trim()
-                    ? "empty_analysis"
-                    : "completed"),
+              : tracked && !progress.complete()
+                ? "checks_unresolved"
+                : investigationResult.finishReason === "tool-calls" &&
+                    !progress.complete()
+                  ? "round_limit"
+                  : investigationResult.finishReason === "length"
+                    ? "output_length"
+                    : !investigationText.trim()
+                      ? "empty_analysis"
+                      : "completed"),
         });
         break;
       } catch (error) {
@@ -543,6 +639,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       }
     }
 
+    if (tracked && !progress.finished()) {
+      investigationText = `${progress.summary()}\nUncheckpointed diagnostic notes (not proof of completed coverage):\n${investigationText}`;
+    }
     // Phase 2: Dedicated Structured Finalization Step
     const compactContext = extractCompactContext(request.prompt);
     const finalizationPrompt = [
@@ -561,7 +660,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       JSON.stringify(
         selectFinalizationEvidence(
           request.evidenceCandidates,
-          investigationText,
+          tracked
+            ? `${progress.diagnostics()}\n${completedTexts.join("\n")}`
+            : investigationText,
         ),
       ),
       "Use only evidence actually available in the investigation or host-selected canonical windows. Missing evidence never proves absence of defects.",

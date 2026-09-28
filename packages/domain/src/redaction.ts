@@ -1,4 +1,4 @@
-const redactedSecret = "[REDACTED_SECRET]";
+export const redactedSecret = "[REDACTED_SECRET]";
 
 const secretPatterns = [
   /-----BEGIN (?:EC |OPENSSH |PGP |RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:EC |OPENSSH |PGP |RSA )?PRIVATE KEY-----/gu,

@@ -449,6 +449,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -494,7 +495,10 @@ describe("model review boundary", () => {
     );
 
     expect(calls).toHaveLength(3);
-    expect(phase1Options.stopWhen).toEqual({ steps: 25 });
+    expect(phase1Options.stopWhen).toEqual([
+      { steps: 25 },
+      expect.any(Function),
+    ]);
     expect(phase1Options.maxRetries).toBe(0);
 
     const phase2Options = sdk.generateText.mock.calls[1]?.[0] as {
@@ -570,6 +574,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -616,6 +621,7 @@ describe("model review boundary", () => {
 
       await expect(
         generator.generate({
+          investigationPaths: [],
           evidenceCandidates: [],
           instructions: "system",
           prompt: "prompt",
@@ -676,6 +682,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -714,6 +721,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -742,6 +750,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -768,6 +777,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -799,6 +809,7 @@ describe("model review boundary", () => {
 
     await expect(
       generator.generate({
+        investigationPaths: [],
         evidenceCandidates: [],
         instructions: "system",
         prompt: "prompt",
@@ -869,6 +880,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(rescueError);
 
     const result = await generator.generate({
+      investigationPaths: [],
       evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
@@ -908,6 +920,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = await generator.generate({
+      investigationPaths: [],
       evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
@@ -948,6 +961,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = (await generator.generate({
+      investigationPaths: [],
       evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
@@ -985,6 +999,7 @@ describe("model review boundary", () => {
       .mockRejectedValueOnce(semanticError);
 
     const result = (await generator.generate({
+      investigationPaths: [],
       evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
@@ -1080,6 +1095,7 @@ describe("review loss diagnostics", () => {
       );
       const result = redactModelReviewOutput(
         (await generator.generate({
+          investigationPaths: [],
           evidenceCandidates: [],
           instructions: "system",
           prompt: "prompt",
@@ -1124,6 +1140,7 @@ describe("review loss diagnostics", () => {
       (usage) => usages.push(usage),
     );
     const result = (await generator.generate({
+      investigationPaths: [],
       evidenceCandidates: [],
       instructions: "system",
       prompt: "prompt",
@@ -1161,6 +1178,7 @@ it("does not approve an empty investigation merely because finalization returned
     await generator.generate({
       instructions: "system",
       prompt: "prompt",
+      investigationPaths: [],
       evidenceCandidates: [],
     }),
   ).toMatchObject({
@@ -1189,6 +1207,7 @@ it("supplies canonical evidence to finalization even when investigation omits th
   await generator.generate({
     instructions: "system",
     prompt: "metadata",
+    investigationPaths: [],
     evidenceCandidates: [
       {
         path: "src/index.ts",
@@ -1302,6 +1321,7 @@ describe("compiled configuration across model phases", () => {
         if (index === 0)
           expect(Object.keys(request.tools ?? {}).toSorted()).toEqual([
             "read_file",
+            "review_checkpoint",
             "search_structure",
             "search_text",
           ]);
@@ -1339,4 +1359,60 @@ describe("compiled configuration across model phases", () => {
     ).rejects.toThrow("identity_mismatch");
     expect(generate).not.toHaveBeenCalled();
   });
+});
+
+it("prioritizes existing findings and structural risk without omitting low-risk files", async () => {
+  const generate = vi.fn(async () => output);
+  const model = new GatewayModelReviewer({ generate });
+  await model.review(job, {
+    ...context,
+    files: [
+      "plain.ts",
+      "security.ts",
+      "contract.ts",
+      "prior.ts",
+      "alpha.ts",
+    ].map((path) => ({ ...context.files[0]!, path })),
+    priorFindings: [
+      {
+        filePath: "prior.ts",
+        fingerprint: `fp:${"a".repeat(64)}`,
+        severity: "high",
+        diagnostic: "Previously verified",
+      },
+    ],
+    structuralImpact: {
+      changedSymbols: [],
+      downstreamReferences: [],
+      testGaps: [],
+      securitySurfaces: [
+        {
+          path: "security.ts",
+          line: 1,
+          kind: "network_egress",
+          excerpt: "fetch",
+        },
+      ],
+      contractBreaks: [
+        {
+          path: "contract.ts",
+          line: 1,
+          kind: "exported_symbol_removed",
+          severity: "high",
+          description: "Check callers",
+        },
+      ],
+    },
+  });
+  expect(generate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      investigationPaths: [
+        "prior.ts",
+        "security.ts",
+        "contract.ts",
+        "alpha.ts",
+        "plain.ts",
+      ],
+    }),
+  );
 });
