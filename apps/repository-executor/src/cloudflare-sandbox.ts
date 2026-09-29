@@ -300,7 +300,7 @@ export class CloudflareSandboxProvider implements SandboxProvider {
     return new CloudflareSandboxPort(
       getSandbox(this.env.SANDBOXES, createSandboxId(runId), {
         normalizeId: true,
-        // Tool calls recreate the checkout if this ephemeral context slept.
+        // Preparation recreates the checkout if this ephemeral context slept.
         sleepAfter: "30s",
         containerTimeouts: {
           instanceGetTimeoutMS: 30_000,

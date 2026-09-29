@@ -224,3 +224,51 @@ drene runs e confirme cleanup antes de atualizar componentes. O contrato incorpo
 base SHA na identidade e exige novos campos persistidos; não há leitor legado.
 Confirme `/schemas/holon.schema.json` contra o build implantado. Reset de estado
 de desenvolvimento, migrações remotas e smoke live exigem autorização específica.
+
+## Admissão e rollout do Sandbox após o incidente do PR #99
+
+Procedimento verificado na documentação oficial em 2026-09-28. Os comandos abaixo
+alteram produção e só devem ser executados pelo operador em um deploy autorizado.
+Este PR não os executa. Executor e control-plane precisam compartilhar o contrato
+atual `RepositoryToolOutcome`; não retomar instâncias antigas com código novo.
+
+1. Conferir conta/ambiente, revisão Git, imagem e configurações dos dois Workers.
+2. Pausar entrega da fila: `pnpm exec wrangler queues pause-delivery holon-review-jobs`.
+   Webhooks continuam sendo armazenados. Não purgar a fila; observar o prazo de
+   retenção. Pausar entrega não cancela batches já entregues nem Workflows ativos.
+3. Aguardar os batches em trânsito e todas as runs não terminais, inclusive em
+   espera/retry, além de cleanup pendente. Consultar a lista paginada de instâncias
+   do Workflow e seus estados no painel/API. Repetir a consulta até não haver novas
+   admissões nem instâncias ativas. Se não for possível comprovar drenagem, não
+   substituir o executor. Uma interrupção manual requer o fluxo de terminalização
+   e cleanup; somente terminar a instância na Cloudflare não prova limpeza.
+4. Implantar os dois Workers da mesma revisão. Confirmar o resultado do rollout
+   da aplicação de Containers e a imagem efetiva antes de liberar a fila. Sucesso
+   de `wrangler deploy` confirma início do rollout, não seu término. Um período de
+   graça não protege indefinidamente uma análise; keepAlive também não impede rollout.
+5. Só então retomar: `pnpm exec wrangler queues resume-delivery holon-review-jobs`.
+   Monitorar uma execução controlada de smoke: check inicial, conclusão, inline
+   esperado e cleanup. Se ela falhar, pausar novas entregas para investigar antes
+   de consumir mais recursos com PRs grandes. Mensagens de follow-up também ficam
+   pausadas; não confundir essa pausa com perda de eventos.
+
+Não há neste patch um controlador automático de deploy ou bloqueio da API de
+criação manual de Workflows. Operações diretas também devem respeitar a pausa.
+A automação futura deve manter a fila pausada em caso de falha e exigir evidência
+de rollout concluído antes de retomá-la.
+
+### Aceitação remota da correção
+
+Executar primeiro PR pequeno sem defeito e PR pequeno com defeito isolado. Depois,
+uma revisão em duas ondas e o PR grande. Conferir tokens/chamadas, cobertura,
+`repository.tool_failed`, `model.phase_failed` e cleanup por runId. Injetar perda
+do container apenas em ambiente de teste: após a primeira falha fatal não devem
+surgir novas chamadas ao provider, embora chamadas já em trânsito possam terminar
+e ser cobradas. Nenhum teste local comprova interrupção imediata do faturamento
+pelo provider. A run deve falhar com causa preservada e limpeza agendada, sem
+aprovação ou nova tentativa automática que renove orçamento.
+
+Fontes: [pausa de Queues](https://developers.cloudflare.com/queues/configuration/pause-purge/),
+[rollouts](https://developers.cloudflare.com/containers/configuration/rollouts/),
+[ciclo do Sandbox preview](https://developers.cloudflare.com/sandbox/1-0-preview/lifecycle/)
+e [cancelamento e erros de ferramentas no AI SDK](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling).

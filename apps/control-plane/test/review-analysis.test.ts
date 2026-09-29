@@ -994,3 +994,108 @@ it("replays a completed first wave and successful peers without repeating their 
     1,
   );
 });
+
+it("cancels a wave on infrastructure loss, joins cancellation, and never starts the next wave", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles * 6 },
+      (_, i) => ({
+        path: `src/f${String(i).padStart(3, "0")}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
+  });
+  const failure = new Error("repository unavailable");
+  let started = 0;
+  let joined = 0;
+  let release!: () => void;
+  const allStarted = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  services.createShardReviewer = (index, _total, cancellation) => ({
+    toolBudgetExceeded: () => false,
+    model: {
+      review: async () => {
+        started++;
+        if (started === reviewExecutionLimits.concurrency) release();
+        await allStarted;
+        if (index === 0) {
+          cancellation!.abort(failure);
+          throw failure;
+        }
+        cancellation!.signal.throwIfAborted();
+        throw new Error("unreachable");
+      },
+    },
+  });
+  const original = services.createShardReviewer.bind(services);
+  services.createShardReviewer = (...args) => {
+    const reviewer = original(...args);
+    const review = reviewer.model.review.bind(reviewer.model);
+    reviewer.model.review = async (...params) => {
+      try {
+        return await review(...params);
+      } finally {
+        await Promise.resolve();
+        joined++;
+      }
+    };
+    return reviewer;
+  };
+  await expect(analyzeReview(job, services, vi.fn())).rejects.toBe(failure);
+  expect(started).toBe(reviewExecutionLimits.concurrency);
+  expect(joined).toBe(started);
+});
+
+it("shares wave preparation with a delayed shard instead of rebuilding while a peer investigates", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles + 1 },
+      (_, i) => ({
+        path: `src/shared${i}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
+  });
+  let active = 0;
+  let notifyFirst!: () => void;
+  let notifySecond!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    notifyFirst = resolve;
+  });
+  const secondStarted = new Promise<void>((resolve) => {
+    notifySecond = resolve;
+  });
+  const prepare = vi.fn(async () => {
+    expect(active).toBe(0);
+  });
+  services.ensureContext = prepare;
+  services.model.review = async () => {
+    active++;
+    if (active === 1) {
+      notifyFirst();
+      await secondStarted;
+    } else notifySecond();
+    active--;
+    return {
+      output: { findings: [], summary: "Checked" },
+      promptTruncated: false,
+    };
+  };
+  const result = await analyzeReview(job, services, vi.fn(), undefined, {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
+    runStep: async (name, _phase, fn) => {
+      if (name === "analyze-shard-2") await firstStarted;
+      return fn();
+    },
+    finish: async (output) => output,
+  });
+  expect(result.totalShards).toBe(2);
+  expect(prepare).toHaveBeenCalledTimes(3);
+});

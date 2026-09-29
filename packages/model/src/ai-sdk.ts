@@ -315,6 +315,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
+    request.abortSignal?.throwIfAborted();
     const deadlineAt =
       request.deadlineAt ?? Date.now() + reviewTimeBudget.analysisMs;
     const modelForPhase = (phase: string) =>
@@ -348,6 +349,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         try {
           return await this.toolsRunner.run(call, execution);
         } catch (error) {
+          request.abortSignal?.throwIfAborted();
           if (
             error instanceof Error &&
             error.name === "RepositoryToolBudgetExceededError"
@@ -520,6 +522,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                 completedToolCalls += step.toolCalls.length;
               },
             }),
+          request.abortSignal,
         ).catch(async (error: unknown) => {
           if (roundInFlight) {
             progress.invalidateCompletion();
@@ -598,6 +601,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         });
         break;
       } catch (error) {
+        request.abortSignal?.throwIfAborted();
         if (
           isTransientGenerationError(error) &&
           attempt === 1 &&
@@ -709,6 +713,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             stopWhen: stepCountIs(1),
             temperature: 0,
           }),
+        request.abortSignal,
       ).catch(async (error: unknown) => {
         const usage = failedGenerationUsage(error, attempt);
         await this.onUsage?.(usage);
@@ -778,6 +783,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     try {
       return await runFinalization("finalization");
     } catch (error) {
+      request.abortSignal?.throwIfAborted();
       if (APICallError.isInstance(error) && !error.isRetryable) {
         throw new ModelProviderRequestError(
           error.isRetryable,
@@ -846,6 +852,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     try {
       return await runFinalization("recovery");
     } catch (error) {
+      request.abortSignal?.throwIfAborted();
       if (APICallError.isInstance(error) && !error.isRetryable) {
         throw new ModelProviderRequestError(
           error.isRetryable,

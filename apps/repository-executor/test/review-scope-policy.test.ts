@@ -76,11 +76,11 @@ describe("run-scoped repository review policy", () => {
     };
 
     expect(() => assertReviewScopePathAllowed(policy, "secret.txt")).toThrow(
-      "excluded by the run policy",
+      "path_denied",
     );
     expect(() =>
       assertReviewScopePathAllowed(policy, "vendor/lib/util.js"),
-    ).toThrow("excluded by repository policy");
+    ).toThrow("path_denied");
     expect(() =>
       assertReviewScopePathAllowed(
         { ...policy, additionalExcludes: [".github/**"] },

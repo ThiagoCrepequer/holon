@@ -29,6 +29,7 @@ import {
 } from "./redaction.js";
 
 export interface ReviewGenerationRequest {
+  readonly abortSignal?: AbortSignal | undefined;
   readonly output?: ReviewOutputPreferences | undefined;
   readonly repositoryGuidance?: string | undefined;
   readonly deadlineAt?: number | undefined;
@@ -323,6 +324,7 @@ export class GatewayModelReviewer implements ModelReviewer {
     const guidance = serializedRepositoryGuidance(context.repositoryGuidance);
     const generated = await this.generator.generate({
       deadlineAt: context.deadlineAt,
+      abortSignal: context.abortSignal,
       evidenceCandidates: canonicalEvidenceCandidates(context.files),
       investigationPaths: context.files
         .map((file) => file.path)

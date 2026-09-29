@@ -92,3 +92,24 @@ it("returns successful work even when logging fails, and bounds cleanup acknowle
   await Promise.all(retained);
   execution.dispose();
 });
+
+it("distinguishes failed sub-operations from successful ones without logging exception content", async () => {
+  const observe = vi.fn();
+  const execution = new ToolExecution(Date.now() + 10_000, () => {}, observe);
+  await execution.wait(async () => "safe", undefined, "lease_check");
+  await expect(
+    execution.wait(
+      async () => {
+        throw new Error("private message");
+      },
+      undefined,
+      "read_file",
+    ),
+  ).rejects.toThrow("private message");
+  expect(observe.mock.calls.map(([value]) => value.outcome)).toEqual([
+    "succeeded",
+    "failed",
+  ]);
+  expect(JSON.stringify(observe.mock.calls)).not.toContain("private message");
+  execution.dispose();
+});

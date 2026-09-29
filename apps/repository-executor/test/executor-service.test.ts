@@ -429,7 +429,7 @@ describe("RepositoryExecutorService", () => {
           name: "read_file",
         }),
       ),
-    ).rejects.toThrow("excluded by the run policy");
+    ).rejects.toThrow("path_denied");
 
     const originalRun = sandbox.run.bind(sandbox);
     let searchArgv: readonly string[] | undefined;
@@ -852,7 +852,7 @@ describe("RepositoryExecutorService", () => {
           name: "search_structure",
         }),
       ),
-    ).rejects.toThrow("unavailable without structural review files");
+    ).rejects.toThrow("query_unsupported");
     await expect(
       service.runTool(
         request.runId,
@@ -861,7 +861,10 @@ describe("RepositoryExecutorService", () => {
           name: "read_file",
         }),
       ),
-    ).rejects.toThrow("excluded from review");
+    ).rejects.toMatchObject({
+      name: "RepositoryQueryError",
+      code: "path_denied",
+    });
 
     sandbox.run = () =>
       Promise.resolve({
@@ -987,7 +990,7 @@ describe("RepositoryExecutorService", () => {
           name: "read_file",
         }),
       ),
-    ).rejects.toThrow("escapes the repository");
+    ).rejects.toThrow("path_denied");
   });
 
   it("rejects an allowed-looking symlink that resolves to an ignored path", async () => {
@@ -1012,7 +1015,7 @@ describe("RepositoryExecutorService", () => {
           name: "read_file",
         }),
       ),
-    ).rejects.toThrow("Resolved repository tool path is excluded");
+    ).rejects.toThrow("path_denied");
   });
 
   it("destroys a sandbox explicitly after the workflow completes", async () => {
@@ -1230,4 +1233,44 @@ describe("RepositoryExecutorService", () => {
       truncated: true,
     });
   });
+});
+
+it("classifies a missing query path while preserving context failures as infrastructure", async () => {
+  const sandbox = new FakeSandbox();
+  const original = sandbox.run.bind(sandbox);
+  sandbox.run = (argv, options) =>
+    argv[0] === "realpath" && argv.includes("--canonicalize-existing")
+      ? Promise.resolve({
+          exitCode: 1,
+          stdout: "",
+          stderr: "private path",
+          truncated: false,
+        })
+      : original(argv, options);
+  const service = new RepositoryExecutorService({ get: () => sandbox });
+  await expect(
+    service.runTool(
+      request.runId,
+      repositoryToolCallSchema.parse({
+        name: "read_file",
+        arguments: { path: "src/missing.ts" },
+      }),
+    ),
+  ).rejects.toMatchObject({
+    name: "RepositoryQueryError",
+    code: "path_unavailable",
+  });
+  const failure = new SandboxRuntimeError(true, "unavailable");
+  sandbox.readFile = async () => {
+    throw failure;
+  };
+  await expect(
+    service.runTool(
+      request.runId,
+      repositoryToolCallSchema.parse({
+        name: "read_file",
+        arguments: { path: "src/index.ts" },
+      }),
+    ),
+  ).rejects.toBe(failure);
 });

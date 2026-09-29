@@ -105,6 +105,14 @@ function searchRoots(paths: readonly string[] | undefined): readonly string[] {
   return paths === undefined || paths.length === 0 ? ["."] : paths;
 }
 
+/** A model-supplied query violates tool policy; host configuration errors stay fatal. */
+export class RepositoryToolPolicyError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "RepositoryToolPolicyError";
+  }
+}
+
 function assertReviewablePaths(
   paths: readonly string[] | undefined,
   requiredMode?: ReviewFileMode,
@@ -112,10 +120,12 @@ function assertReviewablePaths(
   for (const path of paths ?? []) {
     const mode = classifyReviewPath(path);
     if (mode === undefined) {
-      throw new TypeError("Repository tool path is excluded from review");
+      throw new RepositoryToolPolicyError(
+        "Repository tool path is excluded from review",
+      );
     }
     if (requiredMode !== undefined && mode !== requiredMode) {
-      throw new TypeError(
+      throw new RepositoryToolPolicyError(
         "Structural search path must be JavaScript/TypeScript",
       );
     }

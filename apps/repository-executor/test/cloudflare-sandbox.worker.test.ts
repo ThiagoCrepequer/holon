@@ -175,8 +175,8 @@ it("cancels a running tool process without destroying the shared sandbox", async
     await port.run(["rg", "literal"], { timeoutMs: 20_000 });
     return { content: "", truncated: false };
   });
-  const rejected = expect(task.result()).rejects.toMatchObject({
-    reason: "timed-out",
+  const rejected = expect(task.result()).resolves.toMatchObject({
+    error: { kind: "infrastructure", code: "repository_tool_timeout" },
   });
   await ready;
   await task.cancel();
@@ -193,7 +193,9 @@ it("does not start disposed RPC capabilities and executes repeated result reads 
     execute,
   );
   cancelled[Symbol.dispose]();
-  await expect(cancelled.result()).rejects.toThrow();
+  await expect(cancelled.result()).resolves.toMatchObject({
+    error: { kind: "infrastructure", code: "repository_tool_timeout" },
+  });
   expect(execute).not.toHaveBeenCalled();
   const task = new RepositoryToolTask(
     new ToolExecution(Date.now() + 10_000, () => {}),
@@ -202,4 +204,28 @@ it("does not start disposed RPC capabilities and executes repeated result reads 
   await Promise.all([task.result(), task.result()]);
   expect(execute).toHaveBeenCalledOnce();
   task[Symbol.dispose]();
+});
+
+it("transports only safe query and infrastructure codes across the tool capability", async () => {
+  const { RepositoryQueryError } =
+    await import("../src/repository-tool-failure.js");
+  for (const [error, expected] of [
+    [
+      new RepositoryQueryError("path_unavailable"),
+      { kind: "query", code: "path_unavailable" },
+    ],
+    [
+      new Error("private filesystem details"),
+      { kind: "infrastructure", code: "repository_tool_failed" },
+    ],
+  ] as const) {
+    const task = new RepositoryToolTask(
+      new ToolExecution(Date.now() + 10_000, () => {}),
+      async () => {
+        throw error;
+      },
+    );
+    await expect(task.result()).resolves.toEqual({ error: expected });
+    task[Symbol.dispose]();
+  }
 });

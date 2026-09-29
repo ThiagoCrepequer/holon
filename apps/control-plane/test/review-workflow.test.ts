@@ -2514,3 +2514,113 @@ it("cancels and disposes a remote tool when the model step aborts", async () => 
   expect(dispose).toHaveBeenCalledOnce();
   expect(startTool).toHaveBeenCalledOnce();
 });
+
+it("rejects later tool calls after the first infrastructure failure", async () => {
+  const message = "runtime unavailable";
+  const { createReviewServices } = await import("../src/review-services.js");
+  const setup = runtime();
+  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
+    createReviewRun(job),
+    "incident-probe",
+  );
+  let calls = 0;
+  let continued = false;
+  const services = createReviewServices(
+    env,
+    job,
+    {
+      ...setup.value,
+      executor: {
+        ...setup.value.executor!,
+        hasContext: async () => true,
+        startTool: toolOperation(async () => {
+          calls++;
+          if (calls === 1) throw new Error(message);
+          return { content: "valid later result", truncated: false };
+        }),
+      },
+      createModel: (tools) => ({
+        review: async () => {
+          try {
+            await tools.run({
+              name: "read_file",
+              arguments: { path: "missing.ts" },
+            });
+          } catch {
+            /* Simulate SDK handling a tool error. */
+          }
+          continued = true;
+          await tools.run({
+            name: "read_file",
+            arguments: { path: "valid.ts" },
+          });
+          return {
+            output: { findings: [], summary: "Complete" },
+            promptTruncated: false,
+          };
+        },
+      }),
+    },
+    { emit: () => {} },
+    {},
+  );
+  await expect(
+    services.createShardReviewer(0, 1).model.review(job, context),
+  ).rejects.toMatchObject({
+    name: "RepositoryToolError",
+    code: "repository_tool_failed",
+    cause: { message: "runtime unavailable" },
+  });
+  expect(continued).toBe(true);
+  expect(calls).toBe(1);
+});
+
+it("keeps a rejected query recoverable and allows a corrected query", async () => {
+  const { createReviewServices } = await import("../src/review-services.js");
+  const setup = runtime();
+  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
+    createReviewRun(job),
+    "query-rejection",
+  );
+  const result = vi
+    .fn()
+    .mockResolvedValueOnce({
+      error: { kind: "query", code: "path_unavailable" },
+    })
+    .mockResolvedValueOnce({ content: "safe", truncated: false });
+  const services = createReviewServices(
+    env,
+    job,
+    {
+      ...setup.value,
+      executor: {
+        ...setup.value.executor!,
+        startTool: async () => ({
+          result,
+          cancel: async () => {},
+          [Symbol.dispose]: () => {},
+        }),
+      },
+      createModel: (tools) => ({
+        review: async () => {
+          await expect(
+            tools.run({ name: "read_file", arguments: { path: "missing.ts" } }),
+          ).rejects.toThrow("path_unavailable");
+          await expect(
+            tools.run({ name: "read_file", arguments: { path: "valid.ts" } }),
+          ).resolves.toMatchObject({ content: "safe" });
+          return {
+            output: { findings: [], summary: "Checked" },
+            promptTruncated: false,
+          };
+        },
+      }),
+    },
+    { emit: () => {} },
+    {},
+  );
+  await expect(
+    services.createShardReviewer(0, 1).model.review(job, context),
+  ).resolves.toMatchObject({ output: { summary: "Checked" } });
+  expect(result).toHaveBeenCalledTimes(2);
+});
