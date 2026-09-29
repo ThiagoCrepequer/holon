@@ -84,15 +84,19 @@ export class ToolExecution {
       });
     // A late process handle must still be killed, even after its RPC caller leaves.
     this.retain(pending.catch(() => {}));
+    let outcome = "succeeded";
     try {
       return await Promise.race([pending, aborted]);
+    } catch (error) {
+      outcome = this.signal.aborted ? "cancelled" : "failed";
+      throw error;
     } finally {
       this.signal.removeEventListener("abort", abort);
       try {
         this.observe({
           stage,
           durationMs: Date.now() - startedAt,
-          outcome: this.signal.aborted ? "cancelled" : "settled",
+          outcome,
         });
       } catch {
         /* Advisory metadata must not alter execution. */

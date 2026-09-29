@@ -819,3 +819,85 @@ it("keeps length-truncated checkpoint generation incomplete", async () => {
   });
   expect(calls).toBe(2);
 });
+
+it("stops the SDK after fatal tool cancellation without finalization or recovery", async () => {
+  const controller = new AbortController();
+  const failure = new Error("Repository infrastructure failed");
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      calls++;
+      if (calls > 1) return textResult(JSON.stringify(output));
+      return {
+        ...textResult(""),
+        content: [
+          {
+            type: "tool-call" as const,
+            toolCallId: "fatal",
+            toolName: "read_file",
+            input: JSON.stringify({ path: "src/a.ts" }),
+          },
+        ],
+        finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+      };
+    },
+  });
+  const run = vi.fn(async () => {
+    controller.abort(failure);
+    throw failure;
+  });
+  await expect(
+    generator(model, undefined, run).generate({
+      ...request,
+      abortSignal: controller.signal,
+    }),
+  ).rejects.toBe(failure);
+  expect(calls).toBe(1);
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+it("does not start a provider call when the review is already cancelled", async () => {
+  const failure = new Error("Wave interrupted");
+  const generate = vi.fn(async () => textResult(JSON.stringify(output)));
+  await expect(
+    generator(new MockLanguageModelV3({ doGenerate: generate })).generate({
+      ...request,
+      abortSignal: AbortSignal.abort(failure),
+    }),
+  ).rejects.toBe(failure);
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it("preserves a fatal cancellation during finalization instead of scheduling structured-output recovery", async () => {
+  const controller = new AbortController();
+  const failure = new Error("Repository unavailable in peer shard");
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      calls++;
+      if (calls === 1) return textResult("No defect found after investigation");
+      controller.abort(failure);
+      throw new APICallError({
+        message: "provider interrupted",
+        url: "https://example.test",
+        requestBodyValues: {},
+        isRetryable: true,
+      });
+    },
+  });
+  const events: GenerationEvent[] = [];
+  await expect(
+    generator(model, (event) => events.push(event)).generate({
+      ...request,
+      abortSignal: controller.signal,
+    }),
+  ).rejects.toBe(failure);
+  expect(calls).toBe(2);
+  expect(
+    events.some((event) => event.event === "model.recovery_scheduled"),
+  ).toBe(false);
+  expect(events.at(-1)).toMatchObject({
+    event: "model.phase_failed",
+    reason: "review_cancelled",
+  });
+});

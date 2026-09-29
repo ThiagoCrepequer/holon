@@ -1,5 +1,6 @@
 import {
   repositoryExecutionLimits,
+  repositoryToolOutcomeSchema,
   type RepositoryToolOperation,
 } from "@holon/contracts";
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "@holon/contracts";
 
 import type { DesiredCheckRun } from "./check-run-reconciliation.js";
+import { RepositoryToolResponseError } from "./review-tool-error.js";
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
 }
@@ -27,7 +29,6 @@ import {
   executorRequestSchema,
   reviewInvestigationLimits,
   preparedRepositorySchema,
-  repositoryToolResultSchema,
   reviewContextSchema,
   type ExecutorRequest,
   type GitHubCredentialRequest,
@@ -188,6 +189,7 @@ export interface ReviewServices {
   createShardReviewer(
     index: number,
     totalShards: number,
+    cancellation?: AbortController,
   ): {
     readonly model: ModelReviewer;
     toolBudgetExceeded(): boolean;
@@ -417,12 +419,17 @@ export function createReviewServices(
       if (contextPreparation === pending) contextPreparation = undefined;
     });
   };
-  const createShardReviewer = (shardIndex: number, shardCount: number) => {
+  const createShardReviewer = (
+    shardIndex: number,
+    shardCount: number,
+    cancellation = new AbortController(),
+  ) => {
     let infrastructureFailure: unknown;
     let toolSequence = 0;
     const toolBudget = createPartitionedRepositoryToolRunner(
       createRedactingRepositoryToolRunner({
         run: async (call, execution) => {
+          cancellation.signal.throwIfAborted();
           execution?.abortSignal?.throwIfAborted();
           const startedAt = Date.now();
           const toolCallIndex = ++toolSequence;
@@ -453,6 +460,7 @@ export function createReviewServices(
               throw new RepositoryToolBudgetExceededError(
                 reviewInvestigationLimits.toolCalls,
               );
+            cancellation.signal.throwIfAborted();
             execution?.abortSignal?.throwIfAborted();
             const deadlineAt = Math.min(
               execution?.deadlineAt ?? Infinity,
@@ -464,12 +472,14 @@ export function createReviewServices(
               call,
               deadlineAt,
             );
-            let cancellation: Promise<void> | undefined;
+            let remoteCancellation: Promise<void> | undefined;
             const cancel = () => {
-              cancellation ??= operation.cancel();
-              cancellation.catch(() => {});
+              remoteCancellation ??= operation.cancel();
+              remoteCancellation.catch(() => {});
             };
-            const signal = execution?.abortSignal;
+            const signal = execution?.abortSignal
+              ? AbortSignal.any([execution.abortSignal, cancellation.signal])
+              : cancellation.signal;
             signal?.addEventListener("abort", cancel, { once: true });
             let result: RepositoryToolResult;
             try {
@@ -477,14 +487,17 @@ export function createReviewServices(
                 cancel();
                 signal.throwIfAborted();
               }
-              result = repositoryToolResultSchema.parse(
+              const outcome = repositoryToolOutcomeSchema.parse(
                 await operation.result(),
               );
+              if ("error" in outcome)
+                throw new RepositoryToolResponseError(outcome.error);
+              result = outcome;
               signal?.throwIfAborted();
             } finally {
               signal?.removeEventListener("abort", cancel);
               try {
-                await cancellation;
+                await remoteCancellation;
               } finally {
                 operation[Symbol.dispose]();
               }
@@ -493,19 +506,26 @@ export function createReviewServices(
             return result;
           } catch (error) {
             const reason =
-              error instanceof RepositoryToolBudgetExceededError
-                ? "tool_budget_exhausted"
-                : error instanceof Error &&
-                    (error.name === "TimeoutError" ||
-                      ("reason" in error && error.reason === "timed-out"))
-                  ? "repository_tool_timeout"
-                  : "repository_tool_failed";
+              error instanceof RepositoryToolResponseError
+                ? error.failure.code
+                : error instanceof RepositoryToolBudgetExceededError
+                  ? "tool_budget_exhausted"
+                  : error instanceof Error &&
+                      (error.name === "TimeoutError" ||
+                        ("reason" in error && error.reason === "timed-out"))
+                    ? "repository_tool_timeout"
+                    : "repository_tool_failed";
             emitTool("repository.tool_failed", reason);
             if (
               !(error instanceof RepositoryToolBudgetExceededError) &&
-              !execution?.abortSignal?.aborted
-            )
-              infrastructureFailure = Object.assign(
+              !(
+                error instanceof RepositoryToolResponseError &&
+                error.failure.kind === "query"
+              ) &&
+              !execution?.abortSignal?.aborted &&
+              !cancellation.signal.aborted
+            ) {
+              infrastructureFailure ??= Object.assign(
                 new Error("Repository infrastructure failed", { cause: error }),
                 {
                   name: "RepositoryToolError",
@@ -513,7 +533,11 @@ export function createReviewServices(
                   phase: "repository_tool",
                 },
               );
-            throw error;
+              cancellation.abort(infrastructureFailure);
+            }
+            throw cancellation.signal.aborted
+              ? cancellation.signal.reason
+              : error;
           }
         },
       }),
@@ -560,7 +584,14 @@ export function createReviewServices(
           context: Parameters<ModelReviewer["review"]>[1],
         ) {
           try {
-            const result = await delegateModel.review(reviewJob, context);
+            cancellation.signal.throwIfAborted();
+            const result = await delegateModel.review(reviewJob, {
+              ...context,
+              abortSignal: context.abortSignal
+                ? AbortSignal.any([context.abortSignal, cancellation.signal])
+                : cancellation.signal,
+            });
+            cancellation.signal.throwIfAborted();
             if (infrastructureFailure !== undefined)
               throw infrastructureFailure;
             return result;

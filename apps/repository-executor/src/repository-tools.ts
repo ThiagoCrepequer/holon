@@ -7,10 +7,12 @@ import {
 } from "@holon/contracts";
 import {
   buildToolExecution,
+  RepositoryToolPolicyError,
   classifyReviewPath,
   matchesAnyPathGlob,
 } from "@holon/repository-analysis";
 
+import { RepositoryQueryError } from "./repository-tool-failure.js";
 import {
   assertReviewScopePathAllowed,
   parseReviewScopePolicy,
@@ -125,13 +127,20 @@ async function resolveReviewablePaths(
 ): Promise<readonly string[]> {
   if (paths.length === 0) return [];
   const resolved = await sandbox.run(
-    ["realpath", "--", ...paths.map((path) => `${repositoryPath}/${path}`)],
+    [
+      "realpath",
+      "--canonicalize-existing",
+      "--",
+      ...paths.map((path) => `${repositoryPath}/${path}`),
+    ],
     {
       cwd: repositoryPath,
       maxOutputBytes: Math.min(50_000, paths.length * 2_048),
       timeoutMs: 10_000,
     },
   );
+  if (!resolved.timedOut && resolved.exitCode === 1)
+    throw new RepositoryQueryError("path_unavailable");
   assertSuccessful(resolved);
   const resolvedPaths = resolved.stdout.trimEnd().split("\n");
   if (resolved.truncated || resolvedPaths.length !== paths.length) {
@@ -139,14 +148,12 @@ async function resolveReviewablePaths(
   }
   for (const resolvedPath of resolvedPaths) {
     if (!resolvedPath.startsWith(`${repositoryPath}/`)) {
-      throw new Error("Resolved file path escapes the repository workspace");
+      throw new RepositoryQueryError("path_denied");
     }
     const relativePath = resolvedPath.slice(repositoryPath.length + 1);
     assertReviewScopePathAllowed(policy, relativePath);
     if (classifyReviewPath(relativePath) === undefined) {
-      throw new TypeError(
-        "Resolved repository tool path is excluded from review",
-      );
+      throw new RepositoryQueryError("path_denied");
     }
   }
   return resolvedPaths;
@@ -176,12 +183,17 @@ export async function executeRepositoryTool(
       JSON.parse(await sandbox.readFile(contextPath)) as unknown,
     );
     if (!hasStructuralReviewFiles(context)) {
-      throw new TypeError(
-        "Structural search is unavailable without structural review files",
-      );
+      throw new RepositoryQueryError("query_unsupported");
     }
   }
-  const execution = buildToolExecution(call, repositoryPath);
+  let execution: ReturnType<typeof buildToolExecution>;
+  try {
+    execution = buildToolExecution(call, repositoryPath);
+  } catch (error) {
+    if (error instanceof RepositoryToolPolicyError)
+      throw new RepositoryQueryError("path_denied");
+    throw error;
+  }
   if (call.name === "read_file") {
     if (!("kind" in execution))
       throw new TypeError("Read-file policy returned a command execution");

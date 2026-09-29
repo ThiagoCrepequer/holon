@@ -362,3 +362,38 @@ tardias são descartadas e handles tardios são encerrados; o container dos dema
 shards não é destruído. A recuperação do checkout acontece antes da análise,
 nunca dentro de uma ferramenta. `repository.tool_operation` registra somente
 etapa, duração, resultado operacional e runId.
+
+### Falha de ambiente durante uma onda
+
+A preparação da onda é uma barreira compartilhada, inclusive no replay: concede
+lease, verifica/reconstrói contexto ausente com a política da run e valida o digest
+do plano antes de iniciar modelos. A checagem individual de shard permanece.
+As tentativas de preparação continuam limitadas a duas; os deadlines persistidos
+da onda e as reservas duráveis de ferramentas não são renovados.
+
+`RepositoryToolOutcome` transporta resultado ou falha fechada. Uma consulta a
+caminho ausente, negado ou operação não disponível devolve código seguro ao modelo;
+não libera acesso adicional nem transforma a consulta em sucesso. Exceções de
+política/contexto persistido, transporte, runtime, timeout ou resultado RPC inválido
+continuam fatais. Mensagens arbitrárias do executor não atravessam esse contrato.
+
+A primeira falha fatal cancela a geração e as ferramentas da onda. O sinal chega ao
+AI SDK, impede finalização/recovery e prevalece sobre erros secundários de aborto.
+O coordenador aguarda `allSettled` antes de propagar a causa e executar cleanup;
+não inicia a próxima onda nem publica revisão parcial por falha de infraestrutura.
+Os logs operacionais distinguem sucesso, falha e cancelamento de suboperações.
+
+Perda do Sandbox durante investigação **não reinicia automaticamente o modelo**:
+a conversa e os contadores de geração ainda pertencem ao step em memória. Reiniciar
+esse step renovaria orçamento e descartaria progresso. A recuperação automática
+suportada ocorre na barreira anterior à investigação; recuperação no meio da
+investigação exigirá persistência explícita de continuação e consumo, com outro
+conjunto de testes. Isso mantém a fronteira da ADR-0043 e encerra o gasto inútil
+identificado no [incidente do PR #99](../research/2026-09-28-review-99-rollout-and-failure-amplification.md).
+
+A resolução de caminhos usa `realpath --canonicalize-existing`, pois o modo
+padrão pode aceitar um último componente inexistente. Somente o código de saída
+1 dessa resolução é classificado como caminho indisponível; timeout e falhas do
+processo permanecem fatais. Sem essa opção, a leitura posterior poderia transformar
+uma consulta a arquivo ausente em falha de infraestrutura. Fonte verificada em
+2026-09-28: [GNU realpath](https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html).

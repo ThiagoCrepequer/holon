@@ -95,6 +95,7 @@ async function reviewShards(
   deadlineAt?: number,
   effectivePolicy?: RepositoryPolicy,
   configuration?: RunConfigurationRef,
+  cancellation?: AbortController,
 ): Promise<{
   readonly results: readonly ShardReviewResult[];
   readonly anyPromptTruncated: boolean;
@@ -107,6 +108,7 @@ async function reviewShards(
     const reviewer = services.createShardReviewer(
       shard.index,
       plan.shards.length,
+      cancellation,
     );
     const snapshot =
       configuration === undefined
@@ -399,6 +401,23 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           ),
         }),
       );
+      const cancellation = new AbortController();
+      // One preparation barrier per live wave. No peer can reconstruct a checkout
+      // after another peer has already started using it, including on replay.
+      let ready: ReturnType<typeof load> | undefined;
+      const prepareWave = () =>
+        (ready ??= (async () => {
+          cancellation.signal.throwIfAborted();
+          if (Date.now() < wave.deadlineAt)
+            await services.executor.acquireReviewLease(
+              job.runId,
+              wave.deadlineAt,
+            );
+          const loaded = await load();
+          if ((await planDigest(loaded.plan)) !== planning.planDigest)
+            throw new NonRetryableError("Review plan changed during replay");
+          return loaded;
+        })());
       const settled = await Promise.allSettled(
         planning.shardIds
           .slice(offset, offset + reviewExecutionLimits.concurrency)
@@ -408,12 +427,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               `analyze-shard-${index + 1}`,
               "analysis",
               async () => {
-                if (Date.now() < wave.deadlineAt)
-                  await services.executor.acquireReviewLease(
-                    job.runId,
-                    wave.deadlineAt,
-                  );
-                const { context, plan } = await load();
+                cancellation.signal.throwIfAborted();
+                const { context, plan } = await prepareWave();
+                cancellation.signal.throwIfAborted();
                 if (
                   plan.shards[index]?.id !== shardId ||
                   (await planDigest(plan)) !== planning.planDigest
@@ -447,13 +463,18 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                   wave.deadlineAt,
                   effectivePolicy,
                   execution?.configuration,
+                  cancellation,
                 );
               },
-            );
+            ).catch((error: unknown) => {
+              cancellation.abort(error);
+              throw error;
+            });
           }),
       );
       // Join every in-flight shard before terminal cleanup. Infrastructure/state
       // failures retain their cause and cannot become a publishable partial review.
+      cancellation.signal.throwIfAborted();
       for (const result of settled)
         if (result.status === "rejected") throw result.reason;
       for (const completed of settled) {

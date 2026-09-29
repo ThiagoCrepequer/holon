@@ -11,6 +11,8 @@ export interface ReviewScopePolicy {
   readonly deniedPaths: readonly string[];
 }
 
+import { RepositoryQueryError } from "./repository-tool-failure.js";
+
 const maximumPolicyBytes = 500_000;
 const maximumDeniedPaths = 10_000;
 
@@ -114,15 +116,13 @@ export function assertReviewScopePathAllowed(
 ): void {
   if (isProtectedPath(path)) return;
   if (policy.deniedPaths.includes(path)) {
-    throw new TypeError("Repository tool path is excluded by the run policy");
+    throw new RepositoryQueryError("path_denied");
   }
   if (
     policy.additionalExcludes.length > 0 &&
     matchesAnyPathGlob(path, policy.additionalExcludes)
   ) {
-    throw new TypeError(
-      "Repository tool path is excluded by repository policy",
-    );
+    throw new RepositoryQueryError("path_denied");
   }
 }
 

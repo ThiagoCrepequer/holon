@@ -29,6 +29,8 @@ Nao criam uma decisao por si so.
 - [Configuração e schema para editores](2026-09-09-repository-configuration-and-editor-schema.md)
 - [Arquitetura e estado da arte para serviço de busca de documentação](2026-09-10-technical-documentation-retrieval-service.md)
 
+- [PR #99: rollout do Sandbox e amplificação da falha](2026-09-28-review-99-rollout-and-failure-amplification.md)
+
 ## Politica de manutencao
 
 - Preserve a conclusao original.

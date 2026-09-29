@@ -26,6 +26,7 @@ import type {
 import type { ShardReviewGuidance } from "./configuration-projections.js";
 
 export type ReviewContext = ReviewShardContext & {
+  readonly abortSignal?: AbortSignal | undefined;
   readonly repositoryGuidance?: ShardReviewGuidance | undefined;
   readonly deadlineAt?: number | undefined;
   readonly priorFindings?:

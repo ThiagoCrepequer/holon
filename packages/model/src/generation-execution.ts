@@ -71,7 +71,9 @@ export async function executeGeneration<T>(
     onStepStart: () => void;
     onStepFinish: () => void;
   }) => Promise<T>,
+  abortSignal?: AbortSignal,
 ): Promise<T> {
+  abortSignal?.throwIfAborted();
   const startedAt = Date.now();
   const remaining = () => Math.max(0, phaseDeadlineAt - Date.now());
   const timeoutMs = Math.min(reviewTimeBudget.callMs, remaining());
@@ -95,6 +97,9 @@ export async function executeGeneration<T>(
     throw new ModelGenerationTimeoutError(phase, "phase_budget_exhausted");
   }
   const controller = new AbortController();
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
   const timer = setTimeout(
     () =>
       controller.abort(
@@ -107,7 +112,7 @@ export async function executeGeneration<T>(
   emit("model.phase_started", { timeoutMs: remaining() });
   try {
     const result = await execute({
-      abortSignal: controller.signal,
+      abortSignal: signal,
       timeout: { stepMs: timeoutMs },
       onStepStart: () => {
         round++;
@@ -123,17 +128,18 @@ export async function executeGeneration<T>(
           durationMs: Date.now() - roundStartedAt,
         }),
     });
-    controller.signal.throwIfAborted();
+    signal.throwIfAborted();
     emit("model.phase_finished", { durationMs: Date.now() - startedAt });
     return result;
   } catch (error) {
-    const classified = controller.signal.aborted
-      ? controller.signal.reason
+    const classified = signal.aborted
+      ? signal.reason
       : error instanceof Error && error.name === "TimeoutError"
         ? new ModelGenerationTimeoutError(phase, "generation_step_timeout")
         : error;
-    const reason =
-      classified instanceof ModelGenerationTimeoutError
+    const reason = abortSignal?.aborted
+      ? "review_cancelled"
+      : classified instanceof ModelGenerationTimeoutError
         ? classified.reason
         : APICallError.isInstance(classified)
           ? classified.isRetryable
@@ -143,7 +149,13 @@ export async function executeGeneration<T>(
     emit("model.phase_failed", {
       round,
       roundDurationMs: Date.now() - roundStartedAt,
-      timeoutScope: controller.signal.aborted ? "phase" : "generation_step",
+      ...(classified instanceof ModelGenerationTimeoutError
+        ? {
+            timeoutScope: controller.signal.aborted
+              ? ("phase" as const)
+              : ("generation_step" as const),
+          }
+        : {}),
       durationMs: Date.now() - startedAt,
       timeoutMs,
       reason,
