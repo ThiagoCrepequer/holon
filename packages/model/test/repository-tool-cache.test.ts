@@ -125,3 +125,51 @@ it("does not infer line positions through redacted multiline source", async () =
   });
   expect(run).toHaveBeenCalledTimes(2);
 });
+
+it("shares completed results across shards without sharing pending cancellation", async () => {
+  const { createRepositoryToolCacheStore } =
+    await import("../src/repository-tool-cache.js");
+  const store = createRepositoryToolCacheStore();
+  const run = vi.fn(async () => ({ content: "source", truncated: false }));
+  await createRepositoryToolCache({ run }, store).run(call);
+  const next = createRepositoryToolCache({ run }, store);
+  await next.run(call);
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(next.metrics().hits).toBe(1);
+  await createRepositoryToolCache(
+    { run },
+    createRepositoryToolCacheStore(),
+  ).run(call);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
+it("does not share in-flight, truncated or oversized results and evicts bounded entries", async () => {
+  const { createRepositoryToolCacheStore } =
+    await import("../src/repository-tool-cache.js");
+  const shared = createRepositoryToolCacheStore();
+  let resolve!: (result: { content: string; truncated: boolean }) => void;
+  const pending = createRepositoryToolCache(
+    {
+      run: () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    },
+    shared,
+  ).run(call);
+  await Promise.resolve();
+  const run = vi.fn(async () => ({ content: "other", truncated: false }));
+  await createRepositoryToolCache({ run }, shared).run(call);
+  expect(run).toHaveBeenCalledTimes(1);
+  resolve({ content: "partial", truncated: true });
+  await pending;
+  const isolated = createRepositoryToolCacheStore();
+  isolated.set("large", { content: "a".repeat(2_000_001), truncated: false });
+  isolated.set("partial", { content: "x", truncated: true });
+  expect(isolated.get("large")).toBeUndefined();
+  expect(isolated.get("partial")).toBeUndefined();
+  for (let index = 0; index < 129; index++)
+    isolated.set(String(index), { content: "x", truncated: false });
+  expect(isolated.get("0")).toBeUndefined();
+  expect(isolated.get("128")?.content).toBe("x");
+});

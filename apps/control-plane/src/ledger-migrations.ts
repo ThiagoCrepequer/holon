@@ -379,6 +379,19 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       ALTER TABLE run_configurations DROP COLUMN summary_json;
     `,
   },
+  {
+    version: 18,
+    statements: `
+    CREATE TABLE model_generation_reservations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      input_bytes INTEGER NOT NULL CHECK(input_bytes > 0),
+      output_tokens INTEGER NOT NULL CHECK(output_tokens >= 0),
+      settled INTEGER NOT NULL DEFAULT 0 CHECK(settled IN (0,1))
+    );
+    CREATE INDEX model_generation_run ON model_generation_reservations(run_id);
+  `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

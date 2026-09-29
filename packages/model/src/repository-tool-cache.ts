@@ -13,9 +13,39 @@ export interface RepositoryCacheMetrics {
   searchCalls: number;
 }
 
+/** A completed-only cache scoped to one immutable run, never shared promises. */
+export function createRepositoryToolCacheStore() {
+  const results = new Map<
+    string,
+    { result: RepositoryToolResult; bytes: number }
+  >();
+  let bytes = 0;
+  return {
+    get: (key: string) => results.get(key)?.result,
+    set(key: string, result: RepositoryToolResult) {
+      if (result.truncated || result.content.includes(redactedSecret)) return;
+      const size = new TextEncoder().encode(key + result.content).byteLength;
+      if (size > 2_000_000) return;
+      bytes -= results.get(key)?.bytes ?? 0;
+      results.delete(key);
+      while (results.size >= 128 || bytes + size > 2_000_000) {
+        const oldest = results.keys().next().value!;
+        bytes -= results.get(oldest)!.bytes;
+        results.delete(oldest);
+      }
+      results.set(key, { result: { ...result }, bytes: size });
+      bytes += size;
+    },
+  };
+}
+export type RepositoryToolCacheStore = ReturnType<
+  typeof createRepositoryToolCacheStore
+>;
+
 /** Per investigation and immutable SHA. Failed or truncated reads never cover another range. */
 export function createRepositoryToolCache(
   delegate: RepositoryToolRunner,
+  shared?: RepositoryToolCacheStore,
 ): RepositoryToolRunner & { metrics(): RepositoryCacheMetrics } {
   const results = new Map<string, Promise<RepositoryToolResult>>();
   const reads: Array<{ path: string; start: number; lines: string[] }> = [];
@@ -50,6 +80,11 @@ export function createRepositoryToolCache(
         call.arguments.paths = [...new Set(call.arguments.paths)].toSorted();
       metrics.requests++;
       const key = JSON.stringify(call);
+      const completed = shared?.get(key);
+      if (completed) {
+        metrics.hits++;
+        return Promise.resolve({ ...completed });
+      }
       const existing = results.get(key);
       if (existing) {
         metrics.hits++;
@@ -85,6 +120,7 @@ export function createRepositoryToolCache(
         })
         .then((result) => {
           execution?.abortSignal?.throwIfAborted();
+          shared?.set(key, result);
           if (result.truncated) metrics.truncatedResults++;
           if (
             call.name === "read_file" &&

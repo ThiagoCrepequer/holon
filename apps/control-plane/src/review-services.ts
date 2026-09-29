@@ -1,3 +1,4 @@
+import type { ModelGenerationReservation } from "@holon/contracts";
 import {
   repositoryExecutionLimits,
   repositoryToolOutcomeSchema,
@@ -7,6 +8,7 @@ import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
 } from "@holon/contracts";
+import { createRepositoryToolCacheStore } from "@holon/model";
 
 import type { DesiredCheckRun } from "./check-run-reconciliation.js";
 import { RepositoryToolResponseError } from "./review-tool-error.js";
@@ -114,6 +116,16 @@ export interface WorkflowLedger
     output: ReconciledReviewOutput,
   ): Promise<ReviewAnalysisCheckpoint>;
   loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput>;
+
+  reserveModelGeneration(
+    runId: string,
+    request: ModelGenerationReservation,
+  ): Promise<number | undefined>;
+  settleModelGeneration(
+    runId: string,
+    id: number,
+    outputTokens: number,
+  ): Promise<void>;
 
   reserveAnalysisToolCall(
     runId: string,
@@ -419,6 +431,7 @@ export function createReviewServices(
       if (contextPreparation === pending) contextPreparation = undefined;
     });
   };
+  const repositoryCache = createRepositoryToolCacheStore();
   const createShardReviewer = (
     shardIndex: number,
     shardCount: number,
@@ -574,6 +587,15 @@ export function createReviewServices(
               modelRoute: env.AI_MODEL_ID,
               ...details,
             }),
+          {
+            repositoryCache,
+            generationBudget: {
+              reserve: (request) =>
+                ledger.reserveModelGeneration(job.runId, request),
+              settle: (id, outputTokens) =>
+                ledger.settleModelGeneration(job.runId, id, outputTokens),
+            },
+          },
         ),
       );
 

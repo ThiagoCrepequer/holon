@@ -30,6 +30,10 @@ import {
   preflightConfigurationPrompt,
 } from "./configuration-guidance.js";
 import {
+  withGenerationBudget,
+  type ModelGenerationBudget,
+} from "./generation-budget.js";
+import {
   executeGeneration,
   isTransientGenerationError,
   observeGeneration,
@@ -40,6 +44,7 @@ import {
   createInvestigationProgress,
   investigationCheckpointSchema,
 } from "./investigation-progress.js";
+import type { RepositoryToolCacheStore } from "./repository-tool-cache.js";
 import { createRepositoryToolCache } from "./repository-tool-cache.js";
 import {
   ModelGenerationTimeoutError,
@@ -134,6 +139,7 @@ export function isNonRetryableModelProviderError(error: unknown): boolean {
 }
 
 export type NonRetryableModelFailureCode =
+  | "model_budget_exhausted"
   | "object_invalid"
   | "output_missing"
   | "provider_permanent"
@@ -144,6 +150,7 @@ const nonRetryableModelErrorCodes = new Map<
   string,
   NonRetryableModelFailureCode
 >([
+  ["ModelReviewBudgetExceededError", "model_budget_exhausted"],
   ["AI_NoObjectGeneratedError", "object_invalid"],
   ["AI_NoOutputGeneratedError", "output_missing"],
   ["RepositoryToolBudgetExceededError", "tool_budget_exhausted"],
@@ -312,6 +319,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     private readonly onUsage?: (usage: ModelUsage) => unknown,
     private readonly outputContract: ModelOutputContract = "portable",
     private readonly observer?: GenerationObserver,
+    private readonly resources: {
+      generationBudget?: ModelGenerationBudget;
+      repositoryCache?: RepositoryToolCacheStore;
+    } = {},
   ) {}
 
   public async generate(request: ReviewGenerationRequest): Promise<unknown> {
@@ -319,14 +330,21 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     const deadlineAt =
       request.deadlineAt ?? Date.now() + reviewTimeBudget.analysisMs;
     const modelForPhase = (phase: string) =>
-      createGatewayLanguageModel({
-        ...this.config,
-        metadata: { ...this.config.metadata, phase },
-      });
+      withGenerationBudget(
+        createGatewayLanguageModel({
+          ...this.config,
+          metadata: { ...this.config.metadata, phase },
+        }),
+        this.resources.generationBudget,
+      );
     const model = modelForPhase("investigation");
     const progress = createInvestigationProgress(request.investigationPaths);
     const tracked = request.investigationPaths.length > 0;
     let closing = false;
+    let closureCompleted = false;
+    let blockCalls = 0;
+    let blocksWithoutProgress = 0;
+    let resolvedChecks = 0;
     let previousRevision = 0;
     let stepStartedAt = Date.now();
     let roundInFlight = false;
@@ -342,23 +360,31 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     let previousToolCalls = 0;
     let totalOutputTokens = 0;
     let roundDeadlineAt = deadlineAt;
-    const cachedTools = createRepositoryToolCache({
-      run: async (call, execution) => {
-        execution?.abortSignal?.throwIfAborted();
-        toolCalls++;
-        try {
-          return await this.toolsRunner.run(call, execution);
-        } catch (error) {
-          request.abortSignal?.throwIfAborted();
-          if (
-            error instanceof Error &&
-            error.name === "RepositoryToolBudgetExceededError"
-          )
-            toolBudgetExhausted = true;
-          throw error;
-        }
+    const cachedTools = createRepositoryToolCache(
+      {
+        run: async (call, execution) => {
+          execution?.abortSignal?.throwIfAborted();
+          if (tracked && blockCalls >= 4)
+            throw new Error(
+              "Checkpoint required before further repository queries",
+            );
+          blockCalls++;
+          toolCalls++;
+          try {
+            return await this.toolsRunner.run(call, execution);
+          } catch (error) {
+            request.abortSignal?.throwIfAborted();
+            if (
+              error instanceof Error &&
+              error.name === "RepositoryToolBudgetExceededError"
+            )
+              toolBudgetExhausted = true;
+            throw error;
+          }
+        },
       },
-    });
+      this.resources.repositoryCache,
+    );
     const tools = {
       ...createRepositoryModelTools(cachedTools, () => roundDeadlineAt),
       review_checkpoint: tool({
@@ -406,24 +432,21 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
               providerOptions: gatewayModelProviderOptions,
               stopWhen: [
                 stepCountIs(maximumInvestigationSteps - completedRounds),
-                () => progress.finished(),
+                () => progress.finished() || closureCompleted,
               ],
               temperature: 0,
               prepareStep: () => {
                 stepStartedAt = Date.now();
                 progress.beginRound();
                 roundInFlight = true;
-                roundDeadlineAt = Math.min(
-                  investigationDeadlineAt,
-                  Date.now() + reviewTimeBudget.callMs,
-                );
                 if (
                   toolCalls >= reviewInvestigationLimits.toolCalls ||
                   toolBudgetExhausted
                 )
                   forcedClosure = "tool_budget_exhausted";
                 else if (
-                  stagnantRounds >= reviewInvestigationLimits.stagnantRounds
+                  stagnantRounds >= reviewInvestigationLimits.stagnantRounds ||
+                  blocksWithoutProgress >= 2
                 )
                   forcedClosure = "no_progress";
                 else if (
@@ -438,16 +461,28 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                   tracked &&
                   (Boolean(forcedClosure) ||
                     investigationDeadlineAt - Date.now() <=
-                      reviewTimeBudget.callMs +
-                        reviewTimeBudget.investigationClosureMs);
+                      reviewTimeBudget.investigationClosureMs);
+                roundDeadlineAt = Math.min(
+                  investigationDeadlineAt -
+                    (tracked && !closing
+                      ? reviewTimeBudget.investigationClosureMs
+                      : 0),
+                  Date.now() +
+                    (closing
+                      ? reviewTimeBudget.investigationClosureMs
+                      : reviewTimeBudget.callMs),
+                );
+                lifecycle.setStepDeadline(roundDeadlineAt);
+                const checkpointRequired =
+                  closing || (tracked && blockCalls >= 4);
                 return {
-                  ...(closing
+                  ...(checkpointRequired
                     ? {
                         activeTools: ["review_checkpoint" as const],
                         maxOutputTokens: 8_192,
                       }
                     : {}),
-                  toolChoice: closing
+                  toolChoice: checkpointRequired
                     ? {
                         type: "tool" as const,
                         toolName: "review_checkpoint" as const,
@@ -455,7 +490,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                     : forcedClosure
                       ? "none"
                       : "auto",
-                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
+                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Record a checkpoint after each block of at most four uncached queries; changes to notes alone do not count as coverage progress. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
                 };
               },
               tools,
@@ -487,6 +522,23 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                   progress.revision() === previousRevision
                     ? stagnantRounds + 1
                     : 0;
+                if (
+                  tracked &&
+                  step.toolCalls.some(
+                    (call) => call.toolName === "review_checkpoint",
+                  ) &&
+                  !step.toolCalls.some(
+                    (call) => call.toolName !== "review_checkpoint",
+                  )
+                ) {
+                  const resolved =
+                    progress.counts().reviewed + progress.counts().blocked;
+                  blocksWithoutProgress =
+                    resolved > resolvedChecks ? 0 : blocksWithoutProgress + 1;
+                  resolvedChecks = Math.max(resolvedChecks, resolved);
+                  blockCalls = 0;
+                }
+                closureCompleted = closing;
                 previousToolCalls = toolCalls;
                 previousRevision = progress.revision();
                 observeGeneration(this.observer, {
@@ -605,6 +657,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
         if (
           isTransientGenerationError(error) &&
           attempt === 1 &&
+          !closing &&
           completedRounds < maximumInvestigationSteps &&
           investigationDeadlineAt - Date.now() >=
             reviewTimeBudget.minimumRetryMs
@@ -918,7 +971,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       return validSummaries[0] ?? "";
     }
 
-    const model = createGatewayLanguageModel(this.config);
+    const model = withGenerationBudget(
+      createGatewayLanguageModel(this.config),
+      this.resources.generationBudget,
+    );
     const synthesisPrompt = [
       "Merge the following separate review shard summaries for a single pull request into one unified, cohesive executive summary.",
       "Eliminate duplicate introductory phrases, repetitive boilerplate, and redundant conclusions.",

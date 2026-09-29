@@ -342,11 +342,18 @@ A investigação acompanha cada arquivo como pendente, revisado ou bloqueado,
 priorizando achados anteriores e pistas de segurança/contratos. O checkpoint final
 encerra o loop sem uma resposta narrativa adicional. Checkpoints junto de leituras
 não avançam a cobertura daquela rodada. Pendências e bloqueios impedem aprovação.
-Ao restarem no máximo 270 segundos, a próxima rodada recebe somente o checkpoint
-para encerrar dentro do prazo de nove minutos; isso reserva margem sem aumentar
-os prazos globais. As últimas quatro chamadas ao executor são orientadas a
+Conforme a [ADR-0045](../decisions/0045-bound-review-generation-expenditure.md),
+a cada quatro consultas não atendidas por cache o host exige checkpoint; dois
+checkpoints sem avanço de cobertura encerram a exploração. A reserva final é de
+90 segundos, com uma única rodada de encerramento e sem retry. Rodadas anteriores
+não podem consumir essa reserva; os prazos globais permanecem. As últimas quatro chamadas ao executor são orientadas a
 verificações pendentes, mantendo o teto de 24. O acompanhamento fica em memória
-no step; nenhum conteúdo de checkpoint é incluído nos logs.
+no step; nenhum conteúdo de checkpoint é incluído nos logs. Resultados completos
+compartilhados na mesma run usam cache de até 128 entradas/2 MB, sem promises
+compartilhadas. O ledger limita a revisão a 64 inferências, 4 MB cumulativos de
+entrada serializada e 120.000 tokens de saída reservados/consumidos. Retries e
+replay compartilham esses limites. Falhas incertas mantêm suas reservas; esgotamento
+produz incompletude explícita, nunca aprovação.
 
 ### Concessão de Sandbox e cancelamento de ferramentas
 
