@@ -118,3 +118,41 @@ e registrar duração/categoria segura do transporte, fase e dimensão do orçam
 Os watchdogs do processo e do teste também respeitam a janela do core, com margem
 para encerramento. Essa mudança foi validada offline; não houve uma segunda rodada
 paga. A conclusão real do shard e das oito partes permanece sem validação.
+
+## Segunda avaliação com modelo real: 2026-09-29
+
+A segunda rodada foi explicitamente autorizada e executada sobre `ca7edd0`, com o
+mesmo snapshot e teto de quatro requests/300.000 bytes. Falhou em 411,2 segundos.
+Apenas o shard de índice 3 usou inferência real; os demais permaneceram simulados.
+
+Sequência observada:
+
+1. Duas respostas HTTP 200; o relay mediu 13.906 e 32.982 ms.
+2. A investigação fez quatro consultas de repositório. A terceira rodada atingiu
+   `generation_step_timeout`; o relay registrou `transport_timeout` em 180.012 ms.
+3. A tentativa seguinte foi recusada antes da inferência: `output_tokens`, limite
+   6.808, consumido/reservado 6.808, solicitado 8.192.
+4. A finalização também expirou: `phase_budget_exhausted`, com `transport_timeout`
+   no relay em 180.007 ms.
+5. A recuperação foi recusada antes da inferência: `output_tokens`, limite 15.000,
+   consumido/reservado 15.000, solicitado 8.192.
+
+O esgotamento da parcela foi consequência das reservas mantidas após chamadas
+sem usage confirmado. Não é evidência de 15.000 tokens efetivamente gerados ou
+cobrados. A reserva de conclusão permitiu tentar a finalização, mas não garantiu
+que o serviço externo a concluísse. As quatro consultas não indicam, neste caso,
+exploração excessiva do repositório.
+
+Os dois registros concluídos no Gateway identificam `deepseek/deepseek-v4.1-flash`,
+com 19.384 tokens de entrada, 1.540 de saída e US$ 0,0076632 de custo registrado.
+Não há valor confirmado para eventuais chamadas canceladas sem registro concluído.
+O container foi destruído e não houve publicação, deploy ou terceira rodada.
+
+A validação real continua reprovada. Pelo código e pela contagem de consultas,
+a terceira rodada exigia `review_checkpoint`; a finalização exige saída
+estruturada. Essa associação orienta o próximo diagnóstico, mas não demonstra
+incompatibilidade do modelo: os registros ainda não distinguem problema de rota,
+provider, contrato da requisição ou demora durante a resposta. Antes de outro teste
+com o PR inteiro, isolar esses dois formatos em casos mínimos e rastreáveis, sob
+novo orçamento explicitamente autorizado. Não aumentar os tetos para tratar a
+recusa secundária como se fosse a falha inicial.
