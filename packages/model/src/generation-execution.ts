@@ -1,5 +1,6 @@
 import { APICallError } from "ai";
 
+import { ModelReviewBudgetExceededError } from "./generation-budget.js";
 import {
   ModelGenerationTimeoutError,
   reviewTimeBudget,
@@ -8,6 +9,7 @@ import {
 
 export interface GenerationEvent {
   readonly event:
+    | "model.checkpoint_rejected"
     | "model.investigation_stopped"
     | "model.investigation_progress"
     | "model.phase_started"
@@ -38,6 +40,10 @@ export interface GenerationEvent {
   readonly timeoutMs?: number;
   readonly remainingMs: number;
   readonly reason?: string;
+  readonly budgetLimit?: number;
+  readonly budgetConsumed?: number;
+  readonly budgetRequested?: number;
+  readonly budgetReason?: string;
   readonly statusCode?: number;
   readonly retryable?: boolean;
 }
@@ -171,6 +177,14 @@ export async function executeGeneration<T>(
             ? "model_budget_exhausted"
             : "generation_failed";
     emit("model.phase_failed", {
+      ...(classified instanceof ModelReviewBudgetExceededError
+        ? {
+            budgetReason: classified.admission.reason,
+            budgetLimit: classified.admission.limit,
+            budgetConsumed: classified.admission.consumed,
+            budgetRequested: classified.admission.requested,
+          }
+        : {}),
       ...(APICallError.isInstance(classified)
         ? {
             statusCode: classified.statusCode,

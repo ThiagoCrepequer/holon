@@ -392,6 +392,13 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     CREATE INDEX model_generation_run ON model_generation_reservations(run_id);
   `,
   },
+  {
+    version: 19,
+    statements: `
+    ALTER TABLE model_generation_reservations ADD COLUMN shard_index INTEGER NOT NULL DEFAULT -1;
+    CREATE TABLE model_generation_plans (run_id TEXT PRIMARY KEY, shard_count INTEGER NOT NULL CHECK(shard_count BETWEEN 1 AND 64));
+  `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

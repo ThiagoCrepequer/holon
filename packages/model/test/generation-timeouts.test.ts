@@ -2,6 +2,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { afterEach, expect, it, vi } from "vitest";
 
+import type { ModelGenerationBudget } from "../src/generation-budget.js";
 import type { RepositoryToolRunner } from "../src/reviewer.js";
 
 const provider = vi.hoisted(() => ({ model: vi.fn() }));
@@ -47,6 +48,7 @@ function generator(
     content: "private tool result",
     truncated: false,
   }),
+  generationBudget?: ModelGenerationBudget,
 ) {
   provider.model.mockReturnValue(model);
   return new TwoPhaseReviewGenerator(
@@ -60,6 +62,7 @@ function generator(
     undefined,
     "domain",
     observer,
+    generationBudget ? { generationBudget } : {},
   );
 }
 afterEach(() => vi.useRealTimers());
@@ -1036,4 +1039,125 @@ it("aborts a closing checkpoint after ninety seconds without retrying it", async
         event.phase === "investigation",
     ),
   ).toBe(false);
+});
+
+it("repairs rejected checkpoints without counting them as coverage stagnation", async () => {
+  let calls = 0;
+  const events: GenerationEvent[] = [];
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      const index = calls++;
+      if (index < 2) {
+        const result = checkpointResult(false, "pending");
+        return {
+          ...result,
+          content: result.content.map((part) => ({
+            ...part,
+            input: JSON.stringify({
+              checks: [{ id: "unknown", status: "reviewed", note: "Checked" }],
+              summary: "",
+              finished: false,
+            }),
+          })),
+        };
+      }
+      if (index === 2) return checkpointResult(true);
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model, (event) => events.push(event)).generate(
+    { ...request, investigationPaths: ["src/a.ts"] },
+  );
+  expect(result).not.toMatchObject({ isDegraded: true });
+  expect(
+    events.filter((event) => event.event === "model.checkpoint_rejected"),
+  ).toHaveLength(2);
+});
+
+it("compacts acknowledged query history while retaining canonical context and the latest query block", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0 || index === 2)
+        return {
+          ...textResult(""),
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: `read-${index}`,
+              toolName: "read_file",
+              input: JSON.stringify({ path: `src/${index}.ts` }),
+            },
+          ],
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index === 1) return checkpointResult(false, "pending");
+      if (index === 3) return checkpointResult(false, "reviewed");
+      if (index === 4) {
+        const prompt = JSON.stringify(options.prompt);
+        expect(prompt).not.toContain("OLD_QUERY_SENTINEL");
+        expect(prompt).toContain("LATEST_QUERY_SENTINEL");
+        expect(prompt).toContain("private patch");
+        return checkpointResult(true);
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  await generator(model, undefined, async (call) => ({
+    content:
+      ("path" in call.arguments && call.arguments.path) === "src/0.ts"
+        ? "OLD_QUERY_SENTINEL"
+        : "LATEST_QUERY_SENTINEL",
+    truncated: false,
+  })).generate({ ...request, investigationPaths: ["src/a.ts"] });
+  expect(calls).toBe(6);
+});
+
+it("preserves checkpoint notes and finalizes incompletely when investigation admission is exhausted", async () => {
+  const events: GenerationEvent[] = [];
+  let providerCalls = 0;
+  let investigationCalls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      if (providerCalls++ === 0) return checkpointResult(false);
+      expect(JSON.stringify(options.prompt)).toContain(
+        "Compared changed contract and relevant callers",
+      );
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(
+    model,
+    (event) => events.push(event),
+    undefined,
+    {
+      reserve: async (reservation) =>
+        reservation.phase === "investigation" && investigationCalls++ > 0
+          ? {
+              accepted: false,
+              reason: "input_bytes",
+              limit: 1000,
+              consumed: 900,
+              requested: 200,
+            }
+          : { accepted: true, id: providerCalls + 1, outputTokens: 8192 },
+      settle: async () => {},
+    },
+  ).generate({ ...request, investigationPaths: ["src/a.ts"] });
+  expect(providerCalls).toBe(2);
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: expect.arrayContaining(["investigation_incomplete"]),
+  });
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.phase_failed",
+      reason: "model_budget_exhausted",
+      budgetReason: "input_bytes",
+      budgetLimit: 1000,
+      budgetConsumed: 900,
+      budgetRequested: 200,
+    }),
+  );
 });

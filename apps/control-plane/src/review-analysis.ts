@@ -384,6 +384,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
             reviewTimeBudget.analysisMs,
       };
     });
+    services.setReviewShardCount(planning.shardIds.length);
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
     for (

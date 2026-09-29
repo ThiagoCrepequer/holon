@@ -355,6 +355,15 @@ entrada serializada e 120.000 tokens de saída reservados/consumidos. Retries e
 replay compartilham esses limites. Falhas incertas mantêm suas reservas; esgotamento
 produz incompletude explícita, nunca aprovação.
 
+A [ADR-0046](../decisions/0046-protect-shard-completion-and-local-replay.md)
+divide esses tetos pelo plano imutável, com reserva de conclusão por parte. A primeira
+onda não pode consumir as parcelas seguintes. A recusa informa dimensão, limite e
+consumo, sem payloads. Checkpoints rejeitados recebem reparo limitado e não contam
+como checkpoints sem progresso. Após checkpoint aceito, o histórico de consultas
+fica restrito ao bloco mais recente e ao corrente; prompt canônico e notas aceitas
+continuam disponíveis. A [reprodução local](../operations/local-review-reproduction.md)
+valida esse encadeamento sem publicação nem chamadas obrigatórias a modelos reais.
+
 ### Concessão de Sandbox e cancelamento de ferramentas
 
 Conforme a [ADR-0043](../decisions/0043-bound-investigation-and-sandbox-lifecycle.md),

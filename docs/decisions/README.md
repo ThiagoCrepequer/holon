@@ -90,3 +90,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0044 — Acompanhar cobertura e encerrar investigação por checkpoint](0044-track-review-investigation-progress.md) — complementa a ADR-0043, com cache por intervalo e métricas de eficiência.
 
 - [ADR-0045 — Exigir progresso e limitar o gasto agregado](0045-bound-review-generation-expenditure.md) — substitui a ADR-0044 quanto à cadência, encerramento e escopo do cache.
+
+- [ADR-0046 — Proteger conclusão por shard e reproduzir incidentes localmente](0046-protect-shard-completion-and-local-replay.md) — substitui a admissão compartilhada e o tratamento de checkpoints rejeitados da ADR-0045.
