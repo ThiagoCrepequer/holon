@@ -38,6 +38,8 @@ export interface GenerationEvent {
   readonly timeoutMs?: number;
   readonly remainingMs: number;
   readonly reason?: string;
+  readonly statusCode?: number;
+  readonly retryable?: boolean;
 }
 export type GenerationObserver = (event: GenerationEvent) => void;
 
@@ -68,6 +70,7 @@ export async function executeGeneration<T>(
   execute: (lifecycle: {
     abortSignal: AbortSignal;
     timeout: { stepMs: number };
+    setStepDeadline: (deadlineAt: number) => void;
     onStepStart: () => void;
     onStepFinish: () => void;
   }) => Promise<T>,
@@ -107,11 +110,27 @@ export async function executeGeneration<T>(
       ),
     remaining(),
   );
+  let stepTimer: ReturnType<typeof setTimeout> | undefined;
+  let roundTimeoutMs = timeoutMs;
   let round = 0;
   let roundStartedAt = startedAt;
   emit("model.phase_started", { timeoutMs: remaining() });
   try {
     const result = await execute({
+      setStepDeadline: (deadlineAt) => {
+        clearTimeout(stepTimer);
+        roundTimeoutMs = Math.max(
+          0,
+          Math.min(timeoutMs, deadlineAt - Date.now()),
+        );
+        stepTimer = setTimeout(
+          () =>
+            controller.abort(
+              new ModelGenerationTimeoutError(phase, "generation_step_timeout"),
+            ),
+          roundTimeoutMs,
+        );
+      },
       abortSignal: signal,
       timeout: { stepMs: timeoutMs },
       onStepStart: () => {
@@ -119,14 +138,16 @@ export async function executeGeneration<T>(
         roundStartedAt = Date.now();
         emit("model.round_started", {
           round,
-          timeoutMs: Math.min(timeoutMs, remaining()),
+          timeoutMs: Math.min(roundTimeoutMs, remaining()),
         });
       },
-      onStepFinish: () =>
+      onStepFinish: () => {
+        clearTimeout(stepTimer);
         emit("model.round_finished", {
           round,
           durationMs: Date.now() - roundStartedAt,
-        }),
+        });
+      },
     });
     signal.throwIfAborted();
     emit("model.phase_finished", { durationMs: Date.now() - startedAt });
@@ -145,23 +166,34 @@ export async function executeGeneration<T>(
           ? classified.isRetryable
             ? "provider_transient"
             : "provider_permanent"
-          : "generation_failed";
+          : classified instanceof Error &&
+              classified.name === "ModelReviewBudgetExceededError"
+            ? "model_budget_exhausted"
+            : "generation_failed";
     emit("model.phase_failed", {
+      ...(APICallError.isInstance(classified)
+        ? {
+            statusCode: classified.statusCode,
+            retryable: classified.isRetryable,
+          }
+        : {}),
       round,
       roundDurationMs: Date.now() - roundStartedAt,
       ...(classified instanceof ModelGenerationTimeoutError
         ? {
-            timeoutScope: controller.signal.aborted
-              ? ("phase" as const)
-              : ("generation_step" as const),
+            timeoutScope:
+              classified.reason === "phase_budget_exhausted"
+                ? ("phase" as const)
+                : ("generation_step" as const),
           }
         : {}),
       durationMs: Date.now() - startedAt,
-      timeoutMs,
+      timeoutMs: roundTimeoutMs,
       reason,
     });
     throw classified;
   } finally {
     clearTimeout(timer);
+    clearTimeout(stepTimer);
   }
 }

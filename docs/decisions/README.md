@@ -88,3 +88,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0043 — Coordenar investigação, cancelamento e ciclo do Sandbox](0043-bound-investigation-and-sandbox-lifecycle.md) — substitui a política de investigação da ADR-0042.
 
 - [ADR-0044 — Acompanhar cobertura e encerrar investigação por checkpoint](0044-track-review-investigation-progress.md) — complementa a ADR-0043, com cache por intervalo e métricas de eficiência.
+
+- [ADR-0045 — Exigir progresso e limitar o gasto agregado](0045-bound-review-generation-expenditure.md) — substitui a ADR-0044 quanto à cadência, encerramento e escopo do cache.

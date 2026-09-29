@@ -29,3 +29,4 @@ export * from "./repository-config/input.js";
 export * from "./review-execution-limits.js";
 
 export * from "./repository-execution.js";
+export * from "./model-generation-budget.js";

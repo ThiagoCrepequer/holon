@@ -220,3 +220,10 @@ sugerem repetição de consultas; muitas chamadas sem cache exigem avaliar se as
 perguntas causais eram necessárias. As métricas não registram argumentos nem
 permitem reconstruir o código revisado. Corpo indisponível no Gateway não deve
 motivar habilitar coleta de prompts para medir redundância.
+
+A [ADR-0045](../decisions/0045-bound-review-generation-expenditure.md) adiciona
+`statusCode` e `retryable` a `model.phase_failed` quando existe `APICallError`;
+não há coleta da mensagem/body original. `model_budget_exhausted` significa
+recusa de admissão antes da chamada, por limite agregado durável. Não reinicie
+repetidamente para contornar esse limite: compare cobertura, consultas e usage
+da execução. A ausência de status HTTP não demonstra sucesso do provider.

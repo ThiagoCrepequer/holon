@@ -6,6 +6,7 @@ import type {
   ReviewDecisionContext,
   ReviewLedger,
 } from "@holon/application";
+import type { ModelGenerationReservation } from "@holon/contracts";
 import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
@@ -56,6 +57,7 @@ import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
+import { ReviewGenerationBudgetStore } from "./review-generation-budget-store.js";
 import { ReviewToolBudgetStore } from "./review-tool-budget-store.js";
 import { RunConfigurationStore } from "./run-configuration-store.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
@@ -902,6 +904,34 @@ export class ReviewLedgerObject
     return Promise.resolve(
       new ReviewAnalysisStore(this.ctx.storage).load(runId),
     );
+  }
+
+  public reserveModelGeneration(
+    runId: string,
+    request: ModelGenerationReservation,
+  ): Promise<number | undefined> {
+    return Promise.resolve(
+      this.ctx.storage.transactionSync(() =>
+        new ReviewGenerationBudgetStore(this.ctx.storage.sql).reserve(
+          runId,
+          request,
+        ),
+      ),
+    );
+  }
+  public settleModelGeneration(
+    runId: string,
+    id: number,
+    outputTokens: number,
+  ): Promise<void> {
+    this.ctx.storage.transactionSync(() =>
+      new ReviewGenerationBudgetStore(this.ctx.storage.sql).settle(
+        runId,
+        id,
+        outputTokens,
+      ),
+    );
+    return Promise.resolve();
   }
 
   public reserveAnalysisToolCall(

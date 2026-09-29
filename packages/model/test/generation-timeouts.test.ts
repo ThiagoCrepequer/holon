@@ -405,6 +405,7 @@ it("retries a transient provider failure once and preserves the successful recov
 });
 
 it("keeps persistent provider failures incomplete with a bounded number of attempts", async () => {
+  const events: GenerationEvent[] = [];
   const model = new MockLanguageModelV3({
     doGenerate: async () => {
       throw new APICallError({
@@ -416,11 +417,21 @@ it("keeps persistent provider failures incomplete with a bounded number of attem
       });
     },
   });
-  await expect(generator(model).generate(request)).resolves.toMatchObject({
+  await expect(
+    generator(model, (event) => events.push(event)).generate(request),
+  ).resolves.toMatchObject({
     isDegraded: true,
     outputLimitations: ["investigation_incomplete", "finalization_failed"],
   });
   expect(model.doGenerateCalls).toHaveLength(4);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.phase_failed",
+      statusCode: 503,
+      retryable: true,
+    }),
+  );
+  expect(JSON.stringify(events)).not.toContain("provider.invalid");
 });
 
 it("does not invoke synthesis after its shared deadline", async () => {
@@ -706,7 +717,7 @@ it("reserves closure before another long generation can consume the phase deadli
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
       const index = calls++;
-      if (index === 0)
+      if (index < 2)
         return delayed(
           {
             ...textResult(""),
@@ -723,7 +734,7 @@ it("reserves closure before another long generation can consume the phase deadli
           150_000,
           options.abortSignal,
         );
-      if (index === 1) {
+      if (index === 2) {
         expect(options.tools?.map((t) => t.name)).toEqual([
           "review_checkpoint",
         ]);
@@ -743,12 +754,12 @@ it("reserves closure before another long generation can consume the phase deadli
     investigationPaths: ["src/a.ts"],
     deadlineAt: Date.now() + 14 * 60_000,
   });
-  await vi.advanceTimersByTimeAsync(150_000);
+  await vi.advanceTimersByTimeAsync(300_000);
   expect(await pending).toMatchObject({
     isDegraded: true,
     outputLimitations: ["investigation_incomplete"],
   });
-  expect(calls).toBe(3);
+  expect(calls).toBe(4);
 });
 
 it("discards a premature checkpoint when its repository round is cancelled", async () => {
@@ -900,4 +911,129 @@ it("preserves a fatal cancellation during finalization instead of scheduling str
     event: "model.phase_failed",
     reason: "review_cancelled",
   });
+});
+
+it("ends after one closing checkpoint even when the model asks to continue", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      calls++;
+      if (options.tools?.some((tool) => tool.name === "review_checkpoint"))
+        return checkpointResult(false, "pending");
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+    deadlineAt: Date.now() + 8 * 60_000 + 30_000,
+  });
+  expect(result).toMatchObject({ isDegraded: true });
+  expect(calls).toBe(2);
+});
+
+it("requires a checkpoint after a small block of reads before permitting more exploration", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0)
+        return {
+          ...textResult(""),
+          content: Array.from({ length: 4 }, (_, i) => ({
+            type: "tool-call" as const,
+            toolCallId: `block-${i}`,
+            toolName: "read_file",
+            input: JSON.stringify({ path: `src/f${i}.ts` }),
+          })),
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index === 1) {
+        expect(options.tools?.map((tool) => tool.name)).toEqual([
+          "review_checkpoint",
+        ]);
+        return checkpointResult(true);
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(calls).toBe(3);
+});
+
+it("bounds exploration even when a batch exceeds four queries and checkpoints only rewrite notes", async () => {
+  let calls = 0;
+  let reads = 0;
+  const run = vi.fn(async () => ({ content: "source", truncated: false }));
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      const index = calls++;
+      if (index === 0 || index === 2)
+        return {
+          ...textResult(""),
+          content: Array.from({ length: 6 }, () => ({
+            type: "tool-call" as const,
+            toolCallId: `read-${reads}`,
+            toolName: "read_file",
+            input: JSON.stringify({ path: `src/${reads++}.ts` }),
+          })),
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index < 5) return checkpointResult(false, "pending");
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model, undefined, run).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(run).toHaveBeenCalledTimes(8);
+  expect(calls).toBe(6);
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+});
+
+it("aborts a closing checkpoint after ninety seconds without retrying it", async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  const events: GenerationEvent[] = [];
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index < 2) return checkpointResult(false, "pending");
+      if (index === 2)
+        return delayed(
+          checkpointResult(false, "pending"),
+          120_000,
+          options.abortSignal,
+        );
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const pending = generator(model, (event) => events.push(event)).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(await pending).toMatchObject({ isDegraded: true });
+  expect(calls).toBe(4);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.phase_failed",
+      reason: "generation_step_timeout",
+      timeoutScope: "generation_step",
+    }),
+  );
+  expect(
+    events.some(
+      (event) =>
+        event.event === "model.recovery_scheduled" &&
+        event.phase === "investigation",
+    ),
+  ).toBe(false);
 });
