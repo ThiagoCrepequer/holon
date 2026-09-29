@@ -121,6 +121,7 @@ it
             "content-type": "application/json",
           },
           body: JSON.stringify(body),
+          signal: request.signal,
         });
       }
       providerCalls++;
@@ -368,18 +369,49 @@ it
       JSON.stringify({
         scenario,
         events: events
-          .map(({ event, reason, errorName, errorCode, limitationCodes }) => ({
-            event,
-            reason,
-            errorName,
-            errorCode,
-            limitationCodes,
-          }))
+          .map(
+            ({
+              event,
+              phase,
+              shardIndex,
+              round,
+              reason,
+              statusCode,
+              budgetReason,
+              budgetLimit,
+              budgetConsumed,
+              budgetRequested,
+              reviewedChecks,
+              pendingChecks,
+              toolCalls,
+              errorName,
+              errorCode,
+              limitationCodes,
+            }) => ({
+              event,
+              phase,
+              shardIndex,
+              round,
+              reason,
+              statusCode,
+              budgetReason,
+              budgetLimit,
+              budgetConsumed,
+              budgetRequested,
+              reviewedChecks,
+              pendingChecks,
+              toolCalls,
+              errorName,
+              errorCode,
+              limitationCodes,
+            }),
+          )
           .filter(
             (item) =>
               item.event.includes("fail") ||
               item.event.includes("reject") ||
-              item.event.includes("limits"),
+              item.event.includes("limits") ||
+              item.event === "model.investigation_stopped",
           ),
       }),
     );

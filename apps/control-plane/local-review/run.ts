@@ -9,6 +9,7 @@ import {
   executorRequestSchema,
   repositoryToolCallSchema,
 } from "@holon/contracts";
+import { reviewTimeBudget } from "@holon/model";
 
 import {
   executeRepositoryTool,
@@ -43,6 +44,11 @@ let liveInputBytes = 0;
 let headSha: string = incidentCase.headSha;
 let artifacts: ReturnType<typeof buildReviewArtifacts> | undefined;
 const server = createServer(async (req, res) => {
+  const startedAt = Date.now();
+  const disconnected = new AbortController();
+  res.once("close", () => {
+    if (!res.writableEnded) disconnected.abort();
+  });
   try {
     if (req.headers.authorization !== `Bearer ${capability}`) {
       res.writeHead(403).end();
@@ -84,7 +90,10 @@ const server = createServer(async (req, res) => {
         `https://gateway.ai.cloudflare.com/v1/${process.env.AI_GATEWAY_ACCOUNT_ID}/${process.env.AI_GATEWAY_ID}/compat/chat/completions`,
         {
           method: "POST",
-          signal: AbortSignal.timeout(60_000),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(reviewTimeBudget.callMs),
+            disconnected.signal,
+          ]),
           headers: {
             "content-type": "application/json",
             "cf-aig-authorization": `Bearer ${token}`,
@@ -114,6 +123,7 @@ const server = createServer(async (req, res) => {
           status: response.status,
           inputBytes: length,
           responseBytes,
+          durationMs: Date.now() - startedAt,
         }),
       );
       res.writeHead(response.status, { "content-type": "application/json" });
@@ -224,7 +234,19 @@ const server = createServer(async (req, res) => {
     } else throw new Error("Unknown local endpoint");
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(output));
-  } catch {
+  } catch (error) {
+    if (req.url === "/model")
+      console.log(
+        JSON.stringify({
+          event: "local.live_transport_failed",
+          durationMs: Date.now() - startedAt,
+          reason: disconnected.signal.aborted
+            ? "client_cancelled"
+            : error instanceof Error && error.name === "TimeoutError"
+              ? "transport_timeout"
+              : "transport_or_setup_failure",
+        }),
+      );
     res
       .writeHead(500, { "Content-Type": "application/json" })
       .end('{"error":"local_execution_failed"}');
@@ -238,6 +260,9 @@ try {
   process.env.HOLON_LOCAL_REVIEW_URL = `http://127.0.0.1:${address.port}`;
   process.env.HOLON_LOCAL_REVIEW_CAPABILITY = capability;
   process.env.HOLON_LOCAL_REVIEW_LIVE = String(live);
+  process.env.HOLON_LOCAL_REVIEW_TIMEOUT_MS = String(
+    reviewTimeBudget.analysisMs + 60_000,
+  );
   const result = await command(
     [
       "pnpm",
@@ -250,7 +275,7 @@ try {
       "vitest.local-review.config.ts",
     ],
     undefined,
-    600_000,
+    reviewTimeBudget.analysisMs + 120_000,
     100_000,
   );
   // Test output contains counts/assertions only; provider and repository payloads are never logged.

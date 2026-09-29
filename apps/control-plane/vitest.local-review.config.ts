@@ -2,6 +2,11 @@ import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { mergeConfig } from "vitest/config";
 
 import base from "./vitest.config.js";
+const timeout = Number(process.env.HOLON_LOCAL_REVIEW_TIMEOUT_MS);
+if (!Number.isSafeInteger(timeout) || timeout <= 0)
+  throw new Error(
+    "Run the local-review command to configure the execution deadline",
+  );
 export default mergeConfig(
   { ...base, plugins: [] },
   {
@@ -37,7 +42,7 @@ export default mergeConfig(
     ],
     test: {
       include: ["local-review/**/*.test.ts"],
-      testTimeout: 300_000,
+      testTimeout: timeout,
       coverage: { enabled: false },
     },
   },

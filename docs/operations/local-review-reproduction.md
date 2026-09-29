@@ -71,7 +71,8 @@ pnpm --filter @holon/control-plane test:local-review --live
 Também aceita `CLOUDFLARE_API_TOKEN` no ambiente. A rota é `dynamic/pr-review`.
 O modo live envia apenas o shard de índice 3; os outros sete mantêm respostas
 simuladas. Limites independentes: quatro requests externos, 300.000 bytes cumulativos
-de request, 60 segundos por chamada, resposta de até 1 MB. Os máximos de saída do
+de request, até 180 segundos por chamada (o mesmo teto do core), resposta de até 1 MB.
+O cancelamento do caller é propagado ao relay e à conexão externa. Os máximos de saída do
 ledger continuam aplicados. Limites excedidos fazem o teste falhar, sem ampliar
 automaticamente o orçamento. O Gateway recebe instrução de não coletar payload de
 log e de ignorar cache. Metadados identificam `local-evaluation`/`pr106-shard3`.
@@ -91,3 +92,29 @@ produziu uma publicação `REQUEST_CHANGES` e um comentário inline. Todos os ce
 confirmaram cleanup concluído no ledger e destruição do container. `pnpm verify`
 passou sem alteração dos limites de cobertura. Esses números não estimam custo
 ou qualidade de um modelo real. O modo live não foi executado nesta evidência.
+
+## Primeira avaliação com modelo real: 2026-09-29
+
+Com autorização explícita, o comando `test:local-review --live` foi executado
+sobre `c7717a2`. Falhou em 191,9 segundos: registrou dois `provider_transient` e
+dois `model_budget_exhausted`. O assert impediu considerar o resultado aprovado.
+Não houve publicação no GitHub. O `finally` encerrou o container; nenhuma outra
+inferência foi disparada após a falha.
+
+O Gateway retornou dois registros concluídos de `deepseek/deepseek-v4.1-flash`,
+ambos HTTP 200, com durações de 14.666 e 51.761 ms. Somam 19.371 tokens de entrada,
+1.958 de saída e US$ 0,0081609 de custo registrado. Isso não é uma fatura completa
+nem contabiliza eventuais requests cancelados sem registro concluído.
+
+O runner daquele commit tinha um timeout próprio de 60 segundos, inferior aos
+180 segundos do core, e convertia exceções do relay em HTTP 500 sem causa segura.
+Também omitia fase/dimensão do orçamento no relatório. A sequência e a duração
+são compatíveis com timeout local, retenção conservadora da reserva e recusa
+posterior, mas os dados disponíveis não confirmam a causa original. Não é prova
+de indisponibilidade do modelo nem reprodução fiel do timeout de produção.
+
+Após essa execução, o runner passou a usar o teto do core, propagar cancelamento
+e registrar duração/categoria segura do transporte, fase e dimensão do orçamento.
+Os watchdogs do processo e do teste também respeitam a janela do core, com margem
+para encerramento. Essa mudança foi validada offline; não houve uma segunda rodada
+paga. A conclusão real do shard e das oito partes permanece sem validação.
