@@ -638,6 +638,56 @@ const checkpointResult = (finished = true, status = "reviewed") => ({
   ],
   finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
 });
+it("advertises the current shard check IDs in the checkpoint tool schema", async () => {
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      if (
+        options.tools?.some(
+          (candidate) => candidate.name === "review_checkpoint",
+        )
+      ) {
+        const checkpoint = options.tools.find(
+          (candidate) => candidate.name === "review_checkpoint",
+        );
+        expect(JSON.stringify(checkpoint)).toContain(
+          '"enum":["file-0","file-1"]',
+        );
+        return {
+          ...checkpointResult(),
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: "checkpoint",
+              toolName: "review_checkpoint",
+              input: JSON.stringify({
+                checks: [
+                  {
+                    id: "file-0",
+                    status: "reviewed",
+                    note: "Checked first patch",
+                  },
+                  {
+                    id: "file-1",
+                    status: "reviewed",
+                    note: "Checked second patch",
+                  },
+                ],
+                summary: "Both changes checked",
+                finished: true,
+              }),
+            },
+          ],
+        };
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts", "src/b.ts"],
+  });
+  expect(result).not.toMatchObject({ isDegraded: true });
+});
 it("requests a checkpoint after a provider ignores required tools and returns text with checks open", async () => {
   let calls = 0;
   const model = new MockLanguageModelV3({

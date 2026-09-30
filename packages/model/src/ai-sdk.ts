@@ -41,10 +41,7 @@ import {
   type GenerationObserver,
 } from "./generation-execution.js";
 import { selectFinalizationEvidence } from "./host-context.js";
-import {
-  createInvestigationProgress,
-  investigationCheckpointSchema,
-} from "./investigation-progress.js";
+import { createInvestigationProgress } from "./investigation-progress.js";
 import type { RepositoryToolCacheStore } from "./repository-tool-cache.js";
 import { createRepositoryToolCache } from "./repository-tool-cache.js";
 import {
@@ -399,7 +396,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       review_checkpoint: tool({
         description:
           "Record compact verified conclusions and coverage. Mark reviewed only after checking changed behavior and necessary callers/tests. Preserve unresolved questions as pending or blocked. Set finished when ready for finalization. Submit separately AFTER reading repository tool results; never in the same batch as reads/searches. Include concrete defect diagnoses and canonical path/line anchors in summary; do not repeat source code or speculate.",
-        inputSchema: investigationCheckpointSchema,
+        inputSchema: progress.checkpointSchema(),
         execute: (input) => {
           const result = progress.record(input);
           checkpointAccepted = true;
