@@ -3,7 +3,7 @@ id: OPS-LOCAL-REVIEW-REPRODUCTION
 kind: operation
 status: current
 owners: [core-team]
-last-reviewed: 2026-09-29
+last-reviewed: 2026-09-30
 ---
 
 # Reproduzir o PR #106 sem publicar uma revisão
@@ -156,3 +156,33 @@ provider, contrato da requisição ou demora durante a resposta. Antes de outro 
 com o PR inteiro, isolar esses dois formatos em casos mínimos e rastreáveis, sob
 novo orçamento explicitamente autorizado. Não aumentar os tetos para tratar a
 recusa secundária como se fosse a falha inicial.
+
+## Terceira avaliação com modelo real: 2026-09-30
+
+Após alteração da rota pelo operador para tentar `openai/gpt-oss-20b:free` e,
+depois, `openai/gpt-oss-20b`, uma nova rodada do mesmo comando live foi
+explicitamente solicitada. A rota ativa ainda continha quatro fallbacks DeepSeek,
+e todos os nós registravam `timeout: 0`. O operador informou ter restringido o
+provider ao CoreWeave no OpenRouter; o log do Gateway identifica apenas o
+provider intermediário `openrouter`, então não confirma o endpoint final.
+
+O replay reprovou em 16,56 segundos. O shard de índice 3 fez dois requests reais,
+ambos HTTP 200, com 7.809 e 1.705 ms medidos pelo relay. Os logs concluídos do
+Gateway mostram `openai/gpt-oss-20b`, 13.240 tokens de entrada, 170 de saída e
+US$ 0,0003368 de custo registrado. Os demais sete shards usaram respostas
+simuladas. O shard real encerrou a investigação na primeira rodada com zero
+consultas ao repositório, motivo `checks_unresolved` e limite
+`investigation_incomplete`. O assert do cenário recusou considerar esse resultado
+aprovado. Não houve timeout nesta rodada, publicação no GitHub ou container
+remanescente.
+
+Duas sondas adicionais, com prompts sintéticos sem conteúdo do repositório,
+usaram a mesma rota: `tool_choice` para `review_checkpoint` retornou uma chamada
+da função exigida; `response_format` com JSON Schema retornou o objeto válido.
+Ambas tiveram HTTP 200 no `openai/gpt-oss-20b`, somando US$ 0,000012856 nos logs
+concluídos. Isso comprova esses contratos mínimos, não a execução correta do
+review completo. O modelo não escolheu ferramentas na primeira rodada do replay,
+que usa `toolChoice: auto`; as verificações permaneceram abertas. Os registros
+não mostram se a variante gratuita foi tentada nem por que a rota selecionou a
+variante paga. Não repetir o PR inteiro antes de isolar a decisão de ferramentas
+em `auto` e revisar o critério de progresso da investigação.
