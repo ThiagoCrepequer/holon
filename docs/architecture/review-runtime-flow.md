@@ -286,6 +286,16 @@ e nenhuma aprovação. Erros desconhecidos e falhas de ledger/executor não são
 convertidos em falhas transitórias do modelo. Uso conhecido de rodadas concluídas
 é registrado também quando uma rodada posterior falha; uso da chamada interrompida
 pode permanecer desconhecido.
+
+Com verificações rastreadas, o host pede uma chamada de ferramenta na investigação.
+Se a primeira rodada ainda assim termina em texto, sem nenhuma chamada de ferramenta
+nem checkpoint, e restam pelo menos 60 segundos, faz uma única continuação com
+`review_checkpoint` selecionado explicitamente. As mensagens e os limites são
+compartilhados; a continuação não concede novo orçamento. Se o provider ignorar
+também essa seleção ou mantiver verificações pendentes, o resultado continua
+incompleto. O checkpoint declara cobertura, mas não substitui a validação de
+evidência dos findings.
+
 Cada shard tem 24 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências

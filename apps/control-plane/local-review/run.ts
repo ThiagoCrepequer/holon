@@ -116,6 +116,24 @@ const server = createServer(async (req, res) => {
             throw new Error("Live response exceeds local bound");
           responseChunks.push(chunk);
         }
+      const responseBody = Buffer.concat(responseChunks);
+      let responseToolCalls = 0;
+      let responseFinishReason = "unknown";
+      try {
+        const parsed = JSON.parse(responseBody.toString("utf8"));
+        const choice = parsed.choices?.[0];
+        responseToolCalls = Array.isArray(choice?.message?.tool_calls)
+          ? choice.message.tool_calls.length
+          : 0;
+        if (
+          ["stop", "tool_calls", "length", "content_filter"].includes(
+            choice?.finish_reason,
+          )
+        )
+          responseFinishReason = choice.finish_reason;
+      } catch {
+        // Report only safe metadata; the raw response is forwarded unchanged.
+      }
       console.log(
         JSON.stringify({
           event: "local.live_call",
@@ -124,10 +142,20 @@ const server = createServer(async (req, res) => {
           inputBytes: length,
           responseBytes,
           durationMs: Date.now() - startedAt,
+          requestedToolChoice:
+            body.tool_choice === "required" ||
+            body.tool_choice === "auto" ||
+            body.tool_choice === "none"
+              ? body.tool_choice
+              : body.tool_choice?.type === "function"
+                ? "specific_function"
+                : "other",
+          responseToolCalls,
+          responseFinishReason,
         }),
       );
       res.writeHead(response.status, { "content-type": "application/json" });
-      res.end(Buffer.concat(responseChunks));
+      res.end(responseBody);
       return;
     } else if (req.url === "/case") {
       if (destroyed) {

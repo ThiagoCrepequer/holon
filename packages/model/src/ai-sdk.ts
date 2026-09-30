@@ -348,6 +348,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
     let checkpointAccepted = false;
     let checkpointRepairs = 0;
     let repairCheckpoint = false;
+    let checkpointAfterText = false;
     let closureCompleted = false;
     let blockCalls = 0;
     let blocksWithoutProgress = 0;
@@ -491,7 +492,10 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                 );
                 lifecycle.setStepDeadline(roundDeadlineAt);
                 const checkpointRequired =
-                  closing || repairCheckpoint || (tracked && blockCalls >= 4);
+                  closing ||
+                  repairCheckpoint ||
+                  checkpointAfterText ||
+                  (tracked && blockCalls >= 4);
                 return {
                   ...(retainedQueryBlock
                     ? {
@@ -515,7 +519,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                       }
                     : forcedClosure
                       ? "none"
-                      : "auto",
+                      : tracked
+                        ? "required"
+                        : "auto",
                   instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Record a checkpoint after each block of at most four uncached queries; changes to notes alone do not count as coverage progress. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
                 };
               },
@@ -647,18 +653,6 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           });
           throw error;
         });
-        if (investigationResult.finishReason === "length")
-          generationLimits.push("generation_length");
-        if (
-          forcedClosure ||
-          toolBudgetExhausted ||
-          (investigationResult.finishReason === "tool-calls" &&
-            !progress.complete()) ||
-          (tracked && !progress.complete())
-        )
-          generationLimits.push("investigation_incomplete");
-        if (forcedClosure === "tool_budget_exhausted" || toolBudgetExhausted)
-          generationLimits.push("tool_budget_exhausted");
         const usage =
           investigationResult.totalUsage ?? investigationResult.usage;
         await this.onUsage?.({
@@ -675,6 +669,34 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
             investigationResult.toolCalls?.length ??
             0,
         });
+        if (
+          tracked &&
+          !progress.finished() &&
+          !closing &&
+          !forcedClosure &&
+          !toolBudgetExhausted &&
+          attempt === 1 &&
+          completedRounds === 1 &&
+          completedToolCalls === 0 &&
+          investigationResult.finishReason === "stop" &&
+          investigationDeadlineAt - Date.now() >=
+            reviewTimeBudget.minimumRetryMs
+        ) {
+          checkpointAfterText = true;
+          continue;
+        }
+        if (investigationResult.finishReason === "length")
+          generationLimits.push("generation_length");
+        if (
+          forcedClosure ||
+          toolBudgetExhausted ||
+          (investigationResult.finishReason === "tool-calls" &&
+            !progress.complete()) ||
+          (tracked && !progress.complete())
+        )
+          generationLimits.push("investigation_incomplete");
+        if (forcedClosure === "tool_budget_exhausted" || toolBudgetExhausted)
+          generationLimits.push("tool_budget_exhausted");
         investigationText = progress.finished()
           ? progress.summary()
           : completedTexts.length

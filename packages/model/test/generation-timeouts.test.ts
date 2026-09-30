@@ -638,6 +638,56 @@ const checkpointResult = (finished = true, status = "reviewed") => ({
   ],
   finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
 });
+it("requests a checkpoint after a provider ignores required tools and returns text with checks open", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0) return textResult("I found no issue in the patch.");
+      if (index === 1) {
+        expect(options.toolChoice).toEqual({
+          type: "tool",
+          toolName: "review_checkpoint",
+        });
+        return checkpointResult();
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(model.doGenerateCalls[0]?.toolChoice).toEqual({ type: "required" });
+  expect(calls).toBe(3);
+  expect(result).not.toMatchObject({ isDegraded: true });
+});
+it("keeps coverage incomplete when the provider ignores the forced checkpoint too", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0) return textResult("No issue found.");
+      if (index === 1) {
+        expect(options.toolChoice).toEqual({
+          type: "tool",
+          toolName: "review_checkpoint",
+        });
+        return textResult("Still no checkpoint.");
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(calls).toBe(3);
+  expect(result).toMatchObject({
+    isDegraded: true,
+    outputLimitations: ["investigation_incomplete"],
+  });
+});
 it("completes through a checkpoint without an extra narrative model call", async () => {
   let calls = 0;
   const events: GenerationEvent[] = [];

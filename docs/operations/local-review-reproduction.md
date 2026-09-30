@@ -186,3 +186,36 @@ que usa `toolChoice: auto`; as verificações permaneceram abertas. Os registros
 não mostram se a variante gratuita foi tentada nem por que a rota selecionou a
 variante paga. Não repetir o PR inteiro antes de isolar a decisão de ferramentas
 em `auto` e revisar o critério de progresso da investigação.
+
+## Quarta avaliação e correção local: 2026-09-30
+
+O usuário autorizou investigação, ajustes e novas inferências locais até corrigir
+o problema, sem solicitar confirmação a cada rodada. A primeira mudança exigiu
+`tool_choice: required` quando havia verificações rastreadas. O teste de regressão
+falhou antes dessa mudança e passou depois, junto dos 107 testes do package de
+modelo. Duas execuções live ainda reprovaram na primeira rodada: o relay confirmou
+que enviou `required`, mas recebeu HTTP 200 com `finish_reason: stop` e zero
+chamadas de ferramenta. Isso distingue uma preferência correta do host de um
+comportamento não cumprido pela rota/provider. O log do Gateway continuou
+identificando `openai/gpt-oss-20b` via `openrouter`, sem identificar o endpoint
+interno.
+
+O host agora faz uma única continuação com a função `review_checkpoint`
+selecionada explicitamente quando a primeira rodada rastreada termina apenas em
+texto, sem ferramentas e com verificações abertas. Reutiliza mensagens, prazos,
+orçamento de ferramentas e reservas de tokens; caso a função também não seja
+chamada, permanece `investigation_incomplete`. O teste focado foi escrito para
+falhar pelo motivo observado antes da correção e cobre também a recusa da função
+forçada. Os 107 testes do modelo e os cinco cenários offline do replay passaram.
+O gate local completo (`pnpm verify`) também passou após a correção, incluindo
+formatação, lint, typecheck, cobertura e build/dry-runs com Docker.
+
+No replay live limitado após a correção, o shard 3 passou: a primeira chamada
+retornou texto sem ferramenta, a segunda chamou `review_checkpoint` quando
+selecionado e a terceira finalizou. Foram três HTTP 200 no
+`openai/gpt-oss-20b`, 19.686 tokens de entrada, 247 de saída e US$ 0,000500128
+de custo registrado no Gateway. O teste terminou com `APPROVE`, sem limitações
+de investigação nem rejeições de checkpoint. Sete shards permaneceram simulados;
+nenhuma publicação foi enviada ao GitHub e o container local foi destruído.
+Isso comprova o protocolo e a composição neste shard, não a qualidade dos
+findings nem a conclusão real de todos os oito shards.
