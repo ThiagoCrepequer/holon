@@ -33,6 +33,8 @@ export default mergeConfig(
           bindings: {
             HOLON_LOCAL_REVIEW_LIVE:
               process.env.HOLON_LOCAL_REVIEW_LIVE ?? "false",
+            HOLON_LOCAL_REVIEW_ALL:
+              process.env.HOLON_LOCAL_REVIEW_ALL ?? "false",
             HOLON_LOCAL_REVIEW_URL: process.env.HOLON_LOCAL_REVIEW_URL ?? "",
             HOLON_LOCAL_REVIEW_CAPABILITY:
               process.env.HOLON_LOCAL_REVIEW_CAPABILITY ?? "",

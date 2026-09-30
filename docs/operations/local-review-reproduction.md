@@ -83,6 +83,21 @@ partes, a estabilidade estatística do provider, custos de produção ou a opera
 remota de Workflows/GitHub/Sandbox. Antes de ampliar uma avaliação, inspecione a
 primeira execução e defina um orçamento explícito; não repita automaticamente.
 
+Depois de autorização específica para expor todos os shards ao mesmo destino, use
+`--live-all` no lugar de `--live`. O runner então envia os oito shards ao provider,
+com teto próprio de 64 requests e 4.800.000 bytes de requests, além dos limites
+duráveis do ledger. O teste exige revisão completa; mesmo quando ela termina
+incompleta, registra primeiro o veredito coletado e confirma o cleanup antes de
+falhar. Os dois modos continuam sem publicar no GitHub.
+
+Para diagnóstico local de um modelo alternativo, acrescente `--live-deepseek` a
+qualquer modo live. O relay seleciona diretamente
+`openrouter/deepseek/deepseek-v4.1-flash`, mantendo a restrição de provider
+configurada na conta OpenRouter; não altera a rota remota `dynamic/pr-review`.
+Nesse modo, o relay espaça o início das chamadas por 15 segundos. No shard único,
+os tetos locais são oito requests e 600.000 bytes. Resultados desse modo medem
+o modelo alternativo, não validam a rota de produção.
+
 ## Evidência local em 2026-09-29
 
 Os cinco cenários offline passaram. Com o provider programado, o cenário normal
@@ -219,3 +234,37 @@ de investigação nem rejeições de checkpoint. Sete shards permaneceram simula
 nenhuma publicação foi enviada ao GitHub e o container local foi destruído.
 Isso comprova o protocolo e a composição neste shard, não a qualidade dos
 findings nem a conclusão real de todos os oito shards.
+
+## Quinta avaliação: oito shards e comparação de modelo, 2026-09-30
+
+Com autorização explícita, o replay privado `--live-all` foi executado no
+snapshot imutável do PR #106, sem publicação. A primeira tentativa parou por uma
+falha do adaptador local: ele convertia uma recusa de consulta `path_denied` em
+HTTP 500. O adaptador passou a devolver o mesmo erro estruturado de consulta
+que o executor de produção. O typecheck passou depois desse ajuste.
+
+Na segunda tentativa, os oito shards receberam respostas reais da rota
+`dynamic/pr-review`, que selecionou `openai/gpt-oss-20b` no Gateway. O replay
+terminou sem revisão completa: seis shards registraram
+`investigation_incomplete`, dois alcançaram o limite de seis chamadas de modelo
+na investigação e um recebeu falha de provider classificada permanente, apesar
+do status HTTP 200. Houve recusas `path_denied` tratadas como erros de consulta.
+O teste reprovou antes de aceitar a revisão como completa; nessa tentativa o
+veredito coletado não chegou a ser inspecionado. Os dois replays de
+oito shards somaram 38 registros HTTP 200, 381.956 tokens de entrada, 7.448 de
+saída e US$ 0,01000112 de custo conhecido no Gateway; essa soma inclui a
+tentativa interrompida e não representa a fatura completa.
+
+Consultas sintéticas, sem contexto do repositório, mostraram diferenças de
+protocolo: `openai/gpt-oss-120b` na CoreWeave chamou ferramenta com
+`tool_choice: auto`, mas retornou `finish_reason: error` quando se exigiu
+`required`. `deepseek/deepseek-v4.1-flash` na CoreWeave chamou ferramenta com
+`required` e com função específica. Uma avaliação do shard 3 com DeepSeek sem
+espaçamento recebeu HTTP 429. Com 15 segundos entre inícios de requests, as
+sete chamadas retornaram HTTP 200, mas o shard encerrou por falta de progresso
+de cobertura após oito consultas ao repositório: veredito coletado `COMMENT`,
+sem aprovação. O Gateway registrou 89.853 tokens de entrada, 2.833 de saída e
+US$ 0,02809758 para essa última avaliação. Nenhuma rota ou recurso remoto foi
+modificado. Os metadados do Gateway e o [catálogo de endpoints do OpenRouter](https://openrouter.ai/docs/api/api-reference/endpoints/list-endpoints)
+não provam estabilidade de ferramenta em uma execução real completa.
+Após os ajustes do runner, os cinco cenários offline e `pnpm verify` passaram.

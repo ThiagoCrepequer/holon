@@ -11,6 +11,7 @@ import {
 } from "@holon/contracts";
 import { reviewTimeBudget } from "@holon/model";
 
+import { repositoryToolFailure } from "../../repository-executor/src/repository-tool-failure.js";
 import {
   executeRepositoryTool,
   contextPath,
@@ -38,9 +39,24 @@ async function cleanup() {
   }
 }
 const capability = randomUUID();
-const live = process.argv.includes("--live");
+const liveAll = process.argv.includes("--live-all");
+const live = liveAll || process.argv.includes("--live");
+const liveDeepSeek = process.argv.includes("--live-deepseek");
+if (liveDeepSeek && !live)
+  throw new Error("--live-deepseek requires --live or --live-all");
+const liveModel = liveDeepSeek
+  ? "openrouter/deepseek/deepseek-v4.1-flash"
+  : "dynamic/pr-review";
+const maximumLiveCalls = liveAll ? 64 : liveDeepSeek ? 8 : 4;
+const maximumLiveInputBytes = liveAll
+  ? 4_800_000
+  : liveDeepSeek
+    ? 600_000
+    : 300_000;
 let liveCalls = 0;
 let liveInputBytes = 0;
+let lastDeepSeekStartAt = 0;
+let deepSeekStartQueue: Promise<void> = Promise.resolve();
 let headSha: string = incidentCase.headSha;
 let artifacts: ReturnType<typeof buildReviewArtifacts> | undefined;
 const server = createServer(async (req, res) => {
@@ -66,13 +82,18 @@ const server = createServer(async (req, res) => {
       : {};
     let output: unknown;
     if (req.url === "/model") {
-      if (!live || liveCalls >= 4 || liveInputBytes + length > 300_000) {
+      if (
+        !live ||
+        liveCalls >= maximumLiveCalls ||
+        liveInputBytes + length > maximumLiveInputBytes
+      ) {
         res
           .writeHead(429)
           .end('{"error":{"message":"local_live_budget_exhausted"}}');
         return;
       }
       liveCalls++;
+      const call = liveCalls;
       liveInputBytes += length;
       const token =
         process.env.CLOUDFLARE_API_TOKEN ??
@@ -86,6 +107,19 @@ const server = createServer(async (req, res) => {
       )
         throw new Error("Explicit gateway configuration required");
       if (!token) throw new Error("Local live token unavailable");
+      if (liveDeepSeek) {
+        const pacedStart = deepSeekStartQueue.then(async () => {
+          const waitMs = Math.max(0, lastDeepSeekStartAt + 15_000 - Date.now());
+          if (waitMs)
+            await new Promise<void>((done) => setTimeout(done, waitMs));
+          disconnected.signal.throwIfAborted();
+          lastDeepSeekStartAt = Date.now();
+          return undefined;
+        });
+        deepSeekStartQueue = pacedStart.catch(() => undefined);
+        await pacedStart;
+      }
+      const effectiveToolChoice = body.tool_choice;
       const response = await fetch(
         `https://gateway.ai.cloudflare.com/v1/${process.env.AI_GATEWAY_ACCOUNT_ID}/${process.env.AI_GATEWAY_ID}/compat/chat/completions`,
         {
@@ -101,10 +135,14 @@ const server = createServer(async (req, res) => {
             "cf-aig-skip-cache": "true",
             "cf-aig-metadata": JSON.stringify({
               stage: "local-evaluation",
-              fixture: "pr106-shard3",
+              fixture: liveAll ? "pr106-all-shards" : "pr106-shard3",
             }),
           },
-          body: JSON.stringify({ ...body, model: "dynamic/pr-review" }),
+          body: JSON.stringify({
+            ...body,
+            model: liveModel,
+            tool_choice: effectiveToolChoice,
+          }),
         },
       );
       const responseChunks: Uint8Array[] = [];
@@ -119,14 +157,35 @@ const server = createServer(async (req, res) => {
       const responseBody = Buffer.concat(responseChunks);
       let responseToolCalls = 0;
       let responseFinishReason = "unknown";
+      let responseModel = "unknown";
+      let responseProvider = "unknown";
+      let responseOutputTokens: number | undefined;
+      let responseErrorCode: number | undefined;
       try {
         const parsed = JSON.parse(responseBody.toString("utf8"));
         const choice = parsed.choices?.[0];
+        if (
+          typeof parsed.model === "string" &&
+          /^[A-Za-z0-9_.:/-]{1,100}$/.test(parsed.model)
+        )
+          responseModel = parsed.model;
+        if (
+          typeof parsed.provider === "string" &&
+          /^[A-Za-z0-9._-]{1,100}$/.test(parsed.provider)
+        )
+          responseProvider = parsed.provider;
+        if (
+          Number.isSafeInteger(parsed.usage?.completion_tokens) &&
+          parsed.usage.completion_tokens >= 0
+        )
+          responseOutputTokens = parsed.usage.completion_tokens;
+        if (Number.isSafeInteger(parsed.error?.code))
+          responseErrorCode = parsed.error.code;
         responseToolCalls = Array.isArray(choice?.message?.tool_calls)
           ? choice.message.tool_calls.length
           : 0;
         if (
-          ["stop", "tool_calls", "length", "content_filter"].includes(
+          ["stop", "tool_calls", "length", "content_filter", "error"].includes(
             choice?.finish_reason,
           )
         )
@@ -137,7 +196,7 @@ const server = createServer(async (req, res) => {
       console.log(
         JSON.stringify({
           event: "local.live_call",
-          call: liveCalls,
+          call,
           status: response.status,
           inputBytes: length,
           responseBytes,
@@ -150,8 +209,23 @@ const server = createServer(async (req, res) => {
               : body.tool_choice?.type === "function"
                 ? "specific_function"
                 : "other",
+          effectiveToolChoice:
+            effectiveToolChoice === "auto" ||
+            effectiveToolChoice === "required" ||
+            effectiveToolChoice === "none"
+              ? effectiveToolChoice
+              : "specific_function",
           responseToolCalls,
           responseFinishReason,
+          responseModel,
+          responseProvider,
+          responseOutputTokens,
+          responseErrorCode,
+          retryAfterSeconds: /^[0-9]{1,5}$/.test(
+            response.headers.get("retry-after") ?? "",
+          )
+            ? Number(response.headers.get("retry-after"))
+            : undefined,
         }),
       );
       res.writeHead(response.status, { "content-type": "application/json" });
@@ -250,13 +324,25 @@ const server = createServer(async (req, res) => {
         truncated: artifacts.context.truncated,
       };
     } else if (req.url === "/context") output = artifacts?.context;
-    else if (req.url === "/tool")
-      output = await executeRepositoryTool(
-        sandbox,
-        body.runId,
-        repositoryToolCallSchema.parse(body.call),
-      );
-    else if (req.url === "/report") {
+    else if (req.url === "/tool") {
+      try {
+        output = await executeRepositoryTool(
+          sandbox,
+          body.runId,
+          repositoryToolCallSchema.parse(body.call),
+        );
+      } catch (error) {
+        const failure = repositoryToolFailure(error);
+        console.log(
+          JSON.stringify({
+            event: "local.repository_tool_failed",
+            kind: failure.kind,
+            code: failure.code,
+          }),
+        );
+        output = { error: failure };
+      }
+    } else if (req.url === "/report") {
       console.log(JSON.stringify(body));
       output = { saved: true };
     } else throw new Error("Unknown local endpoint");
@@ -288,6 +374,7 @@ try {
   process.env.HOLON_LOCAL_REVIEW_URL = `http://127.0.0.1:${address.port}`;
   process.env.HOLON_LOCAL_REVIEW_CAPABILITY = capability;
   process.env.HOLON_LOCAL_REVIEW_LIVE = String(live);
+  process.env.HOLON_LOCAL_REVIEW_ALL = String(liveAll);
   process.env.HOLON_LOCAL_REVIEW_TIMEOUT_MS = String(
     reviewTimeBudget.analysisMs + 60_000,
   );

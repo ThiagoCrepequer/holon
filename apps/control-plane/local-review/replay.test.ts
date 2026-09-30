@@ -1,6 +1,7 @@
 import { createReviewRun } from "@holon/application";
 import {
   reviewJobSchema,
+  type RepositoryToolOutcome,
   type ReviewContext,
   type PreparedRepository,
 } from "@holon/contracts";
@@ -23,6 +24,7 @@ import { incidentCase as fixture, injectedDefect } from "./case.js";
 
 const settings = env as typeof env & {
   HOLON_LOCAL_REVIEW_LIVE: string;
+  HOLON_LOCAL_REVIEW_ALL: string;
   HOLON_LOCAL_REVIEW_URL: string;
   HOLON_LOCAL_REVIEW_CAPABILITY: string;
 };
@@ -50,15 +52,17 @@ afterEach(async () => {
 it
   .skipIf(!settings.HOLON_LOCAL_REVIEW_URL)
   .each(
-    settings.HOLON_LOCAL_REVIEW_LIVE === "true"
-      ? ["live-small-shard"]
-      : [
-          "normal",
-          "checkpoint-repair",
-          "injected-defect",
-          "provider-failure",
-          "checkpoint-invalid",
-        ],
+    settings.HOLON_LOCAL_REVIEW_ALL === "true"
+      ? ["live-all-shards"]
+      : settings.HOLON_LOCAL_REVIEW_LIVE === "true"
+        ? ["live-small-shard"]
+        : [
+            "normal",
+            "checkpoint-repair",
+            "injected-defect",
+            "provider-failure",
+            "checkpoint-invalid",
+          ],
   )(
   "replays PR106 through the real review composition: %s",
   async (scenario) => {
@@ -111,7 +115,10 @@ it
         request.headers.get("cf-aig-metadata") ?? "{}",
       );
       const key = String(metadata.shard_index);
-      if (scenario === "live-small-shard" && key === "3") {
+      if (
+        scenario === "live-all-shards" ||
+        (scenario === "live-small-shard" && key === "3")
+      ) {
         rounds.set(key, (rounds.get(key) ?? 0) + 1);
         providerCalls++;
         return await nativeFetch(settings.HOLON_LOCAL_REVIEW_URL + "/model", {
@@ -314,10 +321,10 @@ it
         startTool: async (toolRunId, call) => ({
           result: async () => {
             tools++;
-            return await bridge<{ content: string; truncated: boolean }>(
-              "/tool",
-              { runId: toolRunId, call },
-            );
+            return await bridge<RepositoryToolOutcome>("/tool", {
+              runId: toolRunId,
+              call,
+            });
           },
           cancel: async () => {},
           [Symbol.dispose]: () => {},
@@ -425,15 +432,9 @@ it
         plannedShards: fixture.expected.shards,
       });
     else expect(coverage.totalEligibleFiles).toBe(33);
-    expect(
-      events.filter((event) => event.event === "model.output_limits"),
-    ).toHaveLength(scenario === "checkpoint-invalid" ? 8 : 0);
     const failures = events.filter(
       (event) => event.event === "model.phase_failed",
     );
-    if (scenario === "provider-failure")
-      expect(failures.length).toBeGreaterThan(0);
-    else expect(failures).toHaveLength(0);
     expect(rounds.size).toBe(coverage.plannedShards);
     expect(tools).toBeGreaterThan(0);
     await runDurableObjectAlarm(ledger);
@@ -445,11 +446,7 @@ it
     expect(await bridge("/cleanup-state")).toEqual({ destroyed: true });
     const reviews = posts.filter((post) => post.route.includes("/reviews"));
     expect(reviews).toHaveLength(1);
-    if (scenario === "live-small-shard")
-      expect(["APPROVE", "REQUEST_CHANGES"]).toContain(
-        reviews[0]!.parameters.event,
-      );
-    else
+    if (scenario !== "live-small-shard" && scenario !== "live-all-shards")
       expect(reviews[0]!.parameters.event).toBe(
         scenario === "injected-defect"
           ? "REQUEST_CHANGES"
@@ -480,5 +477,15 @@ it
         (event) => event.event === "model.checkpoint_rejected",
       ).length,
     });
+    expect(
+      events.filter((event) => event.event === "model.output_limits"),
+    ).toHaveLength(scenario === "checkpoint-invalid" ? 8 : 0);
+    if (scenario === "provider-failure")
+      expect(failures.length).toBeGreaterThan(0);
+    else expect(failures).toHaveLength(0);
+    if (scenario === "live-small-shard" || scenario === "live-all-shards")
+      expect(["APPROVE", "REQUEST_CHANGES"]).toContain(
+        reviews[0]!.parameters.event,
+      );
   },
 );
