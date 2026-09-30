@@ -268,3 +268,31 @@ US$ 0,02809758 para essa última avaliação. Nenhuma rota ou recurso remoto foi
 modificado. Os metadados do Gateway e o [catálogo de endpoints do OpenRouter](https://openrouter.ai/docs/api/api-reference/endpoints/list-endpoints)
 não provam estabilidade de ferramenta em uma execução real completa.
 Após os ajustes do runner, os cinco cenários offline e `pnpm verify` passaram.
+
+## Sexta avaliação: checkpoint restrito e Nemotron, 2026-09-30
+
+O runner local passou a permitir `--live-nemotron` com seleção explícita do
+`nvidia/nemotron-3.5-lightning-20260807` na CoreWeave. Uma consulta sintética
+confirmou chamadas de função com `required` e com seleção de função específica.
+Na primeira tentativa de um shard, o modelo enviou um identificador de check
+que não existia naquele shard. O contrato publicado da ferramenta aceitava
+qualquer string curta, embora o host rejeitasse IDs desconhecidos. O schema
+anunciado de `review_checkpoint` agora enumera os IDs reais do shard; um teste
+de regressão cobre esse contrato. O runner registrou apenas a categoria da
+falha de forma, sem valores de checklist ou argumentos do modelo.
+
+Com esse ajuste, o replay limitado do shard 3 passou em três HTTP 200, com
+checkpoint válido, `APPROVE` e sem limitação. Em seguida, o replay privado dos
+oito shards teve 42 chamadas HTTP 200 e 21 consultas ao repositório, mas
+terminou com `COMMENT` e reprovou o assert de completude: quatro shards
+registraram `model.output_limits`. Os shards 0 e 1 esgotaram os 372.000 bytes
+de entrada permitidos à investigação de cada um; o shard 5 esgotou as seis
+chamadas da fase; os shards 4 e 7 conservaram checks não resolvidos. A
+recuperação do shard 7 esgotou sua parcela de tokens de saída. Houve uma
+rejeição de checkpoint misturado com consulta. Respostas de finalização
+atingiram o teto de 8.192 tokens. A limpeza do checkout local terminou.
+
+Assim, restringir IDs elimina um erro de contrato reproduzido, mas não resolve
+o PR inteiro. Os limites de gasto e a exigência de cobertura continuam
+aplicados; aumentar tetos ou aceitar uma revisão incompleta exigiria uma nova
+decisão. A rota dinâmica remota e os recursos de produção não foram alterados.

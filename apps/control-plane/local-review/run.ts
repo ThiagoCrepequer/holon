@@ -11,6 +11,7 @@ import {
 } from "@holon/contracts";
 import { reviewTimeBudget } from "@holon/model";
 
+import { investigationCheckpointSchema } from "../../../packages/model/src/investigation-progress.js";
 import { repositoryToolFailure } from "../../repository-executor/src/repository-tool-failure.js";
 import {
   executeRepositoryTool,
@@ -42,15 +43,20 @@ const capability = randomUUID();
 const liveAll = process.argv.includes("--live-all");
 const live = liveAll || process.argv.includes("--live");
 const liveDeepSeek = process.argv.includes("--live-deepseek");
-if (liveDeepSeek && !live)
-  throw new Error("--live-deepseek requires --live or --live-all");
-const liveModel = liveDeepSeek
-  ? "openrouter/deepseek/deepseek-v4.1-flash"
-  : "dynamic/pr-review";
-const maximumLiveCalls = liveAll ? 64 : liveDeepSeek ? 8 : 4;
+const liveNemotron = process.argv.includes("--live-nemotron");
+if ((liveDeepSeek || liveNemotron) && !live)
+  throw new Error("Alternative model requires --live or --live-all");
+if (liveDeepSeek && liveNemotron)
+  throw new Error("Select only one alternative model");
+const liveModel = liveNemotron
+  ? "openrouter/nvidia/nemotron-3.5-lightning-20260807"
+  : liveDeepSeek
+    ? "openrouter/deepseek/deepseek-v4.1-flash"
+    : "dynamic/pr-review";
+const maximumLiveCalls = liveAll ? 64 : liveDeepSeek || liveNemotron ? 8 : 4;
 const maximumLiveInputBytes = liveAll
   ? 4_800_000
-  : liveDeepSeek
+  : liveDeepSeek || liveNemotron
     ? 600_000
     : 300_000;
 let liveCalls = 0;
@@ -161,6 +167,7 @@ const server = createServer(async (req, res) => {
       let responseProvider = "unknown";
       let responseOutputTokens: number | undefined;
       let responseErrorCode: number | undefined;
+      let checkpointDiagnosis: string | undefined;
       try {
         const parsed = JSON.parse(responseBody.toString("utf8"));
         const choice = parsed.choices?.[0];
@@ -184,6 +191,54 @@ const server = createServer(async (req, res) => {
         responseToolCalls = Array.isArray(choice?.message?.tool_calls)
           ? choice.message.tool_calls.length
           : 0;
+        const checkpoint = choice?.message?.tool_calls?.find(
+          (candidate: unknown) =>
+            typeof candidate === "object" &&
+            candidate !== null &&
+            "function" in candidate &&
+            typeof candidate.function === "object" &&
+            candidate.function !== null &&
+            "name" in candidate.function &&
+            candidate.function.name === "review_checkpoint",
+        );
+        if (checkpoint) {
+          try {
+            const parsedArguments = JSON.parse(checkpoint.function.arguments);
+            const validated =
+              investigationCheckpointSchema.safeParse(parsedArguments);
+            if (!validated.success) checkpointDiagnosis = "schema_invalid";
+            else {
+              const system = Array.isArray(body.messages)
+                ? body.messages.find(
+                    (message: { role?: string }) => message.role === "system",
+                  )?.content
+                : undefined;
+              const match =
+                typeof system === "string"
+                  ? /Host coverage checklist \(untrusted paths and model notes\): (\[.*?\])\./s.exec(
+                      system,
+                    )
+                  : null;
+              if (!match?.[1]) checkpointDiagnosis = "checklist_unavailable";
+              else {
+                const knownIds = new Set(
+                  JSON.parse(match[1]).map((check: { id: string }) => check.id),
+                );
+                const submittedIds = validated.data.checks.map(
+                  (check) => check.id,
+                );
+                checkpointDiagnosis =
+                  new Set(submittedIds).size !== submittedIds.length
+                    ? "duplicate_check_id"
+                    : submittedIds.some((id) => !knownIds.has(id))
+                      ? "unknown_check_id"
+                      : "shape_valid";
+              }
+            }
+          } catch {
+            checkpointDiagnosis = "arguments_or_checklist_invalid_json";
+          }
+        }
         if (
           ["stop", "tool_calls", "length", "content_filter", "error"].includes(
             choice?.finish_reason,
@@ -221,6 +276,7 @@ const server = createServer(async (req, res) => {
           responseProvider,
           responseOutputTokens,
           responseErrorCode,
+          checkpointDiagnosis,
           retryAfterSeconds: /^[0-9]{1,5}$/.test(
             response.headers.get("retry-after") ?? "",
           )
