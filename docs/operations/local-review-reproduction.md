@@ -296,3 +296,10 @@ Assim, restringir IDs elimina um erro de contrato reproduzido, mas não resolve
 o PR inteiro. Os limites de gasto e a exigência de cobertura continuam
 aplicados; aumentar tetos ou aceitar uma revisão incompleta exigiria uma nova
 decisão. A rota dinâmica remota e os recursos de produção não foram alterados.
+
+Duas sondagens adicionais de um shard, selecionando diretamente
+`qwen/qwen3-30b-a3b-instruct-2507` e `moonshotai/kimi-k2.6`, receberam HTTP
+404 antes de qualquer saída do modelo. A lista pública de provedores do
+OpenRouter não demonstrou disponibilidade desses endpoints na configuração
+restrita a CoreWeave deste Gateway. Nenhum replay completo foi iniciado para
+esses modelos; os seletores experimentais foram removidos do runner.
