@@ -488,10 +488,16 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                       : reviewTimeBudget.callMs),
                 );
                 lifecycle.setStepDeadline(roundDeadlineAt);
+                const completionCheckpointRequired =
+                  tracked &&
+                  progress.counts().pending === 0 &&
+                  progress.counts().blocked === 0 &&
+                  !progress.finished();
                 const checkpointRequired =
                   closing ||
                   repairCheckpoint ||
                   checkpointAfterText ||
+                  completionCheckpointRequired ||
                   (tracked && blockCalls >= 4);
                 return {
                   ...(retainedQueryBlock
@@ -519,7 +525,7 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                       : tracked
                         ? "required"
                         : "auto",
-                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Record a checkpoint after each block of at most four uncached queries; changes to notes alone do not count as coverage progress. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
+                  instructions: `${request.instructions}\nHost investigation budget: ${maximumInvestigationSteps - completedRounds} rounds including this one; ${Math.max(0, reviewInvestigationLimits.toolCalls - toolCalls)} uncached repository calls remaining; ${Math.max(0, Math.floor((investigationDeadlineAt - Date.now()) / 1000))} seconds remaining. Record a checkpoint after each block of at most four uncached queries; changes to notes alone do not count as coverage progress. Use supplied patches first, then targeted reads to establish causal impact. Avoid repeating identical queries. Prioritize changed contracts, callers and relevant tests. Conclude as soon as all necessary checks are complete; unused budget is not a reason to keep calling tools. State unresolved checks explicitly.${tracked ? progress.guidance(closing, toolCalls >= reviewInvestigationLimits.toolCalls - 4) : ""}${completionCheckpointRequired ? " Every tracked check is marked reviewed. Finish through review_checkpoint now, or mark a check pending if further verification is genuinely required." : ""}${forcedClosure ? " The host has closed tool access. Summarize verified evidence and unfinished work; do not claim a complete review." : ""}`,
                 };
               },
               tools,

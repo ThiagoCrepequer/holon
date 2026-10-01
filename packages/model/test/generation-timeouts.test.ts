@@ -638,6 +638,32 @@ const checkpointResult = (finished = true, status = "reviewed") => ({
   ],
   finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
 });
+it("requires a completion checkpoint once every tracked check is reviewed", async () => {
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0) return checkpointResult(false, "reviewed");
+      if (index === 1) {
+        expect(options.toolChoice).toEqual({
+          type: "tool",
+          toolName: "review_checkpoint",
+        });
+        expect(options.tools?.map((candidate) => candidate.name)).toEqual([
+          "review_checkpoint",
+        ]);
+        return checkpointResult(true, "reviewed");
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model).generate({
+    ...request,
+    investigationPaths: ["src/a.ts"],
+  });
+  expect(calls).toBe(3);
+  expect(result).not.toMatchObject({ isDegraded: true });
+});
 it("advertises the current shard check IDs in the checkpoint tool schema", async () => {
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
