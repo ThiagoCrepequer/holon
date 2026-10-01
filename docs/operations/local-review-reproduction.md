@@ -3,7 +3,7 @@ id: OPS-LOCAL-REVIEW-REPRODUCTION
 kind: operation
 status: current
 owners: [core-team]
-last-reviewed: 2026-09-30
+last-reviewed: 2026-10-01
 ---
 
 # Reproduzir o PR #106 sem publicar uma revisão
@@ -303,3 +303,63 @@ Duas sondagens adicionais de um shard, selecionando diretamente
 OpenRouter não demonstrou disponibilidade desses endpoints na configuração
 restrita a CoreWeave deste Gateway. Nenhum replay completo foi iniciado para
 esses modelos; os seletores experimentais foram removidos do runner.
+
+## Sétima avaliação: DeepSeek como primeiro nó, 2026-10-01
+
+Antes da rodada, a versão implantada da rota `pr-review` era
+`5b966976-5fa3-45d1-8afc-b32e0bbc965e`, criada em
+`2026-10-01 12:06:58` conforme a API do Gateway. O primeiro nó era
+`deepseek/deepseek-v4.1-flash` via OpenRouter, com fallback para
+`openai/gpt-oss-20b`. A mesma versão foi confirmada depois da execução.
+
+O relay local passou a registrar, por chamada, shard, fase, ordinal, status,
+modelo/provider retornados, duração, espera de pacing, bytes de request e
+resposta, tokens de entrada/saída/raciocínio, motivo de término, tipos de
+ferramenta e categoria de validade de checkpoint. O observer do host registra
+progresso de cobertura, consultas/cache, limites e fases para cada shard. Esses
+logs não contêm prompts, diffs, conteúdo de arquivos, argumentos ou respostas
+do modelo. O modo `--pace-live` mantém 15 segundos entre inícios de requests
+sem selecionar outro modelo; foi usado com `--live-all` para testar a rota
+implantada e evitar o HTTP 429 observado anteriormente sem pacing.
+`durationMs` inclui a espera na fila local; não mede isoladamente a latência do
+provider.
+Nesta execução, o logger antigo classificou `tool_choice` ausente na
+finalização como `specific_function`; isso era uma classificação incorreta do
+logger, corrigida após a rodada. Não altera o request enviado nem o resultado.
+
+Os cinco cenários offline passaram antes do envio privado. O replay real levou
+744,5 segundos, fez 49 chamadas HTTP 200 (47 DeepSeek e duas
+`gpt-oss-20b`, ambas via CoreWeave), 53 consultas efetivas ao repositório e
+terminou com `COMMENT`. Foram enviados 2.956.824 bytes de requests. As
+respostas reportaram 769.118 tokens de entrada e 61.759 de saída; 52.954 dos
+tokens de saída eram de raciocínio. Esses são dados de usage das respostas,
+não uma fatura. Não houve HTTP 429, erro de transporte nem falha estruturada
+de consulta. A rota de fallback respondeu com `gpt-oss-20b` em duas chamadas
+HTTP 200; o relay não vê a causa da seleção dentro do Gateway.
+
+O assert de completude reprovou: sete shards registraram
+`model.output_limits`, e o oitavo terminou a recuperação com orçamento de
+saída esgotado. Por shard:
+
+| Shard | Cobertura no último progresso | Encerramento da investigação | Falha relevante                                                                  |
+| ----- | ----------------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
+| 0     | 0 revisados, 8 pendentes      | `model_budget_exhausted`     | bytes de entrada; finalização e recuperação terminaram em `length`               |
+| 1     | 0 revisados, 6 pendentes      | `model_budget_exhausted`     | bytes de entrada                                                                 |
+| 2     | 0 revisados, 1 pendente       | `model_budget_exhausted`     | bytes de entrada; finalização respondeu via fallback `gpt-oss-20b`               |
+| 3     | 0 revisados, 1 pendente       | `checks_unresolved`          | uma rodada respondeu via fallback `gpt-oss-20b` sem ferramenta exigida           |
+| 4     | 0 revisados, 1 pendente       | `checks_unresolved`          | um checkpoint fora do schema e uma investigação em `length`                      |
+| 5     | 3 revisados, 2 pendentes      | `model_budget_exhausted`     | seis chamadas de investigação consumidas                                         |
+| 6     | 0 revisados, 3 pendentes      | `model_budget_exhausted`     | bytes de entrada                                                                 |
+| 7     | 0 revisados, 7 pendentes      | `checks_unresolved`          | investigação e finalização em `length`; recuperação recusada por tokens de saída |
+
+Houve dez chamadas de `review_checkpoint`: nove passaram pela validação de
+forma do relay e uma falhou; o host registrou uma rejeição. Cinco respostas
+terminaram em `length` (investigação nos shards 4 e 7, finalização nos shards
+0 e 7, recuperação no shard 0). Em cada uma, todos os tokens de saída
+reportados eram de raciocínio, sem conclusão útil daquela chamada. A
+finalização do shard 0 consumiu 8.192 tokens assim; a recuperação, mais 4.416.
+O relatório foi coletado, o cleanup local concluiu e nenhuma revisão foi
+publicada no GitHub. A execução demonstra incompatibilidade prática desta
+rota/configuração com a conclusão do PR #106 sob os limites atuais; não
+identifica sozinha se mudar modelo, parâmetros de raciocínio, contexto ou
+política de orçamento é a correção apropriada.
