@@ -44,6 +44,7 @@ const liveAll = process.argv.includes("--live-all");
 const live = liveAll || process.argv.includes("--live");
 const liveDeepSeek = process.argv.includes("--live-deepseek");
 const liveNemotron = process.argv.includes("--live-nemotron");
+const liveNoReasoning = process.argv.includes("--live-no-reasoning");
 const paceLive = liveDeepSeek || process.argv.includes("--pace-live");
 if ((liveDeepSeek || liveNemotron) && !live)
   throw new Error("Alternative model requires --live or --live-all");
@@ -51,6 +52,8 @@ if (paceLive && !live)
   throw new Error("--pace-live requires --live or --live-all");
 if (liveDeepSeek && liveNemotron)
   throw new Error("Select only one alternative model");
+if (liveNoReasoning && !liveDeepSeek)
+  throw new Error("--live-no-reasoning requires --live-deepseek");
 const liveModel = liveNemotron
   ? "openrouter/nvidia/nemotron-3.5-lightning-20260807"
   : liveDeepSeek
@@ -161,6 +164,15 @@ const server = createServer(async (req, res) => {
         await pacedStart;
       }
       const effectiveToolChoice = body.tool_choice;
+      const outboundBody = {
+        ...body,
+        model: liveModel,
+        tool_choice: effectiveToolChoice,
+      };
+      if (liveNoReasoning) {
+        delete outboundBody.reasoning_effort;
+        outboundBody.reasoning = { effort: "none" };
+      }
       const response = await fetch(
         `https://gateway.ai.cloudflare.com/v1/${process.env.AI_GATEWAY_ACCOUNT_ID}/${process.env.AI_GATEWAY_ID}/compat/chat/completions`,
         {
@@ -179,11 +191,7 @@ const server = createServer(async (req, res) => {
               fixture: liveAll ? "pr106-all-shards" : "pr106-shard3",
             }),
           },
-          body: JSON.stringify({
-            ...body,
-            model: liveModel,
-            tool_choice: effectiveToolChoice,
-          }),
+          body: JSON.stringify(outboundBody),
         },
       );
       const responseChunks: Uint8Array[] = [];
@@ -355,6 +363,7 @@ const server = createServer(async (req, res) => {
           responseInputTokens,
           responseOutputTokens,
           responseReasoningTokens,
+          requestedReasoning: liveNoReasoning ? "none" : "host-low",
           responseErrorPresent,
           responseErrorCode,
           checkpointDiagnosis,

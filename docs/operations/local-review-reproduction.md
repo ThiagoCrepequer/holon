@@ -363,3 +363,68 @@ publicada no GitHub. A execução demonstra incompatibilidade prática desta
 rota/configuração com a conclusão do PR #106 sob os limites atuais; não
 identifica sozinha se mudar modelo, parâmetros de raciocínio, contexto ou
 política de orçamento é a correção apropriada.
+
+## Oitava avaliação: DeepSeek sem raciocínio, 2026-10-01
+
+A implementação instalada do AI SDK converte `reasoningEffort: "low"` em
+`reasoning_effort: "low"`. O catálogo público do OpenRouter anunciava `low`
+e `none` para `deepseek/deepseek-v4.1-flash`, mas também anunciava raciocínio
+obrigatório para o fallback `openai/gpt-oss-20b` (consulta em 2026-10-01).
+O parâmetro `none` foi testado apenas com seleção local direta de DeepSeek;
+a rota dinâmica implantada e o código de produção continuaram em `low`.
+
+Quatro requests sintéticos sem conteúdo do repositório, com o mesmo prompt,
+ferramenta e `max_tokens: 1024`, responderam HTTP 200 via CoreWeave. As formas
+`reasoning_effort: low` e `reasoning: {effort: low}` consumiram 496 e 480
+tokens de raciocínio, respectivamente; `reasoning: {effort: high}` consumiu
+575; `reasoning: {effort: none}` consumiu zero e chamou a ferramenta em 36
+tokens totais. A amostra não mede qualidade de revisão nem estabelece um teto
+exato para `low`; demonstra que trocar apenas a sintaxe de `low` não remove
+o uso de raciocínio nesse caminho.
+
+O runner ganhou `--live-no-reasoning`, válido somente com `--live-deepseek`.
+Ele substitui `reasoning_effort` por `reasoning: {effort: none}` no relay
+local e registra apenas a categoria do parâmetro. O replay privado do shard 3
+concluiu em três respostas HTTP 200, com um check revisado, sem limitações e
+com cleanup. Isso motivou a avaliação completa já autorizada; não foi uma
+alteração de configuração remota.
+
+O replay dos oito shards fez 47 requests, dos quais 46 foram HTTP 200 e um
+HTTP 429. As respostas reportaram 680.076 tokens de entrada, 13.172 de saída
+e zero de raciocínio. Foram enviados 2.667.204 bytes de requests. A coleta
+registrou 40 consultas efetivas ao repositório, uma rejeição de checkpoint,
+`COMMENT`, cleanup concluído e assert de completude reprovado. Não houve
+publicação no GitHub. Três shards (3, 4 e 6) completaram; cinco preservaram
+`investigation_incomplete`:
+
+| Shard | Última cobertura registrada | Limite observado                                  |
+| ----- | --------------------------- | ------------------------------------------------- |
+| 0     | 6 revisados, 2 pendentes    | HTTP 429; depois bytes de entrada                 |
+| 1     | 0 revisados, 6 pendentes    | bytes de entrada                                  |
+| 2     | 0 revisados, 1 pendente     | bytes de entrada                                  |
+| 5     | 4 revisados, 1 pendente     | seis chamadas de investigação                     |
+| 7     | 7 revisados, 0 pendentes    | seis chamadas de investigação sem `finished=true` |
+
+O shard 7 expôs uma falha concreta no controle de fluxo: após receber um
+checkpoint aceito com todos os checks revisados, mas ainda sem `finished`, o
+host deixou o modelo abrir outra rodada de consultas. A chamada seguinte
+esgotou a parcela e invalidou a conclusão, apesar de não haver check pendente.
+Um teste de regressão reproduziu a escolha de ferramenta incorreta. Agora o
+host exige `review_checkpoint` nesse estado; o modelo precisa confirmar
+`finished=true` ou recolocar um check em `pending` se ainda faltar prova. O
+teste passou após a mudança. Essa correção não explica os shards que ainda
+tinham checks pendentes, nem prova que o modelo encontraria defeitos reais.
+
+Os dados sustentam duas causas distintas: raciocínio pode consumir toda a
+saída e impedir uma resposta útil, enquanto contexto/rodadas continuam
+esgotando as parcelas mesmo com raciocínio desativado. A documentação do
+[AI SDK](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text) define
+`maxOutputTokens` e `prepareStep`; a documentação do
+[OpenRouter sobre raciocínio](https://github.com/OpenRouterTeam/docs/blob/main/guides/best-practices/reasoning-tokens.mdx)
+explica que tokens de raciocínio integram `max_tokens` e podem produzir
+`finish_reason: length` sem conteúdo. A compactação de observações em
+[SWE-agent](https://github.com/SWE-agent/SWE-agent/blob/main/sweagent/agent/history_processors.py)
+é referência de abordagem, não validação de que remover mais histórico seja
+seguro neste revisor. Uma mudança de orçamento ou da retenção decidida pela
+ADR-0046 exige decisão explícita e teste de qualidade com defeitos conhecidos;
+`none` não deve ser promovido à rota de produção apenas por este replay.
