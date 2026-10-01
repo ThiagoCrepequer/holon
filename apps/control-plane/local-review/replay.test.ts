@@ -25,6 +25,7 @@ import { incidentCase as fixture, injectedDefect } from "./case.js";
 const settings = env as typeof env & {
   HOLON_LOCAL_REVIEW_LIVE: string;
   HOLON_LOCAL_REVIEW_ALL: string;
+  HOLON_LOCAL_REVIEW_DEFECT: string;
   HOLON_LOCAL_REVIEW_URL: string;
   HOLON_LOCAL_REVIEW_CAPABILITY: string;
 };
@@ -55,7 +56,11 @@ it
     settings.HOLON_LOCAL_REVIEW_ALL === "true"
       ? ["live-all-shards"]
       : settings.HOLON_LOCAL_REVIEW_LIVE === "true"
-        ? ["live-small-shard"]
+        ? [
+            settings.HOLON_LOCAL_REVIEW_DEFECT === "true"
+              ? "live-injected-defect"
+              : "live-small-shard",
+          ]
         : [
             "normal",
             "checkpoint-repair",
@@ -116,8 +121,26 @@ it
       );
       const key = String(metadata.shard_index);
       if (
+        scenario === "live-injected-defect" &&
+        metadata.phase === "investigation"
+      ) {
+        const system =
+          body.messages.find((message) => message.role === "system")?.content ??
+          "";
+        const match =
+          /Host coverage checklist \(untrusted paths and model notes\): (\[.*?\])\./s.exec(
+            system,
+          );
+        if (!match)
+          throw new Error("Provider did not receive coverage checklist");
+        const checks = JSON.parse(match[1]!) as Array<{ path: string }>;
+        if (checks.some((check) => check.path === injectedDefect.path))
+          defectShards.add(key);
+      }
+      if (
         scenario === "live-all-shards" ||
-        (scenario === "live-small-shard" && key === "3")
+        (scenario === "live-small-shard" && key === "3") ||
+        (scenario === "live-injected-defect" && defectShards.has(key))
       ) {
         const round = (rounds.get(key) ?? 0) + 1;
         rounds.set(key, round);
@@ -450,7 +473,8 @@ it
               item.event.includes("limits") ||
               item.event === "model.investigation_stopped" ||
               ((scenario === "live-small-shard" ||
-                scenario === "live-all-shards") &&
+                scenario === "live-all-shards" ||
+                scenario === "live-injected-defect") &&
                 (item.event === "model.investigation_progress" ||
                   item.event === "model.phase_started" ||
                   item.event === "model.phase_finished" ||
@@ -461,7 +485,7 @@ it
     const coverage = events.find(
       (event) => event.event === "review.coverage_planned",
     )!;
-    if (scenario !== "injected-defect")
+    if (scenario !== "injected-defect" && scenario !== "live-injected-defect")
       expect(coverage).toMatchObject({
         totalEligibleFiles: fixture.expected.files,
         totalEligibleLines: fixture.expected.lines,
@@ -484,13 +508,13 @@ it
     expect(reviews).toHaveLength(1);
     if (scenario !== "live-small-shard" && scenario !== "live-all-shards")
       expect(reviews[0]!.parameters.event).toBe(
-        scenario === "injected-defect"
+        scenario === "injected-defect" || scenario === "live-injected-defect"
           ? "REQUEST_CHANGES"
           : scenario === "provider-failure" || scenario === "checkpoint-invalid"
             ? "COMMENT"
             : "APPROVE",
       );
-    if (scenario === "injected-defect")
+    if (scenario === "injected-defect" || scenario === "live-injected-defect")
       expect(
         posts
           .filter((post) => post.route.endsWith("/comments"))
@@ -513,12 +537,31 @@ it
         (event) => event.event === "model.checkpoint_rejected",
       ).length,
     });
-    expect(
-      events.filter((event) => event.event === "model.output_limits"),
-    ).toHaveLength(scenario === "checkpoint-invalid" ? 8 : 0);
+    const outputLimits = events.filter(
+      (event) => event.event === "model.output_limits",
+    );
+    if (scenario === "live-injected-defect") {
+      expect(outputLimits).toEqual([
+        expect.objectContaining({
+          shardIndex: 0,
+          limitationCodes: "investigation_incomplete",
+        }),
+      ]);
+      expect(failures).toEqual([
+        expect.objectContaining({
+          shardIndex: 0,
+          reason: "model_budget_exhausted",
+          budgetReason: "input_bytes",
+        }),
+      ]);
+    } else
+      expect(outputLimits).toHaveLength(
+        scenario === "checkpoint-invalid" ? 8 : 0,
+      );
     if (scenario === "provider-failure")
       expect(failures.length).toBeGreaterThan(0);
-    else expect(failures).toHaveLength(0);
+    else if (scenario !== "live-injected-defect")
+      expect(failures).toHaveLength(0);
     if (scenario === "live-small-shard" || scenario === "live-all-shards")
       expect(["APPROVE", "REQUEST_CHANGES"]).toContain(
         reviews[0]!.parameters.event,

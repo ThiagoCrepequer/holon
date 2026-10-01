@@ -42,6 +42,7 @@ async function cleanup() {
 const capability = randomUUID();
 const liveAll = process.argv.includes("--live-all");
 const live = liveAll || process.argv.includes("--live");
+const liveDefect = process.argv.includes("--live-defect");
 const liveDeepSeek = process.argv.includes("--live-deepseek");
 const liveNemotron = process.argv.includes("--live-nemotron");
 const liveNoReasoning = process.argv.includes("--live-no-reasoning");
@@ -54,6 +55,8 @@ if (liveDeepSeek && liveNemotron)
   throw new Error("Select only one alternative model");
 if (liveNoReasoning && !liveDeepSeek)
   throw new Error("--live-no-reasoning requires --live-deepseek");
+if (liveDefect && (!liveDeepSeek || liveAll))
+  throw new Error("--live-defect requires --live --live-deepseek");
 const liveModel = liveNemotron
   ? "openrouter/nvidia/nemotron-3.5-lightning-20260807"
   : liveDeepSeek
@@ -188,7 +191,11 @@ const server = createServer(async (req, res) => {
             "cf-aig-skip-cache": "true",
             "cf-aig-metadata": JSON.stringify({
               stage: "local-evaluation",
-              fixture: liveAll ? "pr106-all-shards" : "pr106-shard3",
+              fixture: liveAll
+                ? "pr106-all-shards"
+                : liveDefect
+                  ? "pr106-injected-defect"
+                  : "pr106-shard3",
             }),
           },
           body: JSON.stringify(outboundBody),
@@ -378,13 +385,18 @@ const server = createServer(async (req, res) => {
       res.end(responseBody);
       return;
     } else if (req.url === "/case") {
+      if (liveDefect !== (body.scenario === "live-injected-defect"))
+        throw new Error("Live defect scenario mismatch");
       if (destroyed) {
         sandbox = await localSandbox(root);
         destroyed = false;
       }
       artifacts = undefined;
       headSha = incidentCase.headSha;
-      if (body.scenario === "injected-defect") {
+      if (
+        body.scenario === "injected-defect" ||
+        body.scenario === "live-injected-defect"
+      ) {
         await sandbox.writeFile(
           "/workspace/repository/" + injectedDefect.path,
           injectedDefect.content,
@@ -525,6 +537,7 @@ try {
   process.env.HOLON_LOCAL_REVIEW_CAPABILITY = capability;
   process.env.HOLON_LOCAL_REVIEW_LIVE = String(live);
   process.env.HOLON_LOCAL_REVIEW_ALL = String(liveAll);
+  process.env.HOLON_LOCAL_REVIEW_DEFECT = String(liveDefect);
   process.env.HOLON_LOCAL_REVIEW_TIMEOUT_MS = String(
     reviewTimeBudget.analysisMs + 60_000,
   );

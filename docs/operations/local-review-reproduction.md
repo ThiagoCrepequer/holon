@@ -428,3 +428,37 @@ explica que tokens de raciocínio integram `max_tokens` e podem produzir
 seguro neste revisor. Uma mudança de orçamento ou da retenção decidida pela
 ADR-0046 exige decisão explícita e teste de qualidade com defeitos conhecidos;
 `none` não deve ser promovido à rota de produção apenas por este replay.
+
+## Nona avaliação: defeito conhecido com DeepSeek sem raciocínio, 2026-10-01
+
+Para medir ao menos detecção funcional, o runner passou a aceitar
+`--live-defect` junto de `--live --live-deepseek`. Ele cria o mesmo commit
+temporário do cenário offline `injected-defect`, mas envia somente o shard
+que contém o arquivo novo ao modelo real. O cenário exige 33 arquivos,
+`REQUEST_CHANGES` e comentário na linha 3 do arquivo injetado, com trecho
+literal validado pelo gate de evidência; os outros shards continuam simulados.
+Uma guarda em `/case` falha antes de inferência se o Worker de teste não
+receber o seletor do cenário.
+
+A primeira tentativa não foi uma avaliação do defeito: a configuração local
+do Vitest não repassava o seletor novo, e o relatório indicou
+`live-small-shard`, 32 arquivos. Essa tentativa não deve ser contada como
+acerto do modelo. Após corrigir o binding e adicionar a guarda, o relatório
+confirmou `live-injected-defect`, 33 arquivos e head temporário distinto.
+
+Nesse cenário corrigido, o DeepSeek na CoreWeave respondeu seis vezes com
+HTTP 200 e zero tokens de raciocínio. O workflow coletou `REQUEST_CHANGES` e
+a asserção do comentário no arquivo e linha do defeito conhecido passou:
+houve identificação e evidência publicável desse defeito simples. A
+investigação do shard, porém, terminou com seis checks revisados e dois
+pendentes. A chamada seguinte foi recusada por bytes de entrada (limite
+372.000, consumidos 328.660, solicitados 82.921), resultando em
+`investigation_incomplete`. O teste live falhou porque ainda esperava zero
+limitações; a asserção foi ajustada para exigir explicitamente essa limitação
+e a dimensão da falha observada, sem outra execução paga.
+
+Um único defeito novo e isolado não mede recall, precisão ou segurança da
+revisão do PR inteiro. O resultado demonstra que `none` não impede sempre a
+detecção, mas não resolve a exaustão de contexto nem autoriza trocar o
+parâmetro na rota de produção. O replay local não publicou no GitHub e
+confirmou cleanup.
