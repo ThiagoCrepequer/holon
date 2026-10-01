@@ -119,13 +119,17 @@ it
         scenario === "live-all-shards" ||
         (scenario === "live-small-shard" && key === "3")
       ) {
-        rounds.set(key, (rounds.get(key) ?? 0) + 1);
+        const round = (rounds.get(key) ?? 0) + 1;
+        rounds.set(key, round);
         providerCalls++;
         return await nativeFetch(settings.HOLON_LOCAL_REVIEW_URL + "/model", {
           method: "POST",
           headers: {
             authorization: `Bearer ${settings.HOLON_LOCAL_REVIEW_CAPABILITY}`,
             "content-type": "application/json",
+            "x-local-shard-index": key,
+            "x-local-phase": String(metadata.phase),
+            "x-local-shard-call": String(round),
           },
           body: JSON.stringify(body),
           signal: request.signal,
@@ -381,6 +385,7 @@ it
               event,
               phase,
               shardIndex,
+              attempt,
               round,
               reason,
               statusCode,
@@ -390,7 +395,19 @@ it
               budgetRequested,
               reviewedChecks,
               pendingChecks,
+              blockedChecks,
               toolCalls,
+              repositoryRequests,
+              cacheHits,
+              coveringReadHits,
+              truncatedResults,
+              readCalls,
+              searchCalls,
+              outputTokens,
+              reasoningTokens,
+              durationMs,
+              remainingMs,
+              closing,
               errorName,
               errorCode,
               limitationCodes,
@@ -398,6 +415,7 @@ it
               event,
               phase,
               shardIndex,
+              attempt,
               round,
               reason,
               statusCode,
@@ -407,7 +425,19 @@ it
               budgetRequested,
               reviewedChecks,
               pendingChecks,
+              blockedChecks,
               toolCalls,
+              repositoryRequests,
+              cacheHits,
+              coveringReadHits,
+              truncatedResults,
+              readCalls,
+              searchCalls,
+              outputTokens,
+              reasoningTokens,
+              durationMs,
+              remainingMs,
+              closing,
               errorName,
               errorCode,
               limitationCodes,
@@ -418,7 +448,13 @@ it
               item.event.includes("fail") ||
               item.event.includes("reject") ||
               item.event.includes("limits") ||
-              item.event === "model.investigation_stopped",
+              item.event === "model.investigation_stopped" ||
+              ((scenario === "live-small-shard" ||
+                scenario === "live-all-shards") &&
+                (item.event === "model.investigation_progress" ||
+                  item.event === "model.phase_started" ||
+                  item.event === "model.phase_finished" ||
+                  item.event === "model.recovery_scheduled")),
           ),
       }),
     );

@@ -44,8 +44,11 @@ const liveAll = process.argv.includes("--live-all");
 const live = liveAll || process.argv.includes("--live");
 const liveDeepSeek = process.argv.includes("--live-deepseek");
 const liveNemotron = process.argv.includes("--live-nemotron");
+const paceLive = liveDeepSeek || process.argv.includes("--pace-live");
 if ((liveDeepSeek || liveNemotron) && !live)
   throw new Error("Alternative model requires --live or --live-all");
+if (paceLive && !live)
+  throw new Error("--pace-live requires --live or --live-all");
 if (liveDeepSeek && liveNemotron)
   throw new Error("Select only one alternative model");
 const liveModel = liveNemotron
@@ -65,8 +68,37 @@ let lastDeepSeekStartAt = 0;
 let deepSeekStartQueue: Promise<void> = Promise.resolve();
 let headSha: string = incidentCase.headSha;
 let artifacts: ReturnType<typeof buildReviewArtifacts> | undefined;
+function toolChoiceKind(value: unknown): string {
+  if (value === undefined) return "unspecified";
+  if (value === "auto" || value === "required" || value === "none")
+    return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "function"
+  )
+    return "specific_function";
+  return "other";
+}
 const server = createServer(async (req, res) => {
   const startedAt = Date.now();
+  const localHeader = (name: string) => {
+    const value = req.headers[name];
+    return typeof value === "string" ? value : "";
+  };
+  const shardIndex = /^[0-7]$/.test(localHeader("x-local-shard-index"))
+    ? Number(localHeader("x-local-shard-index"))
+    : undefined;
+  const shardCall = /^[1-9][0-9]?$/.test(localHeader("x-local-shard-call"))
+    ? Number(localHeader("x-local-shard-call"))
+    : undefined;
+  const phase = ["investigation", "finalization", "recovery"].includes(
+    localHeader("x-local-phase"),
+  )
+    ? localHeader("x-local-phase")
+    : undefined;
+  let modelCall: number | undefined;
   const disconnected = new AbortController();
   res.once("close", () => {
     if (!res.writableEnded) disconnected.abort();
@@ -100,6 +132,7 @@ const server = createServer(async (req, res) => {
       }
       liveCalls++;
       const call = liveCalls;
+      modelCall = call;
       liveInputBytes += length;
       const token =
         process.env.CLOUDFLARE_API_TOKEN ??
@@ -113,9 +146,11 @@ const server = createServer(async (req, res) => {
       )
         throw new Error("Explicit gateway configuration required");
       if (!token) throw new Error("Local live token unavailable");
-      if (liveDeepSeek) {
+      let paceWaitMs = 0;
+      if (paceLive) {
         const pacedStart = deepSeekStartQueue.then(async () => {
           const waitMs = Math.max(0, lastDeepSeekStartAt + 15_000 - Date.now());
+          paceWaitMs = waitMs;
           if (waitMs)
             await new Promise<void>((done) => setTimeout(done, waitMs));
           disconnected.signal.throwIfAborted();
@@ -165,9 +200,13 @@ const server = createServer(async (req, res) => {
       let responseFinishReason = "unknown";
       let responseModel = "unknown";
       let responseProvider = "unknown";
+      let responseInputTokens: number | undefined;
       let responseOutputTokens: number | undefined;
+      let responseReasoningTokens: number | undefined;
       let responseErrorCode: number | undefined;
+      let responseErrorPresent = false;
       let checkpointDiagnosis: string | undefined;
+      let toolKinds: string[] = [];
       try {
         const parsed = JSON.parse(responseBody.toString("utf8"));
         const choice = parsed.choices?.[0];
@@ -182,15 +221,51 @@ const server = createServer(async (req, res) => {
         )
           responseProvider = parsed.provider;
         if (
+          Number.isSafeInteger(parsed.usage?.prompt_tokens) &&
+          parsed.usage.prompt_tokens >= 0
+        )
+          responseInputTokens = parsed.usage.prompt_tokens;
+        if (
           Number.isSafeInteger(parsed.usage?.completion_tokens) &&
           parsed.usage.completion_tokens >= 0
         )
           responseOutputTokens = parsed.usage.completion_tokens;
+        if (
+          Number.isSafeInteger(
+            parsed.usage?.completion_tokens_details?.reasoning_tokens,
+          ) &&
+          parsed.usage.completion_tokens_details.reasoning_tokens >= 0
+        )
+          responseReasoningTokens =
+            parsed.usage.completion_tokens_details.reasoning_tokens;
+        responseErrorPresent = parsed.error !== undefined;
         if (Number.isSafeInteger(parsed.error?.code))
           responseErrorCode = parsed.error.code;
         responseToolCalls = Array.isArray(choice?.message?.tool_calls)
           ? choice.message.tool_calls.length
           : 0;
+        toolKinds = Array.isArray(choice?.message?.tool_calls)
+          ? choice.message.tool_calls.slice(0, 16).map((candidate: unknown) => {
+              const name =
+                typeof candidate === "object" &&
+                candidate !== null &&
+                "function" in candidate &&
+                typeof candidate.function === "object" &&
+                candidate.function !== null &&
+                "name" in candidate.function
+                  ? candidate.function.name
+                  : undefined;
+              return typeof name === "string" &&
+                [
+                  "review_checkpoint",
+                  "read_file",
+                  "search_text",
+                  "search_structure",
+                ].includes(name)
+                ? name
+                : "other";
+            })
+          : [];
         const checkpoint = choice?.message?.tool_calls?.find(
           (candidate: unknown) =>
             typeof candidate === "object" &&
@@ -252,29 +327,35 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           event: "local.live_call",
           call,
+          shardIndex,
+          shardCall,
+          phase,
           status: response.status,
           inputBytes: length,
           responseBytes,
           durationMs: Date.now() - startedAt,
-          requestedToolChoice:
-            body.tool_choice === "required" ||
-            body.tool_choice === "auto" ||
-            body.tool_choice === "none"
-              ? body.tool_choice
-              : body.tool_choice?.type === "function"
-                ? "specific_function"
-                : "other",
-          effectiveToolChoice:
-            effectiveToolChoice === "auto" ||
-            effectiveToolChoice === "required" ||
-            effectiveToolChoice === "none"
-              ? effectiveToolChoice
-              : "specific_function",
+          paceWaitMs,
+          inputMessages: Array.isArray(body.messages)
+            ? body.messages.length
+            : undefined,
+          requestedToolChoice: toolChoiceKind(body.tool_choice),
+          effectiveToolChoice: toolChoiceKind(effectiveToolChoice),
+          responseFormat:
+            body.response_format?.type === "json_schema" ||
+            body.response_format?.type === "json_object" ||
+            body.response_format?.type === "text"
+              ? body.response_format.type
+              : "unspecified",
           responseToolCalls,
+          toolKinds,
+          toolKindsTruncated: responseToolCalls > toolKinds.length,
           responseFinishReason,
           responseModel,
           responseProvider,
+          responseInputTokens,
           responseOutputTokens,
+          responseReasoningTokens,
+          responseErrorPresent,
           responseErrorCode,
           checkpointDiagnosis,
           retryAfterSeconds: /^[0-9]{1,5}$/.test(
@@ -409,6 +490,10 @@ const server = createServer(async (req, res) => {
       console.log(
         JSON.stringify({
           event: "local.live_transport_failed",
+          call: modelCall,
+          shardIndex,
+          shardCall,
+          phase,
           durationMs: Date.now() - startedAt,
           reason: disconnected.signal.aborted
             ? "client_cancelled"
