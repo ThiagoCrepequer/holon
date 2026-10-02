@@ -17,9 +17,9 @@
     "config:explain": "pnpm --filter @holon/config-cli holon config explain",
     "config:schema:generate": "pnpm --filter @holon/config-cli schema:generate",
     "config:schema:check": "pnpm --filter @holon/config-cli schema:check",
-    "deploy": "node tooling/deploy/cli.mjs",
     "test:deploy": "node --test tooling/deploy/*.test.mjs",
-    "test:deploy:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/deploy/*.mjs\" --test-coverage-exclude=\"tooling/deploy/*.test.mjs\" tooling/deploy/*.test.mjs"
+    "test:deploy:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/deploy/*.mjs\" --test-coverage-exclude=\"tooling/deploy/*.test.mjs\" tooling/deploy/*.test.mjs",
+    "deploy:guarded": "node tooling/deploy/cli.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-istanbul": "catalog:",

@@ -8,11 +8,12 @@ last-reviewed: 2026-10-02
 
 # Deploy coordenado com confirmação de evidência
 
-A entrada normal é `pnpm run deploy`, na raiz. Os scripts `deploy` dos dois apps e
-`deploy:bootstrap` recusam a execução independente; builds/dry-runs permanecem
-inalterados. Esta proteção reduz deploys acidentais durante uma revisão, mas não
-impede um administrador de executar Wrangler diretamente ou agir pelo painel.
-Não é um lock distribuído nem substitui o controle de acesso da conta.
+Ferramenta manual opcional, preservada para uso explícito via `pnpm run deploy:guarded`.
+A [ADR-0048](../decisions/0048-restore-automatic-worker-deployments.md) substitui a
+obrigatoriedade da ADR-0047: os scripts dos apps voltaram ao Wrangler direto para
+manter os Workers Builds automáticos. Esta ferramenta não participa desse fluxo
+nem protege deploys automáticos concorrentes com análises. Não é um lock distribuído
+nem substitui o controle de acesso da conta.
 
 O incidente do PR #107, em 2026-10-02, mostrou troca de versões dos Workers
 com uma revisão ativa e reset explícito do Durable Object do Sandbox por
@@ -42,14 +43,14 @@ ou modo CI não interativo. Não reutilize um registro de confirmação de outra
   O lock local não coordena outros computadores. Webhooks podem continuar enfileirados.
 
 ```sh
-pnpm run deploy \
+pnpm run deploy:guarded \
   --account <account-id-32-hex> \
   --queue <queue-id-32-hex> \
   --application <container-application-uuid> \
   --revision <git-sha-40-hex>
 ```
 
-`pnpm run deploy --help` não acessa a rede. A conta explícita é usada nas sondagens
+`pnpm run deploy:guarded --help` não acessa a rede. A conta explícita é usada nas sondagens
 REST e no ambiente do Wrangler. Todos os comandos Wrangler fixam `--env ""`
 e configuração explícita; origem da API e sanitização de logs são fixadas,
 sem herdar seletores de ambiente ou origem alternativa da sessão. Não há argumentos para trocar Worker, Workflow,
@@ -135,8 +136,9 @@ Não confirme apenas por copiar a frase: registre a fonte observada e o resultad
   é uma pré-condição explícita. A retomada não é atomicamente condicionada ao snapshot.
 
 O bootstrap de uma conta vazia permanece procedimento excepcional explícito no
-[runbook de provisionamento](deployment.md#recursos), com tráfego fechado. Os
-atalhos antigos agora falham justamente para não confundi-lo com um upgrade normal.
+[runbook de provisionamento](deployment.md#recursos), com tráfego fechado. O
+script `deploy:bootstrap` foi restaurado; continua específico ao primeiro
+provisionamento e não deve substituir o deploy automático normal.
 
 ## Validação local
 

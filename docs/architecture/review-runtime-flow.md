@@ -424,10 +424,11 @@ processo permanecem fatais. Sem essa opção, a leitura posterior poderia transf
 uma consulta a arquivo ausente em falha de infraestrutura. Fonte verificada em
 2026-09-28: [GNU realpath](https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html).
 
-### Guarda operacional de deploy
+### Deploy automático e ferramenta manual opcional
 
-A [ADR-0047](../decisions/0047-guard-coordinated-deployments.md) protege a entrada
-normal de deploy com pausa da fila, verificação de Workflows e confirmações de
-evidência de drenagem/rollout. Não acrescenta coordenação distribuída ao runtime
-nem altera a política de recuperação ou orçamento de reviews. O procedimento
-e seus limites estão em [deploy protegido](../operations/guarded-deployment.md).
+A [ADR-0048](../decisions/0048-restore-automatic-worker-deployments.md) restaura os
+scripts independentes de deploy dos Workers Builds. A proteção contra atualização
+durante análises ativas está adiada. A guarda da ADR-0047 permanece disponível
+somente como `pnpm run deploy:guarded`, com confirmação interativa e janela exclusiva;
+não participa do deploy automático. Nenhum gate distribuído foi acrescentado ao
+runtime. Ver [procedimento atual](../operations/deployment.md).

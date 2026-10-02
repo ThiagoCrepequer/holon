@@ -1,7 +1,8 @@
 ---
 id: ADR-0047
 kind: decision
-status: accepted
+status: superseded
+superseded-by: 0048-restore-automatic-worker-deployments.md
 date: 2026-10-02
 owners: [core-team]
 related:

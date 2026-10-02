@@ -9,7 +9,7 @@ import { deployCoordinated, DeploymentGuardError, workers } from "./guard.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const usage = `Deploy coordenado do Holon (altera produção):
-  pnpm run deploy --account <32 hex> --queue <32 hex> --application <UUID> --revision <Git SHA completo>
+  pnpm run deploy:guarded --account <32 hex> --queue <32 hex> --application <UUID> --revision <Git SHA completo>
 Requer terminal interativo, CLOUDFLARE_API_TOKEN existente, Node 24, pnpm 11.24.0,
 checkout limpo e pnpm verify aprovado. A fila é pausada; o operador comprova
 batches/cleanup drenados e rollout concluído. Não há --yes nem retomada automática.

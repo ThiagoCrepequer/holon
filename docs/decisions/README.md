@@ -93,4 +93,6 @@ vigentes; os textos anteriores são preservados como histórico.
 
 - [ADR-0046 — Proteger conclusão por shard e reproduzir incidentes localmente](0046-protect-shard-completion-and-local-replay.md) — substitui a admissão compartilhada e o tratamento de checkpoints rejeitados da ADR-0045.
 
-- [ADR-0047 — Proteger o caminho normal de deploy](0047-guard-coordinated-deployments.md) — guarda operacional com evidência de drenagem e rollout vinculada à sessão.
+- [ADR-0047 — Proteger o caminho normal de deploy](0047-guard-coordinated-deployments.md) — `superseded` pela ADR-0048; ferramenta manual preservada como opção.
+
+- [ADR-0048 — Restaurar deploy automático dos Workers](0048-restore-automatic-worker-deployments.md) — substitui o bloqueio obrigatório da ADR-0047; guarda preservada como ferramenta manual opcional.
