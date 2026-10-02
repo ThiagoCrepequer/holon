@@ -37,6 +37,8 @@ export default mergeConfig(
               process.env.HOLON_LOCAL_REVIEW_ALL ?? "false",
             HOLON_LOCAL_REVIEW_DEFECT:
               process.env.HOLON_LOCAL_REVIEW_DEFECT ?? "false",
+            HOLON_LOCAL_REVIEW_PROFILE_INPUT:
+              process.env.HOLON_LOCAL_REVIEW_PROFILE_INPUT ?? "false",
             HOLON_LOCAL_REVIEW_URL: process.env.HOLON_LOCAL_REVIEW_URL ?? "",
             HOLON_LOCAL_REVIEW_CAPABILITY:
               process.env.HOLON_LOCAL_REVIEW_CAPABILITY ?? "",

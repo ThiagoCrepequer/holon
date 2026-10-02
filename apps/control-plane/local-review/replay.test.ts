@@ -21,11 +21,13 @@ import {
 } from "../src/review-workflow.js";
 import { unconfiguredExecutor } from "../test/executor-fixture.js";
 import { incidentCase as fixture, injectedDefect } from "./case.js";
+import { profileModelInput } from "./input-profile.js";
 
 const settings = env as typeof env & {
   HOLON_LOCAL_REVIEW_LIVE: string;
   HOLON_LOCAL_REVIEW_ALL: string;
   HOLON_LOCAL_REVIEW_DEFECT: string;
+  HOLON_LOCAL_REVIEW_PROFILE_INPUT: string;
   HOLON_LOCAL_REVIEW_URL: string;
   HOLON_LOCAL_REVIEW_CAPABILITY: string;
 };
@@ -61,13 +63,15 @@ it
               ? "live-injected-defect"
               : "live-small-shard",
           ]
-        : [
-            "normal",
-            "checkpoint-repair",
-            "injected-defect",
-            "provider-failure",
-            "checkpoint-invalid",
-          ],
+        : settings.HOLON_LOCAL_REVIEW_PROFILE_INPUT === "true"
+          ? ["normal"]
+          : [
+              "normal",
+              "checkpoint-repair",
+              "injected-defect",
+              "provider-failure",
+              "checkpoint-invalid",
+            ],
   )(
   "replays PR106 through the real review composition: %s",
   async (scenario) => {
@@ -106,6 +110,14 @@ it
       [];
     const events: Array<{ event: string; [key: string]: unknown }> = [];
     const rounds = new Map<string, number>();
+    const profileCalls = new Map<string, number>();
+    const inputProfiles: Array<
+      ReturnType<typeof profileModelInput> & {
+        shardIndex: number;
+        phase: string;
+        call: number;
+      }
+    > = [];
     let prepared = false;
     let providerCalls = 0;
     let tools = 0;
@@ -113,13 +125,24 @@ it
       const request = new Request(input, init);
       if (!request.url.startsWith("https://gateway.ai.cloudflare.com/"))
         throw new Error("Unexpected external request during offline replay");
-      const body = (await request.json()) as {
+      const raw = await request.text();
+      const body = JSON.parse(raw) as {
         messages: Array<{ role: string; content: string }>;
       };
       const metadata = JSON.parse(
         request.headers.get("cf-aig-metadata") ?? "{}",
       );
       const key = String(metadata.shard_index);
+      if (settings.HOLON_LOCAL_REVIEW_PROFILE_INPUT === "true") {
+        const call = (profileCalls.get(key) ?? 0) + 1;
+        profileCalls.set(key, call);
+        inputProfiles.push({
+          ...profileModelInput(raw, body),
+          shardIndex: Number(key),
+          phase: String(metadata.phase),
+          call,
+        });
+      }
       if (
         scenario === "live-injected-defect" &&
         metadata.phase === "investigation"
@@ -482,6 +505,10 @@ it
           ),
       }),
     );
+    if (settings.HOLON_LOCAL_REVIEW_PROFILE_INPUT === "true")
+      console.log(
+        JSON.stringify({ event: "local.input_profile", inputProfiles }),
+      );
     const coverage = events.find(
       (event) => event.event === "review.coverage_planned",
     )!;

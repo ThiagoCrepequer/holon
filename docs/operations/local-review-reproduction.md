@@ -28,6 +28,16 @@ não faz fetch, instala dependências ou busca credenciais automaticamente.
 pnpm --filter @holon/control-plane test:local-review
 ```
 
+Para medir somente os tamanhos serializados do request inicial e do histórico
+na composição offline, execute `pnpm --filter @holon/control-plane
+test:local-review --profile-input`. Esse modo roda apenas o cenário normal e
+registra por chamada contagens UTF-8 das mensagens de instrução, primeiro prompt
+do usuário, mensagens posteriores, schemas de ferramentas, formato de resposta e
+demais campos. Não registra conteúdo. As contagens são do corpo HTTP enviado ao
+relay local; a reserva durável mede a serialização dos parâmetros do AI SDK e
+pode diferir. O provider simulado encerra a investigação em duas chamadas por
+shard, portanto esse perfil não representa o histórico produzido por um modelo real.
+
 O Docker monta objetos Git somente para leitura, sem rede, com filesystem de imagem
 somente leitura, CPU/memória limitadas e workspace temporário. Cada cenário cria seu
 container e o compartilha entre os shards. O ledger solicita cleanup pelo binding
@@ -97,6 +107,38 @@ configurada na conta OpenRouter; não altera a rota remota `dynamic/pr-review`.
 Nesse modo, o relay espaça o início das chamadas por 15 segundos. No shard único,
 os tetos locais são oito requests e 600.000 bytes. Resultados desse modo medem
 o modelo alternativo, não validam a rota de produção.
+
+## Perfil de entrada e experimento de compactação: 2026-10-01
+
+O cenário offline `--profile-input` passou, com oito shards, 25 chamadas
+simuladas, oito consultas reais ao executor e veredito coletado `APPROVE`. As
+primeiras chamadas de investigação mediram entre 29.471 e 57.583 bytes no corpo
+HTTP. Somadas, foram 350.019 bytes: 292.338 bytes (83,5%) do prompt canônico,
+34.097 de instruções, 22.072 de schemas de ferramentas e 1.512 de outros
+campos. O histórico estava vazio. Os oito tamanhos iniciais coincidem com os
+registrados no replay real anterior com DeepSeek sem reasoning; isso confirma a
+base imutável do prompt, não o comportamento posterior do modelo.
+
+Nesse replay real, a investigação do shard 0 enviou quatro requests que somaram
+327.789 bytes no relay; o primeiro tinha 57.583 e o quarto 99.064 bytes. O
+shard 1 enviou cinco requests que somaram 373.048 bytes no relay; o primeiro
+tinha 53.316 e o quinto 89.230 bytes. O incremento sobre repetir o tamanho
+inicial foi respectivamente 97.457 e 106.468 bytes. Esses incrementos incluem
+histórico de ferramentas e pequenas mudanças das instruções e schemas; não são
+uma medição isolada do histórico nem dos bytes cobrados pelo ledger. A recusa
+`input_bytes` do ledger permanece a evidência direta do teto por shard.
+
+Um teste determinístico com resultado de ferramenta de 20 KB confirmou que o
+bloco de consulta anterior permanece no prompt após um checkpoint aceito. Um
+contrafactual que conserva o prompt canônico, as notas e o par de mensagens do
+checkpoint, mas retira o par da consulta anterior, reduz mais de 20 KB naquela
+chamada. Isso mede uma oportunidade de compactação, **não** comprova que um
+modelo real manteria a mesma qualidade de revisão. A ADR-0046 exige conservar
+o bloco de consultas/checkpoint mais recente; por isso não foi alterado o core
+nem a alocação de orçamento com base apenas nesse teste. É necessária uma nova
+decisão para mudar essa retenção ou distribuir cotas de modo diferente, seguida
+de validação de achado conhecido e replay real limitado. Nenhum envio externo
+foi feito nesta medição.
 
 ## Evidência local em 2026-09-29
 

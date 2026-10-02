@@ -42,6 +42,9 @@ async function cleanup() {
 const capability = randomUUID();
 const liveAll = process.argv.includes("--live-all");
 const live = liveAll || process.argv.includes("--live");
+const profileInput = process.argv.includes("--profile-input");
+if (profileInput && live)
+  throw new Error("--profile-input is an offline-only diagnostic");
 const liveDefect = process.argv.includes("--live-defect");
 const liveDeepSeek = process.argv.includes("--live-deepseek");
 const liveNemotron = process.argv.includes("--live-nemotron");
@@ -538,6 +541,7 @@ try {
   process.env.HOLON_LOCAL_REVIEW_LIVE = String(live);
   process.env.HOLON_LOCAL_REVIEW_ALL = String(liveAll);
   process.env.HOLON_LOCAL_REVIEW_DEFECT = String(liveDefect);
+  process.env.HOLON_LOCAL_REVIEW_PROFILE_INPUT = String(profileInput);
   process.env.HOLON_LOCAL_REVIEW_TIMEOUT_MS = String(
     reviewTimeBudget.analysisMs + 60_000,
   );

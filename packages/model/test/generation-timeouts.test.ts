@@ -1240,6 +1240,56 @@ it("compacts acknowledged query history while retaining canonical context and th
   expect(calls).toBe(6);
 });
 
+it("profiles the retained query block after a checkpoint without changing review behavior", async () => {
+  const oldResult = "OLD_QUERY_SENTINEL" + "x".repeat(20_000);
+  let calls = 0;
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      const index = calls++;
+      if (index === 0)
+        return {
+          ...textResult(""),
+          content: [
+            {
+              type: "tool-call" as const,
+              toolCallId: "old-read",
+              toolName: "read_file",
+              input: JSON.stringify({ path: "src/a.ts" }),
+            },
+          ],
+          finishReason: { unified: "tool-calls" as const, raw: "tool_calls" },
+        };
+      if (index === 1) return checkpointResult(false, "pending");
+      if (index === 2) {
+        const prompt = options.prompt;
+        expect(prompt).toHaveLength(6);
+        const actual = JSON.stringify(prompt);
+        const checkpointOnly = JSON.stringify([
+          ...prompt.slice(0, 2),
+          ...prompt.slice(4),
+        ]);
+        expect(actual).toContain(oldResult);
+        expect(checkpointOnly).not.toContain(oldResult);
+        expect(checkpointOnly).toContain(
+          "Compared changed contract and relevant callers",
+        );
+        expect(checkpointOnly).toContain("private patch");
+        expect(
+          new TextEncoder().encode(actual).byteLength -
+            new TextEncoder().encode(checkpointOnly).byteLength,
+        ).toBeGreaterThan(20_000);
+        return checkpointResult(true);
+      }
+      return textResult(JSON.stringify(output));
+    },
+  });
+  const result = await generator(model, undefined, async () => ({
+    content: oldResult,
+    truncated: false,
+  })).generate({ ...request, investigationPaths: ["src/a.ts"] });
+  expect(result).not.toMatchObject({ isDegraded: true });
+});
+
 it("preserves checkpoint notes and finalizes incompletely when investigation admission is exhausted", async () => {
   const events: GenerationEvent[] = [];
   let providerCalls = 0;
