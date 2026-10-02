@@ -6,7 +6,10 @@ import type {
   ReviewDecisionContext,
   ReviewLedger,
 } from "@holon/application";
-import type { ModelGenerationReservation } from "@holon/contracts";
+import type {
+  ModelGenerationReservation,
+  ModelGenerationAdmission,
+} from "@holon/contracts";
 import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
@@ -909,7 +912,7 @@ export class ReviewLedgerObject
   public reserveModelGeneration(
     runId: string,
     request: ModelGenerationReservation,
-  ): Promise<number | undefined> {
+  ): Promise<ModelGenerationAdmission> {
     return Promise.resolve(
       this.ctx.storage.transactionSync(() =>
         new ReviewGenerationBudgetStore(this.ctx.storage.sql).reserve(

@@ -9,7 +9,8 @@
     "dev": "wrangler dev",
     "test": "vitest run --config vitest.config.ts",
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
-    "typecheck": "wrangler types --check && tsc --noEmit -p tsconfig.json"
+    "typecheck": "wrangler types --check && tsc --noEmit -p tsconfig.json",
+    "test:local-review": "pnpm --filter @holon/evaluation exec tsx ../../apps/control-plane/local-review/run.ts"
   },
   "dependencies": {
     "@holon/application": "workspace:*",

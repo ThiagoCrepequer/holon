@@ -1,12 +1,22 @@
-import type { ModelGenerationReservation } from "@holon/contracts";
+import type {
+  ModelGenerationReservation,
+  ModelGenerationAdmission,
+} from "@holon/contracts";
 import { wrapLanguageModel, type LanguageModel } from "ai";
 
 export interface ModelGenerationBudget {
-  reserve(request: ModelGenerationReservation): Promise<number | undefined>;
+  reserve(
+    request: Omit<ModelGenerationReservation, "shardIndex" | "shardCount">,
+  ): Promise<ModelGenerationAdmission>;
   settle(id: number, outputTokens: number): Promise<void>;
 }
 export class ModelReviewBudgetExceededError extends Error {
-  public constructor() {
+  public constructor(
+    public readonly admission: Extract<
+      ModelGenerationAdmission,
+      { accepted: false }
+    >,
+  ) {
     super("Aggregate review generation budget exhausted");
     this.name = "ModelReviewBudgetExceededError";
   }
@@ -14,13 +24,14 @@ export class ModelReviewBudgetExceededError extends Error {
 export function withGenerationBudget(
   model: Exclude<LanguageModel, string>,
   budget?: ModelGenerationBudget,
+  phase: ModelGenerationReservation["phase"] = "investigation",
 ) {
   if (!budget) return model;
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v4",
-      wrapGenerate: async ({ params, doGenerate }) => {
+      wrapGenerate: async ({ params, model: provider }) => {
         params.abortSignal?.throwIfAborted();
         const maximum = params.maxOutputTokens;
         if (
@@ -32,6 +43,7 @@ export function withGenerationBudget(
             "Model generation requires a bounded output maximum",
           );
         const reservation = await budget.reserve({
+          phase,
           inputBytes: new TextEncoder().encode(
             JSON.stringify({
               prompt: params.prompt,
@@ -41,17 +53,20 @@ export function withGenerationBudget(
           ).byteLength,
           outputTokens: maximum,
         });
-        if (reservation === undefined)
-          throw new ModelReviewBudgetExceededError();
+        if (!reservation.accepted)
+          throw new ModelReviewBudgetExceededError(reservation);
         params.abortSignal?.throwIfAborted();
-        const result = await doGenerate();
+        const result = await provider.doGenerate({
+          ...params,
+          maxOutputTokens: reservation.outputTokens,
+        });
         const outputTokens = result.usage.outputTokens.total;
         if (
           outputTokens !== undefined &&
           Number.isSafeInteger(outputTokens) &&
           outputTokens >= 0
         )
-          await budget.settle(reservation, outputTokens);
+          await budget.settle(reservation.id, outputTokens);
         return result;
       },
     },

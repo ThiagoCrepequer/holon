@@ -286,6 +286,16 @@ e nenhuma aprovação. Erros desconhecidos e falhas de ledger/executor não são
 convertidos em falhas transitórias do modelo. Uso conhecido de rodadas concluídas
 é registrado também quando uma rodada posterior falha; uso da chamada interrompida
 pode permanecer desconhecido.
+
+Com verificações rastreadas, o host pede uma chamada de ferramenta na investigação.
+Se a primeira rodada ainda assim termina em texto, sem nenhuma chamada de ferramenta
+nem checkpoint, e restam pelo menos 60 segundos, faz uma única continuação com
+`review_checkpoint` selecionado explicitamente. As mensagens e os limites são
+compartilhados; a continuação não concede novo orçamento. Se o provider ignorar
+também essa seleção ou mantiver verificações pendentes, o resultado continua
+incompleto. O checkpoint declara cobertura, mas não substitui a validação de
+evidência dos findings.
+
 Cada shard tem 24 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências
@@ -354,6 +364,15 @@ compartilhadas. O ledger limita a revisão a 64 inferências, 4 MB cumulativos d
 entrada serializada e 120.000 tokens de saída reservados/consumidos. Retries e
 replay compartilham esses limites. Falhas incertas mantêm suas reservas; esgotamento
 produz incompletude explícita, nunca aprovação.
+
+A [ADR-0046](../decisions/0046-protect-shard-completion-and-local-replay.md)
+divide esses tetos pelo plano imutável, com reserva de conclusão por parte. A primeira
+onda não pode consumir as parcelas seguintes. A recusa informa dimensão, limite e
+consumo, sem payloads. Checkpoints rejeitados recebem reparo limitado e não contam
+como checkpoints sem progresso. Após checkpoint aceito, o histórico de consultas
+fica restrito ao bloco mais recente e ao corrente; prompt canônico e notas aceitas
+continuam disponíveis. A [reprodução local](../operations/local-review-reproduction.md)
+valida esse encadeamento sem publicação nem chamadas obrigatórias a modelos reais.
 
 ### Concessão de Sandbox e cancelamento de ferramentas
 
