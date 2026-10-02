@@ -4,8 +4,7 @@ kind: decision
 status: accepted
 date: 2026-10-02
 owners: [core-team]
-related:
-  - 0047-guard-coordinated-deployments.md
+supersedes: [0047-guard-coordinated-deployments.md]
 ---
 
 # Restaurar deploy automático dos Workers
