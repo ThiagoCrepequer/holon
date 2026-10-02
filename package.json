@@ -9,14 +9,17 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
-    "test": "turbo run test",
-    "test:coverage": "turbo run test:coverage",
+    "test": "pnpm test:deploy && turbo run test",
+    "test:coverage": "pnpm test:deploy:coverage && turbo run test:coverage",
     "typecheck": "turbo run typecheck",
     "verify": "pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "config:validate": "pnpm --filter @holon/config-cli holon config validate",
     "config:explain": "pnpm --filter @holon/config-cli holon config explain",
     "config:schema:generate": "pnpm --filter @holon/config-cli schema:generate",
-    "config:schema:check": "pnpm --filter @holon/config-cli schema:check"
+    "config:schema:check": "pnpm --filter @holon/config-cli schema:check",
+    "deploy": "node tooling/deploy/cli.mjs",
+    "test:deploy": "node --test tooling/deploy/*.test.mjs",
+    "test:deploy:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/deploy/*.mjs\" --test-coverage-exclude=\"tooling/deploy/*.test.mjs\" tooling/deploy/*.test.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-istanbul": "catalog:",
