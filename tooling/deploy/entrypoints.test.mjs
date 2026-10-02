@@ -76,7 +76,10 @@ await test("existing Cloudflare commands deploy noninteractively through Wrangle
           // pnpm/Corepack may normalize a child status to 1. The contract is
           // failure propagation, not preservation of the exact numeric code.
           assert.notEqual(result.status, 0);
-          assert.match(result.stderr + result.stdout, /exit (?:code|status) 23/i);
+          assert.match(
+            result.stderr + result.stdout,
+            /exit (?:code|status) 23/i,
+          );
         }
         const call = JSON.parse(await readFile(capture, "utf8"));
         assert.deepEqual(call.args, expected);
