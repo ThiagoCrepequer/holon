@@ -68,7 +68,7 @@ function fixture() {
   return { options, ports, calls, versions, paused: () => paused };
 }
 
-test("coordinates both deployments and resumes only after bound rollout confirmation", async () => {
+await test("coordinates both deployments and resumes only after bound rollout confirmation", async () => {
   const f = fixture();
   const result = await deployCoordinated(f.options, f.ports);
   assert.equal(result.revision, revision);
@@ -97,7 +97,7 @@ for (const status of [
   "unknown",
   "retrying",
 ]) {
-  test(`blocks ${status} workflows and leaves queue paused`, async () => {
+  await test(`blocks ${status} workflows and leaves queue paused`, async () => {
     const f = fixture();
     f.ports.reader.workflows = async () => [
       { id: "active", status, versionId: "v" },
@@ -111,7 +111,7 @@ for (const status of [
   });
 }
 
-test("rejects stale/unbound operator evidence", async () => {
+await test("rejects stale/unbound operator evidence", async () => {
   const f = fixture();
   f.ports.confirm = async (stage, binding) => ({
     binding: stage === "drain" ? "old-session" : binding,
@@ -125,7 +125,7 @@ test("rejects stale/unbound operator evidence", async () => {
   assert.ok(!f.calls.includes("holon-control-plane"));
 });
 
-test("new admission after manual drain invalidates the snapshot", async () => {
+await test("new admission after manual drain invalidates the snapshot", async () => {
   const f = fixture();
   let scans = 0;
   f.ports.reader.workflows = async () =>
@@ -138,7 +138,7 @@ test("new admission after manual drain invalidates the snapshot", async () => {
   assert.ok(!f.calls.includes("holon-control-plane"));
 });
 
-test("failed executor deployment never resumes after control-plane success", async () => {
+await test("failed executor deployment never resumes after control-plane success", async () => {
   const f = fixture();
   f.ports.command.deploy = async (worker) => {
     f.calls.push(worker);
@@ -152,7 +152,7 @@ test("failed executor deployment never resumes after control-plane success", asy
   assert.ok(!f.calls.includes("resume"));
 });
 
-test("wrong deployed revision blocks the next deployment", async () => {
+await test("wrong deployed revision blocks the next deployment", async () => {
   const f = fixture();
   f.versions["holon-control-plane"].tag = "e".repeat(40);
   await assert.rejects(
@@ -163,7 +163,7 @@ test("wrong deployed revision blocks the next deployment", async () => {
   assert.equal(f.paused(), true);
 });
 
-test("empty container list still requires explicit rollout evidence", async () => {
+await test("empty container list still requires explicit rollout evidence", async () => {
   const f = fixture();
   f.ports.confirm = async (stage, binding) =>
     stage === "rollout-and-resume"
@@ -177,7 +177,7 @@ test("empty container list still requires explicit rollout evidence", async () =
   assert.equal(f.paused(), true);
 });
 
-test("concurrent deployment during confirmation blocks resume", async () => {
+await test("concurrent deployment during confirmation blocks resume", async () => {
   const f = fixture();
   f.ports.confirm = async (stage, binding) => {
     if (stage === "rollout-and-resume")
@@ -195,7 +195,7 @@ test("concurrent deployment during confirmation blocks resume", async () => {
   assert.equal(f.paused(), true);
 });
 
-test("uncertain resume is followed by a verified fail-safe pause", async () => {
+await test("uncertain resume is followed by a verified fail-safe pause", async () => {
   const f = fixture();
   const resume = f.ports.command.resume;
   f.ports.command.resume = async () => {
@@ -210,7 +210,7 @@ test("uncertain resume is followed by a verified fail-safe pause", async () => {
   assert.equal(f.calls.at(-1), "pause");
 });
 
-test("pause verification failure never claims paused", async () => {
+await test("pause verification failure never claims paused", async () => {
   const f = fixture();
   f.ports.reader.queue = async () => ({ paused: false });
   await assert.rejects(
@@ -220,7 +220,7 @@ test("pause verification failure never claims paused", async () => {
   assert.ok(!f.calls.includes("holon-control-plane"));
 });
 
-test("invalid target fails before any remote operation", async () => {
+await test("invalid target fails before any remote operation", async () => {
   const f = fixture();
   await assert.rejects(
     deployCoordinated({ ...f.options, revision: "main" }, f.ports),
@@ -229,7 +229,7 @@ test("invalid target fails before any remote operation", async () => {
   assert.deepEqual(f.calls, []);
 });
 
-test("interrupt during final evidence reads never resumes", async () => {
+await test("interrupt during final evidence reads never resumes", async () => {
   const f = fixture();
   const controller = new AbortController();
   f.ports.signal = controller.signal;
@@ -259,7 +259,7 @@ for (const state of [
   "unhealthy",
   "unknown",
 ]) {
-  test(`blocks Container state ${state}`, async () => {
+  await test(`blocks Container state ${state}`, async () => {
     const f = fixture();
     const container = f.ports.reader.container;
     f.ports.reader.container = async () => ({
@@ -274,7 +274,7 @@ for (const state of [
   });
 }
 for (const summary of ["degraded", "unhealthy", "pending"]) {
-  test(`blocks explicit unhealthy summary ${summary} even without error details`, async () => {
+  await test(`blocks explicit unhealthy summary ${summary} even without error details`, async () => {
     const f = fixture();
     const container = f.ports.reader.container;
     f.ports.reader.container = async () => ({
@@ -287,7 +287,7 @@ for (const summary of ["degraded", "unhealthy", "pending"]) {
     );
   });
 }
-test("running image mismatch blocks but stopped history does not establish readiness", async () => {
+await test("running image mismatch blocks but stopped history does not establish readiness", async () => {
   const f = fixture();
   const container = f.ports.reader.container;
   f.ports.reader.container = async () => ({
@@ -302,7 +302,7 @@ test("running image mismatch blocks but stopped history does not establish readi
     /container_image_mismatch/,
   );
 });
-test("signal while resume is in flight returns to paused instead of reporting success", async () => {
+await test("signal while resume is in flight returns to paused instead of reporting success", async () => {
   const f = fixture();
   const controller = new AbortController();
   f.ports.signal = controller.signal;
@@ -317,7 +317,7 @@ test("signal while resume is in flight returns to paused instead of reporting su
   );
   assert.equal(f.paused(), true);
 });
-test("failed safety pause reports unconfirmed state", async () => {
+await test("failed safety pause reports unconfirmed state", async () => {
   const f = fixture();
   let attempts = 0;
   const pause = f.ports.command.pause;
@@ -334,7 +334,7 @@ test("failed safety pause reports unconfirmed state", async () => {
   );
 });
 
-test("wrong/inaccessible queue ID fails before pausing any named queue", async () => {
+await test("wrong/inaccessible queue ID fails before pausing any named queue", async () => {
   const f = fixture();
   f.ports.reader.queue = async () => {
     throw new Error("wrong target");

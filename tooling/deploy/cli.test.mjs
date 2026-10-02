@@ -21,13 +21,13 @@ const argv = [
   "--revision",
   "c".repeat(40),
 ];
-test("requires explicit immutable targets and rejects extra switches", () => {
+await test("requires explicit immutable targets and rejects extra switches", () => {
   assert.equal(parseArguments(argv).revision, "c".repeat(40));
   assert.throws(() => parseArguments([...argv, "--yes"]));
   assert.throws(() => parseArguments(argv.slice(0, -2)));
   assert.throws(() => parseArguments([...argv, "--queue", "d".repeat(32)]));
 });
-test("deployment command pins worker and full revision without a shell", () => {
+await test("deployment command pins worker and full revision without a shell", () => {
   assert.deepEqual(deploymentCommand("holon-control-plane", "c".repeat(40)), [
     "exec",
     "wrangler",
@@ -43,7 +43,7 @@ test("deployment command pins worker and full revision without a shell", () => {
   ]);
   assert.throws(() => deploymentCommand("other-worker", "c".repeat(40)));
 });
-test("rollout confirmation requires both deployed revisions and image", () => {
+await test("rollout confirmation requires both deployed revisions and image", () => {
   const phrase = confirmationPhrase("rollout-and-resume", "binding", {
     deployed: {
       "holon-control-plane": { versionId: "cp" },
@@ -53,7 +53,7 @@ test("rollout confirmation requires both deployed revisions and image", () => {
   });
   assert.equal(phrase, "RETOMAR cp ex image:sha binding");
 });
-test("noninteractive execution cannot pause or deploy", () => {
+await test("noninteractive execution cannot pause or deploy", () => {
   const result = spawnSync(
     process.execPath,
     ["tooling/deploy/cli.mjs", ...argv],
@@ -65,7 +65,7 @@ test("noninteractive execution cannot pause or deploy", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /terminal interativo/);
 });
-test("independent package deploy entrypoints are blocked, dry-run build preserved", async () => {
+await test("independent package deploy entrypoints are blocked, dry-run build preserved", async () => {
   for (const name of ["control-plane", "repository-executor"]) {
     const manifest = JSON.parse(
       await readFile(
@@ -83,7 +83,7 @@ test("independent package deploy entrypoints are blocked, dry-run build preserve
     );
   }
 });
-test("blocked entrypoint exits without spawning deployment", () => {
+await test("blocked entrypoint exits without spawning deployment", () => {
   const result = spawnSync(process.execPath, ["tooling/deploy/blocked.mjs"], {
     encoding: "utf8",
   });
@@ -91,14 +91,14 @@ test("blocked entrypoint exits without spawning deployment", () => {
   assert.match(result.stderr, /pnpm run deploy/);
 });
 
-test("real CLI main is simulated end to end without commands or network", async () => {
+await test("real CLI main is simulated end to end without commands or network", async () => {
   const {
     mkdtemp,
     rm,
     readdir,
     readFile: read,
   } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
+  const os = await import("node:os");
   const { join } = await import("node:path");
   for (const scenario of [
     "success",
@@ -114,7 +114,7 @@ test("real CLI main is simulated end to end without commands or network", async 
     "verify-failed",
     "lock-existing",
   ]) {
-    const directory = await mkdtemp(join(tmpdir(), "holon-deploy-sim-"));
+    const directory = await mkdtemp(join(os.tmpdir(), "holon-deploy-sim-"));
     try {
       const child = spawnSync(
         process.execPath,
@@ -173,7 +173,7 @@ test("real CLI main is simulated end to end without commands or network", async 
   }
 });
 
-test("pins Wrangler target, origin and sanitized logs despite ambient overrides", () => {
+await test("pins Wrangler target, origin and sanitized logs despite ambient overrides", () => {
   const env = commandEnvironment(
     {
       CLOUDFLARE_ENV: "staging",

@@ -116,7 +116,7 @@ async function rejectsQueue(value, pattern = /Cloudflare/) {
   await assert.rejects(fixture(value).reader.queue(), pattern);
 }
 
-test("reads only the fixed official queue endpoint and explicit boolean", async () => {
+await test("reads only the fixed official queue endpoint and explicit boolean", async () => {
   for (const paused of [true, false]) {
     const { reader, calls } = fixture(queue(paused));
     assert.deepEqual(await reader.queue(), { paused });
@@ -132,7 +132,7 @@ test("reads only the fixed official queue endpoint and explicit boolean", async 
   }
 });
 
-test("rejects queue identity/name mismatches and missing or coerced pause", async () => {
+await test("rejects queue identity/name mismatches and missing or coerced pause", async () => {
   for (const mutate of [
     (x) => {
       x.result.queue_id = "c".repeat(32);
@@ -156,7 +156,7 @@ test("rejects queue identity/name mismatches and missing or coerced pause", asyn
   }
 });
 
-test("rejects unsuccessful and malformed API envelopes", async () => {
+await test("rejects unsuccessful and malformed API envelopes", async () => {
   for (const value of [
     null,
     [],
@@ -172,7 +172,7 @@ test("rejects unsuccessful and malformed API envelopes", async () => {
   }
 });
 
-test("sanitizes HTTP, network, redirect and JSON errors", async () => {
+await test("sanitizes HTTP, network, redirect and JSON errors", async () => {
   for (const response of [
     () => new Response(token, { status: 403 }),
     () =>
@@ -214,7 +214,7 @@ const oversized = () =>
     { headers: { "content-type": "application/json" } },
   );
 
-test("bounds streamed response bytes even without content-length", async () => {
+await test("bounds streamed response bytes even without content-length", async () => {
   await rejectsQueue(oversized);
   await rejectsQueue(
     () =>
@@ -227,7 +227,7 @@ test("bounds streamed response bytes even without content-length", async () => {
   );
 });
 
-test("rejects invalid configuration before any fetch", () => {
+await test("rejects invalid configuration before any fetch", () => {
   for (const args of [
     { accountId: "https://evil.test" },
     { queueId: "../queues" },
@@ -242,7 +242,7 @@ test("rejects invalid configuration before any fetch", () => {
   }
 });
 
-test("exhausts Workflow cursor pages without status filters and sorts identities", async () => {
+await test("exhausts Workflow cursor pages without status filters and sorts identities", async () => {
   const { reader, calls } = fixture(
     workflowPage([instance("z", "running")], "next/+="),
     workflowPage([instance("a", "terminated")]),
@@ -257,7 +257,7 @@ test("exhausts Workflow cursor pages without status filters and sorts identities
   assert.equal(calls[1].url.searchParams.get("page"), null);
 });
 
-test("accepts every documented Workflow state but rejects unknown states", async () => {
+await test("accepts every documented Workflow state but rejects unknown states", async () => {
   const statuses = [
     "queued",
     "running",
@@ -280,7 +280,7 @@ test("accepts every documented Workflow state but rejects unknown states", async
   );
 });
 
-test("Workflow scan rejects loops, duplicates and inconsistent workflow identities", async () => {
+await test("Workflow scan rejects loops, duplicates and inconsistent workflow identities", async () => {
   const different = instance("b");
   different.workflow_id = applicationId;
   for (const pages of [
@@ -294,7 +294,7 @@ test("Workflow scan rejects loops, duplicates and inconsistent workflow identiti
     await assert.rejects(fixture(...pages).reader.workflows(), /Cloudflare/);
 });
 
-test("Workflow scan rejects missing and ambiguous pagination or identity", async () => {
+await test("Workflow scan rejects missing and ambiguous pagination or identity", async () => {
   const full = Array.from({ length: 100 }, (_, i) => instance(`i-${i}`));
   for (const response of [
     envelope([]),
@@ -310,7 +310,7 @@ test("Workflow scan rejects missing and ambiguous pagination or identity", async
     await assert.rejects(fixture(response).reader.workflows(), /Cloudflare/);
 });
 
-test("bounds Workflow page count without network access", async () => {
+await test("bounds Workflow page count without network access", async () => {
   let calls = 0;
   const reader = createCloudflareReader({
     accountId,
@@ -330,7 +330,7 @@ test("bounds Workflow page count without network access", async () => {
   assert.ok(calls <= 100);
 });
 
-test("reads active deployment then exact version tag using documented beta endpoint", async () => {
+await test("reads active deployment then exact version tag using documented beta endpoint", async () => {
   const value = deployments();
   value.result.deployments.push({
     ...value.result.deployments[0],
@@ -352,7 +352,7 @@ test("reads active deployment then exact version tag using documented beta endpo
   );
 });
 
-test("rejects deployment guesses, splits, unknown strategies, missing tag and mismatched version", async () => {
+await test("rejects deployment guesses, splits, unknown strategies, missing tag and mismatched version", async () => {
   for (const mutate of [
     (x) => {
       x.result.deployments = [];
@@ -399,7 +399,7 @@ test("rejects deployment guesses, splits, unknown strategies, missing tag and mi
   assert.equal(calls.length, 0);
 });
 
-test("returns sanitized Container evidence across every instance page", async () => {
+await test("returns sanitized Container evidence across every instance page", async () => {
   const first = containerInstance("f".repeat(64));
   const second = containerInstance("e".repeat(64), "stopped");
   const { reader, calls } = fixture(
@@ -424,7 +424,7 @@ test("returns sanitized Container evidence across every instance page", async ()
   assert.equal(calls[2].url.searchParams.get("page_token"), "next/+=");
 });
 
-test("empty instances and absent rollout id do not assert readiness", async () => {
+await test("empty instances and absent rollout id do not assert readiness", async () => {
   const app = application();
   delete app.result.active_rollout_id;
   const result = await fixture(app, containerPage([])).reader.container(
@@ -437,7 +437,7 @@ test("empty instances and absent rollout id do not assert readiness", async () =
   assert.equal(result.ready, undefined);
 });
 
-test("fails closed for unsupported Container policy, identity and health", async () => {
+await test("fails closed for unsupported Container policy, identity and health", async () => {
   for (const mutate of [
     (x) => {
       x.result.scheduling_policy = "durable_object";
@@ -473,7 +473,7 @@ test("fails closed for unsupported Container policy, identity and health", async
   }
 });
 
-test("Container instances reject malformed state, ownership and pagination", async () => {
+await test("Container instances reject malformed state, ownership and pagination", async () => {
   for (const page of [
     envelope([]),
     containerPage([{ ...containerInstance(), application_id: deploymentId }]),
@@ -498,7 +498,7 @@ test("Container instances reject malformed state, ownership and pagination", asy
   );
 });
 
-test("preserves unavailable Container health and optional sampled summary", async () => {
+await test("preserves unavailable Container health and optional sampled summary", async () => {
   const missing = application();
   delete missing.result.health;
   assert.equal(
@@ -523,7 +523,7 @@ test("preserves unavailable Container health and optional sampled summary", asyn
   );
 });
 
-test("bounds an unresponsive fetch and aborts without exposing its error", async (t) => {
+await test("bounds an unresponsive fetch and aborts without exposing its error", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let signal;
   const reader = createCloudflareReader({
@@ -544,7 +544,7 @@ test("bounds an unresponsive fetch and aborts without exposing its error", async
   assert.equal(signal.aborted, true);
 });
 
-test("sanitizes JSON parser errors and rejects a silently changed response URL", async () => {
+await test("sanitizes JSON parser errors and rejects a silently changed response URL", async () => {
   await rejectsQueue(
     () =>
       new Response(`{ invalid: "${token}" }`, {
@@ -562,7 +562,7 @@ test("sanitizes JSON parser errors and rejects a silently changed response URL",
   });
 });
 
-test("validates all Container states and counts errors without retaining details", async () => {
+await test("validates all Container states and counts errors without retaining details", async () => {
   const app = application();
   app.result.health.errors = [{ event: { message: token } }];
   const states = [
@@ -590,7 +590,7 @@ test("validates all Container states and counts errors without retaining details
   );
 });
 
-test("bounds Container pages and rejects duplicate instance identities", async () => {
+await test("bounds Container pages and rejects duplicate instance identities", async () => {
   await assert.rejects(
     fixture(
       application(),
@@ -625,7 +625,7 @@ test("bounds Container pages and rejects duplicate instance identities", async (
   assert.ok(pages <= 100);
 });
 
-test("allows an explicit empty/null Workflow cursor to terminate a full page", async () => {
+await test("allows an explicit empty/null Workflow cursor to terminate a full page", async () => {
   const rows = Array.from({ length: 100 }, (_, i) => instance(`i-${i}`));
   for (const end of ["", null]) {
     assert.equal(
@@ -635,7 +635,7 @@ test("allows an explicit empty/null Workflow cursor to terminate a full page", a
   }
 });
 
-test("preserves unavailable images only for stopped and inactive Container history", async () => {
+await test("preserves unavailable images only for stopped and inactive Container history", async () => {
   for (const state of ["stopped", "inactive"]) {
     for (const unavailable of [undefined, null, ""]) {
       const row = {
@@ -659,7 +659,7 @@ test("preserves unavailable images only for stopped and inactive Container histo
   );
 });
 
-test("allows omitted envelope diagnostics and unused timestamp metadata", async () => {
+await test("allows omitted envelope diagnostics and unused timestamp metadata", async () => {
   const queueValue = { success: true, result: queue().result };
   assert.deepEqual(await fixture(queueValue).reader.queue(), { paused: true });
   const row = instance();
@@ -691,7 +691,7 @@ test("allows omitted envelope diagnostics and unused timestamp metadata", async 
   );
 });
 
-test("binds the exact deployed executor version to its self-bound sandbox namespace", async () => {
+await test("binds the exact deployed executor version to its self-bound sandbox namespace", async () => {
   for (const scriptName of [undefined, "holon-repository-executor"]) {
     const detail = workerVersion();
     detail.result.bindings[0].script_name = scriptName;
@@ -710,7 +710,7 @@ test("binds the exact deployed executor version to its self-bound sandbox namesp
   }
 });
 
-test("rejects missing, malformed, ambiguous or externally bound executor sandboxes", async () => {
+await test("rejects missing, malformed, ambiguous or externally bound executor sandboxes", async () => {
   for (const bindings of [
     undefined,
     null,
@@ -742,7 +742,7 @@ test("rejects missing, malformed, ambiguous or externally bound executor sandbox
   }
 });
 
-test("rejects an unrelated Container application even with matching image and health", async () => {
+await test("rejects an unrelated Container application even with matching image and health", async () => {
   for (const binding of [
     undefined,
     null,
