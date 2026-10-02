@@ -99,7 +99,7 @@ await test("real CLI main is simulated end to end without commands or network", 
     readFile: read,
   } = await import("node:fs/promises");
   const os = await import("node:os");
-  const { join } = await import("node:path");
+  const path = await import("node:path");
   for (const scenario of [
     "success",
     "active-workflow",
@@ -114,7 +114,9 @@ await test("real CLI main is simulated end to end without commands or network", 
     "verify-failed",
     "lock-existing",
   ]) {
-    const directory = await mkdtemp(join(os.tmpdir(), "holon-deploy-sim-"));
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "holon-deploy-sim-"),
+    );
     try {
       const child = spawnSync(
         process.execPath,
@@ -135,10 +137,10 @@ await test("real CLI main is simulated end to end without commands or network", 
         assert.equal(result.paused, false);
         assert.equal(result.confirmations, 3);
         const [auditName] = await readdir(
-          join(directory, "holon-deploy-audit"),
+          path.join(directory, "holon-deploy-audit"),
         );
         const audit = await read(
-          join(directory, "holon-deploy-audit", auditName),
+          path.join(directory, "holon-deploy-audit", auditName),
           "utf8",
         );
         assert.match(audit, /"stage":"completed"/);
