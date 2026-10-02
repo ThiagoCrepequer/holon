@@ -51,6 +51,7 @@ await test("existing Cloudflare commands deploy noninteractively through Wrangle
     ];
     for (const { name, script, expected } of cases) {
       for (const exitCode of [0, 23]) {
+        await rm(capture, { force: true });
         const result = spawnSync(
           "pnpm",
           ["--filter", `@holon/${name}`, "run", script],
@@ -67,7 +68,16 @@ await test("existing Cloudflare commands deploy noninteractively through Wrangle
             },
           },
         );
-        assert.equal(result.status, exitCode, result.stderr || result.stdout);
+        assert.equal(result.error, undefined);
+        assert.equal(result.signal, null);
+        if (exitCode === 0) {
+          assert.equal(result.status, 0, result.stderr || result.stdout);
+        } else {
+          // pnpm/Corepack may normalize a child status to 1. The contract is
+          // failure propagation, not preservation of the exact numeric code.
+          assert.notEqual(result.status, 0);
+          assert.match(result.stderr + result.stdout, /exit (?:code|status) 23/i);
+        }
         const call = JSON.parse(await readFile(capture, "utf8"));
         assert.deepEqual(call.args, expected);
         assert.equal(call.cwd, path.join(directory, "apps", name));
