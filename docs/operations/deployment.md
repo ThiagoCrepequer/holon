@@ -4,13 +4,18 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-02
 ---
 
 # Provisionamento e deploy
 
 O primeiro deploy remoto foi executado em 2026-08-29. Os comandos abaixo são
 um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-los.
+
+Para atualizações de ambientes existentes, use exclusivamente a entrada normal
+`pnpm run deploy` descrita em [deploy protegido](guarded-deployment.md). Os comandos
+Wrangler diretos abaixo são exceção de primeiro provisionamento sem tráfego, não
+um atalho para upgrades; exigem autorização operacional específica.
 
 ## Recursos
 
@@ -42,20 +47,20 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    Ele não possui broker e não deve receber tráfego de review:
 
    ```bash
-   pnpm --filter @holon/repository-executor deploy:bootstrap
+   pnpm --filter @holon/repository-executor exec wrangler deploy --config wrangler.bootstrap.jsonc
    ```
 
 7. Faça deploy do control plane, que oferece o broker:
 
    ```bash
-   pnpm --filter @holon/control-plane deploy
+   pnpm --filter @holon/control-plane exec wrangler deploy
    ```
 
 8. Faça deploy do executor final com o binding para o entrypoint nomeado do
    broker:
 
    ```bash
-   pnpm --filter @holon/repository-executor deploy
+   pnpm --filter @holon/repository-executor exec wrangler deploy
    ```
 
 O Wrangler aplica as migrations de classes Durable Object, registrando Workflows,
@@ -75,8 +80,9 @@ Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 O root permanece no topo porque ambos os apps dependem do workspace e do
 lockfile do monorepo. Deploy automático independente dos dois Workers fica
 desabilitado: os bindings são bidirecionais e a ordem control plane -> executor
-é parte do contrato de rollout. Uma pipeline futura pode automatizar exatamente
-essa sequência com aprovação. O executor final usa `wrangler deploy`, pois
+é parte do contrato de rollout. A entrada raiz `pnpm run deploy` coordena
+essa sequência com confirmações de evidência; integração CI sem operador não é
+suportada por esta guarda. O executor final usa `wrangler deploy`, pois
 `wrangler versions upload` não atualiza imagens de Containers. Mantenha o
 include watch path `*` para validar mudanças compartilhadas.
 
@@ -252,10 +258,10 @@ atual `RepositoryToolOutcome`; não retomar instâncias antigas com código novo
    de consumir mais recursos com PRs grandes. Mensagens de follow-up também ficam
    pausadas; não confundir essa pausa com perda de eventos.
 
-Não há neste patch um controlador automático de deploy ou bloqueio da API de
-criação manual de Workflows. Operações diretas também devem respeitar a pausa.
-A automação futura deve manter a fila pausada em caso de falha e exigir evidência
-de rollout concluído antes de retomá-la.
+A [guarda de deploy](guarded-deployment.md) implementa a entrada operacional
+coordenada, mantendo confirmações manuais onde não há prova autoritativa na API.
+Não há bloqueio distribuído da API de criação manual de Workflows. Operações
+diretas e outros administradores também devem respeitar a janela exclusiva.
 
 ### Aceitação remota da correção
 

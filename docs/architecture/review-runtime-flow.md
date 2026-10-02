@@ -423,3 +423,11 @@ padrão pode aceitar um último componente inexistente. Somente o código de sa�
 processo permanecem fatais. Sem essa opção, a leitura posterior poderia transformar
 uma consulta a arquivo ausente em falha de infraestrutura. Fonte verificada em
 2026-09-28: [GNU realpath](https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html).
+
+### Guarda operacional de deploy
+
+A [ADR-0047](../decisions/0047-guard-coordinated-deployments.md) protege a entrada
+normal de deploy com pausa da fila, verificação de Workflows e confirmações de
+evidência de drenagem/rollout. Não acrescenta coordenação distribuída ao runtime
+nem altera a política de recuperação ou orçamento de reviews. O procedimento
+e seus limites estão em [deploy protegido](../operations/guarded-deployment.md).
