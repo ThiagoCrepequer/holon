@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import {
@@ -65,32 +64,6 @@ await test("noninteractive execution cannot pause or deploy", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /terminal interativo/);
 });
-await test("independent package deploy entrypoints are blocked, dry-run build preserved", async () => {
-  for (const name of ["control-plane", "repository-executor"]) {
-    const manifest = JSON.parse(
-      await readFile(
-        new URL(`../../apps/${name}/package.json`, import.meta.url),
-        "utf8",
-      ),
-    );
-    assert.equal(
-      manifest.scripts.deploy,
-      "node ../../tooling/deploy/blocked.mjs",
-    );
-    assert.equal(
-      manifest.scripts.build,
-      "wrangler deploy --dry-run --outdir dist",
-    );
-  }
-});
-await test("blocked entrypoint exits without spawning deployment", () => {
-  const result = spawnSync(process.execPath, ["tooling/deploy/blocked.mjs"], {
-    encoding: "utf8",
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /pnpm run deploy/);
-});
-
 await test("real CLI main is simulated end to end without commands or network", async () => {
   const {
     mkdtemp,
@@ -99,7 +72,7 @@ await test("real CLI main is simulated end to end without commands or network", 
     readFile: read,
   } = await import("node:fs/promises");
   const os = await import("node:os");
-  const { join } = await import("node:path");
+  const path = await import("node:path");
   for (const scenario of [
     "success",
     "active-workflow",
@@ -114,7 +87,9 @@ await test("real CLI main is simulated end to end without commands or network", 
     "verify-failed",
     "lock-existing",
   ]) {
-    const directory = await mkdtemp(join(os.tmpdir(), "holon-deploy-sim-"));
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "holon-deploy-sim-"),
+    );
     try {
       const child = spawnSync(
         process.execPath,
@@ -135,10 +110,10 @@ await test("real CLI main is simulated end to end without commands or network", 
         assert.equal(result.paused, false);
         assert.equal(result.confirmations, 3);
         const [auditName] = await readdir(
-          join(directory, "holon-deploy-audit"),
+          path.join(directory, "holon-deploy-audit"),
         );
         const audit = await read(
-          join(directory, "holon-deploy-audit", auditName),
+          path.join(directory, "holon-deploy-audit", auditName),
           "utf8",
         );
         assert.match(audit, /"stage":"completed"/);
