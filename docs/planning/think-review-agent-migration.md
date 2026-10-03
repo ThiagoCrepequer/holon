@@ -151,6 +151,30 @@ A sessão do Think pode conter o prompt, os patches selecionados e respostas de
 tools daquela run; ela deve permanecer isolada por run/shard. Isso é diferente
 do workspace virtual de arquivos, que não recebe um checkout do repositório.
 
+### Modelo e AI Gateway
+
+O Think aceita um `LanguageModel` do AI SDK retornado por `getModel()`; não
+obriga o uso de Workers AI. A rota atual do Holon usa o provider compatível com
+OpenAI do AI SDK através de `dynamic/pr-review` no AI Gateway. O valor
+`AI_MODEL_ID=openrouter/free` **não é aceito pelo adapter atual**: ele exige
+`dynamic/{route}`. Para testar o router gratuito sem mudar o contrato de
+configuração, a rota dinâmica precisaria selecionar OpenRouter com modelo
+`openrouter/free` e BYOK configurado. A compatibilidade dessa combinação
+específica deve ser comprovada com um smoke; as fontes documentam as peças,
+mas não uma execução integrada do Holon.
+
+O OpenRouter afirma que `openrouter/free` escolhe modelos gratuitos por
+requisição e filtra modelos conforme recursos pedidos, como tool calling e
+structured outputs. Isso permite um experimento, mas não fixa o mesmo modelo
+em todos os passos de investigação e finalização. A variabilidade dificulta
+regressão, calibração do orçamento e garantia de qualidade. O serviço gratuito
+também tem cotas de requisições; cada passo, retry e shard consome uma chamada.
+Para review principal, preferir um modelo identificado e aprovado no corpus,
+com suporte comprovado a streaming, tools e JSON Schema. O router gratuito pode
+servir a testes e avaliação comparativa, com seu modelo efetivo registrado
+somente como metadado técnico. Revisar política de dados do provider antes de
+enviar código privado.
+
 ### Custos, recuperação e observabilidade
 
 O orçamento deve continuar existindo, mas a política atual não deve ser
@@ -261,3 +285,9 @@ atualmente os exige; um novo ADR deve revogar essa parte antes da remoção.
 - [Think: configuração e MCP habilitado por padrão](https://developers.cloudflare.com/agents/harnesses/think/configuration/)
 - [Think: recuperação e compaction](https://developers.cloudflare.com/agents/harnesses/think/recovery/)
 - [AI SDK: middleware `wrapGenerate` e `wrapStream`](https://ai-sdk.dev/docs/ai-sdk-core/middleware)
+- [AI Gateway: Dynamic Routes e BYOK](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/)
+- [AI Gateway: provider OpenRouter](https://developers.cloudflare.com/ai-gateway/usage/providers/openrouter/)
+- [OpenRouter: `openrouter/free`](https://openrouter.ai/openrouter/free)
+- [OpenRouter: tool calling](https://openrouter.ai/docs/guides/features/tool-calling)
+- [OpenRouter: structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
+- [OpenRouter: limites do plano gratuito](https://openrouter.ai/pricing/)
