@@ -66,6 +66,7 @@ afterEach(() => vi.useRealTimers());
 
 it("closes tool access at 24 uncached calls and keeps forced completion incomplete", async () => {
   let calls = 0;
+  const events: GenerationEvent[] = [];
   const run = vi.fn(async () => ({ content: "source", truncated: false }));
   const model = new MockLanguageModelV3({
     doGenerate: async (options) => {
@@ -92,13 +93,26 @@ it("closes tool access at 24 uncached calls and keeps forced completion incomple
       );
     },
   });
-  const result = await generator(model, undefined, run).generate(request);
+  const result = await generator(
+    model,
+    (event) => events.push(event),
+    run,
+  ).generate(request);
   expect(run).toHaveBeenCalledTimes(24);
   expect(calls).toBe(3);
   expect(result).toMatchObject({
     isDegraded: true,
     outputLimitations: ["investigation_incomplete", "tool_budget_exhausted"],
   });
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "model.investigation_stopped",
+      reason: "tool_budget_exhausted",
+      rule: "repository_tool_calls",
+      current: 24,
+      limit: 24,
+    }),
+  );
 });
 
 it("allows a seventh investigation round and reserves output space for reasoning", async () => {
@@ -489,6 +503,9 @@ it("closes repeated cached requests after three rounds without progress", async 
       reason: "no_progress",
       round: 5,
       toolCalls: 1,
+      rule: "stagnant_rounds",
+      current: 3,
+      limit: 3,
     }),
   );
   expect(calls).toBe(6);

@@ -37,6 +37,7 @@ import {
 import { buildReviewPlan } from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
+import { errorKind } from "./observability.js";
 import { resolveReviewGuidance } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
 import { buildShardReviewContext } from "./review-shard-context.js";
@@ -57,6 +58,19 @@ type EmitReviewEvent = (
   fields?: Readonly<Record<string, boolean | number | string | undefined>>,
   suffix?: number | string,
 ) => void;
+
+function emitDiagnostic(
+  emit: EmitReviewEvent | undefined,
+  event: string,
+  fields: Readonly<Record<string, boolean | number | string | undefined>>,
+  suffix?: string,
+): void {
+  try {
+    emit?.(event, fields, suffix);
+  } catch {
+    // Observability cannot change a review result or its retry decision.
+  }
+}
 
 function contextBytes(context: {
   readonly files: readonly { readonly patch: string }[];
@@ -177,6 +191,40 @@ async function reviewShards(
           inputContextOmitted: reviewResult.promptTruncated,
           omittedSections: reviewResult.promptOmissions?.join(","),
         });
+      const limitations = [
+        ...new Set([
+          ...(modelOutput.outputLimitations ?? []),
+          ...(reviewResult.promptTruncated
+            ? ["input_context_omitted" as const]
+            : []),
+          ...(budgetExceeded ? ["tool_budget_exhausted" as const] : []),
+          ...(evidenceRejected ? ["evidence_rejected" as const] : []),
+        ]),
+      ];
+      for (const reason of limitations)
+        emitDiagnostic(
+          emit,
+          "review.shard_partial",
+          {
+            severity: "warning",
+            shardIndex: shard.index,
+            reason,
+            findingsReceived: modelOutput.findings.length,
+            findingsVerified: verifiedFindings.length,
+          },
+          `${shard.index}:${reason}`,
+        );
+      if (modelOutput.isDegraded && limitations.length === 0)
+        emitDiagnostic(
+          emit,
+          "review.shard_partial",
+          {
+            severity: "warning",
+            shardIndex: shard.index,
+            reason: "model_degraded",
+          },
+          `${shard.index}:model_degraded`,
+        );
       results.push({
         findings: modelOutput.findings.filter((finding) =>
           verifiedFindings.includes(finding),
@@ -187,16 +235,7 @@ async function reviewShards(
           reviewResult.promptTruncated ||
           budgetExceeded ||
           evidenceRejected,
-        outputLimitations: [
-          ...new Set([
-            ...(modelOutput.outputLimitations ?? []),
-            ...(reviewResult.promptTruncated
-              ? ["input_context_omitted" as const]
-              : []),
-            ...(budgetExceeded ? ["tool_budget_exhausted" as const] : []),
-            ...(evidenceRejected ? ["evidence_rejected" as const] : []),
-          ]),
-        ],
+        outputLimitations: limitations,
         shardId: shard.id,
         shardIndex: shard.index,
         status: "success",
@@ -209,17 +248,31 @@ async function reviewShards(
         !(error instanceof ModelProviderRequestError)
       )
         throw error;
+      const reason =
+        failureCode ??
+        (error instanceof ModelProviderRequestError && error.isRetryable
+          ? "provider_transient"
+          : "provider_permanent");
+      emitDiagnostic(
+        emit,
+        "review.shard_failed",
+        {
+          severity: "error",
+          shardIndex: shard.index,
+          reason,
+          ...(error instanceof ModelProviderRequestError
+            ? { statusCode: error.statusCode, retryable: error.isRetryable }
+            : {}),
+        },
+        `${shard.index}:${reason}`,
+      );
       results.push({
         shardId: shard.id,
         shardIndex: shard.index,
         status: "failure",
         findings: [],
         summary: "",
-        errorReason:
-          failureCode ??
-          (error instanceof ModelProviderRequestError && error.isRetryable
-            ? "provider_transient"
-            : "provider_permanent"),
+        errorReason: reason,
       });
     }
   }
@@ -437,7 +490,19 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                   throw new NonRetryableError(
                     "Review plan changed during replay",
                   );
-                if (Date.now() >= wave.deadlineAt)
+                if (Date.now() >= wave.deadlineAt) {
+                  emitDiagnostic(
+                    emit,
+                    "review.shard_failed",
+                    {
+                      severity: "error",
+                      shardIndex: index,
+                      reason: "analysis_deadline",
+                      deadlineAt: wave.deadlineAt,
+                      overdueMs: Math.max(0, Date.now() - wave.deadlineAt),
+                    },
+                    `${index}:analysis_deadline`,
+                  );
                   return {
                     results: [
                       {
@@ -451,6 +516,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                     ],
                     anyPromptTruncated: false,
                   };
+                }
                 return reviewShards(
                   job,
                   services,
@@ -530,6 +596,18 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           updatedTrackedFindings: [],
           waiversCount: context.waiversCount,
         };
+        if (output.scopeStatus !== "complete")
+          emitDiagnostic(emit, "review.analysis_partial", {
+            severity: "warning",
+            scopeStatus: output.scopeStatus,
+            plannedShards: plan.shards.length,
+            analyzedShards: 0,
+            failedShards: 0,
+            degradedShards: 0,
+            omittedReasons: plan.omissionReasons
+              .map((reason) => reason.code)
+              .join(","),
+          });
         return execution ? execution.finish(output) : output;
       }
 
@@ -653,7 +731,11 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               path: finding.location.path,
             })),
           });
-        } catch {
+        } catch (error) {
+          emitDiagnostic(emit, "review.synthesis_failed", {
+            severity: "warning",
+            errorKind: errorKind(error),
+          });
           unifiedSummary = reviewMessage(
             outputPreferences.language,
             "synthesisUnavailable",
@@ -689,9 +771,35 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         contextTruncated: context.truncated,
         promptTruncated: anyPromptTruncated || context.truncated,
       });
+      if (output.scopeStatus !== "complete" || output.isDegraded) {
+        emitDiagnostic(emit, "review.analysis_partial", {
+          severity: "warning",
+          scopeStatus: output.scopeStatus,
+          plannedShards: plan.shards.length,
+          analyzedShards: shardResults.filter(
+            (result) => result.status === "success",
+          ).length,
+          failedShards: shardResults.filter(
+            (result) => result.status === "failure",
+          ).length,
+          degradedShards: shardResults.filter((result) => result.isDegraded)
+            .length,
+          omittedReasons: plan.omissionReasons
+            .map((reason) => reason.code)
+            .join(","),
+        });
+      }
       return execution ? execution.finish(output) : output;
     });
   } catch (error) {
+    emitDiagnostic(emit, "review.analysis_failed", {
+      severity: "error",
+      errorKind: errorKind(error),
+      reason:
+        error instanceof RepositoryConfigurationError
+          ? "repository_configuration"
+          : (nonRetryableModelFailureCode(error) ?? "analysis_error"),
+    });
     if (error instanceof RepositoryConfigurationError)
       throw new NonRetryableError(`HOLON_REPOSITORY_CONFIG:${error.code}`);
     const failureCode = nonRetryableModelFailureCode(error);

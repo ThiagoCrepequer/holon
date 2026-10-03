@@ -14,6 +14,7 @@ last-reviewed: 2026-09-10
 - [Configuração do GitHub App](github-app.md)
 - [Rotação de Chave do GitHub App (Runbook)](github-app-key-rotation-runbook.md)
 - [Retirada do admin e limites atuais de diagnóstico](admin-retirement.md)
+- [Diagnóstico de análise parcial ou interrompida](review-analysis-diagnostics.md)
 - [Provisionamento e deploy](deployment.md)
 
 Estes documentos distinguem comandos de validação local de efeitos remotos. Um

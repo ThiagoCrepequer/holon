@@ -5,9 +5,14 @@ import {
   type ModelGenerationReservation,
 } from "@holon/contracts";
 
+import { consoleLogger, type StructuredLogger } from "./observability.js";
+
 /** Call only inside the ledger transaction. Uncertain calls retain their full reservation. */
 export class ReviewGenerationBudgetStore {
-  public constructor(private readonly sql: SqlStorage) {}
+  public constructor(
+    private readonly sql: SqlStorage,
+    private readonly logger: StructuredLogger = consoleLogger,
+  ) {}
   public reserve(
     rawRunId: string,
     raw: ModelGenerationReservation,
@@ -24,12 +29,61 @@ export class ReviewGenerationBudgetStore {
         runId,
       )
       .one();
-    if (
-      totals.calls >= modelGenerationLimits.calls ||
-      totals.input + request.inputBytes > modelGenerationLimits.inputBytes ||
-      totals.output + request.outputTokens > modelGenerationLimits.outputTokens
-    )
+    const callsExceeded = totals.calls >= modelGenerationLimits.calls;
+    const inputBytesExceeded =
+      totals.input + request.inputBytes > modelGenerationLimits.inputBytes;
+    const outputTokensExceeded =
+      totals.output + request.outputTokens > modelGenerationLimits.outputTokens;
+    if (callsExceeded || inputBytesExceeded || outputTokensExceeded) {
+      const rule = callsExceeded
+        ? "calls"
+        : inputBytesExceeded
+          ? "input_bytes"
+          : "output_tokens";
+      const current =
+        rule === "calls"
+          ? totals.calls
+          : rule === "input_bytes"
+            ? totals.input
+            : totals.output;
+      const requested =
+        rule === "calls"
+          ? 1
+          : rule === "input_bytes"
+            ? request.inputBytes
+            : request.outputTokens;
+      const limit =
+        rule === "calls"
+          ? modelGenerationLimits.calls
+          : rule === "input_bytes"
+            ? modelGenerationLimits.inputBytes
+            : modelGenerationLimits.outputTokens;
+      try {
+        this.logger.emit("model.budget_rejected", {
+          severity: "error",
+          runId,
+          rule,
+          current,
+          requested,
+          limit,
+          callsCurrent: totals.calls,
+          callsExceeded,
+          callsLimit: modelGenerationLimits.calls,
+          callsRequested: 1,
+          inputBytesCurrent: totals.input,
+          inputBytesExceeded,
+          inputBytesLimit: modelGenerationLimits.inputBytes,
+          inputBytesRequested: request.inputBytes,
+          outputTokensCurrent: totals.output,
+          outputTokensExceeded,
+          outputTokensLimit: modelGenerationLimits.outputTokens,
+          outputTokensRequested: request.outputTokens,
+        });
+      } catch {
+        // Logging cannot alter admission or transactional accounting.
+      }
       return undefined;
+    }
     return this.sql
       .exec<{ id: number }>(
         "INSERT INTO model_generation_reservations(run_id,input_bytes,output_tokens) VALUES (?,?,?) RETURNING id",

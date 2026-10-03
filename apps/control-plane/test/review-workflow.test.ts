@@ -2292,7 +2292,13 @@ it("waits durably for an existing cache owner then reuses its result", async () 
 });
 
 it("schedules durable cleanup and preserves the original analysis failure", async () => {
+  const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const setup = runtime({
+    logger: {
+      emit: (eventName, fields) => {
+        events.push({ event: eventName, fields });
+      },
+    },
     model: () => ({
       review: async () => {
         throw new Error("analysis infrastructure unavailable");
@@ -2310,6 +2316,21 @@ it("schedules durable cleanup and preserves the original analysis failure", asyn
   ).rejects.toThrow("analysis infrastructure unavailable");
   expect(steps).toContain("mark-review-terminal-and-schedule-cleanup");
   expect(steps.some((name) => /accounting|telemetry/.test(name))).toBe(false);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "review.analysis_step_failed",
+      fields: expect.objectContaining({
+        phase: "analysis",
+        errorKind: "Error",
+      }),
+    }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "review.failed",
+      fields: expect.objectContaining({ phase: "analysis" }),
+    }),
+  );
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   expect(await ledger.runState(job.runId as RunId)).toBe("failed_terminal");
   await runInDurableObject(ledger, (_object, state) => {
