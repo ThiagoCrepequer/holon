@@ -40,6 +40,9 @@ export interface GenerationEvent {
   readonly timeoutMs?: number;
   readonly remainingMs: number;
   readonly reason?: string;
+  readonly rule?: string;
+  readonly current?: number;
+  readonly limit?: number;
   readonly budgetLimit?: number;
   readonly budgetConsumed?: number;
   readonly budgetRequested?: number;

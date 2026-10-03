@@ -2,6 +2,8 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
 
+import { ReviewToolBudgetStore } from "../src/review-tool-budget-store.js";
+
 afterEach(() => reset());
 
 it("shares the 24-call durable limit across concurrent reservations and recreated clients", async () => {
@@ -28,6 +30,27 @@ it("shares the 24-call durable limit across concurrent reservations and recreate
   const replay = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
   expect(await replay.reserveAnalysisToolCall(runId, 0, 2)).toBe(false);
   expect(await replay.reserveAnalysisToolCall(runId, 1, 2)).toBe(true);
+  const events = await runInDurableObject(ledger, (_object, state) => {
+    const captured: unknown[] = [];
+    const store = new ReviewToolBudgetStore(state.storage.sql, {
+      emit(event, fields) {
+        captured.push({ event, ...fields });
+      },
+    });
+    expect(store.reserveToolCall(runId, 0, 2)).toBe(false);
+    return captured;
+  });
+  expect(events).toEqual([
+    expect.objectContaining({
+      event: "repository.tool_budget_rejected",
+      runId,
+      shardIndex: 0,
+      rule: "shard_calls",
+      shardCurrent: 24,
+      shardLimit: 24,
+      totalLimit: 48,
+    }),
+  ]);
 });
 
 it("keeps review state and tool budgets without administrative storage", async () => {

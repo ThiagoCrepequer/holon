@@ -6,9 +6,14 @@ import {
   type ModelGenerationReservation,
 } from "@holon/contracts";
 
+import { consoleLogger, type StructuredLogger } from "./observability.js";
+
 /** Call only inside the ledger transaction. Uncertain calls retain their full reservation. */
 export class ReviewGenerationBudgetStore {
-  public constructor(private readonly sql: SqlStorage) {}
+  public constructor(
+    private readonly sql: SqlStorage,
+    private readonly logger: StructuredLogger = consoleLogger,
+  ) {}
   public reserve(
     rawRunId: string,
     raw: ModelGenerationReservation,
@@ -46,34 +51,82 @@ export class ReviewGenerationBudgetStore {
       request.shardCount,
       request.phase === "investigation",
     );
+    const reject = (
+      reason: "calls" | "input_bytes" | "output_tokens",
+      consumed: number,
+      requested: number,
+      ceiling: number,
+    ): ModelGenerationAdmission => {
+      try {
+        this.logger.emit("model.budget_rejected", {
+          severity: "error",
+          runId,
+          shardIndex: request.shardIndex,
+          shardCount: request.shardCount,
+          phase: request.phase,
+          rule: reason,
+          current: consumed,
+          requested,
+          limit: ceiling,
+          callsCurrent: totals.calls,
+          callsLimit: limit.calls,
+          callsRequested: 1,
+          inputBytesCurrent: totals.input,
+          inputBytesLimit: limit.inputBytes,
+          inputBytesRequested: request.inputBytes,
+          outputTokensCurrent: totals.output,
+          outputTokensLimit: limit.outputTokens,
+          outputTokensRequested: request.outputTokens,
+        });
+      } catch {
+        // Logging cannot alter admission or transactional accounting.
+      }
+      return {
+        accepted: false,
+        reason,
+        limit: ceiling,
+        consumed,
+        requested,
+      };
+    };
     if (totals.calls >= limit.calls)
-      return {
-        accepted: false,
-        reason: "calls",
-        limit: limit.calls,
-        consumed: totals.calls,
-        requested: 1,
-      };
+      return reject("calls", totals.calls, 1, limit.calls);
     if (totals.input + request.inputBytes > limit.inputBytes)
-      return {
-        accepted: false,
-        reason: "input_bytes",
-        limit: limit.inputBytes,
-        consumed: totals.input,
-        requested: request.inputBytes,
-      };
+      return reject(
+        "input_bytes",
+        totals.input,
+        request.inputBytes,
+        limit.inputBytes,
+      );
     const outputTokens = Math.min(
       request.outputTokens,
       limit.outputTokens - totals.output,
     );
     if (outputTokens < Math.min(request.outputTokens, 1024))
-      return {
-        accepted: false,
-        reason: "output_tokens",
-        limit: limit.outputTokens,
-        consumed: totals.output,
-        requested: request.outputTokens,
-      };
+      return reject(
+        "output_tokens",
+        totals.output,
+        request.outputTokens,
+        limit.outputTokens,
+      );
+    if (outputTokens < request.outputTokens) {
+      try {
+        this.logger.emit("model.budget_clamped", {
+          severity: "warning",
+          runId,
+          shardIndex: request.shardIndex,
+          shardCount: request.shardCount,
+          phase: request.phase,
+          rule: "output_tokens",
+          current: totals.output,
+          requested: request.outputTokens,
+          granted: outputTokens,
+          limit: limit.outputTokens,
+        });
+      } catch {
+        // Logging cannot alter admission or transactional accounting.
+      }
+    }
     const id = this.sql
       .exec<{ id: number }>(
         "INSERT INTO model_generation_reservations(run_id,input_bytes,output_tokens,shard_index) VALUES (?,?,?,?) RETURNING id",

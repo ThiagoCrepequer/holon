@@ -3,9 +3,14 @@ import {
   reviewInvestigationLimits,
   runIdSchema,
 } from "@holon/contracts";
+
+import { consoleLogger, type StructuredLogger } from "./observability.js";
 /** Durable reservations enforce tool limits across retries and eviction. */
 export class ReviewToolBudgetStore {
-  public constructor(private readonly sql: SqlStorage) {}
+  public constructor(
+    private readonly sql: SqlStorage,
+    private readonly logger: StructuredLogger = consoleLogger,
+  ) {}
   public reserveToolCall(
     rawRunId: string,
     index: number,
@@ -31,11 +36,28 @@ export class ReviewToolBudgetStore {
         runId,
       )
       .toArray()[0]!;
-    if (
-      row.total >= reviewInvestigationLimits.toolCalls * totalShards ||
-      row.shard >= reviewInvestigationLimits.toolCalls
-    )
+    const totalLimit = reviewInvestigationLimits.toolCalls * totalShards;
+    const totalExceeded = row.total >= totalLimit;
+    const shardExceeded = row.shard >= reviewInvestigationLimits.toolCalls;
+    if (totalExceeded || shardExceeded) {
+      try {
+        this.logger.emit("repository.tool_budget_rejected", {
+          severity: "error",
+          runId,
+          shardIndex: index,
+          rule: shardExceeded ? "shard_calls" : "run_calls",
+          shardCurrent: row.shard,
+          shardLimit: reviewInvestigationLimits.toolCalls,
+          totalCurrent: row.total,
+          totalLimit,
+          shardExceeded,
+          totalExceeded,
+        });
+      } catch {
+        // Logging cannot change the durable tool budget decision.
+      }
       return false;
+    }
     this.sql.exec(
       "INSERT INTO review_tool_budgets(run_id,shard_index,calls) VALUES (?,?,1) ON CONFLICT(run_id,shard_index) DO UPDATE SET calls = calls + 1",
       runId,

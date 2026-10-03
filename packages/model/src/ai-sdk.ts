@@ -362,6 +362,9 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
       | "checkpoint_protocol_failed"
       | "output_budget_exhausted"
       | undefined;
+    let forcedClosureDetail:
+      | { rule: string; current?: number; limit?: number }
+      | undefined;
     let stagnantRounds = 0;
     let previousToolCalls = 0;
     let totalOutputTokens = 0;
@@ -457,21 +460,52 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
                 else if (
                   toolCalls >= reviewInvestigationLimits.toolCalls ||
                   toolBudgetExhausted
-                )
+                ) {
                   forcedClosure = "tool_budget_exhausted";
-                else if (
+                  forcedClosureDetail =
+                    toolCalls >= reviewInvestigationLimits.toolCalls
+                      ? {
+                          rule: "repository_tool_calls",
+                          current: toolCalls,
+                          limit: reviewInvestigationLimits.toolCalls,
+                        }
+                      : { rule: "durable_repository_tool_budget" };
+                } else if (
                   stagnantRounds >= reviewInvestigationLimits.stagnantRounds ||
                   blocksWithoutProgress >= 2
-                )
+                ) {
                   forcedClosure = "no_progress";
-                else if (
+                  forcedClosureDetail =
+                    blocksWithoutProgress >= 2
+                      ? {
+                          rule: "checkpoints_without_progress",
+                          current: blocksWithoutProgress,
+                          limit: 2,
+                        }
+                      : {
+                          rule: "stagnant_rounds",
+                          current: stagnantRounds,
+                          limit: reviewInvestigationLimits.stagnantRounds,
+                        };
+                } else if (
                   totalOutputTokens >=
                   reviewInvestigationLimits.totalOutputTokens -
                     reviewInvestigationLimits.outputTokens
-                )
+                ) {
                   forcedClosure = "output_budget_exhausted";
-                else if (completedRounds >= maximumInvestigationSteps - 1)
+                  forcedClosureDetail = {
+                    rule: "investigation_output_tokens",
+                    current: totalOutputTokens,
+                    limit: reviewInvestigationLimits.totalOutputTokens,
+                  };
+                } else if (completedRounds >= maximumInvestigationSteps - 1) {
                   forcedClosure = "round_limit";
+                  forcedClosureDetail = {
+                    rule: "investigation_rounds",
+                    current: completedRounds + 1,
+                    limit: maximumInvestigationSteps,
+                  };
+                }
                 closing =
                   tracked &&
                   (Boolean(forcedClosure) ||
@@ -714,6 +748,19 @@ export class TwoPhaseReviewGenerator implements ReviewGenerator {
           remainingMs: Math.max(0, investigationDeadlineAt - Date.now()),
           round: completedRounds,
           toolCalls,
+          ...(forcedClosureDetail ??
+            (toolBudgetExhausted
+              ? {
+                  rule: "durable_repository_tool_budget",
+                }
+              : tracked && !progress.complete()
+                ? {
+                    rule: "checks_unresolved",
+                    current:
+                      progress.counts().pending + progress.counts().blocked,
+                    limit: 0,
+                  }
+                : {})),
           reason:
             forcedClosure ??
             (toolBudgetExhausted

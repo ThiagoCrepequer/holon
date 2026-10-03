@@ -319,6 +319,12 @@ describe("analyzeReview", () => {
       expect(result.verdict).toBe("APPROVE");
       if (!failure)
         expect(result.summary).toContain("Authoritative unified summary.");
+      if (failure)
+        expect(emit).toHaveBeenCalledWith(
+          "review.synthesis_failed",
+          expect.objectContaining({ errorKind: "Error", severity: "warning" }),
+          undefined,
+        );
       expect(result.summary).not.toContain("input_context_omitted");
       expect(
         emit.mock.calls.some(([event]) => event === "model.output_limits"),
@@ -408,6 +414,22 @@ describe("analyzeReview", () => {
         "model.output_limits",
         expect.objectContaining({ inputContextOmitted: inputOmitted }),
       );
+      expect(emit).toHaveBeenCalledWith(
+        "review.shard_partial",
+        expect.objectContaining({
+          shardIndex: 0,
+          reason: inputOmitted ? "input_context_omitted" : "summary_truncated",
+        }),
+        expect.any(String),
+      );
+      expect(emit).toHaveBeenCalledWith(
+        "review.analysis_partial",
+        expect.objectContaining({
+          scopeStatus: inputOmitted ? "partial_by_policy" : "complete",
+          degradedShards: 1,
+        }),
+        undefined,
+      );
     },
   );
 
@@ -438,6 +460,15 @@ describe("analyzeReview", () => {
 
     await expect(analyzeReview(job, services, emit)).rejects.toThrow(
       "All review shards failed during model execution",
+    );
+    expect(emit).toHaveBeenCalledWith(
+      "review.shard_failed",
+      expect.objectContaining({
+        reason: "provider_transient",
+        statusCode: 504,
+        shardIndex: 0,
+      }),
+      "0:provider_transient",
     );
   });
 
@@ -869,7 +900,8 @@ it("publishes an incomplete result when the shared deadline expires before infer
     truncated: false,
   });
   const review = vi.spyOn(services.model, "review");
-  const result = await analyzeReview(job, services, () => {}, undefined, {
+  const emit = vi.fn();
+  const result = await analyzeReview(job, services, emit, undefined, {
     configuration: configurationReference(await defaultRunConfiguration(job)),
     async runStep<R>(
       name: string,
@@ -887,6 +919,15 @@ it("publishes an incomplete result when the shared deadline expires before infer
   expect(result.scopeStatus).toBe("partial_by_failure");
   expect(result.verdict).toBe("COMMENT");
   expect(result.summary).toContain("analysis_deadline");
+  expect(emit).toHaveBeenCalledWith(
+    "review.shard_failed",
+    expect.objectContaining({
+      shardIndex: 0,
+      reason: "analysis_deadline",
+      severity: "error",
+    }),
+    "0:analysis_deadline",
+  );
 });
 
 it("runs more than five shards in bounded waves and waits before starting the next wave", async () => {
