@@ -8,6 +8,9 @@ export const modelGenerationLimits = {
 } as const;
 export const modelGenerationReservationSchema = z
   .object({
+    shardIndex: z.number().int().min(0).max(63),
+    shardCount: z.number().int().min(1).max(64),
+    phase: z.enum(["investigation", "finalization", "recovery", "synthesis"]),
     inputBytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     outputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   })
@@ -15,3 +18,17 @@ export const modelGenerationReservationSchema = z
 export type ModelGenerationReservation = z.infer<
   typeof modelGenerationReservationSchema
 >;
+
+export type ModelGenerationAdmission =
+  | {
+      readonly accepted: true;
+      readonly id: number;
+      readonly outputTokens: number;
+    }
+  | {
+      readonly accepted: false;
+      readonly reason: "calls" | "input_bytes" | "output_tokens";
+      readonly limit: number;
+      readonly consumed: number;
+      readonly requested: number;
+    };

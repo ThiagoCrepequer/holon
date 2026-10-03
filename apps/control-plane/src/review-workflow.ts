@@ -164,6 +164,13 @@ export async function executeReviewWorkflow(
   let effectivePolicy: RepositoryPolicy | undefined;
   let configuration: RunConfigurationRef | undefined;
   let outputLanguage: ReviewLanguage = "en";
+  let phase:
+    | "admission"
+    | "configuration"
+    | "preparation"
+    | "identification"
+    | "analysis"
+    | "publication" = "admission";
 
   const moveTo = async (
     stepName: string,
@@ -441,6 +448,7 @@ export async function executeReviewWorkflow(
     }
 
     repositoryStarted = true;
+    phase = "configuration";
     configuration = await step.do(
       "resolve-repository-config",
       configurationStep,
@@ -494,6 +502,7 @@ export async function executeReviewWorkflow(
     await ensureCheckRunStarted();
 
     repositoryStarted = true;
+    phase = "preparation";
     await step.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
       const policy = configurationScopePolicy(
@@ -510,6 +519,7 @@ export async function executeReviewWorkflow(
     });
 
     if (services.identifyProjects && effectivePolicy) {
+      phase = "identification";
       const identificationPolicy = effectivePolicy;
       const identificationStarted = await step.do(
         "start-project-identification",
@@ -606,8 +616,16 @@ export async function executeReviewWorkflow(
           identification.projects.some(
             (project) => project.status !== "complete",
           )
-        )
+        ) {
           identification.status = "partial";
+          emit("project.identification_partial", {
+            severity: "warning",
+            totalProjects: identification.projects.length,
+            partialProjects: identification.projects.filter(
+              (project) => project.status !== "complete",
+            ).length,
+          });
+        }
         const configuredIdentification = {
           ...identification,
           configuredCompatibility: projectCompatibility(
@@ -626,17 +644,37 @@ export async function executeReviewWorkflow(
       }
     }
 
+    phase = "analysis";
     let output = await analyzeReview(job, services, emit, effectivePolicy, {
       configuration: configurationRef,
-      runStep: (name, phase, callback) =>
-        step.do(
-          name,
-          name === "plan-review" ? repositoryStep : modelStep,
-          callback,
-        ),
+      runStep: async (name, stepPhase, callback) =>
+        await step
+          .do(
+            name,
+            name === "plan-review" ? repositoryStep : modelStep,
+            callback,
+          )
+          .catch((error: unknown) => {
+            try {
+              emit(
+                "review.analysis_step_failed",
+                {
+                  severity: "error",
+                  stepName: name,
+                  phase: stepPhase,
+                  errorKind: errorKind(error),
+                },
+                name,
+              );
+            } catch {
+              // A log sink failure cannot replace the failed workflow step.
+            }
+            throw error;
+          }),
       finish: (result) => services.ledger.saveReviewAnalysis(run.id, result),
     });
 
+    phase = "publication";
     await moveTo("begin-publication", "running", "publishing", false);
     const currentBeforePublication = await step.do(
       "revalidate-current-refs",
@@ -972,6 +1010,8 @@ export async function executeReviewWorkflow(
           ? 0
           : durationFrom(rawEvent.timestamp, terminal.occurredAt),
       errorKind: errorKind(error),
+      phase,
+      severity: "error",
     });
     if (runClaimed) {
       await ensureCheckRunStarted();

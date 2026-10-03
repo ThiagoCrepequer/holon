@@ -146,7 +146,11 @@ export class ReviewAgent extends Think<Cloudflare.Env> {
           if (!(await this.isReviewAuthorized())) return undefined;
           return await this.env.REVIEW_LEDGERS.getByName(
             config.prKey,
-          ).reserveModelGeneration(config.runId, request);
+          ).reserveModelGeneration(config.runId, {
+            ...request,
+            shardIndex: config.shardIndex,
+            shardCount: config.totalShards,
+          });
         },
         settle: async (id, outputTokens) => {
           await this.env.REVIEW_LEDGERS.getByName(

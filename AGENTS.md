@@ -37,7 +37,7 @@ Há duas aplicações Workers de produção: `apps/control-plane` e
 retries; um Durable Object SQLite por PR mantém o ledger; o executor usa
 Cloudflare Sandbox com egress negado por padrão. O admin e a persistência
 analítica foram retirados pela ADR-0040. A revisão por shard usa
-`ReviewAgent` (Agents SDK + Think) e `ReviewShardWorkflow` conforme ADR-0046.
+`ReviewAgent` (Agents SDK + Think) e `ReviewShardWorkflow` conforme ADR-0049.
 A arquitetura
 vigente está em `docs/architecture/` e nos ADRs aceitos.
 

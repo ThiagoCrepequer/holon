@@ -6,7 +6,7 @@ owners:
   - core-team
 last-reviewed: 2026-10-03
 related:
-  - ../decisions/0046-use-cloudflare-think-for-pr-review.md
+  - ../decisions/0049-use-cloudflare-think-for-pr-review.md
   - ../decisions/0018-adopt-two-phase-decoupled-review-generator.md
   - ../decisions/0038-harden-parallel-review-and-publication.md
   - ../decisions/0045-bound-review-generation-expenditure.md
@@ -21,7 +21,7 @@ related:
 ## Objetivo e estado
 
 Este é o plano histórico que antecedeu a implementação da
-[ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md). O
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md). O
 [fluxo atual](../architecture/review-runtime-flow.md) e o código são as fontes
 para o runtime implementado. O objetivo era substituir o loop de investigação
 e geração de review mantido pelo Holon por `@cloudflare/think`, usando `agents`

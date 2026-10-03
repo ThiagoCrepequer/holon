@@ -1,4 +1,7 @@
-import type { ModelGenerationReservation } from "@holon/contracts";
+import type {
+  ModelGenerationAdmission,
+  ModelGenerationReservation,
+} from "@holon/contracts";
 import type { RepositoryToolOperation } from "@holon/contracts";
 import type {
   RunConfigurationRef,
@@ -101,7 +104,7 @@ export interface WorkflowLedger
   reserveModelGeneration(
     runId: string,
     request: ModelGenerationReservation,
-  ): Promise<number | undefined>;
+  ): Promise<ModelGenerationAdmission | undefined>;
   settleModelGeneration(
     runId: string,
     id: number,

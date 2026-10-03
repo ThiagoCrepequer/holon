@@ -9,11 +9,11 @@ last-reviewed: 2026-10-03
 
 # Diagnóstico de erros nos Workers
 
-> Histórico anterior às ADR-0040 e ADR-0046. O pacote de observabilidade, o
+> Histórico anterior às ADR-0040 e ADR-0049. O pacote de observabilidade, o
 > motor próprio e o enriquecimento de CI foram removidos. Os eventos e limites
 > abaixo não descrevem o runtime atual. Para reviews novos, consulte o
 > [fluxo de execução](../architecture/review-runtime-flow.md), a
-> [ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md) e o
+> [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md) e o
 > [runbook de deploy](deployment.md).
 
 As configurações dos três Workers habilitam logs de invocação da Cloudflare com

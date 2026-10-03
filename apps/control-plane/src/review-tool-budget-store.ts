@@ -3,9 +3,14 @@ import {
   reviewInvestigationLimits,
   runIdSchema,
 } from "@holon/contracts";
+
+import { consoleLogger, type StructuredLogger } from "./observability.js";
 /** Durable reservations enforce tool limits across retries and eviction. */
 export class ReviewToolBudgetStore {
-  public constructor(private readonly sql: SqlStorage) {}
+  public constructor(
+    private readonly sql: SqlStorage,
+    private readonly logger: StructuredLogger = consoleLogger,
+  ) {}
   public reserveToolCall(
     rawRunId: string,
     index: number,
@@ -25,12 +30,28 @@ export class ReviewToolBudgetStore {
     )
       throw new Error("Tool budget run is unavailable");
     const row = this.sql
-      .exec<{ total: number }>(
-        "SELECT COALESCE(SUM(calls),0) AS total FROM review_tool_budgets WHERE run_id = ?",
+      .exec<{ total: number; shard: number }>(
+        "SELECT COALESCE(SUM(calls),0) AS total, COALESCE(SUM(CASE WHEN shard_index = ? THEN calls ELSE 0 END),0) AS shard FROM review_tool_budgets WHERE run_id = ?",
+        index,
         runId,
       )
       .toArray()[0]!;
-    if (row.total >= reviewInvestigationLimits.toolCalls) return false;
+    if (row.total >= reviewInvestigationLimits.toolCalls) {
+      try {
+        this.logger.emit("repository.tool_budget_rejected", {
+          severity: "error",
+          runId,
+          shardIndex: index,
+          rule: "run_calls",
+          shardCurrent: row.shard,
+          totalCurrent: row.total,
+          totalLimit: reviewInvestigationLimits.toolCalls,
+        });
+      } catch {
+        // Logging cannot change the durable tool budget decision.
+      }
+      return false;
+    }
     this.sql.exec(
       "INSERT INTO review_tool_budgets(run_id,shard_index,calls) VALUES (?,?,1) ON CONFLICT(run_id,shard_index) DO UPDATE SET calls = calls + 1",
       runId,

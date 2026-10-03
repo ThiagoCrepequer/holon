@@ -13,7 +13,11 @@ const response = {
   warnings: [],
 };
 it("reserves the provider-ready input before inference and settles actual output", async () => {
-  const reserve = vi.fn(async () => 1);
+  const reserve = vi.fn(async () => ({
+    accepted: true as const,
+    id: 1,
+    outputTokens: 20,
+  }));
   const settle = vi.fn(async () => {});
   const doGenerate = vi.fn(async () => {
     expect(reserve).toHaveBeenCalledTimes(1);
@@ -29,6 +33,7 @@ it("reserves the provider-ready input before inference and settles actual output
     maxRetries: 0,
   });
   expect(reserve).toHaveBeenCalledWith({
+    phase: "investigation",
     inputBytes: expect.any(Number),
     outputTokens: 20,
   });
@@ -40,7 +45,13 @@ it("does not contact a provider after aggregate admission fails", async () => {
   await expect(
     generateText({
       model: withGenerationBudget(new MockLanguageModelV3({ doGenerate }), {
-        reserve: async () => undefined,
+        reserve: async () => ({
+          accepted: false as const,
+          reason: "calls" as const,
+          limit: 64,
+          consumed: 64,
+          requested: 1,
+        }),
         settle,
       }),
       prompt: "Public fixture",
@@ -60,7 +71,11 @@ it("keeps uncertain charges and propagates storage failures", async () => {
   await expect(
     generateText({
       model: withGenerationBudget(new MockLanguageModelV3({ doGenerate }), {
-        reserve: async () => 1,
+        reserve: async () => ({
+          accepted: true as const,
+          id: 1,
+          outputTokens: 20,
+        }),
         settle,
       }),
       prompt: "Public fixture",
@@ -87,7 +102,11 @@ it("keeps uncertain charges and propagates storage failures", async () => {
 });
 
 it("rejects unbounded output before reserving or contacting the provider", async () => {
-  const reserve = vi.fn(async () => 1);
+  const reserve = vi.fn(async () => ({
+    accepted: true as const,
+    id: 1,
+    outputTokens: 20,
+  }));
   const doGenerate = vi.fn(async () => response);
   await expect(
     generateText({
@@ -104,7 +123,11 @@ it("rejects unbounded output before reserving or contacting the provider", async
 });
 
 it("reserves before streaming and settles only after the provider finish event", async () => {
-  const reserve = vi.fn(async () => 7);
+  const reserve = vi.fn(async () => ({
+    accepted: true as const,
+    id: 7,
+    outputTokens: 20,
+  }));
   const settle = vi.fn(async () => {});
   const doStream = vi.fn(async () => {
     expect(reserve).toHaveBeenCalledTimes(1);
@@ -141,7 +164,13 @@ it("never starts a streaming request after budget denial", async () => {
   const doStream = vi.fn();
   const result = streamText({
     model: withGenerationBudget(new MockLanguageModelV4({ doStream }), {
-      reserve: async () => undefined,
+      reserve: async () => ({
+        accepted: false as const,
+        reason: "calls" as const,
+        limit: 64,
+        consumed: 64,
+        requested: 1,
+      }),
       settle: async () => {},
     }),
     prompt: "Public fixture",
@@ -150,4 +179,29 @@ it("never starts a streaming request after budget denial", async () => {
   });
   await expect(result.text).rejects.toThrow();
   expect(doStream).not.toHaveBeenCalled();
+});
+
+it("applies the admitted output maximum to the actual provider call", async () => {
+  const doGenerate = vi.fn(async () => response);
+  const reserve = vi.fn(async () => ({
+    accepted: true as const,
+    id: 1,
+    outputTokens: 1024,
+  }));
+  await generateText({
+    model: withGenerationBudget(
+      new MockLanguageModelV3({ doGenerate }),
+      { reserve, settle: async () => {} },
+      "finalization",
+    ),
+    prompt: "Public fixture",
+    maxOutputTokens: 8192,
+    maxRetries: 0,
+  });
+  expect(reserve).toHaveBeenCalledWith(
+    expect.objectContaining({ phase: "finalization", outputTokens: 8192 }),
+  );
+  expect(doGenerate).toHaveBeenCalledWith(
+    expect.objectContaining({ maxOutputTokens: 1024 }),
+  );
 });

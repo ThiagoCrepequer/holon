@@ -9,7 +9,7 @@ related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
   - ../decisions/0039-partition-large-reviews-and-bound-concurrency.md
-  - ../decisions/0046-use-cloudflare-think-for-pr-review.md
+  - ../decisions/0049-use-cloudflare-think-for-pr-review.md
 ---
 
 # Fluxo de execução de uma review

@@ -34,7 +34,7 @@ imagem do executor sem realizar deploy.
 - [ADR-0003: stack TypeScript inicial](docs/decisions/0003-adopt-initial-typescript-application-stack.md)
 - [ADR-0004: Workflows, ledger e Sandbox](docs/decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md)
 - [Índice de decisões e status dos ADRs](docs/decisions/README.md)
-- [ADR-0046: agente Think para review](docs/decisions/0046-use-cloudflare-think-for-pr-review.md)
+- [ADR-0049: agente Think para review](docs/decisions/0049-use-cloudflare-think-for-pr-review.md)
 - [ADR-0038: análise paralela e publicação](docs/decisions/0038-harden-parallel-review-and-publication.md)
 - [Ecossistema tecnico](docs/architecture/technical-ecosystem.md)
 - [Guia de engenharia e contexto](docs/engineering/README.md)

@@ -11,7 +11,7 @@ last-reviewed: 2026-10-03
 
 Holon mantém um corpus e recordings sintéticas versionados para regressão
 local/offline. A avaliação live do gerador próprio foi retirada na
-[ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md). Ela não
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md). Ela não
 representava o Agent Think e, portanto, não deve ser usada para estimar sua
 qualidade ou custo. Uma avaliação live futura deve iniciar o Agent real, com
 Workflow, tools e orçamento equivalentes ao runtime de PR.

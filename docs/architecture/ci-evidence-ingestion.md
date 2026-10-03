@@ -9,7 +9,7 @@ last-reviewed: 2026-09-02
 
 # Ingestão de Evidências de CI, Cobertura e Testes (retirada)
 
-> Documento histórico. A [ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md)
+> Documento histórico. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md)
 > retirou este fluxo. O runtime não consome `workflow_run`, não baixa artefatos
 > LCOV/JUnit nem atualiza o comentário com dados de CI. Tabelas antigas do
 > ledger permanecem para preservar dados.

@@ -1,5 +1,5 @@
 ---
-id: ADR-0046
+id: ADR-0049
 kind: decision
 status: accepted
 date: 2026-10-03
@@ -7,6 +7,7 @@ owners: [core-team]
 supersedes:
   - 0018-adopt-two-phase-decoupled-review-generator.md
   - 0045-bound-review-generation-expenditure.md
+  - 0046-protect-shard-completion-and-local-replay.md
 related:
   - 0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - 0039-partition-large-reviews-and-bound-concurrency.md

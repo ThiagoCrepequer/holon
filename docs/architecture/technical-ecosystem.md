@@ -258,13 +258,13 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 | Cloudflare Sandbox SDK       | Selecionada `@next` | Versão exata e imagem correspondente fixadas       |
 | Dependency Cruiser           | Adiada              | Introduzir se regras de pacote nao bastarem        |
 | Knip                         | Adiada              | Introduzir quando houver massa de exports/deps     |
-| Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0046                   |
+| Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0049                   |
 | MCP e RAG                    | Adiados             | Fora do MVP one-shot                               |
 
 UI/admin e suas bibliotecas foram retirados pela
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md). O
 Agent Think substituiu o motor próprio conforme
-[ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md).
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).
 
 ## Regras para agentes de codigo
 

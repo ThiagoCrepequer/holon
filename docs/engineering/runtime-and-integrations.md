@@ -103,7 +103,7 @@ remoto seguem [operação](../operations/README.md) e requerem autorização.
 Não registre segredos nem payloads privados em logs. Antes de ajustar retenção
 ou tracing, localize a decisão e a configuração vigentes. O Agent tracing com
 mensagens e tools está habilitado temporariamente pela
-[ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md); desligue
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md); desligue
 `AGENT_TRACE_PAYLOADS` quando o usuário solicitar.
 
 ## Fontes oficiais verificadas em 2026-10-03

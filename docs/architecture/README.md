@@ -27,7 +27,7 @@ continuam explícitas nos documentos de operação e planejamento.
   privilégios e isolamento.
 - [Ciclo de vida dos dados](data-lifecycle.md): classes de dados e retenção.
 - [Ingestão de evidências de CI](ci-evidence-ingestion.md): descrição histórica
-  da funcionalidade retirada pela ADR-0046.
+  da funcionalidade retirada pela ADR-0049.
 
 ## Regra de precedência
 

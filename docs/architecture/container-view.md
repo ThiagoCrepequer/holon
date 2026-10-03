@@ -81,7 +81,7 @@ mesma elegibilidade a leituras e buscas posteriores. C06 recebe os modos
 explicitamente: ast-grep fica restrito a JS/TS estrutural, enquanto patches
 textuais elegíveis usam apenas diff, leitura e busca textual.
 
-C06 opera por shard conforme [ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md).
+C06 opera por shard conforme [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).
 O `ReviewShardWorkflow` usa `step.prompt` para um turno durável do Think; o
 control plane valida a saída e o diff canônico no host. Tools ficam restritas
 a leitura e busca via C05.
