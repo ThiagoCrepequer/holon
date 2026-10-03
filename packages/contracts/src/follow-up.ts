@@ -1,24 +1,10 @@
 import { z } from "zod";
 
-import {
-  deliveryIdSchema,
-  gitShaSchema,
-  positiveIntegerSchema,
-} from "./shared.js";
+import { deliveryIdSchema, positiveIntegerSchema } from "./shared.js";
 const repository = z.strictObject({
   id: positiveIntegerSchema,
   name: z.string().min(1).max(100),
   owner: z.string().min(1).max(100),
-});
-export const ciEnrichmentInputSchema = z.strictObject({
-  deliveryId: z.string().min(1).max(200),
-  headSha: gitShaSchema,
-  installationId: positiveIntegerSchema,
-  pullRequestNumber: positiveIntegerSchema,
-  repository,
-  workflowName: z.string().max(200).optional(),
-  workflowRunId: positiveIntegerSchema,
-  workflowRunAttempt: positiveIntegerSchema,
 });
 const feedbackBase = {
   deliveryId: deliveryIdSchema.transform(
@@ -46,10 +32,6 @@ export const feedbackThreadEventSchema = z.strictObject({
 export const followUpMessageSchema = z
   .discriminatedUnion("event", [
     z.strictObject({
-      event: z.literal("ci_enrichment"),
-      payload: ciEnrichmentInputSchema,
-    }),
-    z.strictObject({
       event: z.literal("feedback_comment"),
       payload: feedbackCommentEventSchema,
     }),
@@ -64,5 +46,3 @@ export const followUpMessageSchema = z
     "Follow-up exceeds queue byte budget",
   );
 export type FollowUpMessage = z.infer<typeof followUpMessageSchema>;
-
-export type CiEnrichmentInput = z.infer<typeof ciEnrichmentInputSchema>;

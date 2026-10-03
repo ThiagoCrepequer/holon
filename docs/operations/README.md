@@ -11,7 +11,7 @@ last-reviewed: 2026-09-10
 
 - [Desenvolvimento local](local-development.md)
 - [Execução das avaliações](evaluations.md)
-- [Reprodução local do PR #106](local-review-reproduction.md)
+- [Reprodução local histórica do PR #106](local-review-reproduction.md)
 - [Configuração do GitHub App](github-app.md)
 - [Rotação de Chave do GitHub App (Runbook)](github-app-key-rotation-runbook.md)
 - [Retirada do admin e limites atuais de diagnóstico](admin-retirement.md)

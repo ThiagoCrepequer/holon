@@ -1,12 +1,18 @@
 ---
 id: OPS-LOCAL-REVIEW-REPRODUCTION
 kind: operation
-status: current
+status: superseded
 owners: [core-team]
-last-reviewed: 2026-10-01
+last-reviewed: 2026-10-03
 ---
 
 # Reproduzir o PR #106 sem publicar uma revisão
+
+> Histórico do motor próprio. A ADR-0049 retirou o runner local abaixo porque
+> ele importava os módulos de checkpoint e geração removidos na migração para
+> Think. Os comandos deste documento não são executáveis no runtime atual.
+> A próxima avaliação live deve exercitar o `ReviewAgent` real; consulte
+> [avaliações](evaluations.md).
 
 O runner está em `apps/control-plane/local-review/`. Usa código atual contra o
 snapshot imutável do incidente, em vez de alterar o checkout ou depender do head

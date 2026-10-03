@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-02
+last-reviewed: 2026-10-03
 ---
 
 # Provisionamento e deploy
@@ -37,8 +37,9 @@ com terminal e janela exclusiva; não deve ser usado nos Workers Builds.
 1. No AI Gateway `holon`, adicione a chave OpenRouter em Provider Keys/BYOK,
    habilite Authenticated Gateway e publique a versão desejada do Dynamic Route
    `pr-review`. Confirme no editor que todos os modelos ativos selecionam
-   OpenRouter e suportam tool calling e structured outputs. Modelos sem esses
-   dois contratos não devem permanecer nem como último fallback.
+   OpenRouter e suportam tool calling forçado durante streaming. Um modelo que
+   devolve apenas texto nessa condição não pode finalizar o `step.prompt` do
+   Think e não deve permanecer como fallback.
 2. Crie as filas de revisão com sua DLQ:
 
    ```bash
@@ -82,19 +83,32 @@ O Wrangler aplica as migrations de classes Durable Object, registrando Workflows
 Queue bindings e os service bindings definidos nos `wrangler.jsonc`. Não
 abra tráfego no bootstrap; confirme os deploys finais antes do smoke.
 
+O control plane inclui `ReviewAgent` (`REVIEW_AGENTS`) e
+`ReviewShardWorkflow` (`REVIEW_SHARD_WORKFLOW`). Antes de ativar reviews, faça
+um smoke de `step.prompt` com tool call e saída `think_final_answer` usando a
+rota dinâmica e o modelo configurados. Confirme bloqueio de tools de escrita,
+obsolescência de run, orçamento compartilhado e cleanup. Build/dry-run local
+não demonstra compatibilidade do modelo com a chamada forçada de tool.
+
+`AGENT_TRACE_PAYLOADS=enabled` está definido em `wrangler.jsonc` durante o
+beta. O Agent tracing pode armazenar mensagens e outputs de tools com trechos
+de código. **Desabilitar quando o usuário solicitar**, mudando a variável para
+`disabled` e fazendo rollout controlado. Consulte a
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).
+
 ## Deploy automático com Workers Builds
 
 O repositório remoto é `ThiagoCrepequer/holon` e sua branch padrão é `main`.
 Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 
-| Worker                      | Root | Branch | Build command                                        |
-| --------------------------- | ---- | ------ | ---------------------------------------------------- |
-| `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` |
-| `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       |
+| Worker                      | Root | Branch | Build command                                        | Deploy command                                        |
+| --------------------------- | ---- | ------ | ---------------------------------------------------- | ----------------------------------------------------- |
+| `holon-repository-executor` | `/`  | `main` | `pnpm --filter @holon/repository-executor typecheck` | `pnpm --filter @holon/repository-executor run deploy` |
+| `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       | `pnpm --filter @holon/control-plane run deploy`       |
 
 O root permanece no topo porque ambos os apps dependem do workspace e do
-lockfile do monorepo. Os deploy commands são os dois comandos `pnpm --filter`
-listados acima; eles não exigem terminal ou confirmação da guarda. A atualização
+lockfile do monorepo. Os deploy commands são os dois comandos da última coluna;
+eles não exigem terminal ou confirmação da guarda. A atualização
 independente não garante ordem nem drenagem das análises. A ferramenta opcional
 `pnpm run deploy:guarded` é reservada a uma janela manual exclusiva e não substitui
 os comandos de CI. O executor usa `wrangler deploy`, pois `wrangler versions upload`
@@ -125,13 +139,13 @@ Fontes verificadas em 2026-08-30:
 5. Reentregue o mesmo webhook e confirme ausência de novos comentários.
 6. Force-push durante uma análise e confirme outcome `obsolete` sem publicação.
 7. Revogue/desinstale o App e confirme que novas runs falham sem expor segredo.
-8. Nos logs do AI Gateway, confirme `response_format` com JSON Schema, ausência
-   de payload armazenado e presença apenas dos cinco metadados seguros. Confirme
-   em Workers Logs `finishReason`, tokens, tentativa e contagem de tools. Cache
+8. No AI Gateway, confirme ausência de payload armazenado, metadados seguros,
+   rota/modelo esperados e uma chamada para cada turno realmente executado pelo
+   Think. Confira o Agent tracing e os estados de `ReviewShardWorkflow`; o cache
    de prompt do provider é independente.
-9. Induza uma resposta estruturada inválida em ambiente de teste e confirme um
-   único `analyze-review`, com no máximo uma inferência adicional marcada como
-   `recovery` e sem tools. O Workflow não pode repetir a sessão.
+9. Induza uma resposta final estruturada inválida em ambiente de teste. O shard
+   deve terminar como incompleto, sem publicar achados não verificados. Confirme
+   que o orçamento agregado não é reiniciado por retry do Workflow.
 10. Abra um PR cuja base avançou depois da criação da branch e compare a
     contagem de linhas do GitHub com `repository.prepared`.
 11. Abra um PR somente de documentação e confirme uma chamada de modelo em modo
@@ -142,10 +156,10 @@ Fontes verificadas em 2026-08-30:
 13. Abra um PR somente com rename, metadata ou remoções sem linha adicionada
     comentável e confirme uma chamada de modelo, zero finding inline e risco
     comprovado limitado ao resumo.
-14. Em um PR misto, confirme que ambos os modos recebem oportunidade inicial,
-    a seleção seguinte favorece structural em 3:1, arquivos ignorados não
-    aparecem em tools e o resumo declara truncamento quando algum limite for
-    atingido.
+14. Em um PR misto, confirme cobertura dos arquivos elegíveis por shard, acesso
+    somente às três tools de leitura e busca, recusa de tools de escrita e
+    exclusão de arquivos ignorados. O resumo deve declarar truncamento quando
+    algum limite for atingido.
 15. Solicite duas páginas consecutivas de um arquivo grande e confirme que cada
     `read_file` retorna no máximo 500 linhas/100 kB, sem carregar o arquivo
     inteiro, e que páginas de paths ignorados são rejeitadas.
@@ -175,14 +189,13 @@ rollout. Consulte o
 ## Observabilidade e rollback
 
 O código emite JSON estruturado para `review.started`, `repository.prepared`,
-`model.input`, `model.usage`,
-`review.completed`, `review.failed` e falhas secundárias de cleanup ou
-terminalização. Os campos incluem run, IDs não secretos, duração, outcome,
-tokens, contagens de arquivos estruturais/textuais e quantidade publicada; não
-incluem prompt, diff, nome de arquivo ou mensagem
-arbitrária de erro. Antes do piloto, configure retenção e acesso aos logs e ao
-AI Gateway. O header `cf-aig-collect-log-payload=false` é obrigatório; removê-lo
-expõe código do repositório nos logs do Gateway.
+`model.input`, `review.coverage_planned`, `review.completed`, `review.failed` e
+falhas secundárias de cleanup ou terminalização. O ledger mantém reservas de
+chamadas, bytes de entrada, tokens de saída e tools por run. O Agent tracing
+fornece a sequência de turnos e tools; com `AGENT_TRACE_PAYLOADS=enabled`, pode
+conter trechos do repositório. Antes do piloto, configure acesso e retenção de
+Workers Logs, tracing e AI Gateway. O header
+`cf-aig-collect-log-payload=false` é obrigatório.
 
 Uma versão anterior pode ser reimplantada, mas migrations de Durable Objects não
 devem ser removidas ou reutilizadas. O executor é efêmero; runs em andamento
@@ -281,13 +294,13 @@ diretas e outros administradores também devem respeitar a janela exclusiva.
 ### Aceitação remota da correção
 
 Executar primeiro PR pequeno sem defeito e PR pequeno com defeito isolado. Depois,
-uma revisão em duas ondas e o PR grande. Conferir tokens/chamadas, cobertura,
-`repository.tool_failed`, `model.phase_failed` e cleanup por runId. Injetar perda
-do container apenas em ambiente de teste: após a primeira falha fatal não devem
-surgir novas chamadas ao provider, embora chamadas já em trânsito possam terminar
-e ser cobradas. Nenhum teste local comprova interrupção imediata do faturamento
-pelo provider. A run deve falhar com causa preservada e limpeza agendada, sem
-aprovação ou nova tentativa automática que renove orçamento.
+uma revisão em duas ondas e o PR grande. Conferir reservas de modelo e tools no
+ledger, cobertura, estados do `ReviewShardWorkflow`, tracing e cleanup por runId.
+Injetar perda do container apenas em ambiente de teste: após a primeira falha
+fatal não devem surgir novas chamadas ao provider, embora chamadas já em trânsito
+possam terminar e ser cobradas. Nenhum teste local comprova interrupção imediata
+do faturamento pelo provider. A run deve falhar e agendar limpeza, sem renovar
+orçamento automaticamente.
 
 Fontes: [pausa de Queues](https://developers.cloudflare.com/queues/configuration/pause-purge/),
 [rollouts](https://developers.cloudflare.com/containers/configuration/rollouts/),

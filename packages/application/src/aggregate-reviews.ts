@@ -38,7 +38,6 @@ export interface AggregateShardReviewOptions {
   readonly canonicalFindings?: readonly Finding[] | undefined;
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
-  readonly unifiedSummary?: string | undefined;
   readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
 }
 
@@ -335,14 +334,13 @@ export function aggregateShardReviews(
         `Esta revisão está incompleta. ${sortedFindings.length} achado(s) verificado(s) foram mantidos em ${shardsAnalyzed} de ${plan.shards.length} partes planejadas. Não há conclusão sobre alterações omitidas ou investigação inacabada.`,
         `Esta revisión está incompleta. Se conservaron ${sortedFindings.length} hallazgo(s) verificado(s) en ${shardsAnalyzed} de ${plan.shards.length} partes previstas. No hay conclusión sobre cambios omitidos ni investigación sin terminar.`,
       )
-    : options.unifiedSummary?.trim() ||
-      (shardSummaries.length
-        ? shardSummaries.join("\n\n")
-        : text(
-            "No narrative summary is available; refer to the verified findings and review coverage.",
-            "Resumo narrativo indisponível; consulte os achados verificados e a cobertura da revisão.",
-            "Resumen narrativo no disponible; consulte los hallazgos verificados y la cobertura de la revisión.",
-          ));
+    : shardSummaries.length
+      ? shardSummaries.join("\n\n")
+      : text(
+          "No narrative summary is available; refer to the verified findings and review coverage.",
+          "Resumo narrativo indisponível; consulte os achados verificados e a cobertura da revisão.",
+          "Resumen narrativo no disponible; consulte los hallazgos verificados y la cobertura de la revisión.",
+        );
 
   if (scopeStatus === "partial_by_policy") {
     summarySections.push(

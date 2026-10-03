@@ -1,48 +1,13 @@
 import { expect, it } from "vitest";
 
-import {
-  compactProjectContext,
-  canonicalEvidenceCandidates,
-  selectFinalizationEvidence,
-} from "../src/host-context.js";
+import { compactProjectContext } from "../src/host-context.js";
 
-it("retains all sparse evidence windows admitted by the larger shard", () => {
-  const candidates = canonicalEvidenceCandidates([
-    {
-      path: "src/a.ts",
-      mode: "structural",
-      patch: `@@ -1,48 +1,96 @@\n${Array.from({ length: 48 }, (_, i) => ` context\n+value${i}`).join("\n")}\n`,
-    },
-  ]);
-  expect(candidates).toHaveLength(48);
-  expect(
-    selectFinalizationEvidence(candidates, "Investigated the whole file"),
-  ).toHaveLength(48);
+it("represents absent identification without inventing project versions", () => {
+  expect(compactProjectContext(undefined)).toBe("null");
 });
 
-it("bounds finalization evidence by serialized UTF-8 bytes and prioritizes cited locations", () => {
-  const candidates = Array.from({ length: 100 }, (_, i) => ({
-    path: `src/file${i}.ts`,
-    startLine: i + 1,
-    endLine: i + 1,
-    excerpt: "語".repeat(1100),
-  }));
-  const selected = selectFinalizationEvidence(
-    candidates,
-    "src/file99.ts line 100",
-  );
-  expect(selected[0]).toEqual(candidates[99]);
-  expect(
-    selected.reduce(
-      (sum, item) =>
-        sum + new TextEncoder().encode(JSON.stringify(item)).length,
-      0,
-    ),
-  ).toBeLessThanOrEqual(48_000);
-  expect(selected.length).toBeLessThan(candidates.length);
-});
-it("retains configured compatibility conflicts alongside observed versions", () => {
-  const result = JSON.parse(
+it("keeps observed versions and complete relevant compatibility declarations", () => {
+  const compacted = JSON.parse(
     compactProjectContext({
       status: "complete",
       limitations: [],
@@ -55,7 +20,10 @@ it("retains configured compatibility conflicts alongside observed versions", () 
             {
               name: "node",
               category: "runtime",
-              declarations: [{ kind: "locked", value: "20.0.0" }],
+              declarations: [
+                { kind: "locked", value: "20.0.0", condition: "production" },
+                { kind: "range", value: ">=20" },
+              ],
             },
           ],
         },
@@ -64,74 +32,86 @@ it("retains configured compatibility conflicts alongside observed versions", () 
         {
           name: "api",
           root: "apps/api",
-          projectIds: ["api"],
           declarations: [
             {
               category: "runtimes",
               name: "node",
               expected: "22",
               status: "conflicts",
-              detected: [
-                {
-                  projectId: "api",
-                  technology: "node",
-                  kind: "locked",
-                  value: "20.0.0",
-                },
-              ],
             },
           ],
         },
+        { name: "other", root: "apps/other", declarations: [] },
       ],
     } as never),
   );
-  expect(result.configuredCompatibility[0].declarations[0]).toMatchObject({
-    name: "node",
-    expected: "22",
-    status: "conflicts",
-  });
-  expect(result.projects[0].technologies[0].declarations[0].value).toBe(
-    "20.0.0",
+  expect(compacted.projects[0].technologies[0].declarations).toEqual([
+    { kind: "locked", value: "20.0.0", condition: "production" },
+    { kind: "range", value: ">=20" },
+  ]);
+  expect(compacted.configuredCompatibility).toHaveLength(1);
+  expect(compacted.configuredCompatibility[0].declarations[0].status).toBe(
+    "conflicts",
   );
+  expect(compacted.omittedCompatibility).toBe(1);
 });
-it("retains complete JSON entities under the version context budget", () => {
-  const result = compactProjectContext({
-    projects: Array.from({ length: 20 }, (_, i) => ({
-      root: `apps/p${i}`,
+
+it("preserves whole JSON entities while bounding many projects and technologies", () => {
+  const compacted = compactProjectContext({
+    status: "complete",
+    limitations: [],
+    projects: Array.from({ length: 40 }, (_project, index) => ({
+      root: `apps/${index}-${"name".repeat(25)}`,
       ecosystem: "node",
       status: "complete",
-      technologies: Array.from({ length: 100 }, (_technology, j) => ({
-        name: `lib${j}`,
+      technologies: Array.from({ length: 80 }, (_technology, technology) => ({
+        name: `library-${technology}`,
         category: "library",
-        declarations: [
-          { value: "1.2.3", kind: "resolved", evidenceIds: ["fact-1"] },
-        ],
+        declarations: Array.from({ length: 8 }, (_declaration, version) => ({
+          value: `${version}.0.0`,
+          kind: "resolved",
+        })),
       })),
     })),
-    limitations: [],
-    status: "complete",
   } as never);
-  expect(() => JSON.parse(result)).not.toThrow();
-  expect(new TextEncoder().encode(result).length).toBeLessThanOrEqual(12000);
-  expect(JSON.parse(result).omittedTechnologies).toBeGreaterThan(0);
+  const result = JSON.parse(compacted);
+  expect(new TextEncoder().encode(compacted).byteLength).toBeLessThanOrEqual(
+    12_000,
+  );
+  expect(
+    result.omittedProjects +
+      result.omittedTechnologies +
+      result.omittedDeclarations,
+  ).toBeGreaterThan(0);
+  expect(
+    result.projects.every(
+      (project: { technologies: Array<{ declarations: unknown[] }> }) =>
+        project.technologies.every(
+          (technology) => technology.declarations.length <= 4,
+        ),
+    ),
+  ).toBe(true);
 });
-it("provides literal canonical evidence even when the investigation only describes the bug", () => {
-  const candidates = canonicalEvidenceCandidates([
-    {
-      path: "a.ts",
-      mode: "structural",
-      patch: "@@ -10 +10 @@\n-if (allowed) write();\n+write();",
-    },
-  ]);
-  const selected = selectFinalizationEvidence(
-    candidates,
-    "a.ts has an unconditional write that bypasses authorization.",
+
+it("drops oversized limitations and comparisons rather than emitting partial values", () => {
+  const compacted = JSON.parse(
+    compactProjectContext({
+      status: "partial",
+      limitations: Array.from({ length: 10 }, () => "x".repeat(3_000)),
+      projects: [
+        {
+          root: "apps/api",
+          ecosystem: "node",
+          status: "partial",
+          technologies: [],
+        },
+      ],
+      configuredCompatibility: [
+        { name: "x".repeat(7_000), root: "apps/api", declarations: [] },
+      ],
+    } as never),
   );
-  expect(selected).toContainEqual(
-    expect.objectContaining({
-      path: "a.ts",
-      startLine: 10,
-      excerpt: "write();",
-    }),
-  );
+  expect(compacted.limitations.length).toBeLessThan(10);
+  expect(compacted.configuredCompatibility).toHaveLength(0);
+  expect(compacted.omittedCompatibility).toBe(1);
 });

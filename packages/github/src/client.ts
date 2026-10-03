@@ -5,7 +5,6 @@ import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 
-import { readArtifactBody } from "./artifact-body.js";
 import { createDiagnosticAppAuth } from "./authentication.js";
 import { readConfigurationJson } from "./configuration-json.js";
 import { createConfigurationSnapshotReader } from "./configuration-reader.js";
@@ -32,13 +31,6 @@ export interface GitHubAppCredentials {
   readonly privateKey: string;
 }
 
-export interface GitHubWorkflowArtifact {
-  readonly archiveDownloadUrl?: string | undefined;
-  readonly id: number;
-  readonly name: string;
-  readonly sizeInBytes: number;
-}
-
 export interface GitHubInstallationSession {
   configurationReader(
     owner: string,
@@ -56,18 +48,8 @@ export interface GitHubInstallationSession {
     repo: string,
     pullNumber: number,
   ): Promise<{ readonly baseSha: string; readonly headSha: string }>;
-  downloadArtifactZip?(
-    owner: string,
-    repo: string,
-    artifactId: number,
-  ): Promise<ArrayBuffer>;
   readonly expectedAuthorLogin: string;
   readonly expiresAt: string;
-  listWorkflowRunArtifacts?(
-    owner: string,
-    repo: string,
-    runId: number,
-  ): Promise<readonly GitHubWorkflowArtifact[]>;
   pullRequestDiff(
     owner: string,
     repo: string,
@@ -344,49 +326,6 @@ export async function createInstallationSession(
           );
         }
         return data.permission;
-      });
-    },
-    async listWorkflowRunArtifacts(owner, repo, runId) {
-      return await executeGitHubRequest(async () => {
-        const response = await octokit.request(
-          "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
-          {
-            owner,
-            repo,
-            run_id: runId,
-          },
-        );
-        const data = record(response.data, "GitHub artifacts response");
-        const artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
-        return artifacts.map((candidate) => {
-          const item = record(candidate, "GitHub artifact item");
-          return {
-            archiveDownloadUrl:
-              typeof item.archive_download_url === "string"
-                ? item.archive_download_url
-                : undefined,
-            id: Number(item.id),
-            name: typeof item.name === "string" ? item.name : "",
-            sizeInBytes: Number(item.size_in_bytes ?? 0),
-          };
-        });
-      });
-    },
-    async downloadArtifactZip(owner, repo, artifactId) {
-      return await executeGitHubRequest(async () => {
-        const response = await octokit.request(
-          "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
-          {
-            archive_format: "zip",
-            artifact_id: artifactId,
-            owner,
-            repo,
-            request: {
-              parseSuccessResponseBody: false,
-            },
-          },
-        );
-        return await readArtifactBody(response.data, response.headers);
       });
     },
     expiresAt: authentication.expiresAt,

@@ -26,27 +26,14 @@ export const evaluationSubjectFailureReasonSchema = z.enum([
   "unknown",
 ]);
 
-export const evalRunConfigurationSchema = z
-  .strictObject({
-    corpusVersion: evalIdentifierSchema,
-    mode: z.enum(["mock-model", "recorded-output", "live-model"]),
-    modelReference: z.string().trim().min(1).max(256).nullable(),
-    policyVersion: evalIdentifierSchema,
-    promptVersion: evalIdentifierSchema,
-    subjectVersion: evalIdentifierSchema,
-  })
-  .superRefine((configuration, context) => {
-    if (
-      (configuration.mode === "live-model") !==
-      (configuration.modelReference !== null)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "only live-model evaluations must identify a model reference",
-        path: ["modelReference"],
-      });
-    }
-  });
+export const evalRunConfigurationSchema = z.strictObject({
+  corpusVersion: evalIdentifierSchema,
+  mode: z.enum(["mock-model", "recorded-output"]),
+  modelReference: z.null(),
+  policyVersion: evalIdentifierSchema,
+  promptVersion: evalIdentifierSchema,
+  subjectVersion: evalIdentifierSchema,
+});
 
 const diagnosticTermSchema = z.string().trim().min(2).max(100);
 

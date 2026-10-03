@@ -1,5 +1,5 @@
 import {
-  modelShardAllocation,
+  modelGenerationLimits,
   type ModelGenerationAdmission,
   modelGenerationReservationSchema,
   runIdSchema,
@@ -42,15 +42,10 @@ export class ReviewGenerationBudgetStore {
       throw new Error("Model budget plan changed");
     const totals = this.sql
       .exec<{ calls: number; input: number; output: number }>(
-        "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=? AND (shard_index=? OR shard_index=-1)",
+        "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=?",
         runId,
-        request.shardIndex,
       )
       .one();
-    const limit = modelShardAllocation(
-      request.shardCount,
-      request.phase === "investigation",
-    );
     const reject = (
       reason: "calls" | "input_bytes" | "output_tokens",
       consumed: number,
@@ -69,13 +64,13 @@ export class ReviewGenerationBudgetStore {
           requested,
           limit: ceiling,
           callsCurrent: totals.calls,
-          callsLimit: limit.calls,
+          callsLimit: modelGenerationLimits.calls,
           callsRequested: 1,
           inputBytesCurrent: totals.input,
-          inputBytesLimit: limit.inputBytes,
+          inputBytesLimit: modelGenerationLimits.inputBytes,
           inputBytesRequested: request.inputBytes,
           outputTokensCurrent: totals.output,
-          outputTokensLimit: limit.outputTokens,
+          outputTokensLimit: modelGenerationLimits.outputTokens,
           outputTokensRequested: request.outputTokens,
         });
       } catch {
@@ -89,54 +84,35 @@ export class ReviewGenerationBudgetStore {
         requested,
       };
     };
-    if (totals.calls >= limit.calls)
-      return reject("calls", totals.calls, 1, limit.calls);
-    if (totals.input + request.inputBytes > limit.inputBytes)
+    if (totals.calls >= modelGenerationLimits.calls)
+      return reject("calls", totals.calls, 1, modelGenerationLimits.calls);
+    if (totals.input + request.inputBytes > modelGenerationLimits.inputBytes)
       return reject(
         "input_bytes",
         totals.input,
         request.inputBytes,
-        limit.inputBytes,
+        modelGenerationLimits.inputBytes,
       );
-    const outputTokens = Math.min(
-      request.outputTokens,
-      limit.outputTokens - totals.output,
-    );
-    if (outputTokens < Math.min(request.outputTokens, 1024))
+    if (
+      totals.output + request.outputTokens >
+      modelGenerationLimits.outputTokens
+    )
       return reject(
         "output_tokens",
         totals.output,
         request.outputTokens,
-        limit.outputTokens,
+        modelGenerationLimits.outputTokens,
       );
-    if (outputTokens < request.outputTokens) {
-      try {
-        this.logger.emit("model.budget_clamped", {
-          severity: "warning",
-          runId,
-          shardIndex: request.shardIndex,
-          shardCount: request.shardCount,
-          phase: request.phase,
-          rule: "output_tokens",
-          current: totals.output,
-          requested: request.outputTokens,
-          granted: outputTokens,
-          limit: limit.outputTokens,
-        });
-      } catch {
-        // Logging cannot alter admission or transactional accounting.
-      }
-    }
     const id = this.sql
       .exec<{ id: number }>(
         "INSERT INTO model_generation_reservations(run_id,input_bytes,output_tokens,shard_index) VALUES (?,?,?,?) RETURNING id",
         runId,
         request.inputBytes,
-        outputTokens,
+        request.outputTokens,
         request.shardIndex,
       )
       .one().id;
-    return { accepted: true, id, outputTokens };
+    return { accepted: true, id, outputTokens: request.outputTokens };
   }
   public settle(rawRunId: string, id: number, outputTokens: number): void {
     const runId = runIdSchema.parse(rawRunId);

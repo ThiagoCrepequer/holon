@@ -101,7 +101,7 @@ const resilientNullablePositiveInteger = z.preprocess(
     typeof val === "string" && /^\d+$/u.test(val.trim())
       ? Number(val.trim())
       : val,
-  positiveIntegerSchema.nullable(),
+  positiveIntegerSchema.nullable().optional(),
 );
 
 const resilientConfidence = z.preprocess(
@@ -145,6 +145,32 @@ const resilientSeverity = z.preprocess(
   z.enum(["critical", "high", "medium", "low"]),
 );
 
+const resilientEvidence = z.preprocess(
+  (val) => (Array.isArray(val) ? val.slice(0, reviewTextLimits.evidence) : []),
+  z
+    .array(
+      z
+        .object({
+          endLine: resilientNullablePositiveInteger,
+          excerpt: resilientExcerpt,
+          path: repositoryPathSchema,
+          reason: resilientReason,
+          startLine: resilientPositiveInteger,
+        })
+        .strip(),
+    )
+    .min(1)
+    .max(reviewTextLimits.evidence),
+);
+const resilientLocation = z
+  .object({
+    line: resilientPositiveInteger,
+    path: repositoryPathSchema,
+    side: z.literal("RIGHT"),
+    startLine: resilientNullablePositiveInteger,
+  })
+  .strip();
+
 /**
  * JSON-Schema-portable model boundary. Optional domain fields are required but
  * nullable so strict providers see a stable set of required properties. Coercive
@@ -153,7 +179,20 @@ const resilientSeverity = z.preprocess(
  */
 const reviewTransportFields = z
   .object({
-    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
+    resolutions: z
+      .array(
+        z
+          .object({
+            confidence: resilientConfidence,
+            diagnostic: resilientDiagnostic,
+            evidence: resilientEvidence,
+            fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
+            location: resilientLocation,
+          })
+          .strip(),
+      )
+      .max(8)
+      .optional(),
     findings: z.preprocess(
       (val) =>
         Array.isArray(val) ? val.slice(0, reviewTextLimits.findings) : val,
@@ -163,34 +202,8 @@ const reviewTransportFields = z
             .object({
               confidence: resilientConfidence,
               diagnostic: resilientDiagnostic,
-              evidence: z.preprocess(
-                (val) =>
-                  Array.isArray(val)
-                    ? val.slice(0, reviewTextLimits.evidence)
-                    : [],
-                z
-                  .array(
-                    z
-                      .object({
-                        endLine: resilientNullablePositiveInteger,
-                        excerpt: resilientExcerpt,
-                        path: repositoryPathSchema,
-                        reason: resilientReason,
-                        startLine: resilientPositiveInteger,
-                      })
-                      .strip(),
-                  )
-                  .min(1)
-                  .max(reviewTextLimits.evidence),
-              ),
-              location: z
-                .object({
-                  line: resilientPositiveInteger,
-                  path: repositoryPathSchema,
-                  side: z.literal("RIGHT"),
-                  startLine: resilientNullablePositiveInteger,
-                })
-                .strip(),
+              evidence: resilientEvidence,
+              location: resilientLocation,
               severity: resilientSeverity,
               suggestion: resilientSuggestion,
             })
@@ -203,6 +216,59 @@ const reviewTransportFields = z
     outputLimitations: reviewOutputLimitationsSchema.optional(),
   })
   .strip();
+
+/** JSON Schema surface for Think's forced final-answer tool. The permissive
+ * transport parser below remains the host-side authority after inference. */
+export const modelReviewPromptSchema = z.object({
+  findings: z.array(
+    z.object({
+      confidence: z.number(),
+      diagnostic: z.string(),
+      evidence: z.array(
+        z.object({
+          endLine: z.number().int().nullable(),
+          excerpt: z.string(),
+          path: z.string(),
+          reason: z.string(),
+          startLine: z.number().int(),
+        }),
+      ),
+      location: z.object({
+        line: z.number().int(),
+        path: z.string(),
+        side: z.literal("RIGHT"),
+        startLine: z.number().int().nullable(),
+      }),
+      severity: z.enum(["critical", "high", "medium", "low"]),
+      suggestion: z.string().nullable(),
+    }),
+  ),
+  isDegraded: z.boolean(),
+  outputLimitations: z.array(z.enum(reviewOutputLimitationCodes)),
+  resolutions: z.array(
+    z.object({
+      confidence: z.number(),
+      diagnostic: z.string(),
+      evidence: z.array(
+        z.object({
+          endLine: z.number().int().nullable(),
+          excerpt: z.string(),
+          path: z.string(),
+          reason: z.string(),
+          startLine: z.number().int(),
+        }),
+      ),
+      fingerprint: z.string(),
+      location: z.object({
+        line: z.number().int(),
+        path: z.string(),
+        side: z.literal("RIGHT"),
+        startLine: z.number().int().nullable(),
+      }),
+    }),
+  ),
+  summary: z.string(),
+});
 
 export const modelReviewTransportSchema = z.preprocess((value) => {
   if (typeof value !== "object" || value === null) return value;
@@ -221,7 +287,21 @@ export function modelReviewOutputFromTransport(
   const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
     ...(transport.resolutions !== undefined
-      ? { resolutions: transport.resolutions }
+      ? {
+          resolutions: transport.resolutions.map((resolution) => ({
+            ...resolution,
+            evidence: resolution.evidence.map((evidence) => ({
+              ...evidence,
+              ...(evidence.endLine === null ? { endLine: undefined } : {}),
+            })),
+            location: {
+              ...resolution.location,
+              ...(resolution.location.startLine === null
+                ? { startLine: undefined }
+                : {}),
+            },
+          })),
+        }
       : {}),
     findings: transport.findings.map((finding) => ({
       ...finding,

@@ -4,106 +4,44 @@ kind: runbook
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-10-03
 ---
 
 # Execução das avaliações
 
-Holon mantém avaliação offline em Pull Requests e avaliações com modelo somente
-por ação manual. O live eval básico chama o adapter de produção diretamente
-usando a arquitetura em duas fases (ADR-0018).
+Holon mantém um corpus e recordings sintéticas versionados para regressão
+local/offline. A avaliação live do gerador próprio foi retirada na
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md). Ela não
+representava o Agent Think e, portanto, não deve ser usada para estimar sua
+qualidade ou custo. Uma avaliação live futura deve iniciar o Agent real, com
+Workflow, tools e orçamento equivalentes ao runtime de PR.
 
 ## Pull Requests
 
-`.github/workflows/evaluation-offline.yml` executa:
+`.github/workflows/evaluation-offline.yml` executa o corpus V3 contra
+recordings sintéticas, publica resumo no GitHub Actions Job Summary e retém o
+relatório `recorded-output.json` como artifact por 14 dias. Não recebe secrets
+nem chama provider externo. O relatório contém configuração, IDs, métricas e
+categorias de falha, sem patches ou respostas integrais.
 
-1. testes do pacote com subjects mockados;
-2. corpus V3 contra recordings sintéticas versionadas;
-3. resumo no GitHub Actions Job Summary;
-4. relatório `recorded-output.json` como artifact por 14 dias.
+Para reproduzir localmente:
 
-Esse workflow possui apenas `contents: read`, não recebe secrets e a execução
-da avaliação não chama provedores externos. A instalação reproduzível das
-dependências ainda acessa o registry configurado pelo runner. O relatório contém
-configuração, IDs, métricas e tipos enumerados de falha; não contém patches nem
-respostas integrais.
-
-## GitHub Environment live-evaluation
-
-Crie o Environment `live-evaluation` em **Settings > Environments** e, quando o
-plano do repositório oferecer essa protection rule, restrinja as deployment
-branches a `main`. O próprio workflow rejeita refs diferentes de `main`, mesmo
-quando a proteção do Environment não estiver disponível. Uma aprovação
-obrigatória também pode ser adicionada, quando suportada, para impor revisão
-humana antes de liberar o secret.
-
-Configure como Environment variables:
-
-```text
-AI_GATEWAY_ACCOUNT_ID
-AI_GATEWAY_ID
-AI_MODEL_ID=dynamic/pr-review
+```bash
+pnpm --filter @holon/evaluation evaluate:recorded
 ```
 
-Configure como Environment secret:
+Um resultado verde prova apenas a estabilidade do corpus e dos graders
+registrados. Não prova a qualidade do modelo escolhido, execução de tools,
+Sandbox, GitHub App ou publicação remota. Consulte
+[teste e evidência](../engineering/testing-and-evidence.md) para separar os
+níveis de prova.
 
-```text
-AI_GATEWAY_API_TOKEN
-```
+## Próxima avaliação live
 
-`AI_GATEWAY_API_TOKEN` deve ter somente `AI Gateway Run`. A chave do provedor
-permanece no BYOK do Gateway e não entra no GitHub.
-
-Secrets de Environment só ficam disponíveis depois que as protection rules
-forem satisfeitas. Fonte verificada em 2026-08-31:
-[GitHub Environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
-
-## Live model manual
-
-Em **Actions > Evaluation (live model) > Run workflow**, selecione `main`. O job
-também verifica `refs/heads/main`; outra branch fica inelegível. Uma única
-execução live pode ocorrer por vez e execuções manuais não são canceladas por
-uma solicitação posterior.
-
-O workflow:
-
-1. faz checkout do SHA selecionado;
-2. instala o lockfile exato;
-3. envia somente os cinco casos sintéticos V3 ao modelo pela rota dinâmica;
-4. aplica validação canônica e graders locais;
-5. escreve o Job Summary;
-6. salva `live-model.json` por 30 dias;
-7. termina com falha quando algum caso, contrato ou subject falha.
-
-O header de coleta de payload permanece negado e o cache do Gateway é ignorado,
-conforme o adapter de produção. A rota dinâmica exige Gateway autenticado e
-Provider Keys/BYOK. Fonte verificada em 2026-08-31:
-[Cloudflare dynamic routes](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/).
-
-As ferramentas retornam somente o estado enumerado
-`self_contained_evaluation_case`; esse modo mede o prompt e o modelo a partir do
-contexto presente no corpus. Ferramentas reais, clone, Sandbox, ledger e
-publicação pertencem ao smoke remoto separado.
-
-## Interpretação
-
-O corpus atual possui cinco casos de desenvolvimento. Um resultado verde prova
-esses casos, não qualidade geral nem prontidão para produção. Mudanças de
-prompt, política, modelo ou arquitetura devem ser comparadas na mesma suíte. A OpenAI
-recomenda avaliações representativas e contínuas porque saídas generativas são
-variáveis; verificação realizada em 2026-08-31:
-[Evaluation best practices](https://developers.openai.com/api/docs/guides/evaluation-best-practices).
-
-O corpus V1 permanece versionado para reproduzir a primeira execução live. A V2
-substitui o caso positivo ambíguo por um patch autocontido no qual o novo limiar
-literal contradiz uma constante de política preservada no próprio diff. A V3
-inclui limites de findings estruturados, prompt injection e revisão parcial.
-
-Fontes verificadas em 2026-08-31:
-
-- [OpenAI model selection and evaluation](https://developers.openai.com/api/docs/guides/latest-model)
-- [Cloudflare dynamic routes](https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/usage/)
-
-## Identificação de versões (2026-09-05)
-
-Consulte o [runbook de identificação](project-version-identification.md) para configuração, rollout coordenado dos contratos atuais, corpus offline/live e invalidação por perfil. A feature permanece desligada por padrão até validação operacional.
+A próxima suíte deve usar casos com repositório isolado, head/base fixos e
+provider/modelo explícitos. Deve registrar cobertura de shards, saída
+estruturada, evidência aceita/rejeitada, falhas, duração e reservas do ledger,
+sem expor prompts, diffs ou segredos no relatório. A rota `dynamic/pr-review`
+precisa de smoke com tool calling e final answer do Think antes de ser tratada
+como compatível. A decisão de modelo e o custo real serão avaliados depois do
+funcionamento correto do Agent.

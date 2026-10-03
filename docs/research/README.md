@@ -30,6 +30,7 @@ Nao criam uma decisao por si so.
 - [Arquitetura e estado da arte para serviço de busca de documentação](2026-09-10-technical-documentation-retrieval-service.md)
 
 - [PR #99: rollout do Sandbox e amplificação da falha](2026-09-28-review-99-rollout-and-failure-amplification.md)
+- [Exemplos e runtime de Cloudflare Agents para o review](2026-10-03-cloudflare-agents-examples-and-runtime-audit.md)
 
 ## Politica de manutencao
 

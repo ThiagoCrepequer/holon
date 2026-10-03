@@ -120,7 +120,7 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
   });
 });
 
-it("reserves tool calls durably and leaves each remaining shard its allocation", async () => {
+it("reserves one shared tool-call ceiling across shards and eviction", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
@@ -133,30 +133,26 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
     },
     "budget-test",
   );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "budget-test:start",
+  );
   const reservations = await Promise.all(
-    Array.from({ length: 25 }, () =>
+    Array.from({ length: 97 }, () =>
       ledger.reserveAnalysisToolCall(runId, 0, 5),
     ),
   );
-  expect(reservations.filter(Boolean)).toHaveLength(24);
+  expect(reservations.filter(Boolean)).toHaveLength(96);
   await evictDurableObject(ledger);
   await expect(ledger.reserveAnalysisToolCall(runId, 0, 5)).resolves.toBe(
     false,
   );
-  for (const [index, calls] of [
-    [1, 24],
-    [2, 24],
-    [3, 24],
-    [4, 24],
-  ]) {
-    for (let call = 0; call < calls!; call += 1)
-      await expect(
-        ledger.reserveAnalysisToolCall(runId, index!, 5),
-      ).resolves.toBe(true);
-    await expect(
-      ledger.reserveAnalysisToolCall(runId, index!, 5),
-    ).resolves.toBe(false);
-  }
+  await expect(ledger.reserveAnalysisToolCall(runId, 4, 5)).resolves.toBe(
+    false,
+  );
   await runInDurableObject(ledger, (_object, state) => {
     expect(
       state.storage.sql
@@ -165,7 +161,7 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
           runId,
         )
         .one().calls,
-    ).toBe(120);
+    ).toBe(96);
   });
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, -1, 5)).toThrow(
@@ -174,7 +170,7 @@ it("reserves tool calls durably and leaves each remaining shard its allocation",
   });
 });
 
-it("reserves the last shard of a 64-part plan durably without exceeding its own budget", async () => {
+it("allows the last shard of a 64-part plan to spend the shared budget", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
@@ -187,18 +183,29 @@ it("reserves the last shard of a 64-part plan durably without exceeding its own 
     },
     "large-budget-test",
   );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "large-budget-test:start",
+  );
   const results = await Promise.all(
     Array.from({ length: 25 }, () =>
       ledger.reserveAnalysisToolCall(runId, 63, 64),
     ),
   );
-  expect(results.filter(Boolean)).toHaveLength(24);
+  expect(results.filter(Boolean)).toHaveLength(25);
   await evictDurableObject(ledger);
+  for (let index = 0; index < 71; index++)
+    await expect(
+      ledger.reserveAnalysisToolCall(runId, index % 64, 64),
+    ).resolves.toBe(true);
   await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
     false,
   );
   await expect(ledger.reserveAnalysisToolCall(runId, 0, 64)).resolves.toBe(
-    true,
+    false,
   );
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, 64, 64)).toThrow(

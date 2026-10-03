@@ -1,13 +1,18 @@
 ---
 id: ARCH-CI-EVIDENCE
 kind: architecture
-status: current
+status: superseded
 owners:
   - core-team
 last-reviewed: 2026-09-02
 ---
 
-# Ingestão de Evidências de CI, Cobertura e Testes
+# Ingestão de Evidências de CI, Cobertura e Testes (retirada)
+
+> Documento histórico. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md)
+> retirou este fluxo. O runtime não consome `workflow_run`, não baixa artefatos
+> LCOV/JUnit nem atualiza o comentário com dados de CI. Tabelas antigas do
+> ledger permanecem para preservar dados.
 
 Este documento descreve o subsistema de ingestão e correlação determinística de evidências de Integração Contínua (CI) no Holon, abrangendo relatórios de cobertura de código (LCOV) e execução de testes (JUnit XML).
 

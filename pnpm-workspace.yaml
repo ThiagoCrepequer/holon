@@ -7,8 +7,11 @@ allowBuilds:
   # Required build steps, restricted to the two reviewed runtime tools.
   # core-js-pure only performs legacy compatibility bookkeeping; the supported
   # Node 24 and Workers runtimes do not need its postinstall side effect.
+  # Optional compression binaries pulled by Agents; review turns do not use them.
+  "@mongodb-js/zstd": false
   core-js-pure: false
   esbuild: true
+  node-liblzma: false
   workerd: true
 
 catalog:

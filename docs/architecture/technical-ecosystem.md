@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-03
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -15,9 +15,10 @@ related:
 
 # Ecossistema tecnico e fronteiras do monorepo
 
-Este documento descreve a estrutura materializada pelo bootstrap. ADR-0002 a
-ADR-0006 são normativos; os detalhes abaixo correspondem aos manifests e
-fronteiras existentes.
+Este documento descreve a estrutura materializada no repositório. Consulte o
+[índice de decisões](../decisions/README.md) para distinguir ADRs aceitos de
+decisões substituídas; o mapa abaixo foi conferido contra os manifests em
+2026-10-03.
 
 ## Estrutura atual
 
@@ -40,6 +41,7 @@ holon/
 |   |-- evaluation/
 |   |-- github/
 |   |-- model/
+|   |-- project-identification/
 |   |-- repository-analysis/
 |   |-- repository-config/
 |   `-- test-kit/
@@ -61,6 +63,9 @@ políticas puras ficam junto ao pacote ou app que as possui.
 
 ## Grafo permitido
 
+O diagrama resume as relações principais. Os `package.json` são a fonte
+exaustiva para dependências concretas de cada workspace.
+
 ```mermaid
 flowchart TD
     CP[apps/control-plane]
@@ -68,6 +73,7 @@ flowchart TD
     GH[packages/github]
     MO[packages/model]
     RA[packages/repository-analysis]
+    PI[packages/project-identification]
     CT[packages/contracts]
     EV[packages/evaluation]
     AP[packages/application]
@@ -77,6 +83,9 @@ flowchart TD
     CLI[tooling/config-cli]
 
     CP --> RC
+    CP --> PI
+    EX --> PI
+    EV --> PI
     RC --> AP
     RC --> CT
     CLI --> RC
@@ -94,6 +103,9 @@ flowchart TD
     MO --> AP
     MO --> CT
     RA --> CT
+    PI --> AP
+    PI --> CT
+    PI --> DO
     EV --> CT
     EV --> AP
     EV --> MO
@@ -116,23 +128,22 @@ local/Git, gera schema e verifica drift, sem acesso aos deployables.
 
 ## Responsabilidades por pacote
 
-| Pacote                       | Responsabilidade                                                                                   | Dependencias externas permitidas                     |
-| ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `@holon/domain`              | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR           |
-| `@holon/application`         | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                         |
-| `@holon/contracts`           | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                                  |
-| `@holon/evaluation`          | Corpus, recordings, runner, graders, relatório e adapter live manual                               | Aplicação, contratos, modelo, Zod e Node no CLI      |
-| `@holon/github`              | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                      |
-| `@holon/model`               | Implementacao de `ModelClient`, tools e budgets                                                    | AI SDK e AI Gateway provider                         |
-| `@holon/repository-analysis` | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura         |
-| `@holon/repository-config`   | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
-| `@holon/config-cli`          | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
-| `@holon/test-kit`            | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
+| Pacote                          | Responsabilidade                                                                                   | Dependencias externas permitidas                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `@holon/domain`                 | Identidades, estados, findings, politicas e invariantes puras                                      | Nenhuma, salvo utilitario aprovado por ADR           |
+| `@holon/application`            | Casos de uso e portas como `ReviewLedger`, `ModelClient`, `RepositoryAnalyzer` e `GitHubPublisher` | Nenhum SDK de infraestrutura                         |
+| `@holon/contracts`              | Schemas Zod e mapeamento de envelopes externos                                                     | Zod                                                  |
+| `@holon/evaluation`             | Corpus, recordings, runner e graders offline                                                       | Aplicação, contratos, Zod e Node no CLI              |
+| `@holon/github`                 | Auth da GitHub App, releitura de PR e publicacao                                                   | Octokit modular                                      |
+| `@holon/model`                  | Prompt, tools tipadas, provider AI SDK/AI Gateway e budget middleware                              | AI SDK e AI Gateway provider                         |
+| `@holon/project-identification` | Identificação de tecnologias e versões a partir de evidência limitada do snapshot                  | Parsers dos formatos suportados, sem bindings        |
+| `@holon/repository-analysis`    | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura         |
+| `@holon/repository-config`      | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
+| `@holon/config-cli`             | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
+| `@holon/test-kit`               | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
 
-O adapter live usa ferramentas sintéticas indisponíveis por contrato: ele mede
-prompt e modelo somente com o contexto autocontido do caso. O smoke remoto
-continua responsável por provar GitHub, ferramentas reais, Sandbox e
-publicação.
+A avaliação offline usa recordings; a avaliação live do motor antigo foi
+retirada. Um novo teste live deve exercitar Think, Gateway, Sandbox e publicação.
 
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
@@ -146,6 +157,7 @@ subpasta interna.
 - `queue`: consome o envelope normalizado e inicia ou reconcilia uma run;
 - classe `ReviewWorkflow` com checkpoints granulares, retries e terminalização
   após esgotamento;
+- `ReviewAgent` e `ReviewShardWorkflow` para turns duráveis do Think;
 - composicao dos adapters reais por bindings e secrets gerados pelo Wrangler.
 
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
@@ -235,23 +247,24 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 
 ## Politica de bibliotecas
 
-| Biblioteca/capacidade        | Estado                    | Limite                                         |
-| ---------------------------- | ------------------------- | ---------------------------------------------- |
-| Hono                         | Selecionada               | Somente adapter HTTP                           |
-| Zod 4                        | Selecionada               | Fronteiras; nao substituir tipos de dominio    |
-| Octokit modular              | Selecionada               | Somente `@holon/github`                        |
-| AI SDK + AI Gateway provider | Selecionada               | Somente `@holon/model`, atras de porta         |
-| `diff`                       | Selecionada               | Adapter proprio e fixtures obrigatorias        |
-| Cloudflare Workflows         | Selecionada               | Coordenação durável com retries delimitados    |
-| Cloudflare Sandbox SDK       | Selecionada `@next`       | Versão exata e imagem correspondente fixadas   |
-| `@base-ui/react`             | Selecionada               | Primitivas headless acessíveis em `@holon/ui`  |
-| Tailwind CSS v4              | Selecionada               | Estilização semântica e tokens via `@holon/ui` |
-| Recharts                     | Selecionada               | Gráficos de tendências com equivalente tabular |
-| `jose`                       | Selecionada               | Validação estrita de Access JWT e JWKS         |
-| Dependency Cruiser           | Adiada                    | Introduzir se regras de pacote nao bastarem    |
-| Knip                         | Adiada                    | Introduzir quando houver massa de exports/deps |
-| Agents SDK e Think           | Rejeitados / Não adotados | Descomissionados após ADR-0017 / ADR-0018      |
-| MCP e RAG                    | Adiados                   | Fora do MVP one-shot                           |
+| Biblioteca/capacidade        | Estado              | Limite                                             |
+| ---------------------------- | ------------------- | -------------------------------------------------- |
+| Hono                         | Selecionada         | Somente adapter HTTP                               |
+| Zod 4                        | Selecionada         | Fronteiras; nao substituir tipos de dominio        |
+| Octokit modular              | Selecionada         | Somente `@holon/github`                            |
+| AI SDK + AI Gateway provider | Selecionada         | Provider em `@holon/model`; Think no control plane |
+| `diff`                       | Selecionada         | Adapter proprio e fixtures obrigatorias            |
+| Cloudflare Workflows         | Selecionada         | Coordenação durável com retries delimitados        |
+| Cloudflare Sandbox SDK       | Selecionada `@next` | Versão exata e imagem correspondente fixadas       |
+| Dependency Cruiser           | Adiada              | Introduzir se regras de pacote nao bastarem        |
+| Knip                         | Adiada              | Introduzir quando houver massa de exports/deps     |
+| Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0049                   |
+| MCP e RAG                    | Adiados             | Fora do MVP one-shot                               |
+
+UI/admin e suas bibliotecas foram retirados pela
+[ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md). O
+Agent Think substituiu o motor próprio conforme
+[ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).
 
 ## Regras para agentes de codigo
 

@@ -36,22 +36,16 @@ export class ReviewToolBudgetStore {
         runId,
       )
       .toArray()[0]!;
-    const totalLimit = reviewInvestigationLimits.toolCalls * totalShards;
-    const totalExceeded = row.total >= totalLimit;
-    const shardExceeded = row.shard >= reviewInvestigationLimits.toolCalls;
-    if (totalExceeded || shardExceeded) {
+    if (row.total >= reviewInvestigationLimits.toolCalls) {
       try {
         this.logger.emit("repository.tool_budget_rejected", {
           severity: "error",
           runId,
           shardIndex: index,
-          rule: shardExceeded ? "shard_calls" : "run_calls",
+          rule: "run_calls",
           shardCurrent: row.shard,
-          shardLimit: reviewInvestigationLimits.toolCalls,
           totalCurrent: row.total,
-          totalLimit,
-          shardExceeded,
-          totalExceeded,
+          totalLimit: reviewInvestigationLimits.toolCalls,
         });
       } catch {
         // Logging cannot change the durable tool budget decision.

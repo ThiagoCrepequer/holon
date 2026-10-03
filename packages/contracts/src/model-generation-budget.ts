@@ -32,22 +32,3 @@ export type ModelGenerationAdmission =
       readonly consumed: number;
       readonly requested: number;
     };
-export function modelShardAllocation(
-  shardCount: number,
-  investigation: boolean,
-) {
-  const calls = Math.floor(modelGenerationLimits.calls / shardCount);
-  const inputBytes = Math.floor(modelGenerationLimits.inputBytes / shardCount);
-  const outputTokens = Math.floor(
-    modelGenerationLimits.outputTokens / shardCount,
-  );
-  return {
-    calls: Math.max(0, calls - (investigation ? 2 : 0)),
-    inputBytes:
-      inputBytes -
-      (investigation ? Math.min(128_000, Math.floor(inputBytes / 2)) : 0),
-    outputTokens:
-      outputTokens -
-      (investigation ? Math.min(8192, Math.floor(outputTokens * 0.6)) : 0),
-  };
-}

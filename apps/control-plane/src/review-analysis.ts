@@ -20,7 +20,6 @@ import {
   type StructuralImpactReport,
 } from "@holon/contracts";
 import { matchingConfigurationRules } from "@holon/domain";
-import { reviewMessage } from "@holon/domain";
 import {
   computeStableFingerprint,
   computeEvidenceFingerprint,
@@ -41,6 +40,7 @@ import { errorKind } from "./observability.js";
 import { resolveReviewGuidance } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
 import { buildShardReviewContext } from "./review-shard-context.js";
+import { ThinkReviewFailure } from "./think-reviewer.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
 export interface ReviewAnalysisExecution<T extends Rpc.Serializable<T>> {
@@ -158,7 +158,6 @@ async function reviewShards(
         anyPromptTruncated = true;
       }
       const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
-      const budgetExceeded = reviewer.toolBudgetExceeded();
       const verification = verifyFindingsWithCanonicalEvidence(
         modelOutput.findings,
         shardContext,
@@ -175,8 +174,7 @@ async function reviewShards(
       if (
         modelOutput.outputLimitations?.length ||
         reviewResult.promptTruncated ||
-        evidenceRejected ||
-        budgetExceeded
+        evidenceRejected
       )
         emit?.("model.output_limits", {
           shardIndex: shard.index,
@@ -186,7 +184,6 @@ async function reviewShards(
           limitationCodes: [
             ...(modelOutput.outputLimitations ?? []),
             ...(reviewResult.promptTruncated ? ["input_context_omitted"] : []),
-            ...(budgetExceeded ? ["tool_budget_exhausted"] : []),
           ].join(","),
           inputContextOmitted: reviewResult.promptTruncated,
           omittedSections: reviewResult.promptOmissions?.join(","),
@@ -197,7 +194,6 @@ async function reviewShards(
           ...(reviewResult.promptTruncated
             ? ["input_context_omitted" as const]
             : []),
-          ...(budgetExceeded ? ["tool_budget_exhausted" as const] : []),
           ...(evidenceRejected ? ["evidence_rejected" as const] : []),
         ]),
       ];
@@ -233,7 +229,6 @@ async function reviewShards(
         isDegraded:
           modelOutput.isDegraded ||
           reviewResult.promptTruncated ||
-          budgetExceeded ||
           evidenceRejected,
         outputLimitations: limitations,
         shardId: shard.id,
@@ -245,14 +240,17 @@ async function reviewShards(
       const failureCode = nonRetryableModelFailureCode(error);
       if (
         failureCode === undefined &&
-        !(error instanceof ModelProviderRequestError)
+        !(error instanceof ModelProviderRequestError) &&
+        !(error instanceof ThinkReviewFailure)
       )
         throw error;
       const reason =
         failureCode ??
-        (error instanceof ModelProviderRequestError && error.isRetryable
-          ? "provider_transient"
-          : "provider_permanent");
+        (error instanceof ThinkReviewFailure
+          ? error.reason
+          : error instanceof ModelProviderRequestError && error.isRetryable
+            ? "provider_transient"
+            : "provider_permanent");
       emitDiagnostic(
         emit,
         "review.shard_failed",
@@ -437,7 +435,6 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
             reviewTimeBudget.analysisMs,
       };
     });
-    services.setReviewShardCount(planning.shardIds.length);
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
     for (
@@ -612,10 +609,6 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         return execution ? execution.finish(output) : output;
       }
 
-      const successfulSummaries = shardResults
-        .filter((r) => r.status === "success" && r.summary.trim().length > 0)
-        .map((r) => r.summary.trim());
-
       const rawAggregated = aggregateShardReviews(plan, shardResults, {
         language: outputPreferences.language,
         verdictPolicy,
@@ -705,45 +698,6 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         currentRunId: runId,
         prKey,
       });
-      let unifiedSummary: string | undefined;
-      if (
-        rawAggregated.scopeStatus === "complete" &&
-        rawAggregated.isDegraded !== true &&
-        !context.truncated &&
-        (reconciled.summary.unverifiedCount ?? 0) === 0 &&
-        successfulSummaries.length > 1 &&
-        typeof services.model.synthesizeReviewSummary === "function"
-      ) {
-        try {
-          unifiedSummary = await services.model.synthesizeReviewSummary(job, {
-            deadlineAt: planning.deadlineAt,
-            output:
-              execution === undefined
-                ? undefined
-                : (
-                    await services.ledger.loadRunConfiguration(
-                      execution.configuration,
-                    )
-                  ).config.output,
-            shardSummaries: successfulSummaries,
-            verifiedFindings: reconciled.activeFindings.map((finding) => ({
-              diagnostic: finding.diagnostic,
-              severity: finding.severity,
-              path: finding.location.path,
-            })),
-          });
-        } catch (error) {
-          emitDiagnostic(emit, "review.synthesis_failed", {
-            severity: "warning",
-            errorKind: errorKind(error),
-          });
-          unifiedSummary = reviewMessage(
-            outputPreferences.language,
-            "synthesisUnavailable",
-          );
-        }
-      }
-
       const finalAggregated = aggregateShardReviews(plan, shardResults, {
         language: outputPreferences.language,
         canonicalFindings: reconciled.activeFindings,
@@ -751,7 +705,6 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           findings: reconciled.activeFindings,
           output: outputPreferences,
         },
-        unifiedSummary,
         reconciliation: reconciled.summary,
         structuralImpact: context.structuralImpact,
         verdictPolicy,

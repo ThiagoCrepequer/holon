@@ -1,9 +1,4 @@
-import type {
-  ProjectIdentificationResult,
-  ReviewContextFile,
-} from "@holon/contracts";
-
-import { redactSecrets } from "./redaction.js";
+import type { ProjectIdentificationResult } from "@holon/contracts";
 
 const jsonBytes = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).length;
@@ -89,84 +84,4 @@ export function compactProjectContext(
     }
   }
   return JSON.stringify(result);
-}
-
-export interface CanonicalEvidenceCandidate {
-  readonly path: string;
-  readonly startLine: number;
-  readonly endLine: number;
-  readonly excerpt: string;
-}
-
-/** Build complete, bounded line windows from the canonical patch, never model text. */
-export function canonicalEvidenceCandidates(
-  files: readonly ReviewContextFile[],
-): CanonicalEvidenceCandidate[] {
-  const candidates: CanonicalEvidenceCandidate[] = [];
-  for (const file of files) {
-    let line = 0;
-    let window: CanonicalEvidenceCandidate | undefined;
-    const flush = () => {
-      if (window) candidates.push(window);
-      window = undefined;
-    };
-    for (const raw of file.patch.split("\n")) {
-      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/u.exec(raw);
-      if (hunk) {
-        flush();
-        line = Number(hunk[1]);
-        continue;
-      }
-      if (!line || raw.startsWith("-")) continue;
-      if (raw.startsWith("+") || raw.startsWith(" ")) {
-        const text = redactSecrets(raw.slice(1));
-        if (raw.startsWith("+") && text.trim() && text.length <= 1200) {
-          if (
-            window &&
-            window.endLine === line - 1 &&
-            window.excerpt.length + text.length + 1 <= 1200 &&
-            line - window.startLine < 8
-          )
-            window = {
-              ...window,
-              endLine: line,
-              excerpt: window.excerpt + "\n" + text,
-            };
-          else {
-            flush();
-            window = {
-              path: file.path,
-              startLine: line,
-              endLine: line,
-              excerpt: text,
-            };
-          }
-        } else flush();
-        line++;
-      } else if (!raw.startsWith("\\ No newline")) {
-        flush();
-        line = 0;
-      }
-    }
-    flush();
-  }
-  return candidates;
-}
-
-export function selectFinalizationEvidence(
-  candidates: readonly CanonicalEvidenceCandidate[],
-  investigation: string,
-): readonly CanonicalEvidenceCandidate[] {
-  const score = (candidate: CanonicalEvidenceCandidate) =>
-    Number(investigation.includes(candidate.path)) * 2 +
-    Number(new RegExp(`\\b${candidate.startLine}\\b`, "u").test(investigation));
-  const result: CanonicalEvidenceCandidate[] = [];
-  let bytes = 0;
-  for (const candidate of candidates.toSorted((a, b) => score(b) - score(a))) {
-    const size = new TextEncoder().encode(JSON.stringify(candidate)).length;
-    if (bytes + size > 48_000 || result.length >= 64) continue;
-    result.push(candidate);
-    bytes += size;
-  }
-  return result;
 }

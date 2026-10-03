@@ -1,5 +1,4 @@
 export * from "./check-run.js";
-export * from "./ci-evidence.js";
 export * from "./executor.js";
 export * from "./feedback.js";
 export * from "./finding-lifecycle.js";
@@ -16,8 +15,6 @@ export * from "./review-limits.js";
 export * from "./review-analysis.js";
 
 export * from "./follow-up.js";
-
-export * from "./ci-storage.js";
 
 export * from "./review-guidance.js";
 export * from "./repository-config/snapshot.js";

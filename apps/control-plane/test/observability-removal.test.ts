@@ -6,7 +6,7 @@ import { ReviewToolBudgetStore } from "../src/review-tool-budget-store.js";
 
 afterEach(() => reset());
 
-it("shares the 24-call durable limit across concurrent reservations and recreated clients", async () => {
+it("shares the 96-call durable limit across concurrent reservations and recreated clients", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
   const runId =
     `github:42:pr:11:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;
@@ -21,15 +21,22 @@ it("shares the 24-call durable limit across concurrent reservations and recreate
     },
     "budget-test",
   );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "budget-test:start",
+  );
   const reservations = await Promise.all(
-    Array.from({ length: 36 }, () =>
+    Array.from({ length: 97 }, () =>
       ledger.reserveAnalysisToolCall(runId, 0, 2),
     ),
   );
-  expect(reservations.filter(Boolean)).toHaveLength(24);
+  expect(reservations.filter(Boolean)).toHaveLength(96);
   const replay = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
   expect(await replay.reserveAnalysisToolCall(runId, 0, 2)).toBe(false);
-  expect(await replay.reserveAnalysisToolCall(runId, 1, 2)).toBe(true);
+  expect(await replay.reserveAnalysisToolCall(runId, 1, 2)).toBe(false);
   const events = await runInDurableObject(ledger, (_object, state) => {
     const captured: unknown[] = [];
     const store = new ReviewToolBudgetStore(state.storage.sql, {
@@ -45,10 +52,10 @@ it("shares the 24-call durable limit across concurrent reservations and recreate
       event: "repository.tool_budget_rejected",
       runId,
       shardIndex: 0,
-      rule: "shard_calls",
-      shardCurrent: 24,
-      shardLimit: 24,
-      totalLimit: 48,
+      rule: "run_calls",
+      shardCurrent: 96,
+      totalCurrent: 96,
+      totalLimit: 96,
     }),
   ]);
 });
@@ -67,6 +74,13 @@ it("keeps review state and tool budgets without administrative storage", async (
       causalVersion: new Date().toISOString(),
     },
     "removal-test",
+  );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "removal-test:start",
   );
   await runInDurableObject(ledger, (_object, state) => {
     const tables = state.storage.sql
@@ -88,10 +102,10 @@ it("keeps review state and tool budgets without administrative storage", async (
     expect(tables).toContain("pr_findings");
     expect(tables).toContain("cleanup_tasks");
   });
-  for (let index = 0; index < 24; index++)
+  for (let index = 0; index < 96; index++)
     expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(false);
-  expect(await ledger.runState(runId)).toBe("queued");
+  expect(await ledger.runState(runId)).toBe("running");
 });
 
 it("migrates consumed budgets atomically without changing core rows and is replay safe", async () => {
@@ -109,6 +123,13 @@ it("migrates consumed budgets atomically without changing core rows and is repla
       causalVersion: new Date().toISOString(),
     },
     "migration-upgrade",
+  );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "migration-upgrade:start",
   );
   await runInDurableObject(ledger, (_object, state) => {
     const sql = state.storage.sql;
@@ -202,8 +223,8 @@ it("migrates consumed budgets atomically without changing core rows and is repla
         .map((row) => row.name),
     ).not.toContain("summary_json");
   });
-  for (let remaining = 0; remaining < 13; remaining++)
+  for (let remaining = 0; remaining < 84; remaining++)
     expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(false);
-  expect(await ledger.reserveAnalysisToolCall(runId, 12, 13)).toBe(true);
+  expect(await ledger.reserveAnalysisToolCall(runId, 12, 13)).toBe(false);
 });

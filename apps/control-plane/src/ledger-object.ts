@@ -55,7 +55,6 @@ import {
   CheckRunReconciliationStore,
   type DesiredCheckRun,
 } from "./check-run-reconciliation.js";
-import { CiEvidenceStore } from "./ci-evidence-store.js";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { consoleLogger, errorKind } from "./observability.js";
@@ -655,10 +654,6 @@ export class ReviewLedgerObject
     }
 
     await this.reconcileChecks();
-    await new CiEvidenceStore(this.ctx.storage).processDue(
-      this.env,
-      startedAt.toISOString(),
-    );
     await this.processDueWorkflowSupersession(startedAt.toISOString());
 
     await this.ensureMaintenanceAlarm();
@@ -836,8 +831,6 @@ export class ReviewLedgerObject
              SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
              UNION ALL
              SELECT next_attempt_at FROM check_run_tasks WHERE revision > completed_revision
-             UNION ALL
-             SELECT next_attempt_at FROM ci_publication_tasks WHERE revision > completed_revision
            )) AS next_attempt_at`,
       )
       .toArray()[0];
@@ -912,14 +905,19 @@ export class ReviewLedgerObject
   public reserveModelGeneration(
     runId: string,
     request: ModelGenerationReservation,
-  ): Promise<ModelGenerationAdmission> {
+  ): Promise<ModelGenerationAdmission | undefined> {
     return Promise.resolve(
-      this.ctx.storage.transactionSync(() =>
-        new ReviewGenerationBudgetStore(this.ctx.storage.sql).reserve(
+      this.ctx.storage.transactionSync(() => {
+        if (
+          this.latestRunId() !== runId ||
+          this.runState(runId as RunId) !== "running"
+        )
+          return undefined;
+        return new ReviewGenerationBudgetStore(this.ctx.storage.sql).reserve(
           runId,
           request,
-        ),
-      ),
+        );
+      }),
     );
   }
   public settleModelGeneration(
@@ -943,13 +941,18 @@ export class ReviewLedgerObject
     totalShards: number,
   ): Promise<boolean> {
     return Promise.resolve(
-      this.ctx.storage.transactionSync(() =>
-        new ReviewToolBudgetStore(this.ctx.storage.sql).reserveToolCall(
+      this.ctx.storage.transactionSync(() => {
+        if (
+          this.latestRunId() !== runId ||
+          this.runState(runId as RunId) !== "running"
+        )
+          return false;
+        return new ReviewToolBudgetStore(this.ctx.storage.sql).reserveToolCall(
           runId,
           index,
           totalShards,
-        ),
-      ),
+        );
+      }),
     );
   }
 
@@ -1064,20 +1067,6 @@ export class ReviewLedgerObject
   ): Promise<void> {
     this.findingStore.completeFeedbackReply(deliveryId, replyCommentId);
     return Promise.resolve();
-  }
-
-  public async saveCiEvidence(
-    prKey: PrKey,
-    headSha: string,
-    evidence: import("@holon/contracts").SavedCiEvidence,
-  ): Promise<void> {
-    new CiEvidenceStore(this.ctx.storage).save(prKey, headSha, evidence);
-    await this.ensureMaintenanceAlarm();
-  }
-  public loadCiEvidence(prKey: PrKey, headSha: string) {
-    return Promise.resolve(
-      new CiEvidenceStore(this.ctx.storage).load(prKey, headSha),
-    );
   }
 
   public async saveProjectIdentification(

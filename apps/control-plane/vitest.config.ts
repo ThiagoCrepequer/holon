@@ -31,6 +31,7 @@ export default defineConfig({
   ],
   test: {
     clearMocks: true,
+    fileParallelism: false,
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json-summary", "html", "lcov"],

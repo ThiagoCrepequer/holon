@@ -4,14 +4,17 @@ kind: reference
 status: deprecated
 owners:
   - core-team
-last-reviewed: 2026-09-27
+last-reviewed: 2026-10-03
 ---
 
 # Diagnóstico de erros nos Workers
 
-> Histórico anterior à ADR-0040. O pacote de observabilidade e seus wrappers
-> foram removidos. Há somente logs nativos simples; este catálogo não descreve
-> mais a cobertura atual. Consulte [retirada operacional](admin-retirement.md).
+> Histórico anterior às ADR-0040 e ADR-0049. O pacote de observabilidade, o
+> motor próprio e o enriquecimento de CI foram removidos. Os eventos e limites
+> abaixo não descrevem o runtime atual. Para reviews novos, consulte o
+> [fluxo de execução](../architecture/review-runtime-flow.md), a
+> [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md) e o
+> [runbook de deploy](deployment.md).
 
 As configurações dos três Workers habilitam logs de invocação da Cloudflare com
 amostragem integral. Um handler novo recebe automaticamente registro de

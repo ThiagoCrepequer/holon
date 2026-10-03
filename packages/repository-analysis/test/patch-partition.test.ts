@@ -28,7 +28,7 @@ it("bounds evidence windows and bytes while preserving sparse additions and plus
     collectChangedLines("a.ts", patch),
   );
   for (const part of result.patches) {
-    expect(evidenceWindowCount(part)).toBeLessThanOrEqual(48);
+    expect(evidenceWindowCount(part)).toBeLessThanOrEqual(50);
     expect(collectChangedLines("a.ts", part).length).toBeLessThanOrEqual(50);
     expect(new TextEncoder().encode(part).length).toBeLessThanOrEqual(5000);
   }

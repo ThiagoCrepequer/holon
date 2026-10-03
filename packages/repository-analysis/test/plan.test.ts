@@ -1,3 +1,4 @@
+import { reviewExecutionLimits } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import { splitPullRequestDiff } from "../src/diff.js";
@@ -130,7 +131,7 @@ function patchFor(path: string, bytes = 100): string {
 
 it("omits an oversized file completely without starving later eligible patches", () => {
   const plan = buildReviewPlan(
-    splitPullRequestDiff(patchFor("src/a.ts", 60_001) + patchFor("src/b.ts")),
+    splitPullRequestDiff(patchFor("src/a.ts", 120_001) + patchFor("src/b.ts")),
   );
   expect(plan.scopeStatus).toBe("partial_by_policy");
   expect(plan.totalEligibleFiles).toBe(2);
@@ -156,14 +157,14 @@ it("retains 51 eligible files instead of applying the obsolete global file cap",
   expect(plan.omissionReasons).toEqual([]);
 });
 
-it("covers more than five shards and fifty files under the default work budget", () => {
+it("covers more than fifty files with fewer shards under the tolerant work budget", () => {
   const plan = buildReviewPlan(
     splitPullRequestDiff(
       Array.from({ length: 61 }, (_, i) => patchFor(`src/f${i}.ts`)).join(""),
     ),
   );
   expect(plan.scopeStatus).toBe("complete");
-  expect(plan.shards.length).toBeGreaterThan(5);
+  expect(plan.shards.length).toBeLessThanOrEqual(4);
   expect(
     new Set(plan.shards.flatMap((s) => s.files.map((f) => f.path))).size,
   ).toBe(61);
@@ -189,7 +190,9 @@ it("partitions a large single hunk without losing canonical added coordinates or
   );
   expect(retained.join("\n")).toBe(body);
   for (const shard of plan.shards)
-    expect(shard.byteLength).toBeLessThanOrEqual(48_000);
+    expect(shard.byteLength).toBeLessThanOrEqual(
+      reviewExecutionLimits.shardPatchBytes,
+    );
 });
 
 it("packs small hunks of the same file without spending one shard per hunk", () => {

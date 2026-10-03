@@ -42,7 +42,7 @@ vigentes; os textos anteriores são preservados como histórico.
 | [ADR-0015](0015-use-causal-admission-and-durable-terminal-cleanup.md)                 | Usar admissão causal e cleanup terminal durável                            | `superseded` | 2026-08-30 |
 | [ADR-0016](0016-require-complete-patches-and-host-verifiable-evidence.md)             | Exigir patches completos e evidência verificável pelo host                 | `superseded` | 2026-08-30 |
 | [ADR-0017](0017-select-review-output-harness-from-evidence.md)                        | Selecionar harness de saída por avaliação comparativa                      | `superseded` | 2026-08-31 |
-| [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                        | Adotar gerador desacoplado em duas fases com gate no host                  | `accepted`   | 2026-09-01 |
+| [ADR-0018](0018-adopt-two-phase-decoupled-review-generator.md)                        | Adotar gerador desacoplado em duas fases com gate no host                  | `superseded` | 2026-09-01 |
 | [ADR-0019](0019-derive-deterministic-review-verdict-by-policy.md)                     | Derivar veredito determinístico de review por política no host             | `accepted`   | 2026-09-02 |
 | [ADR-0020](0020-reconcile-findings-across-commits-with-stable-fingerprints.md)        | Reconciliar findings entre commits via fingerprinting e ciclo              | `superseded` | 2026-09-02 |
 | [ADR-0021](0021-capture-human-feedback-and-calibration-signals.md)                    | Capturar feedback humano, comandos de dispensa e calibração                | `accepted`   | 2026-09-02 |
@@ -96,3 +96,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0047 — Proteger o caminho normal de deploy](0047-guard-coordinated-deployments.md) — `superseded` pela ADR-0048; ferramenta manual preservada como opção.
 
 - [ADR-0048 — Restaurar deploy automático dos Workers](0048-restore-automatic-worker-deployments.md) — substitui o bloqueio obrigatório da ADR-0047; guarda preservada como ferramenta manual opcional.
+
+- [ADR-0049 — Usar Agents SDK e Think na revisão](0049-use-cloudflare-think-for-pr-review.md) — substitui o motor próprio das ADRs 0018 e 0046; preserva um teto agregado por run e a validação causal.

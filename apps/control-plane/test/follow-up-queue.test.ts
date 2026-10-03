@@ -4,16 +4,16 @@ import { dispatchFollowUpMessages } from "../src/follow-up-queue.js";
 describe("durable follow-up dispatch", () => {
   it("acknowledges completed work and retries infrastructure failures", async () => {
     const payload = {
-      deliveryId: "github:ci-delivery",
-      headSha: "a".repeat(40),
+      action: "resolved",
+      authorLogin: "reviewer",
+      deliveryId: "github:feedback-delivery",
       installationId: 99,
       pullRequestNumber: 7,
-      repository: { id: 42, name: "api", owner: "acme" },
-      workflowRunId: 123,
-      workflowRunAttempt: 1,
+      repository: { fullName: "acme/api", id: 42, name: "api", owner: "acme" },
+      rootCommentId: 123,
     };
     const good = {
-      body: { event: "ci_enrichment", payload },
+      body: { event: "feedback_thread", payload },
       ack: vi.fn(),
       retry: vi.fn(),
     };

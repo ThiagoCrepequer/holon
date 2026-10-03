@@ -8,7 +8,7 @@ import { generateText, Output } from "ai";
 import {
   createGatewayLanguageModel,
   type CloudflareGatewayModelConfig,
-} from "./ai-sdk.js";
+} from "./gateway.js";
 import { redactSecrets } from "./redaction.js";
 export class GatewayProjectIdentificationModel implements ProjectIdentificationModel {
   constructor(

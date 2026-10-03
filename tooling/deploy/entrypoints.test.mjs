@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import test from "node:test";
@@ -83,7 +90,10 @@ await test("existing Cloudflare commands deploy noninteractively through Wrangle
         }
         const call = JSON.parse(await readFile(capture, "utf8"));
         assert.deepEqual(call.args, expected);
-        assert.equal(call.cwd, path.join(directory, "apps", name));
+        assert.equal(
+          call.cwd,
+          await realpath(path.join(directory, "apps", name)),
+        );
         assert.equal(call.tty, false);
       }
     }

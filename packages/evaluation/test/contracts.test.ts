@@ -4,26 +4,19 @@ import { evalCaseSchema, evalRunConfigurationSchema } from "../src/index.js";
 import { createEvalCase, evaluationConfiguration } from "./fixtures.js";
 
 describe("evalRunConfigurationSchema", () => {
-  it("requires a model reference only for live-model evaluations", () => {
+  it("rejects the retired live-model mode and model references", () => {
     expect(() =>
       evalRunConfigurationSchema.parse({
         ...evaluationConfiguration,
         mode: "live-model",
       }),
-    ).toThrow(/must identify a model reference/u);
+    ).toThrow();
     expect(() =>
       evalRunConfigurationSchema.parse({
         ...evaluationConfiguration,
         modelReference: "dynamic/pr-review",
       }),
-    ).toThrow(/must identify a model reference/u);
-    expect(
-      evalRunConfigurationSchema.parse({
-        ...evaluationConfiguration,
-        mode: "live-model",
-        modelReference: "dynamic/pr-review",
-      }),
-    ).toMatchObject({ mode: "live-model" });
+    ).toThrow();
   });
 });
 

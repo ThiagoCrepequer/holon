@@ -5,8 +5,8 @@ por meio de um GitHub App e projetada para executar sobre a plataforma
 Cloudflare.
 
 O repositorio contem a primeira implementacao executavel do MVP: webhook,
-Queue, Workflow, ledger idempotente em Durable Object SQLite, executor isolado
-com Sandbox, review via AI Gateway e publicacao pela GitHub REST API. Ela foi
+Queue, Workflow, ledger idempotente em Durable Object SQLite, agente Think por
+shard, executor isolado com Sandbox, AI Gateway e publicacao pela GitHub REST API. Ela foi
 validada localmente e por dry-run; nenhum ambiente remoto foi implantado por
 esta documentacao.
 
@@ -33,9 +33,12 @@ imagem do executor sem realizar deploy.
 - [ADR-0002: monorepo TypeScript com pnpm e Turborepo](docs/decisions/0002-adopt-typescript-monorepo-toolchain.md)
 - [ADR-0003: stack TypeScript inicial](docs/decisions/0003-adopt-initial-typescript-application-stack.md)
 - [ADR-0004: Workflows, ledger e Sandbox](docs/decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md)
-- [ADR-0005: AI Gateway e AI SDK](docs/decisions/0005-use-ai-gateway-rest-api-with-ai-sdk.md)
-- [ADR-0006: checkpoints granulares do Workflow](docs/decisions/0006-use-granular-workflow-checkpoints.md)
+- [Índice de decisões e status dos ADRs](docs/decisions/README.md)
+- [ADR-0049: agente Think para review](docs/decisions/0049-use-cloudflare-think-for-pr-review.md)
+- [ADR-0038: análise paralela e publicação](docs/decisions/0038-harden-parallel-review-and-publication.md)
 - [Ecossistema tecnico](docs/architecture/technical-ecosystem.md)
+- [Guia de engenharia e contexto](docs/engineering/README.md)
+- [Skills do projeto](.agents/skills/README.md)
 - [Desenvolvimento local](docs/operations/local-development.md)
 - [Configuracao do GitHub App](docs/operations/github-app.md)
 - [Deploy e operacao](docs/operations/deployment.md)

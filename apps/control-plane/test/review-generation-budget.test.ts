@@ -19,6 +19,13 @@ async function ledgerForRun() {
     },
     "budget-test",
   );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "budget-test:start",
+  );
   return ledger;
 }
 it("bounds concurrent model calls across shards and eviction", async () => {
@@ -34,7 +41,7 @@ it("bounds concurrent model calls across shards and eviction", async () => {
       }),
     ),
   );
-  expect(ids.filter((id) => id.accepted)).toHaveLength(64);
+  expect(ids.filter((id) => id?.accepted)).toHaveLength(64);
   await evictDurableObject(ledger);
   expect(
     await ledger.reserveModelGeneration(runId, {
@@ -56,6 +63,7 @@ it("charges uncertain output and settles a successful reservation exactly once",
     outputTokens: 120_000,
   });
   expect(first).toMatchObject({ accepted: true });
+  if (!first?.accepted) throw new Error("Expected generation admission");
   expect(
     await ledger.reserveModelGeneration(runId, {
       shardIndex: 0,
@@ -65,8 +73,8 @@ it("charges uncertain output and settles a successful reservation exactly once",
       outputTokens: 1,
     }),
   ).toMatchObject({ accepted: false });
-  await ledger.settleModelGeneration(runId, first.accepted ? first.id : 0, 10);
-  await ledger.settleModelGeneration(runId, first.accepted ? first.id : 0, 0);
+  await ledger.settleModelGeneration(runId, first.id, 10);
+  await ledger.settleModelGeneration(runId, first.id, 0);
   expect(
     await ledger.reserveModelGeneration(runId, {
       shardIndex: 0,
@@ -208,110 +216,80 @@ it.each([
   ]);
 });
 
-it("logs the output cap granted to a shard without rejecting its call", async () => {
+it("atomically refuses model and tool reservations after a newer head supersedes the run", async () => {
   const ledger = await ledgerForRun();
-  const events = await runInDurableObject(ledger, (_object, state) => {
-    const captured: unknown[] = [];
-    const store = new ReviewGenerationBudgetStore(state.storage.sql, {
-      emit(event, fields) {
-        captured.push({ event, ...fields });
-      },
-    });
-    expect(
-      store.reserve(runId, {
-        shardIndex: 0,
-        shardCount: 8,
-        phase: "investigation",
-        inputBytes: 1,
-        outputTokens: 8192,
-      }),
-    ).toMatchObject({ accepted: true, outputTokens: 6808 });
-    return captured;
-  });
-  expect(events).toEqual([
-    expect.objectContaining({
-      event: "model.budget_clamped",
-      rule: "output_tokens",
-      current: 0,
-      requested: 8192,
-      granted: 6808,
-      limit: 6808,
-      shardCount: 8,
-      phase: "investigation",
-    }),
-  ]);
-});
-
-it("protects finalization and later shards when the first wave consumes its investigation allocation", async () => {
-  const ledger = await ledgerForRun();
-  for (let shardIndex = 0; shardIndex < 5; shardIndex++) {
-    for (let round = 0; round < 10; round++) {
-      const allocation = await ledger.reserveModelGeneration(runId, {
-        inputBytes: 80_000,
-        outputTokens: 12_000,
-        shardIndex,
-        shardCount: 8,
-        phase: "investigation",
-      });
-      if (!allocation.accepted) break;
-      await ledger.settleModelGeneration(runId, allocation.id, 500);
-    }
-  }
-  await evictDurableObject(ledger);
-  for (let shardIndex = 0; shardIndex < 8; shardIndex++) {
-    expect(
-      await ledger.reserveModelGeneration(runId, {
-        inputBytes: 64_000,
-        outputTokens: 8192,
-        shardIndex,
-        shardCount: 8,
-        phase: "finalization",
-      }),
-    ).toMatchObject({ accepted: true });
-  }
-});
-
-it("reports the exhausted dimension and refuses a changed plan", async () => {
-  const ledger = await ledgerForRun();
-  const request = {
-    shardIndex: 0,
-    shardCount: 8,
-    phase: "investigation" as const,
-    inputBytes: 372_001,
-    outputTokens: 8192,
-  };
-  expect(await ledger.reserveModelGeneration(runId, request)).toEqual({
-    accepted: false,
-    reason: "input_bytes",
-    limit: 372_000,
-    consumed: 0,
-    requested: 372_001,
-  });
-  const admitted = await ledger.reserveModelGeneration(runId, {
-    ...request,
-    inputBytes: 1,
-  });
-  expect(admitted).toMatchObject({ accepted: true, outputTokens: 6808 });
+  const newerId =
+    `github:42:pr:7:head:${"c".repeat(40)}:base:${"b".repeat(40)}` as const;
+  const later = new Date(Date.now() + 1_000).toISOString();
+  await ledger.claimRun(
+    {
+      attempt: 0,
+      causalVersion: later,
+      createdAt: later,
+      id: newerId,
+      prKey: "github:42:pr:7",
+      state: "queued",
+    },
+    "new-head",
+  );
   expect(
-    await ledger.reserveModelGeneration(runId, { ...request, inputBytes: 1 }),
-  ).toEqual({
+    await ledger.reserveModelGeneration(runId, {
+      shardIndex: 0,
+      shardCount: 1,
+      phase: "investigation",
+      inputBytes: 1,
+      outputTokens: 1,
+    }),
+  ).toBeUndefined();
+  expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(false);
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT COUNT(*) AS total FROM model_generation_reservations WHERE run_id = ?",
+          runId,
+        )
+        .one().total,
+    ).toBe(0);
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT COUNT(*) AS total FROM review_tool_budgets WHERE run_id = ?",
+          runId,
+        )
+        .one().total,
+    ).toBe(0);
+  });
+});
+
+it("shares the output ceiling across shards without renewing their budget", async () => {
+  const ledger = await ledgerForRun();
+  expect(
+    await ledger.reserveModelGeneration(runId, {
+      shardIndex: 0,
+      shardCount: 2,
+      phase: "investigation",
+      inputBytes: 1,
+      outputTokens: 120_000,
+    }),
+  ).toMatchObject({ accepted: true });
+  expect(
+    await ledger.reserveModelGeneration(runId, {
+      shardIndex: 1,
+      shardCount: 2,
+      phase: "investigation",
+      inputBytes: 1,
+      outputTokens: 1,
+    }),
+  ).toMatchObject({
     accepted: false,
     reason: "output_tokens",
-    limit: 6808,
-    consumed: 6808,
-    requested: 8192,
-  });
-  await runInDurableObject(ledger, (object) => {
-    expect(() =>
-      object.reserveModelGeneration(runId, { ...request, shardCount: 7 }),
-    ).toThrow("plan changed");
-    expect(() =>
-      object.reserveModelGeneration(runId, { ...request, shardIndex: 8 }),
-    ).toThrow("Invalid model shard");
+    consumed: 120_000,
+    limit: 120_000,
   });
 });
 
-it("preserves pre-migration charges conservatively instead of resetting an in-flight run", async () => {
+it("counts historical reservations in the current aggregate ceiling", async () => {
   const ledger = await ledgerForRun();
   await runInDurableObject(ledger, (_object, state) => {
     state.storage.sql.exec(
@@ -323,15 +301,24 @@ it("preserves pre-migration charges conservatively instead of resetting an in-fl
   });
   expect(
     await ledger.reserveModelGeneration(runId, {
-      shardIndex: 7,
-      shardCount: 8,
-      phase: "finalization",
+      shardIndex: 1,
+      shardCount: 2,
+      phase: "investigation",
+      inputBytes: 3_500_000,
+      outputTokens: 1,
+    }),
+  ).toMatchObject({ accepted: true });
+  expect(
+    await ledger.reserveModelGeneration(runId, {
+      shardIndex: 0,
+      shardCount: 2,
+      phase: "investigation",
       inputBytes: 1,
       outputTokens: 1,
     }),
   ).toMatchObject({
     accepted: false,
     reason: "input_bytes",
-    consumed: 500_000,
+    consumed: 4_000_000,
   });
 });

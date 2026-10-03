@@ -1,5 +1,5 @@
-import { generateText } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { generateText, streamText } from "ai";
+import { MockLanguageModelV3, MockLanguageModelV4 } from "ai/test";
 import { expect, it, vi } from "vitest";
 
 import { withGenerationBudget } from "../src/generation-budget.js";
@@ -120,6 +120,65 @@ it("rejects unbounded output before reserving or contacting the provider", async
   ).rejects.toThrow("bounded output maximum");
   expect(reserve).not.toHaveBeenCalled();
   expect(doGenerate).not.toHaveBeenCalled();
+});
+
+it("reserves before streaming and settles only after the provider finish event", async () => {
+  const reserve = vi.fn(async () => ({
+    accepted: true as const,
+    id: 7,
+    outputTokens: 20,
+  }));
+  const settle = vi.fn(async () => {});
+  const doStream = vi.fn(async () => {
+    expect(reserve).toHaveBeenCalledTimes(1);
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "text" });
+          controller.enqueue({ type: "text-delta", id: "text", delta: "OK" });
+          controller.enqueue({ type: "text-end", id: "text" });
+          controller.enqueue({
+            type: "finish",
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: response.usage,
+          });
+          controller.close();
+        },
+      }),
+    };
+  });
+  const result = streamText({
+    model: withGenerationBudget(new MockLanguageModelV4({ doStream }), {
+      reserve,
+      settle,
+    }),
+    prompt: "Public fixture",
+    maxOutputTokens: 20,
+    maxRetries: 0,
+  });
+  expect(await result.text).toBe("OK");
+  expect(settle).toHaveBeenCalledWith(7, 2);
+});
+
+it("never starts a streaming request after budget denial", async () => {
+  const doStream = vi.fn();
+  const result = streamText({
+    model: withGenerationBudget(new MockLanguageModelV4({ doStream }), {
+      reserve: async () => ({
+        accepted: false as const,
+        reason: "calls" as const,
+        limit: 64,
+        consumed: 64,
+        requested: 1,
+      }),
+      settle: async () => {},
+    }),
+    prompt: "Public fixture",
+    maxOutputTokens: 20,
+    maxRetries: 0,
+  });
+  await expect(result.text).rejects.toThrow();
+  expect(doStream).not.toHaveBeenCalled();
 });
 
 it("applies the admitted output maximum to the actual provider call", async () => {
