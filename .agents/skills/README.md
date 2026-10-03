@@ -3,19 +3,48 @@
 Estas skills seguem o formato aberto Agent Skills e são descobertas pelo Codex
 em `.agents/skills/`. São carregadas sob demanda: escolha as que se aplicam à
 tarefa em vez de carregar todo o catálogo. As cópias preservam o conteúdo
-upstream; confirme dependências e instruções específicas do host antes de
-executar fluxos externos. As origens foram verificadas em 2026-09-28.
+upstream, exceto adaptações documentadas abaixo; confirme dependências e
+instruções específicas do host antes de executar fluxos externos. As origens
+anteriores foram verificadas em 2026-09-28; as skills de engenharia foram
+revisadas em 2026-10-03.
 
 ## Qual skill usar
 
-### Design e implementação de UI
+### Engenharia de backend e runtime
+
+| Cenário | Skill | Como usar |
+| --- | --- | --- |
+| Desenhar ou revisar a interface de um módulo | `codebase-design` | Use o vocabulário de módulo, interface e seam; confirme o grafo e os ADRs do Holon antes de criar uma porta. |
+| Construir comportamento novo ou corrigir bug com TDD | `tdd` | Um teste comportamental que falha por vez, seguido da menor correção. A skill depende de `codebase-design` e remete a arquivos `tests.md` e `mocking.md` incluídos. |
+
+Para princípios recorrentes de TypeScript, padrões e anti-padrões, consulte
+[`docs/engineering/typescript-and-module-design.md`](../../docs/engineering/typescript-and-module-design.md).
+Para Cloudflare, GitHub, AI SDK, Workflows, estado e operação, consulte o
+[guia de runtime](../../docs/engineering/runtime-and-integrations.md).
+Essas referências não são skills executáveis: devem refletir o runtime
+vigente e apontar para APIs oficiais atuais.
+
+`find-skills` está disponível no ambiente do agente para descoberta; não é
+dependência do repositório. A skill externa `implement` foi avaliada e não
+incluída: pressupõe `code-review`, configuração de issue tracker e commit
+automático. `typescript-advanced-types` também não foi incluída: cobre
+técnicas genéricas com exemplos de `any`, sem orientar a validação runtime e o
+grafo de dependências do Holon. `improve-codebase-architecture` já existe no
+ambiente local, mas seu fluxo de relatório HTML, subagentes e entrevista não
+é requisito para mudanças comuns do projeto.
+
+### Design e implementação de UI, quando houver uma tarefa nessa área
+
+O runtime atual não inclui UI/admin ou `packages/ui` (ADR-0040). As skills
+abaixo continuam disponíveis como métodos opcionais para trabalho futuro;
+elas não descrevem módulos vigentes do Holon.
 
 | Cenário | Skills recomendadas | Como usar |
 | --- | --- | --- |
 | Procurar padrões reais antes de desenhar uma tela ou fluxo | `ui-radar` | Pesquise exemplos comparáveis e extraia padrões relevantes para o produto; trate referências como inspiração, não como especificação. |
 | Criar, redesenhar ou melhorar uma interface | `ui-design` + `anti-ui-slop` | Use `ui-design` para orientar a exploração, composição e implementação. Use `anti-ui-slop` para firmar uma direção específica do produto, cobrir estados e revisar o acabamento. |
 | Organizar colunas, margens e gutters de uma página | `layout-grid` | Defina a grade e os breakpoints estruturais antes de ajustar o espaçamento interno dos componentes. |
-| Definir ou reorganizar cores, espaçamento, tipografia e elevação | `design-token` | Use ao estabelecer a camada de tokens; respeite primeiro os tokens e padrões existentes em `packages/ui`. |
+| Definir ou reorganizar cores, espaçamento, tipografia e elevação | `design-token` | Use quando houver uma camada de UI e tokens reais para revisar. |
 | Fazer a mesma UI funcionar em telas e métodos de entrada diferentes | `responsive-design` | Revise layouts e interações para tamanhos de tela, toque, teclado e demais contextos aplicáveis. Combine com `layout-grid` quando a estrutura da grade também mudar. |
 | Estabelecer ordem de leitura numa nova composição | `visual-hierarchy` | Defina onde o olhar deve chegar primeiro e ajuste escala, peso, cor, espaço e posição. |
 | Diagnosticar hierarquia visual numa tela existente | `critique-visual-hierarchy` | Avalie ponto de entrada, percurso do olhar, distribuição de peso e ênfase a partir da tela renderizada. |
@@ -32,10 +61,9 @@ executar fluxos externos. As origens foram verificadas em 2026-09-28.
 | Avaliar riscos de segurança | `cso` | Auditoria de segurança; o nível de profundidade pode depender da configuração e dos recursos gstack disponíveis. |
 | Revisar um plano técnico como liderança de engenharia | `plan-eng-review` | Use para desafiar escopo, sequenciamento, riscos e critérios de conclusão antes de implementar. |
 
-## Fluxo recomendado para uma UI no Holon
+## Fluxo recomendado se houver uma UI no Holon
 
-1. Consulte os padrões e tokens existentes em `packages/ui` e a tela ou rota que
-   será alterada.
+1. Consulte a tela ou rota existente e seus padrões/tokens reais, se houver.
 2. Para uma tela nova ou um redesenho, use `ui-radar` para buscar referências;
    então `ui-design` e `anti-ui-slop` para orientar e criticar a solução.
 3. Aplique apenas as skills estruturais necessárias: `layout-grid`,
@@ -58,6 +86,7 @@ as demais apenas quando cobrirem outra dimensão.
 | `layout-grid`, `responsive-design`, `visual-hierarchy`, `design-token`, `accessibility-audit`, `critique-visual-hierarchy` | [Owl-Listener/designer-skills](https://github.com/Owl-Listener/designer-skills) | MIT; aviso em `LICENSES/designer-skills-MIT.txt`. Skills individuais autocontidas selecionadas da coleção. |
 | `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines) | Skill importada do upstream; as regras da auditoria são buscadas de [web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) a cada uso. O repositório de skills não apresenta arquivo de licença na raiz consultada; confira os termos upstream antes de redistribuir ou alterar a cópia. |
 | `ui-design`, `ui-radar`, `anti-ui-slop` | [uizze/uizze](https://github.com/uizze/uizze/tree/main/skills) | Skills UIZZE incluídas nesta atualização. `ui-design` e `anti-ui-slop` preservam os avisos e metadados de licença distribuídos com a cópia; `ui-radar` contém somente o `SKILL.md`, então confira os termos no upstream antes de redistribuir. |
+| `codebase-design`, `tdd` | [mattpocock/skills](https://github.com/mattpocock/skills) em `d81f3a183412e71a5b1e84ca21bc1a35eea03a60` | MIT; arquivos auxiliares e aviso em `LICENSES/mattpocock-skills-MIT.txt`. `tdd/SKILL.md` foi adaptada para o glossário e o fluxo de decisão do Holon. |
 
 Ao atualizar uma skill, confira a estrutura, o conteúdo, as dependências e os
 termos de licença no upstream. Atualize este guia quando o conjunto ou o fluxo
