@@ -161,6 +161,12 @@ checkpoints periódicos. Esses números foram calibrados para o motor atual.
 Bytes de prompt limitam exposição, mas não medem tokens faturados nem custo
 monetário. Shards maiores também mudam o custo de cada passo.
 
+A diretriz de teto duro agregado, saldo compartilhado e reserva para
+finalização foi acordada em 2026-10-03. Os novos valores numéricos ainda não
+foram definidos: serão escolhidos com o corpus e a medição do Think no mesmo
+modelo/rota. Os limites da ADR-0045 continuam descrevendo o motor atual até
+a migração do código e a nova decisão arquitetural.
+
 - **Manter o teto duro agregado e durável por run.** Reservar atomicamente no
   ledger antes de cada chamada ao provider, incluindo investigação,
   finalização, compaction que usar modelo e recuperação. Contabilizar uso
