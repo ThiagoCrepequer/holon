@@ -1,36 +1,46 @@
 ---
 id: PLAN-THINK-REVIEW-AGENT
 kind: planning
-status: proposed
+status: superseded
 owners:
   - core-team
 last-reviewed: 2026-10-03
 related:
+  - ../decisions/0046-use-cloudflare-think-for-pr-review.md
   - ../decisions/0018-adopt-two-phase-decoupled-review-generator.md
   - ../decisions/0038-harden-parallel-review-and-publication.md
   - ../decisions/0045-bound-review-generation-expenditure.md
   - ../architecture/review-runtime-flow.md
   - ../architecture/security-and-trust-boundaries.md
   - ../architecture/ci-evidence-ingestion.md
+  - ../research/2026-10-03-cloudflare-agents-examples-and-runtime-audit.md
 ---
 
 # Migrar a revisão de PRs para Cloudflare Agents SDK e Think
 
 ## Objetivo e estado
 
-Este é o desenho da migração, ainda não a descrição do runtime implementado. O
-objetivo é substituir o loop de investigação e geração de review mantido pelo
-Holon por `@cloudflare/think`, usando `agents` como runtime do agente. O Holon
+Este é o plano histórico que antecedeu a implementação da
+[ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md). O
+[fluxo atual](../architecture/review-runtime-flow.md) e o código são as fontes
+para o runtime implementado. O objetivo era substituir o loop de investigação
+e geração de review mantido pelo Holon por `@cloudflare/think`, usando `agents`
+como runtime do agente. O Holon
 continua responsável pelas regras do produto: identidade do PR, autorização,
 escopo da análise, evidência, orçamento agregado, veredito e publicação.
 
+A [auditoria dos exemplos e do runtime de Agents](../research/2026-10-03-cloudflare-agents-examples-and-runtime-audit.md),
+verificada em 2026-10-03, identificou gates de integração abaixo. Os cinco
+exemplos oficiais demonstram canais e capacidades, mas não uma arquitetura de
+review de PR com Think; seu código não deve ser transposto diretamente.
+
 A [ADR-0018](../decisions/0018-adopt-two-phase-decoupled-review-generator.md)
 aceita explicitamente a retirada do Think com base em três trials datados. A
-migração exige um novo ADR que a substitua, preservando seu histórico e o gate
-de evidências. Também exigirá revisar as partes das ADRs 0038, 0043 e 0045
-afetadas pela troca do loop. O benchmark anterior é uma regressão a superar,
-não uma garantia de que a biblioteca atual produzirá reviews melhores ou mais
-baratos.
+migração exige um novo ADR que a substitua, preservando seu histórico. Também
+exigirá revisar as partes das ADRs 0038, 0043 e 0045 afetadas pela troca do
+loop. O objetivo desta branch é entregar o melhor uso viável do Think para a
+review do Holon. Avaliação comparativa de qualidade e custo entre motores fica
+para uma etapa posterior; o benchmark antigo não é gate desta migração.
 
 ## Desenho proposto
 
@@ -63,15 +73,26 @@ pertencendo à run, não ao agente ou ao projeto: “por projeto” serve para
 configurar escopo e isolamento lógico, não para reutilizar um checkout mutável
 entre PRs. Essa fronteira evita que memória de um PR influencie outro.
 
+O diagrama representa o limite de responsabilidades, não um protocolo já
+validado entre `ReviewWorkflow` e Think. O Workflow atual nasce no control
+plane; `ThinkWorkflow.step.prompt()` só recebe contexto do Agent quando nasce
+por `agent.runWorkflow()`. O corte vertical deve decidir como o Workflow atual
+espera e obtém um resultado terminal durável do shard sem transferir a
+autoridade causal para a sessão do Agent. Uma chamada `chat()` que retorna após
+`onInterrupted` não é conclusão. `submitMessages()` oferece idempotência,
+inspeção e cancelamento duráveis, mas exige mecanismo explícito de espera e
+leitura do resultado. Não expor `routeAgentRequest` publicamente para executar
+reviews; usar apenas binding/RPC interno com identidade validada.
+
 ### Responsabilidades
 
-| Componente | Responsabilidade |
-| --- | --- |
-| `ReviewWorkflow` | Admissão causal, retries, preparação, paralelismo limitado, revalidação e publicação. Não executa loop de modelo. |
+| Componente                  | Responsabilidade                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ReviewWorkflow`            | Admissão causal, retries, preparação, paralelismo limitado, revalidação e publicação. Não executa loop de modelo.                                                              |
 | `ReviewAgent extends Think` | Prompt de review, turnos de investigação/finalização, histórico isolado, tools permitidas, limites por turno, recuperação limitada e tracing. Não publica nem decide veredito. |
-| `RepositoryToolGateway` | Adapta as três operações atuais ao contrato de tools do Think. Valida entrada, identidade da run, SHA, política, paths, cotas, prazo, saída e redaction no limite do executor. |
-| `ReviewLedger` | Autoridade da run, reservas agregadas, checkpoint de resultado e idempotência de efeitos externos. O SQLite de sessão do Think não substitui o ledger. |
-| Host de review | Verifica schema e âncoras literais no patch canônico, classifica cobertura, agrega findings, deriva veredito e publica no GitHub. |
+| `RepositoryToolGateway`     | Adapta as três operações atuais ao contrato de tools do Think. Valida entrada, identidade da run, SHA, política, paths, cotas, prazo, saída e redaction no limite do executor. |
+| `ReviewLedger`              | Autoridade da run, reservas agregadas, checkpoint de resultado e idempotência de efeitos externos. O SQLite de sessão do Think não substitui o ledger.                         |
+| Host de review              | Verifica schema e âncoras literais no patch canônico, classifica cobertura, agrega findings, deriva veredito e publica no GitHub.                                              |
 
 ### Política de shards
 
@@ -99,7 +120,26 @@ uma falha. A tolerância desejada vem de retries limitados do shard afetado,
 checkpoint do resultado concluído e sinalização explícita de cobertura.
 Falha ou omissão em qualquer área necessária mantém o review incompleto e
 impede `APPROVE`; resultados dos demais shards podem fundamentar um
-`COMMENT` com limitações, conforme a política existente.
+`COMMENT` com achados verificados e limites de cobertura. Se nenhum shard
+produzir resultado utilizável, a run falha e o Check Run termina com
+`failure`, sem review vazia que pareça concluída.
+
+### Continuidade entre commits
+
+O Think persiste a conversa e permite novos turnos na mesma sessão. Isso é útil
+para investigação e recuperação **dentro da mesma run**, mas não torna fatos,
+âncoras, respostas de tools ou conclusões do SHA anterior válidos no novo head.
+Reutilizar o transcript integral também pode aumentar o contexto enviado ao
+modelo; a persistência da sessão, por si só, não demonstra economia de tokens.
+
+Manter uma sessão por `runId + shardId`. Ao chegar um commit novo,
+o ledger promove a nova run, cancela o Workflow anterior e impede tools e
+publicação da run obsoleta. A nova run usa o snapshot do novo head e recebe os
+findings anteriores persistidos, com seus fingerprints e diagnósticos, apenas
+como hipóteses limitadas de revalidação. Uma resolução exige evidência positiva
+no diff novo; ausência de finding ou memória do modelo não a comprova. Se a
+revisão anterior ainda não publicou achados, a nova run começa sem transferir
+uma investigação parcial do agente. Essa política foi acordada em 2026-10-03.
 
 ### Turno de review
 
@@ -113,13 +153,17 @@ impede `APPROVE`; resultados dos demais shards podem fundamentar um
    contratos, callers e testes relevantes. Resultados são limitados e tratados
    como dados não confiáveis.
 3. A investigação produz uma síntese concisa de conclusões verificadas,
-   pendências e cobertura. A finalização é um turno sem tools e com schema
-   estruturado. Preservar a separação evita repetir o problema da serialização
-   complexa dentro do loop de ferramentas observado na ADR-0018. A capacidade
-   de executar essa separação via `beforeTurn` e `Output.object` no Think atual
-   precisa ser provada no primeiro corte vertical antes de remover o gerador
-   antigo. Se o segundo turno herdar contexto excessivo, usar sessão isolada
-   para a finalização com apenas a síntese e os excertos canônicos necessários.
+   pendências e cobertura. A opção inicial de finalização é um segundo turno
+   sem tools e com schema por `Output.object` em `beforeTurn`. Preservar essa
+   separação pode evitar a serialização complexa dentro do loop observada na
+   ADR-0018, mas ainda não foi provada no Think atual. Comparar no corte
+   vertical com `ThinkWorkflow.step.prompt()`, que retorna objeto Zod usando a
+   tool interna `think_final_answer`. Este caminho exige Workflow iniciado pelo
+   Agent, tool call forçada em streaming suportada pelo modelo e cuidado para
+   não bloquear a tool interna ou sobrescrever `toolChoice`. Se o segundo turno
+   herdar contexto excessivo, testar sessão isolada para a finalização com
+   apenas a síntese e os excertos canônicos necessários. Escolher um único
+   protocolo de resultado após a prova, sem afirmar equivalência entre eles.
 4. O host valida o objeto, descarta anchors sem linha `RIGHT` e excerto literal,
    marca a análise como incompleta quando evidência ou cobertura faltar, e
    somente então agrega os shards. O veredito continua determinístico. Nenhuma
@@ -127,14 +171,16 @@ impede `APPROVE`; resultados dos demais shards podem fundamentar um
 
 ### Tools e acesso ao repositório
 
-| Tool | Disponibilidade | Limite |
-| --- | --- | --- |
-| `read_file` | Construir um adaptador fino sobre a operação existente | Apenas snapshot no head fixado, path elegível, intervalo e bytes limitados. |
-| `search_text` | Construir um adaptador fino | Roots elegíveis, resultado limitado e sem egress. |
-| `search_structure` | Construir um adaptador fino | Apenas linguagens/paths estruturais suportados. |
-| `write`, `edit`, `delete`, `bash`, execução genérica, instalação | Não expor ao modelo de review | Bloquear também no hook anterior à execução; o Sandbox não recebe RPC de escrita. |
-| Tools de workspace do Think (`read`, `list`, `find`, `grep`) | Desativar no turno de review, salvo uso comprovadamente necessário | Workspace SQLite do Think nunca contém checkout, diff integral ou credenciais. |
-| MCP, extensões, scripts de skills e client tools | Desativados no review inicial | Eventual cadastro exige política e validação próprias por servidor/tool; nenhum MCP privado entra implicitamente no review. |
+| Tool                                                             | Disponibilidade                                                    | Limite                                                                                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `read_file`                                                      | Construir um adaptador fino sobre a operação existente             | Apenas snapshot no head fixado, path elegível, intervalo e bytes limitados.                                                 |
+| `search_text`                                                    | Construir um adaptador fino                                        | Roots elegíveis, resultado limitado e sem egress.                                                                           |
+| `search_structure`                                               | Construir um adaptador fino                                        | Apenas linguagens/paths estruturais suportados.                                                                             |
+| `write`, `edit`, `delete`, `bash`, execução genérica, instalação | Não expor ao modelo de review                                      | Bloquear também no hook anterior à execução; o Sandbox não recebe RPC de escrita.                                           |
+| Tools de workspace do Think (`read`, `list`, `find`, `grep`)     | Desativar no turno de review, salvo uso comprovadamente necessário | Workspace SQLite do Think nunca contém checkout, diff integral ou credenciais.                                              |
+| MCP, extensões, scripts de skills e client tools                 | Desativados no review inicial                                      | Eventual cadastro exige política e validação próprias por servidor/tool; nenhum MCP privado entra implicitamente no review. |
+
+O cadastro de MCPs fica para depois desta migração; não é requisito desta branch.
 
 O Think disponibiliza ferramentas de workspace por padrão, incluindo escrita,
 remoção e `bash`; `workspaceBash = false` remove apenas o `bash`. Configurar
@@ -147,9 +193,19 @@ que ferramentas embutidas ou adicionadas por versão nova não escapam da
 allowlist. A escrita legítima no GitHub pertence apenas ao publisher, após o
 gate do host.
 
+Não anexar `ctx.container` ao `ReviewAgent`: isso associaria um Sandbox a cada
+instância de shard e o exemplo oficial oferece `run_command` genérico. O
+Sandbox permanece por run no executor. Testar também colisões de nomes de
+tools e, se `step.prompt()` for escolhido, a passagem controlada de
+`think_final_answer` sem expor novas capacidades de acesso ao repositório.
+
 A sessão do Think pode conter o prompt, os patches selecionados e respostas de
 tools daquela run; ela deve permanecer isolada por run/shard. Isso é diferente
 do workspace virtual de arquivos, que não recebe um checkout do repositório.
+Evitar memória editável, busca entre sessões e `withCachedPrompt()` com política
+mutável: o prompt em cache fica congelado após o primeiro uso, inclusive após
+hibernação. Identidade e digest da configuração da run devem permanecer
+estáveis durante toda a sessão.
 
 ### Modelo e AI Gateway
 
@@ -169,11 +225,22 @@ structured outputs. Isso permite um experimento, mas não fixa o mesmo modelo
 em todos os passos de investigação e finalização. A variabilidade dificulta
 regressão, calibração do orçamento e garantia de qualidade. O serviço gratuito
 também tem cotas de requisições; cada passo, retry e shard consome uma chamada.
-Para review principal, preferir um modelo identificado e aprovado no corpus,
-com suporte comprovado a streaming, tools e JSON Schema. O router gratuito pode
-servir a testes e avaliação comparativa, com seu modelo efetivo registrado
-somente como metadado técnico. Revisar política de dados do provider antes de
-enviar código privado.
+Usar `openrouter/free` somente para testes de desenvolvimento sem custo de
+inferência quando o router gratuito estiver disponível. O candidato
+inicial para review principal é DeepSeek V4.1 Flash; a rota e o identificador
+dependem do provider escolhido. A API da DeepSeek usa `deepseek-flash` para a
+versão atual, enquanto o OpenRouter identifica o modelo como
+`deepseek/deepseek-v4.1-flash`. Antes de configurar a rota principal, provar
+streaming, tools e saída estruturada no caminho AI SDK → AI Gateway → provider.
+Revisar política de dados do provider antes de enviar código privado.
+
+O provider beta `agents/models/ai-sdk` é outra opção oficial para acessar
+Workers AI e modelos de terceiros pelo binding `AI` e pelo AI Gateway. Sua
+documentação requer AI SDK v7/ProviderV4, mas não demonstra suporte à Dynamic
+Route usada pelo Holon nem a composição com o middleware de orçamento. Avaliar
+essa opção no corte vertical sem substituir a rota atual por suposição; fixar
+versões compatíveis de `agents`, Think, AI SDK e Workers runtime antes de
+alterar dependências.
 
 ### Custos, recuperação e observabilidade
 
@@ -220,12 +287,43 @@ a migração do código e a nova decisão arquitetural.
   Interrupção por supersession cancela o turno e impede novas tools/publicação;
   retries usam identidade determinística e não renovam o orçamento.
 - Usar recuperação de turno e compaction do Think somente com política
-  explícita. Não deixar um agente retomar trabalho após a run perder autoridade.
-- Habilitar tracing do Agent/Think por configuração, mantendo atributos
-  numéricos e identificadores técnicos mínimos; prompts, diffs, conteúdos de
-  arquivo, respostas de tools e segredos não entram em logs/spans. A primeira
-  entrega precisa provar o fluxo e a qualidade da review; políticas detalhadas
-  de retenção de logs ficam fora deste plano.
+  explícita. A recuperação básica é automática, mas overflow de contexto
+  requer compaction e classificação de erro configuradas; tool interrompida
+  pode ser reparada como erro sem reexecução. Cancelamento de fiber é
+  cooperativo. Conferir autoridade da run antes de cada tool e publicação, e
+  não deixar um agente retomar trabalho após a run perder autoridade.
+- Habilitar Agent tracing do Think por configuração. A primeira entrega precisa
+  provar o fluxo e a qualidade da review; políticas detalhadas de retenção de
+  logs ficam fora deste plano.
+
+### Agent tracing
+
+Ativar `observability.traces.enabled` no Worker do agente. O Think instrumenta
+automaticamente `invoke_agent`, chamadas `chat` ao modelo e `execute_tool`; não
+envolver novamente suas chamadas com `wrapAISDK()`. Usar nome lógico estável
+para o agente e identidade de instância/sessão associada à run e ao shard, sem
+criar um nome de agente distinto por PR. Inspecionar duração, status, passos,
+tools e uso de tokens na visão Agents/Workers Observability.
+
+Durante esta fase beta, habilitar também `storeMessages` e `storeTools` no
+`ReviewAgent`, conforme solicitado em 2026-10-03, para permitir session replay
+com mensagens, argumentos e resultados das tools. Prever uma configuração
+explícita que desligue as duas opções quando o responsável solicitar. Credenciais
+e tokens de instalação continuam fora das mensagens e tools do agente.
+
+> **Alerta temporário:** com `storeMessages` e `storeTools` habilitados, o Agent
+> tracing pode registrar prompts, patches e trechos de código privado. Antes de
+> usar o agente com repositórios privados, confirmar quem tem acesso aos traces
+> na conta Cloudflare. Desabilitar a captura de payloads quando solicitado;
+> `observability.traces.enabled` pode continuar ativo para preservar a linha do
+> tempo operacional.
+
+Acrescentar correlação técnica mínima e métricas numéricas do Workflow/ledger
+aos eventos próprios do Holon. Verificar no corte vertical se os traces
+atravessam Workflow, Durable Object e executor como uma única árvore; se não
+atravessarem, correlacionar os registros por identificador técnico limitado,
+sem declarar que há um trace distribuído único. Agent tracing ajuda a
+diagnosticar a execução, mas não substitui resultados e estado durável da run.
 
 ## Sequência de migração
 
@@ -234,10 +332,14 @@ alterados juntos. Não manter dois motores em produção por tempo indeterminado
 
 1. **Decisão e corte vertical.** Criar ADR substituta da 0018; fixar versões
    compatíveis de `agents`, `@cloudflare/think` e AI SDK; provar localmente
-   um shard real com dois turnos, tools restritas, AI Gateway, reserva anterior
-   a cada chamada em streaming, cancelamento e schema de saída. Comparar com
-   o corpus da ADR-0018 no mesmo modelo/rota. Não confundir aprovação local
-   com smoke real.
+   um shard real com resultado terminal durável, duas opções de saída
+   estruturada (`Output.object` e `step.prompt()`), tools restritas, AI Gateway,
+   reserva anterior a cada chamada em streaming, cancelamento e schema de saída.
+   Exercitar hibernação/recovery, `onInterrupted`, retry idempotente, novo head
+   durante a execução e a tool final interna antes de escolher o protocolo.
+   A avaliação
+   comparativa com o corpus da ADR-0018 ocorrerá depois desta branch. Não
+   confundir aprovação local com smoke real.
 2. **Integração do runtime.** Adicionar o Durable Object `ReviewAgent` e sua
    migração, encaminhamento interno do Workflow, sessão por run/shard e tool
    gateway no control plane. Preservar executor, Sandbox, ledger, filtros de
@@ -251,17 +353,18 @@ alterados juntos. Não manter dois motores em produção por tempo indeterminado
    contratos que ainda representam o produto. Atualizar o fluxo de arquitetura
    e testes de regressão.
 4. **Prova de entrega.** Rodar `pnpm verify`, testes Workers/DO e executor,
-   corpus de reviews com precisão, recall, conclusão, latência e tokens por
-   caso, incluindo variações de tamanho e quantidade de shards; depois smoke
-   autorizado com GitHub App, AI Gateway e Cloudflare reais.
+   cenários de integração focados no comportamento da review e na política de
+   shards; depois smoke autorizado com GitHub App, AI Gateway e Cloudflare reais.
    Confirmar PR pequeno/grande, force-push, shard falho, retry, orçamento,
    cancelamento, zero findings legítimo e comentário idempotente. Sem essa
-   evidência remota, não declarar a migração pronta para produção.
+   evidência remota, não declarar a integração remota comprovada. Comparação de
+   precisão, recall e custo entre motores fica para a avaliação posterior.
 
-### Retirada gradual da atualização de comentário por artefatos de CI
+### Retirada da atualização de comentário por artefatos de CI na mesma branch
 
 A ingestão `workflow_run.completed` de ZIP/LCOV/JUnit e o bloco de CI no
-comentário não fazem parte da função central de revisão. A
+comentário não fazem parte da função central de revisão. A remoção integra o
+escopo desta branch, em commits separados da migração do agente. A
 [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md)
 atualmente os exige; um novo ADR deve revogar essa parte antes da remoção.
 
@@ -280,6 +383,7 @@ atualmente os exige; um novo ADR deve revogar essa parte antes da remoção.
 ## Fontes verificadas em 2026-10-03
 
 - [Think: API, `runTurn`, AI SDK e tracing](https://developers.cloudflare.com/agents/harnesses/think/)
+- [Agents: spans, configuração e privacidade do tracing](https://developers.cloudflare.com/agents/runtime/operations/observability/tracing/)
 - [Think: tools embutidas, `workspaceBash` e `getTools`](https://developers.cloudflare.com/agents/harnesses/think/tools/)
 - [Think: `beforeTurn`, `beforeStep` e `beforeToolCall`](https://developers.cloudflare.com/agents/harnesses/think/lifecycle-hooks/)
 - [Think: configuração e MCP habilitado por padrão](https://developers.cloudflare.com/agents/harnesses/think/configuration/)
@@ -291,3 +395,12 @@ atualmente os exige; um novo ADR deve revogar essa parte antes da remoção.
 - [OpenRouter: tool calling](https://openrouter.ai/docs/guides/features/tool-calling)
 - [OpenRouter: structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs)
 - [OpenRouter: limites do plano gratuito](https://openrouter.ai/pricing/)
+- [DeepSeek: anúncio e identificador de API do V4.1 Flash](https://api-docs.deepseek.com/updates/)
+- [OpenRouter: identificador do DeepSeek V4.1 Flash](https://openrouter.ai/deepseek/deepseek-v4.1-flash)
+- [Think: submissões duráveis e cancelamento](https://developers.cloudflare.com/agents/harnesses/think/programmatic-submissions/)
+- [Think: Workflow, `step.prompt()` e `think_final_answer`](https://developers.cloudflare.com/agents/harnesses/think/workflows/)
+- [Think: RPC, `chat()` e `onInterrupted`](https://developers.cloudflare.com/agents/harnesses/think/sub-agents/)
+- [Agents: sessões, prompt em cache e compaction](https://developers.cloudflare.com/agents/runtime/lifecycle/sessions/)
+- [Agents: Sandbox anexado ao Agent](https://developers.cloudflare.com/agents/tools/sandbox/)
+- [Agents: provider AI SDK beta e AI Gateway](https://developers.cloudflare.com/agents/models/ai-sdk/)
+- [Agents: roteamento HTTP e WebSocket](https://developers.cloudflare.com/agents/runtime/communication/routing/)
