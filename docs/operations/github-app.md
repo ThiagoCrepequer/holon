@@ -19,7 +19,6 @@ Verificado em 2026-08-29 contra a documentação REST atual do GitHub.
 | Contents                 | Read  | Clone Git autenticado do repositório selecionado no commit exato (SHA)    |
 | Pull requests            | Write | Obter diff/head, publicar inline comments, replies e reviews estruturados |
 | Checks                   | Write | Criar e gerenciar o Check Run ("Holon Review") e atualizar vereditos      |
-| Actions                  | Read  | Listar e baixar artefatos de cobertura e testes dos workflows do CI       |
 
 Não conceder `Contents: write`, `Issues: write`, administração ou secrets. O
 resumo usa uma Pull Request Review com `event=COMMENT` ou `event=REQUEST_CHANGES`
@@ -30,9 +29,12 @@ e sincroniza o Check Run correspondente.
 Assine os seguintes eventos no GitHub App:
 
 1. `pull_request`: Dispara revisões em `opened`, `reopened` e `synchronize`.
-2. `workflow_run`: Dispara a ingestão de evidências de testes e cobertura após a conclusão do CI (`action=completed`).
-3. `pull_request_review_comment`: Permite ao Holon escutar e processar comandos ChatOps (`/holon dismiss`, `/holon helpful`).
-4. `pull_request_review_thread`: Permite detectar a resolução ou reabertura de conversas no GitHub (`action=resolved`).
+2. `pull_request_review_comment`: Permite ao Holon escutar e processar comandos ChatOps (`/holon dismiss`, `/holon helpful`).
+3. `pull_request_review_thread`: Permite detectar a resolução ou reabertura de conversas no GitHub (`action=resolved`).
+
+Instalações antigas podem remover a permissão `Actions: read` e a assinatura
+`workflow_run`. A mudança da configuração remota da GitHub App é operacional e
+não faz parte de um build local.
 
 Durante o piloto, instale o App apenas em repositórios explicitamente
 selecionados.

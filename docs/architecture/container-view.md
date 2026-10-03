@@ -26,7 +26,7 @@ flowchart TD
     C03[C03 Review Coordinator<br/>Cloudflare Workflow]
     C04[C04 Review Ledger<br/>Durable Object SQLite]
     C05[C05 Repository Analyzer<br/>Cloudflare Sandbox]
-    C06[C06 Review Engine<br/>bounded tool loop]
+    C06[C06 Review Agent<br/>Agents SDK + Think]
     C07[C07 Model Gateway<br/>Cloudflare AI Gateway]
     C08[C08 GitHub Publisher<br/>REST adapter]
     MODEL[LLM provider]
@@ -47,16 +47,16 @@ flowchart TD
 
 ## Catálogo
 
-| ID  | Responsabilidade                                           | Tecnologia atual                          | Estado               |
-| --- | ---------------------------------------------------------- | ----------------------------------------- | -------------------- |
-| C01 | Validar HMAC, normalizar evento e responder rapidamente    | Cloudflare Worker                         | Implementada         |
-| C02 | Absorver bursts e aplicar backpressure                     | Cloudflare Queues                         | Implementada         |
-| C03 | Executar etapas duráveis e retries delimitados             | Cloudflare Workflows                      | Implementada         |
-| C04 | Registrar run, head SHA, efeitos publicados e dedupe       | Durable Object SQLite por PR              | Implementada         |
-| C05 | Classificar contexto e executar buscas/parsers autorizados | Cloudflare Sandbox em deployable separado | Implementada         |
-| C06 | Executar investigação em duas fases e gate de evidência    | Application/domain + Two-Phase Review     | Implementada         |
-| C07 | Aplicar modelo, telemetria e políticas de custo/rate limit | Cloudflare AI Gateway                     | Adapter implementado |
-| C08 | Reler head e publicar comentários/review GitHub            | GitHub REST API                           | Implementada         |
+| ID  | Responsabilidade                                           | Tecnologia atual                              | Estado               |
+| --- | ---------------------------------------------------------- | --------------------------------------------- | -------------------- |
+| C01 | Validar HMAC, normalizar evento e responder rapidamente    | Cloudflare Worker                             | Implementada         |
+| C02 | Absorver bursts e aplicar backpressure                     | Cloudflare Queues                             | Implementada         |
+| C03 | Executar etapas duráveis e retries delimitados             | Cloudflare Workflows                          | Implementada         |
+| C04 | Registrar run, head SHA, efeitos publicados e dedupe       | Durable Object SQLite por PR                  | Implementada         |
+| C05 | Classificar contexto e executar buscas/parsers autorizados | Cloudflare Sandbox em deployable separado     | Implementada         |
+| C06 | Executar revisão agentiva e devolver saída estruturada     | Agents SDK + Think; gate de evidência no host | Implementada         |
+| C07 | Aplicar modelo, telemetria e políticas de custo/rate limit | Cloudflare AI Gateway                         | Adapter implementado |
+| C08 | Reler head e publicar comentários/review GitHub            | GitHub REST API                               | Implementada         |
 
 ## Alocação inicial em deployables
 
@@ -81,14 +81,13 @@ mesma elegibilidade a leituras e buscas posteriores. C06 recebe os modos
 explicitamente: ast-grep fica restrito a JS/TS estrutural, enquanto patches
 textuais elegíveis usam apenas diff, leitura e busca textual.
 
-C06 opera em duas fases conforme ADR-0018: Fase 1 executa investigação com tools
-delimitadas em texto livre; Fase 2 realiza finalização estruturada dedicada com
-schema portável e validação no host.
+C06 opera por shard conforme [ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md).
+O `ReviewShardWorkflow` usa `step.prompt` para um turno durável do Think; o
+control plane valida a saída e o diff canônico no host. Tools ficam restritas
+a leitura e busca via C05.
 
 ## Componentes adiados ou rejeitados
 
-- Agents SDK e `@cloudflare/think`: rejeitados e descomissionados após evidência
-  empírica do benchmark (ADR-0018).
 - Vectorize: somente após benchmark de recuperação.
 - R2: somente quando snapshots ou artefatos grandes tiverem retenção definida.
 - Workers AI: somente com tarefa auxiliar e benchmark explícitos.

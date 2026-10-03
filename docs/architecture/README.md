@@ -26,8 +26,8 @@ continuam explícitas nos documentos de operação e planejamento.
 - [Segurança e trust boundaries](security-and-trust-boundaries.md): ameaças,
   privilégios e isolamento.
 - [Ciclo de vida dos dados](data-lifecycle.md): classes de dados e retenção.
-- [Ingestão de evidências de CI](ci-evidence-ingestion.md): consumo passivo de
-  LCOV e JUnit XML via webhook desacoplado.
+- [Ingestão de evidências de CI](ci-evidence-ingestion.md): descrição histórica
+  da funcionalidade retirada pela ADR-0046.
 
 ## Regra de precedência
 

@@ -164,4 +164,4 @@ os resultados integrais da run independentemente do cap inline.
 
 ## Endurecimento do core (2026-09-27)
 
-A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) define a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados, reconciliação durável dos checks e evidências de CI, e os limites do contexto de documentação. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) definiu a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados e reconciliação durável dos checks. A [ADR-0046](../decisions/0046-use-cloudflare-think-for-pr-review.md) retirou a ingestão de CI e substituiu o motor de review por Agent Think. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
