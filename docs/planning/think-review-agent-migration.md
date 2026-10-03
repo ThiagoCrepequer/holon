@@ -153,16 +153,42 @@ do workspace virtual de arquivos, que não recebe um checkout do repositório.
 
 ### Custos, recuperação e observabilidade
 
-- Conservar os tetos agregados da ADR-0045, com reserva antes de **cada**
-  inferência do Think, incluindo retries, recuperação e finalização. O limite
-  por passo/turno complementa o teto da run; compaction não cria crédito novo.
-  Se a API do Think não expuser interceptação confiável antes da chamada ao
-  provider, usar um wrapper de modelo ou middleware do AI SDK e provar que
-  todas as chamadas passam por ele.
-- Delimitar tempo, steps, tools e tamanho de resultado por shard. Exaustão é
-  resultado incompleto, jamais “sem achados”. Interrupção por supersession
-  cancela o turno e impede nova tool/publicação; retries usam identidade
-  determinística e não multiplicam trabalho faturável sem reserva.
+O orçamento deve continuar existindo, mas a política atual não deve ser
+transplantada integralmente. Hoje a ADR-0045 limita por run 64 chamadas,
+4.000.000 bytes serializados de entrada e 120.000 tokens de saída reservados;
+o loop ainda impõe blocos de quatro consultas, 24 tools, 25 rodadas e
+checkpoints periódicos. Esses números foram calibrados para o motor atual.
+Bytes de prompt limitam exposição, mas não medem tokens faturados nem custo
+monetário. Shards maiores também mudam o custo de cada passo.
+
+- **Manter o teto duro agregado e durável por run.** Reservar atomicamente no
+  ledger antes de cada chamada ao provider, incluindo investigação,
+  finalização, compaction que usar modelo e recuperação. Contabilizar uso
+  conhecido; uma chamada de resultado incerto conserva a reserva. Limitar
+  também tempo absoluto, passos, tools e tamanho dos resultados. O teto
+  evita gasto descontrolado, não determina quando uma review está boa.
+- **Substituir cotas fixas por shard por um fundo compartilhado.** O plano
+  separa uma reserva para finalizar cada shard pendente; o restante pode ser
+  usado onde houver investigação produtiva, sem que o primeiro shard paralelo
+  consuma a capacidade dos outros. Uma meta inicial menor orienta o agente a
+  concluir; o teto duro só interrompe quando não há capacidade segura para
+  continuar. Ajustar os valores pelo corpus e pelo uso remoto no mesmo modelo.
+- **Remover as regras do loop antigo.** Checkpoint obrigatório após quatro
+  consultas, encerramento após contagem de rodadas estagnadas e cota rígida
+  de 24 tools por shard não devem entrar no Think. Usar limites de turno e
+  recuperação do Think, com parada por trabalho sem progresso e cobertura
+  registrada pelo host. Não exigir que o agente gaste toda a reserva.
+- **Implementar o limite no caminho de streaming.** O middleware atual
+  `withGenerationBudget` cobre somente `wrapGenerate` (`doGenerate`), enquanto
+  o Think executa `streamText`. Implementar reserva e liquidação também em
+  `wrapStream` (`doStream`), e testar chamadas, erro durante o stream, retry,
+  compaction e concorrência. `onStepFinish` mede uso após o passo; sozinho não
+  impede uma chamada acima do teto. `shouldKeepRecovering` pode consultar o
+  saldo, mas não substitui a reserva anterior à inferência.
+- **Exaustão preserva honestidade.** Se o teto impedir investigação ou
+  finalização necessárias, o resultado é incompleto e não pode aprovar o PR.
+  Interrupção por supersession cancela o turno e impede novas tools/publicação;
+  retries usam identidade determinística e não renovam o orçamento.
 - Usar recuperação de turno e compaction do Think somente com política
   explícita. Não deixar um agente retomar trabalho após a run perder autoridade.
 - Habilitar tracing do Agent/Think por configuração, mantendo atributos
@@ -179,8 +205,9 @@ alterados juntos. Não manter dois motores em produção por tempo indeterminado
 1. **Decisão e corte vertical.** Criar ADR substituta da 0018; fixar versões
    compatíveis de `agents`, `@cloudflare/think` e AI SDK; provar localmente
    um shard real com dois turnos, tools restritas, AI Gateway, reserva anterior
-   à inferência, cancelamento e schema de saída. Comparar com o corpus da
-   ADR-0018 no mesmo modelo/rota. Não confundir aprovação local com smoke real.
+   a cada chamada em streaming, cancelamento e schema de saída. Comparar com
+   o corpus da ADR-0018 no mesmo modelo/rota. Não confundir aprovação local
+   com smoke real.
 2. **Integração do runtime.** Adicionar o Durable Object `ReviewAgent` e sua
    migração, encaminhamento interno do Workflow, sessão por run/shard e tool
    gateway no control plane. Preservar executor, Sandbox, ledger, filtros de
@@ -227,3 +254,4 @@ atualmente os exige; um novo ADR deve revogar essa parte antes da remoção.
 - [Think: `beforeTurn`, `beforeStep` e `beforeToolCall`](https://developers.cloudflare.com/agents/harnesses/think/lifecycle-hooks/)
 - [Think: configuração e MCP habilitado por padrão](https://developers.cloudflare.com/agents/harnesses/think/configuration/)
 - [Think: recuperação e compaction](https://developers.cloudflare.com/agents/harnesses/think/recovery/)
+- [AI SDK: middleware `wrapGenerate` e `wrapStream`](https://ai-sdk.dev/docs/ai-sdk-core/middleware)
