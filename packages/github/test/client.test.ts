@@ -143,48 +143,6 @@ describe("GitHub installation client", () => {
       { owner: "acme", repo: "api", username: "alice" },
     );
 
-    sdk.request.mockResolvedValueOnce({
-      data: {
-        artifacts: [
-          {
-            archive_download_url: "https://api.github.com/zip",
-            id: 101,
-            name: "coverage-report",
-            size_in_bytes: 2048,
-          },
-        ],
-        total_count: 1,
-      },
-    });
-    await expect(
-      session.listWorkflowRunArtifacts?.("acme", "api", 555),
-    ).resolves.toEqual([
-      {
-        archiveDownloadUrl: "https://api.github.com/zip",
-        id: 101,
-        name: "coverage-report",
-        sizeInBytes: 2048,
-      },
-    ]);
-
-    const bytes = new Uint8Array([1, 2, 3, 4]);
-    sdk.request.mockResolvedValueOnce({
-      headers: {},
-      data: new ReadableStream({
-        start(controller) {
-          controller.enqueue(bytes);
-          controller.close();
-        },
-      }),
-    });
-    expect(
-      new Uint8Array(await session.downloadArtifactZip!("acme", "api", 101)),
-    ).toEqual(bytes);
-    expect(sdk.request).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.objectContaining({ request: { parseSuccessResponseBody: false } }),
-    );
-
     const options = sdk.octokitOptions as {
       readonly auth: string;
       readonly throttle: { onRateLimit(): void; onSecondaryRateLimit(): void };

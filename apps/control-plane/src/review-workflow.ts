@@ -19,7 +19,6 @@ import {
 } from "@holon/contracts";
 import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 import {
-  appendCiEvidenceToSummary,
   classifyFindingPublication,
   createFindingId,
   createPrKey,
@@ -804,26 +803,7 @@ export async function executeReviewWorkflow(
           run.id,
           prKey,
         );
-        const snapshot =
-          await services.ledger.loadRunConfiguration(configurationRef);
-        let summaryText = currentReview.summary;
-        try {
-          const ciEvidence = await services.ledger.loadCiEvidence(
-            prKey,
-            job.envelope.pullRequest.headSha,
-          );
-          if (ciEvidence !== undefined) {
-            summaryText = appendCiEvidenceToSummary(
-              summaryText,
-              ciEvidence.markdownByLanguage[snapshot.config.output.language],
-            );
-          }
-        } catch (error) {
-          emit("ci_evidence_load_failed", {
-            errorKind: errorKind(error),
-            prKey,
-          });
-        }
+        const summaryText = currentReview.summary;
         try {
           const published = await publishAuthorized(
             services.ledger,

@@ -3,16 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   aggregatedReviewResultSchema,
   calibrationMetricsSchema,
-  ciEvidenceSchema,
   createCheckRunInputSchema,
   executorRequestSchema,
   feedbackLabelSchema,
   findingFeedbackRecordSchema,
   findingFingerprintSchema,
   findingStatusSchema,
-  lineCoverageSchema,
   parsedFeedbackCommandSchema,
-  testExecutionReportSchema,
   githubCredentialRequestSchema,
   isProtectedPath,
   modelReviewOutputSchema,
@@ -1088,54 +1085,6 @@ describe("check run contracts", () => {
     } as const;
 
     expect(aggregatedReviewResultSchema.parse(aggregated)).toEqual(aggregated);
-  });
-
-  it("validates line coverage, test execution reports, and CI evidence contracts", () => {
-    const lineCoverage = {
-      hitsByLine: { "10": 3, "11": 0, "12": 1 },
-      path: "src/example.ts",
-      totalFound: 3,
-      totalHit: 2,
-    } as const;
-
-    expect(lineCoverageSchema.parse(lineCoverage)).toEqual(lineCoverage);
-
-    const testReport = {
-      durationMs: 1250,
-      failed: 1,
-      failures: [
-        {
-          filePath: "test/example.test.ts",
-          line: 42,
-          message: "AssertionError: expected true but got false",
-          testName: "it should handle empty input",
-        },
-      ],
-      passed: 10,
-      skipped: 0,
-      total: 11,
-    } as const;
-
-    expect(testExecutionReportSchema.parse(testReport)).toEqual(testReport);
-
-    const fullEvidence = {
-      coverage: [lineCoverage],
-      source: "github-actions",
-      status: "available",
-      tests: testReport,
-      workflowName: "CI Tests",
-      workflowRunId: 12345678,
-    } as const;
-
-    expect(ciEvidenceSchema.parse(fullEvidence)).toEqual(fullEvidence);
-
-    const notAvailableEvidence = {
-      status: "not_available",
-    } as const;
-
-    expect(ciEvidenceSchema.parse(notAvailableEvidence)).toEqual(
-      notAvailableEvidence,
-    );
   });
 
   describe("review verdict contracts", () => {

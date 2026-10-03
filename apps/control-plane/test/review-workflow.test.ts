@@ -1082,78 +1082,6 @@ describe("ReviewWorkflow", () => {
     expect(duplicate.prepareRepository).not.toHaveBeenCalled();
   });
 
-  it("reprepares lost model context with fresh sessions and a bounded retry", async () => {
-    const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
-    let contextExists = true;
-    let sessions = 0;
-    let preparations = 0;
-    const waits: number[] = [];
-    const setup = runtime({
-      model: (toolRunner) => ({
-        review: async () => {
-          contextExists = false;
-          await toolRunner.run({
-            arguments: { maxResults: 1, query: "return" },
-            name: "search_text",
-          });
-          return {
-            output: { findings: [], summary: "No finding." },
-            promptTruncated: false,
-          };
-        },
-      }),
-      posts,
-    });
-    setup.value = {
-      ...setup.value,
-      createSession: () => {
-        sessions += 1;
-        return Promise.resolve(session(posts));
-      },
-      executor: {
-        ...unconfiguredExecutor,
-        ...setup.value.executor!,
-        hasContext: () => Promise.resolve(contextExists),
-        prepareRepository: () => {
-          preparations += 1;
-          if (preparations === 2) {
-            const error = new Error(
-              "HOLON_REPOSITORY_TRANSIENT:fetch:timed-out",
-            );
-            error.name = "RepositoryTransientError";
-            return Promise.reject(error);
-          }
-          contextExists = true;
-          return Promise.resolve({
-            changedLineCount: 1,
-            contextBytes: 100,
-            fileCount: 1,
-            runId: job.runId,
-            effectivePolicyDigest: "c".repeat(64),
-            waiversCount: 0,
-            truncated: false,
-          });
-        },
-      },
-      wait: (delay) => {
-        waits.push(delay);
-        return Promise.resolve();
-      },
-    };
-
-    await expect(
-      executeReviewWorkflow(
-        env,
-        event("reprepare-context"),
-        immediateStep([]),
-        setup.value,
-      ),
-    ).resolves.toMatchObject({ outcome: "completed" });
-    expect(preparations).toBe(3);
-    expect(sessions).toBeGreaterThanOrEqual(6);
-    expect(waits).toEqual([1_000]);
-  });
-
   it("renders summary-only findings deterministically instead of dropping them", async () => {
     const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
     const setup = runtime({
@@ -1987,69 +1915,6 @@ describe("ReviewWorkflow", () => {
     ).rejects.toThrow("HOLON_GITHUB_TRANSIENT");
   });
 
-  it("incorporates pre-existing CI evidence saved in ledger into initial review summary", async () => {
-    const posts: Array<{ readonly route: string; readonly body: unknown }> = [];
-    const targetSha = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-    const prKey = "github:42:pr:7" as const;
-    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
-
-    await ledger.saveCiEvidence(prKey, targetSha, {
-      workflowRunAttempt: 1,
-      target: {
-        installationId: 99,
-        repositoryId: 42,
-        owner: "acme",
-        repo: "api",
-        pullNumber: 7,
-      },
-      markdownByLanguage: {
-        en: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
-        "pt-BR": "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
-        es: "### 🧪 CI Test & Coverage Evidence\nCoverage: 92.5%",
-      },
-      workflowRunId: 789,
-    });
-
-    const setup = runtime({
-      head: () => targetSha,
-      model: () => ({
-        review: async () => ({
-          output: { findings: [], summary: "Initial clean review." },
-          promptTruncated: false,
-        }),
-      }),
-      posts,
-    });
-
-    const targetJob: ReviewJob = reviewJobSchema.parse({
-      ...job,
-      envelope: {
-        ...job.envelope,
-        pullRequest: {
-          ...job.envelope.pullRequest,
-          headSha: targetSha,
-        },
-      },
-      runId: `github:42:pr:7:head:${targetSha}:base:${"b".repeat(40)}`,
-    });
-
-    const result = await executeReviewWorkflow(
-      env,
-      event("ci-evidence-handshake", targetJob),
-      immediateStep([]),
-      setup.value,
-    );
-
-    expect(result.outcome).toBe("completed");
-
-    const summaryPost = posts.find((p) => p.route.includes("/reviews"));
-    expect(summaryPost).toBeDefined();
-    const body = summaryPost?.body as string;
-    expect(body).toContain("Initial clean review.");
-    expect(body).toContain("### 🧪 CI Test & Coverage Evidence");
-    expect(body).toContain("Coverage: 92.5%");
-  });
-
   it("handles terminalization failure and failure notice failure gracefully in workflow catch", async () => {
     const events: Array<{ event: string; fields: Record<string, unknown> }> =
       [];
@@ -2120,7 +1985,7 @@ describe("ReviewWorkflow", () => {
     expect(prepFailed?.fields.retryable).toBe(false);
   });
 
-  it("synthesizes multi-shard summaries into a unified executive summary when all shards succeed", async () => {
+  it("aggregates multi-shard summaries when all shards succeed", async () => {
     const files = Array.from(
       { length: reviewExecutionLimits.shardFiles + 2 },
       (_, index) => ({
@@ -2136,7 +2001,6 @@ describe("ReviewWorkflow", () => {
       side: "RIGHT" as const,
     }));
 
-    let synthesizeCalled = false;
     const setup = runtime({
       context: {
         changedLines,
@@ -2152,13 +2016,6 @@ describe("ReviewWorkflow", () => {
             },
             promptTruncated: false,
           }),
-        synthesizeReviewSummary: (_job, input) => {
-          synthesizeCalled = true;
-          expect(input.shardSummaries).toHaveLength(2);
-          return Promise.resolve(
-            "Unified executive summary synthesized across all shards.",
-          );
-        },
       }),
     });
 
@@ -2170,7 +2027,6 @@ describe("ReviewWorkflow", () => {
     );
 
     expect(result.outcome).toBe("completed");
-    expect(synthesizeCalled).toBe(true);
   });
 
   it("completes without administrative projection steps", async () => {
@@ -2321,11 +2177,9 @@ it("schedules durable cleanup and preserves the original analysis failure", asyn
   });
 });
 
-it("parallel shard tools share one preparation and retain independent budgets", async () => {
+it("shares one repository preparation across concurrent shard requests", async () => {
   const { createReviewServices } = await import("../src/review-services.js");
   const setup = runtime();
-  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-  await ledger.claimRun(createReviewRun(job), "parallel-tools");
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {
     release = resolve;
@@ -2343,10 +2197,6 @@ it("parallel shard tools share one preparation and retain independent budgets", 
     };
   });
   let ready = false;
-  const runTool = vi.fn(async () => ({
-    content: "return null;",
-    truncated: false,
-  }));
   const services = createReviewServices(
     env,
     job,
@@ -2361,266 +2211,18 @@ it("parallel shard tools share one preparation and retain independent budgets", 
           ready = true;
           return result;
         },
-        startTool: toolOperation(runTool),
       },
-      createModel: (toolRunner) => ({
-        review: async () => {
-          await toolRunner.run({
-            name: "read_file",
-            arguments: { path: "src/index.ts", startLine: 1, endLine: 10 },
-          });
-          return {
-            output: { findings: [], summary: "Checked the changed code." },
-            promptTruncated: false,
-          };
-        },
-      }),
     },
     { emit: () => {} },
     {},
   );
   const policy = await defaultScopePolicy(job.envelope.pullRequest.baseSha);
-  const a = services.createShardReviewer(0, 2);
-  const b = services.createShardReviewer(1, 2);
-  const preparation = [
+  const requests = [
     services.ensureContext(2, policy),
     services.ensureContext(2, policy),
   ];
   await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
   release();
-  await Promise.all(preparation);
-  await Promise.all([
-    a.model.review(job, context),
-    b.model.review(job, context),
-  ]);
+  await Promise.all(requests);
   expect(prepare).toHaveBeenCalledOnce();
-  expect(runTool).toHaveBeenCalledTimes(2);
-  expect(a.toolBudgetExceeded()).toBe(false);
-  expect(b.toolBudgetExceeded()).toBe(false);
-});
-
-it("keeps repository tool timeouts fatal and logs safe tool metadata", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
-  const setup = runtime();
-  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
-  await ledger.claimRun(createReviewRun(job), "tool-timeout");
-  const emit = vi.fn();
-  const services = createReviewServices(
-    env,
-    job,
-    {
-      ...setup.value,
-      executor: {
-        ...setup.value.executor!,
-        hasContext: async () => true,
-        startTool: toolOperation(async () => {
-          throw new DOMException("private error", "TimeoutError");
-        }),
-      },
-      createModel: (tools) => ({
-        review: async () => {
-          try {
-            await tools.run({
-              name: "read_file",
-              arguments: { path: "private.ts" },
-            });
-          } catch {
-            /* The SDK may convert tool errors to model context. */
-          }
-          return {
-            output: { findings: [], summary: "Clean" },
-            promptTruncated: false,
-          };
-        },
-      }),
-    },
-    { emit },
-    {},
-  );
-  await expect(
-    services.createShardReviewer(0, 1).model.review(job, context),
-  ).rejects.toMatchObject({
-    name: "RepositoryToolError",
-    code: "repository_tool_timeout",
-  });
-  expect(emit).toHaveBeenCalledWith(
-    "repository.tool_failed",
-    expect.objectContaining({
-      reason: "repository_tool_timeout",
-      toolName: "read_file",
-      shardIndex: 0,
-    }),
-  );
-  expect(JSON.stringify(emit.mock.calls)).not.toMatch(/private/);
-});
-
-it("cancels and disposes a remote tool when the model step aborts", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
-  const setup = runtime();
-  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
-    createReviewRun(job),
-    "cancel-tools",
-  );
-  const controller = new AbortController();
-  let rejectResult!: (error: Error) => void;
-  let started!: () => void;
-  const ready = new Promise<void>((resolve) => {
-    started = resolve;
-  });
-  const cancel = vi.fn(async () => {
-    rejectResult(new DOMException("Cancelled", "AbortError"));
-  });
-  const dispose = vi.fn();
-  const startTool = vi.fn(async () => ({
-    result: () =>
-      new Promise<{ content: string; truncated: boolean }>((_, reject) => {
-        rejectResult = reject;
-        started();
-      }),
-    cancel,
-    [Symbol.dispose]: dispose,
-  }));
-  const services = createReviewServices(
-    env,
-    job,
-    {
-      ...setup.value,
-      executor: { ...setup.value.executor!, startTool },
-      createModel: (tools) => ({
-        review: async () => {
-          await tools.run(
-            {
-              name: "read_file",
-              arguments: { path: "src/index.ts", startLine: 1, endLine: 10 },
-            },
-            { abortSignal: controller.signal, deadlineAt: Date.now() + 60_000 },
-          );
-          return {
-            output: { findings: [], summary: "complete" },
-            promptTruncated: false,
-          };
-        },
-      }),
-    },
-    { emit: () => {} },
-    {},
-  );
-  const pending = services.createShardReviewer(0, 1).model.review(job, context);
-  const rejected = expect(pending).rejects.toThrow();
-  await ready;
-  controller.abort();
-  await rejected;
-  expect(cancel).toHaveBeenCalledOnce();
-  expect(dispose).toHaveBeenCalledOnce();
-  expect(startTool).toHaveBeenCalledOnce();
-});
-
-it("rejects later tool calls after the first infrastructure failure", async () => {
-  const message = "runtime unavailable";
-  const { createReviewServices } = await import("../src/review-services.js");
-  const setup = runtime();
-  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
-    createReviewRun(job),
-    "incident-probe",
-  );
-  let calls = 0;
-  let continued = false;
-  const services = createReviewServices(
-    env,
-    job,
-    {
-      ...setup.value,
-      executor: {
-        ...setup.value.executor!,
-        hasContext: async () => true,
-        startTool: toolOperation(async () => {
-          calls++;
-          if (calls === 1) throw new Error(message);
-          return { content: "valid later result", truncated: false };
-        }),
-      },
-      createModel: (tools) => ({
-        review: async () => {
-          try {
-            await tools.run({
-              name: "read_file",
-              arguments: { path: "missing.ts" },
-            });
-          } catch {
-            /* Simulate SDK handling a tool error. */
-          }
-          continued = true;
-          await tools.run({
-            name: "read_file",
-            arguments: { path: "valid.ts" },
-          });
-          return {
-            output: { findings: [], summary: "Complete" },
-            promptTruncated: false,
-          };
-        },
-      }),
-    },
-    { emit: () => {} },
-    {},
-  );
-  await expect(
-    services.createShardReviewer(0, 1).model.review(job, context),
-  ).rejects.toMatchObject({
-    name: "RepositoryToolError",
-    code: "repository_tool_failed",
-    cause: { message: "runtime unavailable" },
-  });
-  expect(continued).toBe(true);
-  expect(calls).toBe(1);
-});
-
-it("keeps a rejected query recoverable and allows a corrected query", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
-  const setup = runtime();
-  await env.REVIEW_LEDGERS.getByName("github:42:pr:7").claimRun(
-    createReviewRun(job),
-    "query-rejection",
-  );
-  const result = vi
-    .fn()
-    .mockResolvedValueOnce({
-      error: { kind: "query", code: "path_unavailable" },
-    })
-    .mockResolvedValueOnce({ content: "safe", truncated: false });
-  const services = createReviewServices(
-    env,
-    job,
-    {
-      ...setup.value,
-      executor: {
-        ...setup.value.executor!,
-        startTool: async () => ({
-          result,
-          cancel: async () => {},
-          [Symbol.dispose]: () => {},
-        }),
-      },
-      createModel: (tools) => ({
-        review: async () => {
-          await expect(
-            tools.run({ name: "read_file", arguments: { path: "missing.ts" } }),
-          ).rejects.toThrow("path_unavailable");
-          await expect(
-            tools.run({ name: "read_file", arguments: { path: "valid.ts" } }),
-          ).resolves.toMatchObject({ content: "safe" });
-          return {
-            output: { findings: [], summary: "Checked" },
-            promptTruncated: false,
-          };
-        },
-      }),
-    },
-    { emit: () => {} },
-    {},
-  );
-  await expect(
-    services.createShardReviewer(0, 1).model.review(job, context),
-  ).resolves.toMatchObject({ output: { summary: "Checked" } });
-  expect(result).toHaveBeenCalledTimes(2);
 });

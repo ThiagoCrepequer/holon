@@ -74,10 +74,7 @@ describe("aggregateShardReviews", () => {
             summary: "The whole PR is safe.",
           },
         ],
-        {
-          unifiedSummary:
-            "All changes are documentation only and safe to merge.",
-        },
+        {},
       );
       expect(result.summary).not.toContain("safe to merge");
       expect(result.summary).not.toContain("No regressions exist");

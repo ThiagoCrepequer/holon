@@ -17,6 +17,13 @@ async function ledgerForRun() {
     },
     "budget-test",
   );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "budget-test:start",
+  );
   return ledger;
 }
 it("bounds concurrent model calls across shards and eviction", async () => {
@@ -81,5 +88,48 @@ it("bounds cumulative serialized input and rejects invalid reservations", async 
     expect(() =>
       object.reserveModelGeneration(runId, { inputBytes: -1, outputTokens: 1 }),
     ).toThrow();
+  });
+});
+
+it("atomically refuses model and tool reservations after a newer head supersedes the run", async () => {
+  const ledger = await ledgerForRun();
+  const newerId =
+    `github:42:pr:7:head:${"c".repeat(40)}:base:${"b".repeat(40)}` as const;
+  const later = new Date(Date.now() + 1_000).toISOString();
+  await ledger.claimRun(
+    {
+      attempt: 0,
+      causalVersion: later,
+      createdAt: later,
+      id: newerId,
+      prKey: "github:42:pr:7",
+      state: "queued",
+    },
+    "new-head",
+  );
+  expect(
+    await ledger.reserveModelGeneration(runId, {
+      inputBytes: 1,
+      outputTokens: 1,
+    }),
+  ).toBeUndefined();
+  expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(false);
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT COUNT(*) AS total FROM model_generation_reservations WHERE run_id = ?",
+          runId,
+        )
+        .one().total,
+    ).toBe(0);
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT COUNT(*) AS total FROM review_tool_budgets WHERE run_id = ?",
+          runId,
+        )
+        .one().total,
+    ).toBe(0);
   });
 });

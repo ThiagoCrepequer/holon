@@ -16,34 +16,37 @@ export function withGenerationBudget(
   budget?: ModelGenerationBudget,
 ) {
   if (!budget) return model;
+  const reserve = async (params: {
+    readonly abortSignal?: AbortSignal;
+    readonly maxOutputTokens?: number;
+    readonly prompt: unknown;
+    readonly tools?: unknown;
+    readonly responseFormat?: unknown;
+  }) => {
+    params.abortSignal?.throwIfAborted();
+    const maximum = params.maxOutputTokens;
+    if (maximum === undefined || !Number.isSafeInteger(maximum) || maximum <= 0)
+      throw new TypeError("Model generation requires a bounded output maximum");
+    const reservation = await budget.reserve({
+      inputBytes: new TextEncoder().encode(
+        JSON.stringify({
+          prompt: params.prompt,
+          tools: params.tools,
+          responseFormat: params.responseFormat,
+        }),
+      ).byteLength,
+      outputTokens: maximum,
+    });
+    if (reservation === undefined) throw new ModelReviewBudgetExceededError();
+    params.abortSignal?.throwIfAborted();
+    return reservation;
+  };
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v4",
       wrapGenerate: async ({ params, doGenerate }) => {
-        params.abortSignal?.throwIfAborted();
-        const maximum = params.maxOutputTokens;
-        if (
-          maximum === undefined ||
-          !Number.isSafeInteger(maximum) ||
-          maximum <= 0
-        )
-          throw new TypeError(
-            "Model generation requires a bounded output maximum",
-          );
-        const reservation = await budget.reserve({
-          inputBytes: new TextEncoder().encode(
-            JSON.stringify({
-              prompt: params.prompt,
-              tools: params.tools,
-              responseFormat: params.responseFormat,
-            }),
-          ).byteLength,
-          outputTokens: maximum,
-        });
-        if (reservation === undefined)
-          throw new ModelReviewBudgetExceededError();
-        params.abortSignal?.throwIfAborted();
+        const reservation = await reserve(params);
         const result = await doGenerate();
         const outputTokens = result.usage.outputTokens.total;
         if (
@@ -53,6 +56,29 @@ export function withGenerationBudget(
         )
           await budget.settle(reservation, outputTokens);
         return result;
+      },
+      wrapStream: async ({ params, doStream }) => {
+        const reservation = await reserve(params);
+        const result = await doStream();
+        return {
+          ...result,
+          stream: result.stream.pipeThrough(
+            new TransformStream({
+              async transform(part, controller) {
+                if (part.type === "finish") {
+                  const outputTokens = part.usage.outputTokens.total;
+                  if (
+                    outputTokens !== undefined &&
+                    Number.isSafeInteger(outputTokens) &&
+                    outputTokens >= 0
+                  )
+                    await budget.settle(reservation, outputTokens);
+                }
+                controller.enqueue(part);
+              },
+            }),
+          ),
+        };
       },
     },
   });

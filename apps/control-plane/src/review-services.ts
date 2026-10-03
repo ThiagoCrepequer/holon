@@ -1,22 +1,15 @@
 import type { ModelGenerationReservation } from "@holon/contracts";
-import {
-  repositoryExecutionLimits,
-  repositoryToolOutcomeSchema,
-  type RepositoryToolOperation,
-} from "@holon/contracts";
+import type { RepositoryToolOperation } from "@holon/contracts";
 import type {
   RunConfigurationRef,
   RunConfigurationSnapshot,
 } from "@holon/contracts";
-import { createRepositoryToolCacheStore } from "@holon/model";
 
 import type { DesiredCheckRun } from "./check-run-reconciliation.js";
-import { RepositoryToolResponseError } from "./review-tool-error.js";
 function shouldEnrichProjects(value: string): boolean {
   return value === "enrich";
 }
 import type {
-  CiEvidenceLedger,
   FindingLifecycleLedger,
   ModelReviewer,
   ReviewDecisionLedger,
@@ -29,7 +22,6 @@ import {
 } from "@holon/contracts";
 import {
   executorRequestSchema,
-  reviewInvestigationLimits,
   preparedRepositorySchema,
   reviewContextSchema,
   type ExecutorRequest,
@@ -37,7 +29,6 @@ import {
   type PreparedRepository,
   type RepositoryPolicy,
   type RepositoryToolCall,
-  type RepositoryToolResult,
   type ReviewContext,
   type ReviewJob,
   type RunClaimResult,
@@ -53,13 +44,6 @@ import {
   type GitHubInstallationSession,
 } from "@holon/github";
 import { GatewayProjectIdentificationModel } from "@holon/model";
-import {
-  AiSdkReviewGenerator,
-  GatewayModelReviewer,
-  createPartitionedRepositoryToolRunner,
-  RepositoryToolBudgetExceededError,
-  createRedactingRepositoryToolRunner,
-} from "@holon/model";
 import {
   interpretProjects,
   detectorRevision,
@@ -77,6 +61,7 @@ import {
 } from "./github-operations.js";
 import { errorKind, type StructuredLogger } from "./observability.js";
 import { configurationScopePolicy } from "./run-configuration-resolver.js";
+import { ThinkReviewModelReviewer } from "./think-reviewer.js";
 import type { WorkflowController } from "./workflow-superseding.js";
 
 export interface RepositoryExecutorBinding {
@@ -97,11 +82,7 @@ export interface RepositoryExecutorBinding {
 }
 
 export interface WorkflowLedger
-  extends
-    PublicationLedger,
-    ReviewDecisionLedger,
-    CiEvidenceLedger,
-    FindingLifecycleLedger {
+  extends PublicationLedger, ReviewDecisionLedger, FindingLifecycleLedger {
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
   saveRunConfiguration(
@@ -172,11 +153,7 @@ export interface ReviewRuntime {
   ) => Promise<number | undefined>;
   readonly identificationModel?: import("@holon/application").ProjectIdentificationModel;
 
-  readonly createModel?: (
-    toolRunner: ReturnType<
-      typeof createPartitionedRepositoryToolRunner
-    >["runner"],
-  ) => ModelReviewer;
+  readonly createModel?: () => ModelReviewer;
   readonly createSession?: (
     installationId: number,
     repositoryId: number,
@@ -204,7 +181,6 @@ export interface ReviewServices {
     cancellation?: AbortController,
   ): {
     readonly model: ModelReviewer;
-    toolBudgetExceeded(): boolean;
   };
   useProjectIdentification?(result: ProjectIdentificationResult): void;
   getProjectIdentification?(): ProjectIdentificationResult | undefined;
@@ -431,204 +407,27 @@ export function createReviewServices(
       if (contextPreparation === pending) contextPreparation = undefined;
     });
   };
-  const repositoryCache = createRepositoryToolCacheStore();
   const createShardReviewer = (
     shardIndex: number,
     shardCount: number,
     cancellation = new AbortController(),
   ) => {
-    let infrastructureFailure: unknown;
-    let toolSequence = 0;
-    const toolBudget = createPartitionedRepositoryToolRunner(
-      createRedactingRepositoryToolRunner({
-        run: async (call, execution) => {
-          cancellation.signal.throwIfAborted();
-          execution?.abortSignal?.throwIfAborted();
-          const startedAt = Date.now();
-          const toolCallIndex = ++toolSequence;
-          const emitTool = (event: string, reason?: string) => {
-            try {
-              logger.emit(event, {
-                ...logContext,
-                eventId: `${logContext.workflowInstanceId ?? job.runId}:${event}:${shardIndex}:${toolCallIndex}`,
-                shardIndex,
-                toolName: call.name,
-                toolCallIndex,
-                durationMs: Date.now() - startedAt,
-                reason,
-              });
-            } catch {
-              /* Telemetry cannot alter infrastructure failures. */
-            }
-          };
-          emitTool("repository.tool_started");
-          try {
-            if (
-              !(await ledger.reserveAnalysisToolCall(
-                job.runId,
-                shardIndex,
-                shardCount,
-              ))
-            )
-              throw new RepositoryToolBudgetExceededError(
-                reviewInvestigationLimits.toolCalls,
-              );
-            cancellation.signal.throwIfAborted();
-            execution?.abortSignal?.throwIfAborted();
-            const deadlineAt = Math.min(
-              execution?.deadlineAt ?? Infinity,
-              Date.now() + repositoryExecutionLimits.toolMs,
-            );
-            // Preparation is a workflow concern, never hidden in a model tool call.
-            const operation = await executor.startTool(
-              job.runId,
-              call,
-              deadlineAt,
-            );
-            let remoteCancellation: Promise<void> | undefined;
-            const cancel = () => {
-              remoteCancellation ??= operation.cancel();
-              remoteCancellation.catch(() => {});
-            };
-            const signal = execution?.abortSignal
-              ? AbortSignal.any([execution.abortSignal, cancellation.signal])
-              : cancellation.signal;
-            signal?.addEventListener("abort", cancel, { once: true });
-            let result: RepositoryToolResult;
-            try {
-              if (signal?.aborted) {
-                cancel();
-                signal.throwIfAborted();
-              }
-              const outcome = repositoryToolOutcomeSchema.parse(
-                await operation.result(),
-              );
-              if ("error" in outcome)
-                throw new RepositoryToolResponseError(outcome.error);
-              result = outcome;
-              signal?.throwIfAborted();
-            } finally {
-              signal?.removeEventListener("abort", cancel);
-              try {
-                await remoteCancellation;
-              } finally {
-                operation[Symbol.dispose]();
-              }
-            }
-            emitTool("repository.tool_finished");
-            return result;
-          } catch (error) {
-            const reason =
-              error instanceof RepositoryToolResponseError
-                ? error.failure.code
-                : error instanceof RepositoryToolBudgetExceededError
-                  ? "tool_budget_exhausted"
-                  : error instanceof Error &&
-                      (error.name === "TimeoutError" ||
-                        ("reason" in error && error.reason === "timed-out"))
-                    ? "repository_tool_timeout"
-                    : "repository_tool_failed";
-            emitTool("repository.tool_failed", reason);
-            if (
-              !(error instanceof RepositoryToolBudgetExceededError) &&
-              !(
-                error instanceof RepositoryToolResponseError &&
-                error.failure.kind === "query"
-              ) &&
-              !execution?.abortSignal?.aborted &&
-              !cancellation.signal.aborted
-            ) {
-              infrastructureFailure ??= Object.assign(
-                new Error("Repository infrastructure failed", { cause: error }),
-                {
-                  name: "RepositoryToolError",
-                  code: reason,
-                  phase: "repository_tool",
-                },
-              );
-              cancellation.abort(infrastructureFailure);
-            }
-            throw cancellation.signal.aborted
-              ? cancellation.signal.reason
-              : error;
-          }
-        },
-      }),
-      reviewInvestigationLimits.toolCalls * shardCount,
-    );
-    toolBudget.beginShard(shardIndex, shardCount);
-    const delegateModel =
-      runtime.createModel?.(toolBudget.runner) ??
-      new GatewayModelReviewer(
-        new AiSdkReviewGenerator(
-          {
-            accountId: env.AI_GATEWAY_ACCOUNT_ID,
-            apiToken: env.AI_GATEWAY_API_TOKEN,
-            gatewayId: env.AI_GATEWAY_ID,
-            metadata: {
-              pr_number: String(job.envelope.pullRequest.number),
-              repository_id: String(job.envelope.repository.id),
-              run_id: job.runId,
-              stage: "review",
-              shard_index: String(shardIndex),
-            },
-            model: env.AI_MODEL_ID,
-          },
-          toolBudget.runner,
-          async (usage) => {
-            logger.emit("model.usage", { ...logContext, shardIndex, ...usage });
-          },
-          "portable",
-          ({ event, ...details }) =>
-            logger.emit(event, {
-              ...logContext,
-              eventId: `${logContext.workflowInstanceId ?? job.runId}:${event}:${shardIndex}:${details.phase}:${details.attempt}:${details.round ?? 0}`,
-              shardIndex,
-              modelRoute: env.AI_MODEL_ID,
-              ...details,
-            }),
-          {
-            repositoryCache,
-            generationBudget: {
-              reserve: (request) =>
-                ledger.reserveModelGeneration(job.runId, request),
-              settle: (id, outputTokens) =>
-                ledger.settleModelGeneration(job.runId, id, outputTokens),
-            },
-          },
-        ),
-      );
-
+    const model =
+      runtime.createModel?.() ??
+      new ThinkReviewModelReviewer(env, shardIndex, shardCount, wait);
     return {
       model: {
-        async review(
+        review: (
           reviewJob: ReviewJob,
           context: Parameters<ModelReviewer["review"]>[1],
-        ) {
-          try {
-            cancellation.signal.throwIfAborted();
-            const result = await delegateModel.review(reviewJob, {
-              ...context,
-              abortSignal: context.abortSignal
-                ? AbortSignal.any([context.abortSignal, cancellation.signal])
-                : cancellation.signal,
-            });
-            cancellation.signal.throwIfAborted();
-            if (infrastructureFailure !== undefined)
-              throw infrastructureFailure;
-            return result;
-          } catch (error) {
-            throw infrastructureFailure ?? error;
-          }
-        },
-        ...(delegateModel.synthesizeReviewSummary
-          ? {
-              synthesizeReviewSummary:
-                delegateModel.synthesizeReviewSummary.bind(delegateModel),
-            }
-          : {}),
+        ) =>
+          model.review(reviewJob, {
+            ...context,
+            abortSignal: context.abortSignal
+              ? AbortSignal.any([context.abortSignal, cancellation.signal])
+              : cancellation.signal,
+          }),
       },
-      toolBudgetExceeded: () => toolBudget.exceeded(),
     };
   };
   const model = createShardReviewer(0, 1).model;

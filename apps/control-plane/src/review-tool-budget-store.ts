@@ -25,17 +25,12 @@ export class ReviewToolBudgetStore {
     )
       throw new Error("Tool budget run is unavailable");
     const row = this.sql
-      .exec<{ total: number; shard: number }>(
-        "SELECT COALESCE(SUM(calls),0) AS total, COALESCE(SUM(CASE WHEN shard_index = ? THEN calls ELSE 0 END),0) AS shard FROM review_tool_budgets WHERE run_id = ?",
-        index,
+      .exec<{ total: number }>(
+        "SELECT COALESCE(SUM(calls),0) AS total FROM review_tool_budgets WHERE run_id = ?",
         runId,
       )
       .toArray()[0]!;
-    if (
-      row.total >= reviewInvestigationLimits.toolCalls * totalShards ||
-      row.shard >= reviewInvestigationLimits.toolCalls
-    )
-      return false;
+    if (row.total >= reviewInvestigationLimits.toolCalls) return false;
     this.sql.exec(
       "INSERT INTO review_tool_budgets(run_id,shard_index,calls) VALUES (?,?,1) ON CONFLICT(run_id,shard_index) DO UPDATE SET calls = calls + 1",
       runId,

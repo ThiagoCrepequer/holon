@@ -868,38 +868,6 @@ describe("ReviewLedgerObject", () => {
       executor.cleanup = originalCleanup;
     }
   });
-
-  it("persists and loads CI evidence per PR key and head sha", async () => {
-    const testPrKey = "github:42:pr:88" as const;
-    const ledger = env.REVIEW_LEDGERS.getByName(testPrKey);
-    const testHeadSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-    const initial = await ledger.loadCiEvidence(testPrKey, testHeadSha);
-    expect(initial).toBeUndefined();
-
-    await ledger.saveCiEvidence(testPrKey, testHeadSha, {
-      workflowRunAttempt: 1,
-      target: {
-        installationId: 99,
-        repositoryId: 42,
-        owner: "acme",
-        repo: "api",
-        pullNumber: 88,
-      },
-      markdownByLanguage: {
-        en: "### 🧪 CI Test Evidence\nCoverage: 95%",
-        "pt-BR": "### 🧪 CI Test Evidence\nCoverage: 95%",
-        es: "### 🧪 CI Test Evidence\nCoverage: 95%",
-      },
-      workflowRunId: 12345,
-    });
-
-    const loaded = await ledger.loadCiEvidence(testPrKey, testHeadSha);
-    expect(loaded).toBeDefined();
-    expect(loaded?.markdownByLanguage.en).toContain(
-      "### 🧪 CI Test Evidence\nCoverage: 95%",
-    );
-  });
 });
 
 it("keeps the identification snapshot immutable and bound to an existing run", async () => {

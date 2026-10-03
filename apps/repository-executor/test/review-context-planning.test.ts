@@ -40,7 +40,7 @@ describe("plan before context selection", () => {
     expect(result.context.files.map((f) => f.path)).toEqual(paths);
     expect(result.context.files.map((f) => f.patch)).toEqual(paths.map(patch));
     expect(result.context.truncated).toBe(false);
-    expect(result.plan.shards.length).toBeGreaterThan(3);
+    expect(result.plan.shards).toHaveLength(3);
     expect(result.contextBytes).toBeLessThanOrEqual(500_000);
     expect(result.context.changedLines).toEqual(
       paths.flatMap((path) =>

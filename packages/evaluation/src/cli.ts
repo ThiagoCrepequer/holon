@@ -6,18 +6,7 @@ import { baselineRecordingsV3 } from "../recordings/v3/index.js";
 import { evalRunConfigurationSchema } from "./contracts.js";
 import { createEvaluationReport, renderEvaluationSummary } from "./report.js";
 import { runEvaluationSuite } from "./runner.js";
-import { createLiveModelSubject } from "./subjects/live-model.js";
 import { createRecordedSubject } from "./subjects/recorded.js";
-
-type CliMode = "live" | "recorded";
-
-function requiredEnvironment(name: string): string {
-  const value = process.env[name]?.trim();
-  if (value === undefined || value.length === 0) {
-    throw new TypeError(`required evaluation environment is missing: ${name}`);
-  }
-  return value;
-}
 
 function safeRunMetadata(name: string, fallback: string): string {
   const value = process.env[name]?.trim() || fallback;
@@ -25,11 +14,6 @@ function safeRunMetadata(name: string, fallback: string): string {
     throw new TypeError(`evaluation metadata is invalid: ${name}`);
   }
   return value;
-}
-
-function parseMode(value: string | undefined): CliMode {
-  if (value === "live" || value === "recorded") return value;
-  throw new TypeError("evaluation mode must be live or recorded");
 }
 
 async function writeResult(
@@ -46,30 +30,18 @@ async function writeResult(
 }
 
 async function main(): Promise<void> {
-  const mode = parseMode(process.argv[2]);
+  if (process.argv[2] !== "recorded")
+    throw new TypeError("evaluation mode must be recorded");
   const sourceRevision = safeRunMetadata("GITHUB_SHA", "local");
-  const modelReference =
-    mode === "recorded" ? null : requiredEnvironment("AI_MODEL_ID");
   const configuration = evalRunConfigurationSchema.parse({
     corpusVersion: "baseline-v3",
-    mode: mode === "recorded" ? "recorded-output" : "live-model",
-    modelReference,
+    mode: "recorded-output",
+    modelReference: null,
     policyVersion: "review-policy-v1",
     promptVersion: "review-prompt-v1",
-    subjectVersion:
-      mode === "recorded" ? "recorded-output-v3" : "live-structured-output-v1",
+    subjectVersion: "recorded-output-v3",
   });
-  const subject =
-    mode === "live"
-      ? createLiveModelSubject({
-          accountId: requiredEnvironment("AI_GATEWAY_ACCOUNT_ID"),
-          apiToken: requiredEnvironment("AI_GATEWAY_API_TOKEN"),
-          evaluationRunId: safeRunMetadata("GITHUB_RUN_ID", "local"),
-          gatewayId: requiredEnvironment("AI_GATEWAY_ID"),
-          model: configuration.modelReference ?? "",
-          sourceRevision,
-        })
-      : createRecordedSubject(baselineRecordingsV3);
+  const subject = createRecordedSubject(baselineRecordingsV3);
   const suite = await runEvaluationSuite(
     baselineCorpusV3,
     subject,

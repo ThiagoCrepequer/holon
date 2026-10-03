@@ -79,7 +79,7 @@ function createMockServices(
 ): ReviewServices {
   return {
     createShardReviewer() {
-      return { model: this.model, toolBudgetExceeded: () => false };
+      return { model: this.model };
     },
     createMutationContext: () => Promise.reject(new Error("unused")),
     createSession: () => Promise.reject(new Error("unused")),
@@ -122,7 +122,7 @@ function createMockServices(
 
 describe("analyzeReview", () => {
   it.each(["omitted", "degraded"] as const)(
-    "skips synthesis for incomplete multi-shard review (%s)",
+    "marks incomplete multi-shard review without trusting its narrative (%s)",
     async (reason) => {
       const services = createMockServices(
         {
@@ -146,13 +146,10 @@ describe("analyzeReview", () => {
           promptTruncated: false,
         },
       );
-      const synthesis = vi.fn().mockResolvedValue("Everything looks correct.");
-      services.model.synthesizeReviewSummary = synthesis;
       const result = await analyzeReview(job, services, vi.fn());
       expect(result.totalShards).toBe(2);
       expect(result.summary).toContain("This review is incomplete");
       expect(result.summary).not.toContain("Everything looks correct");
-      expect(synthesis).not.toHaveBeenCalled();
     },
   );
 
@@ -281,49 +278,37 @@ describe("analyzeReview", () => {
     expect(ensureContext).toHaveBeenCalledWith(2, effectivePolicy);
   });
 
-  it.each([true, false])(
-    "publishes synthesis or a safe fallback without marking sharding as truncation (failure=%s)",
-    async (failure) => {
-      const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,250 @@\n${"+a;\n".repeat(250)}`;
-      const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,250 @@\n${"+b;\n".repeat(250)}`;
+  it("aggregates shard narratives without marking sharding as truncation", async () => {
+    const largePatch1 = `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,0 +1,500 @@\n${"+a;\n".repeat(500)}`;
+    const largePatch2 = `diff --git a/src/b.ts b/src/b.ts\n--- a/src/b.ts\n+++ b/src/b.ts\n@@ -1,0 +1,500 @@\n${"+b;\n".repeat(500)}`;
 
-      const shardContext: ReviewShardContext = {
-        changedLines: [
-          { line: 1, path: "src/a.ts", side: "RIGHT" },
-          { line: 1, path: "src/b.ts", side: "RIGHT" },
-        ],
-        files: [
-          { mode: "structural", patch: largePatch1, path: "src/a.ts" },
-          { mode: "structural", patch: largePatch2, path: "src/b.ts" },
-        ],
-        truncated: false,
-      };
+    const shardContext: ReviewShardContext = {
+      changedLines: [
+        { line: 1, path: "src/a.ts", side: "RIGHT" },
+        { line: 1, path: "src/b.ts", side: "RIGHT" },
+      ],
+      files: [
+        { mode: "structural", patch: largePatch1, path: "src/a.ts" },
+        { mode: "structural", patch: largePatch2, path: "src/b.ts" },
+      ],
+      truncated: false,
+    };
 
-      const emit = vi.fn();
-      const services = createMockServices(shardContext, {
-        output: { findings: [], summary: "Review summary" },
-        promptTruncated: false,
-      });
-      (
-        services.model as unknown as {
-          synthesizeReviewSummary?: () => Promise<string>;
-        }
-      ).synthesizeReviewSummary = failure
-        ? vi.fn().mockRejectedValue(new Error("Synthesis failed"))
-        : vi.fn().mockResolvedValue("Authoritative unified summary.");
-
-      const result = await analyzeReview(job, services, emit);
-      expect(result.policySource).toBe("default");
-      expect(result.waiversCount).toBe(0);
-      expect(result.verdict).toBe("APPROVE");
-      if (!failure)
-        expect(result.summary).toContain("Authoritative unified summary.");
-      expect(result.summary).not.toContain("input_context_omitted");
-      expect(
-        emit.mock.calls.some(([event]) => event === "model.output_limits"),
-      ).toBe(false);
-    },
-  );
+    const emit = vi.fn();
+    const services = createMockServices(shardContext, {
+      output: { findings: [], summary: "Review summary" },
+      promptTruncated: false,
+    });
+    const result = await analyzeReview(job, services, emit);
+    expect(result.policySource).toBe("default");
+    expect(result.waiversCount).toBe(0);
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.summary).toContain("Review summary");
+    expect(result.summary).not.toContain("input_context_omitted");
+    expect(
+      emit.mock.calls.some(([event]) => event === "model.output_limits"),
+    ).toBe(false);
+  });
 
   it.each([true, false])(
     "keeps loss diagnostics and structural leads without automatic findings (input omitted=%s)",
@@ -622,7 +607,7 @@ it("retries a failed shard without spending another model call on its successful
   const files = ["a", "b"].map((name) => ({
     path: `src/${name}.ts`,
     mode: "structural" as const,
-    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,250 @@\n${`+${name};\n`.repeat(250)}`,
+    patch: `diff --git a/src/${name}.ts b/src/${name}.ts\n--- a/src/${name}.ts\n+++ b/src/${name}.ts\n@@ -1,0 +1,500 @@\n${`+${name};\n`.repeat(500)}`,
   }));
   const services = createMockServices({
     files,
@@ -886,7 +871,7 @@ it("publishes an incomplete result when the shared deadline expires before infer
   expect(result.summary).toContain("analysis_deadline");
 });
 
-it("runs more than five shards in bounded waves and waits before starting the next wave", async () => {
+it("runs more than one wave of shards with bounded concurrency", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: true,
@@ -909,7 +894,8 @@ it("runs more than five shards in bounded waves and waits before starting the ne
     expect(context.truncated).toBe(false);
     active++;
     peak = Math.max(peak, active);
-    if (review.mock.calls.length <= 5) await barrier;
+    if (review.mock.calls.length <= reviewExecutionLimits.concurrency)
+      await barrier;
     active--;
     return {
       output: { findings: [], summary: "Reviewed" },
@@ -919,13 +905,15 @@ it("runs more than five shards in bounded waves and waits before starting the ne
   services.model.review = review;
   const pending = analyzeReview(job, services, vi.fn());
   try {
-    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(5));
+    await vi.waitFor(() =>
+      expect(review).toHaveBeenCalledTimes(reviewExecutionLimits.concurrency),
+    );
   } finally {
     release();
   }
   const result = await pending;
   expect(review).toHaveBeenCalledTimes(7);
-  expect(peak).toBe(5);
+  expect(peak).toBe(reviewExecutionLimits.concurrency);
   expect(result.scopeStatus).toBe("partial_by_policy");
   expect(result.summary).not.toContain("input_context_omitted");
 });
@@ -1016,7 +1004,6 @@ it("cancels a wave on infrastructure loss, joins cancellation, and never starts 
     release = resolve;
   });
   services.createShardReviewer = (index, _total, cancellation) => ({
-    toolBudgetExceeded: () => false,
     model: {
       review: async () => {
         started++;

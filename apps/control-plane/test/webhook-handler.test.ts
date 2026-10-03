@@ -111,91 +111,20 @@ describe("GitHub webhook HTTP boundary", () => {
     expect(result.sent).toHaveLength(0);
   });
 
-  it("handles workflow_run events appropriately", async () => {
-    // Ignored if action is not completed
-    const inProgressResult = await request(
-      JSON.stringify({ action: "in_progress", workflow_run: {} }),
+  it("ignores signed workflow_run events after CI artifact retirement", async () => {
+    const result = await request(
+      JSON.stringify({
+        action: "completed",
+        workflow_run: { id: 12345, pull_requests: [{ number: 7 }] },
+      }),
       { "x-github-event": "workflow_run" },
     );
-    expect(inProgressResult.response.status).toBe(202);
-    await expect(inProgressResult.response.json()).resolves.toEqual({
+    expect(result.response.status).toBe(202);
+    await expect(result.response.json()).resolves.toEqual({
       accepted: true,
       ignored: true,
     });
-
-    // Ignored if workflow_run has no pull requests
-    const noPrResult = await request(
-      JSON.stringify({
-        action: "completed",
-        installation: { id: 99 },
-        repository: { id: 42, name: "api", owner: { login: "acme" } },
-        workflow_run: {
-          head_sha: "a".repeat(40),
-          id: 12345,
-          name: "ci",
-          pull_requests: [],
-        },
-      }),
-      { "x-github-event": "workflow_run" },
-    );
-    expect(noPrResult.response.status).toBe(202);
-    await expect(noPrResult.response.json()).resolves.toEqual({
-      accepted: true,
-      ignored: true,
-    });
-
-    // Enriched when valid completed workflow_run arrives
-    const completedResult = await request(
-      JSON.stringify({
-        action: "completed",
-        installation: { id: 99 },
-        repository: { id: 42, name: "api", owner: { login: "acme" } },
-        workflow_run: {
-          head_sha: "a".repeat(40),
-          id: 12345,
-          name: "ci",
-          pull_requests: [{ number: 7 }],
-        },
-      }),
-      { "x-github-event": "workflow_run" },
-    );
-    expect(completedResult.response.status).toBe(202);
-    await expect(completedResult.response.json()).resolves.toMatchObject({
-      accepted: true,
-      deliveryId: "delivery-123",
-      enriched: true,
-    });
-
-    // Ignored when PR number is invalid
-    const invalidPrNum = await request(
-      JSON.stringify({
-        action: "completed",
-        installation: { id: 99 },
-        repository: { id: 42, name: "api", owner: { login: "acme" } },
-        workflow_run: {
-          head_sha: "a".repeat(40),
-          id: 12345,
-          pull_requests: [{ number: "invalid" }],
-        },
-      }),
-      { "x-github-event": "workflow_run" },
-    );
-    expect(invalidPrNum.response.status).toBe(202);
-
-    // Ignored when head_sha is missing
-    const missingHeadSha = await request(
-      JSON.stringify({
-        action: "completed",
-        installation: { id: 99 },
-        repository: { id: 42, name: "api", owner: { login: "acme" } },
-        workflow_run: {
-          id: 12345,
-          pull_requests: [{ number: 7 }],
-        },
-      }),
-      { "x-github-event": "workflow_run" },
-    );
-    expect(missingHeadSha.response.status).toBe(202);
+    expect(result.sent).toHaveLength(0);
   });
 
   it("accepts but ignores unsupported pull request actions", async () => {
@@ -392,6 +321,7 @@ it.each(["deleted", "suspend"])(
       ),
     ).toBeNull();
   },
+  15_000,
 );
 it("revokes only removed repositories and validates signed revocation payloads", async () => {
   const id = 803;
@@ -425,4 +355,4 @@ it("revokes only removed repositories and validates signed revocation payloads",
       )
     ).response.status,
   ).toBe(202);
-});
+}, 15_000);

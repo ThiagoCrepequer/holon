@@ -7,6 +7,7 @@
   "vars": {
     "PROJECT_IDENTIFICATION_MODE": "observe",
     "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
+    "AGENT_TRACE_PAYLOADS": "enabled",
   },
   "durable_objects": {
     "bindings": [
@@ -22,6 +23,10 @@
         "name": "REVIEW_LEDGERS",
         "class_name": "ReviewLedgerObject",
       },
+      {
+        "name": "REVIEW_AGENTS",
+        "class_name": "ReviewAgent",
+      },
     ],
   },
   "migrations": [
@@ -35,6 +40,10 @@
         "ProjectIdentificationCacheObject",
         "ProjectIdentificationRegistryObject",
       ],
+    },
+    {
+      "tag": "review-agent-v1",
+      "new_sqlite_classes": ["ReviewAgent"],
     },
   ],
   "queues": {
@@ -60,6 +69,11 @@
       "binding": "REVIEW_WORKFLOW",
       "class_name": "ReviewWorkflow",
     },
+    {
+      "name": "holon-review-shard-workflow",
+      "binding": "REVIEW_SHARD_WORKFLOW",
+      "class_name": "ReviewShardWorkflow",
+    },
   ],
   "services": [
     {
@@ -69,6 +83,9 @@
   ],
   "observability": {
     "enabled": true,
+    "traces": {
+      "enabled": true,
+    },
     "logs": {
       "enabled": true,
       "invocation_logs": true,

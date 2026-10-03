@@ -83,13 +83,6 @@ export const runConfigurationRefSchema = z.strictObject({
 });
 export type RunConfigurationRef = z.infer<typeof runConfigurationRefSchema>;
 
-export const localizedCiMarkdownSchema = z.strictObject({
-  en: z.string().max(65536),
-  "pt-BR": z.string().max(65536),
-  es: z.string().max(65536),
-});
-export type LocalizedCiMarkdown = z.infer<typeof localizedCiMarkdownSchema>;
-
 /** Public projection: deliberately excludes YAML, descriptions, instruction and reference bodies. */
 export const runConfigurationSummarySchema = runConfigurationRefSchema.extend({
   source: repositoryPolicySourceSchema,

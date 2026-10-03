@@ -158,12 +158,6 @@ export const reviewMessages = {
     "pt-BR": "Operação destrutiva no banco de dados",
     es: "Operación destructiva en la base de datos",
   },
-  synthesisUnavailable: {
-    en: "Narrative synthesis was unavailable. Refer to the verified findings and coverage in this review.",
-    "pt-BR":
-      "A síntese narrativa não estava disponível. Consulte os achados verificados e a cobertura desta revisão.",
-    es: "La síntesis narrativa no estaba disponible. Consulta los hallazgos verificados y la cobertura de esta revisión.",
-  },
   finalizationFailed: {
     en: "Review finalization failed after recovery. Findings from the unfinished investigation were not published; this review is incomplete.",
     "pt-BR":
@@ -206,79 +200,6 @@ export const reviewMessages = {
     en: "Review updated to reflect current human feedback.",
     "pt-BR": "Revisão atualizada para refletir o feedback humano atual.",
     es: "Revisión actualizada para reflejar los comentarios humanos actuales.",
-  },
-  ciTitle: {
-    en: "### 🧪 CI Test & Coverage Evidence",
-    "pt-BR": "### 🧪 Evidências de testes e cobertura de CI",
-    es: "### 🧪 Evidencias de pruebas y cobertura de CI",
-  },
-  ciUnavailable: {
-    en: "*CI test and coverage artifacts were not available for this run.*",
-    "pt-BR":
-      "*Os artefatos de testes e cobertura de CI não estavam disponíveis para esta execução.*",
-    es: "*Los artefactos de pruebas y cobertura de CI no estaban disponibles para esta ejecución.*",
-  },
-  ciCoverage: {
-    en: "- **Changed lines coverage**: {percentage}% ({covered}/{total} lines covered)",
-    "pt-BR":
-      "- **Cobertura das linhas alteradas**: {percentage}% ({covered}/{total} linhas cobertas)",
-    es: "- **Cobertura de líneas modificadas**: {percentage}% ({covered}/{total} líneas cubiertas)",
-  },
-  ciUncovered: {
-    en: "  - **Uncovered lines**:",
-    "pt-BR": "  - **Linhas sem cobertura**:",
-    es: "  - **Líneas sin cobertura**:",
-  },
-  ciLines: {
-    en: "lines",
-    "pt-BR": "linhas",
-    es: "líneas",
-  },
-  ciMoreLines: {
-    en: "...and {count} more lines",
-    "pt-BR": "...e mais {count} linhas",
-    es: "...y {count} líneas más",
-  },
-  ciMoreFiles: {
-    en: "    - *...and {count} more files with uncovered lines.*",
-    "pt-BR": "    - *...e mais {count} arquivos com linhas sem cobertura.*",
-    es: "    - *...y {count} archivos más con líneas sin cobertura.*",
-  },
-  ciSuite: {
-    en: "- **Test suite**: {passed} passed, {failed} failed, {skipped} skipped, {total} total{duration}",
-    "pt-BR":
-      "- **Suíte de testes**: {passed} passaram, {failed} falharam, {skipped} ignorados, {total} no total{duration}",
-    es: "- **Suite de pruebas**: {passed} pasaron, {failed} fallaron, {skipped} omitidos, {total} en total{duration}",
-  },
-  ciFailed: {
-    en: "  - **Failed tests ({count})**:",
-    "pt-BR": "  - **Testes que falharam ({count})**:",
-    es: "  - **Pruebas fallidas ({count})**:",
-  },
-  ciTestFailed: {
-    en: "Test failed",
-    "pt-BR": "Teste falhou",
-    es: "Prueba fallida",
-  },
-  ciMoreFailed: {
-    en: "    - *...and {count} more failed tests.*",
-    "pt-BR": "    - *...e mais {count} testes que falharam.*",
-    es: "    - *...y {count} pruebas fallidas más.*",
-  },
-  ciWorkflow: {
-    en: "CI Workflow",
-    "pt-BR": "Workflow de CI",
-    es: "Workflow de CI",
-  },
-  ciRun: {
-    en: "run",
-    "pt-BR": "execução",
-    es: "ejecución",
-  },
-  ciSource: {
-    en: "Source",
-    "pt-BR": "Origem",
-    es: "Origen",
   },
   superseded: {
     en: "A newer commit or updated base was detected on this pull request. This review run was superseded.",

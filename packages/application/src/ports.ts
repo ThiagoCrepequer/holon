@@ -1,7 +1,5 @@
-import type { LocalizedCiMarkdown } from "@holon/contracts";
 import type { ReviewOutputPreferences } from "@holon/contracts";
 import type {
-  CiSummary,
   CreateCheckRunInput,
   ModelReviewOutput,
   ReviewShardContext,
@@ -49,19 +47,6 @@ export interface ModelReviewResult {
 
 export interface ModelReviewer {
   review(job: ReviewJob, context: ReviewContext): Promise<ModelReviewResult>;
-  synthesizeReviewSummary?(
-    job: ReviewJob,
-    input: {
-      readonly output?: ReviewOutputPreferences | undefined;
-      readonly deadlineAt?: number | undefined;
-      readonly shardSummaries: readonly string[];
-      readonly verifiedFindings: readonly {
-        diagnostic: string;
-        severity: string;
-        path: string;
-      }[];
-    },
-  ): Promise<string>;
 }
 
 export type ClaimedPublication =
@@ -83,28 +68,6 @@ export interface ReviewLedger {
   completePublication(
     id: PublicationId,
     githubCommentId: number,
-  ): Promise<void>;
-}
-
-export interface CiEvidenceLedger {
-  loadLatestReviewDecision(
-    prKey: PrKey,
-  ): Promise<ReviewDecisionContext | undefined>;
-  loadCiEvidence(
-    prKey: PrKey,
-    headSha: string,
-  ): Promise<
-    | {
-        readonly markdownByLanguage: LocalizedCiMarkdown;
-        readonly workflowRunId?: number | undefined;
-        readonly structuredCi?: CiSummary | null | undefined;
-      }
-    | undefined
-  >;
-  saveCiEvidence(
-    prKey: PrKey,
-    headSha: string,
-    evidence: import("@holon/contracts").SavedCiEvidence,
   ): Promise<void>;
 }
 

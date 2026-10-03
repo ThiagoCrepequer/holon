@@ -1,6 +1,5 @@
 import { followUpMessageSchema, type FollowUpMessage } from "@holon/contracts";
 
-import { enrichReviewWithCiEvidence } from "./ci-enrichment-service.js";
 import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
@@ -11,9 +10,6 @@ export async function processFollowUp(
   message: FollowUpMessage,
 ): Promise<void> {
   switch (message.event) {
-    case "ci_enrichment":
-      await enrichReviewWithCiEvidence(env, message.payload);
-      return;
     case "feedback_comment":
       await handleFeedbackCommentWebhook(env, message.payload);
       return;
@@ -26,7 +22,7 @@ export async function dispatchFollowUpMessages(
   messages: readonly QueueMessagePort[],
   process: (message: FollowUpMessage) => Promise<void>,
 ): Promise<void> {
-  // Bound memory while inflating CI artifacts; review model shards use a separate concurrency budget.
+  // Queue messages are processed sequentially to preserve bounded memory use.
   for (const message of messages) {
     const parsed = followUpMessageSchema.safeParse(message.body);
     if (!parsed.success) {
