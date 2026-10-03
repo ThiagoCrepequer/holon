@@ -73,6 +73,34 @@ entre PRs. Essa fronteira evita que memória de um PR influencie outro.
 | `ReviewLedger` | Autoridade da run, reservas agregadas, checkpoint de resultado e idempotência de efeitos externos. O SQLite de sessão do Think não substitui o ledger. |
 | Host de review | Verifica schema e âncoras literais no patch canônico, classifica cobertura, agrega findings, deriva veredito e publica no GitHub. |
 
+### Política de shards
+
+O planner atual conserva os patches elegíveis e pode gerar até 64 shards,
+executados até cinco por vez. Os limites atuais por shard são oito arquivos,
+384 linhas alteradas e 48.000 bytes de patch. Esse teto de 64 protege a
+cobertura de PRs grandes; não é uma meta de quantidade. No Think, cada shard
+também cria sessão, turnos e chamadas ao modelo. Por isso, **não copiar a
+granularidade atual sem medir**.
+
+A meta inicial é uma única investigação para PRs pequenos e poucos shards
+semanticamente coesos para os demais: agrupar arquivo e teste, contratos e
+consumidores relacionados, e hunks do mesmo arquivo quando couberem. Dividir
+somente quando o prompt, as janelas de evidência, o tempo ou a capacidade de
+investigação do agente ultrapassarem limites medidos. O planner continua
+determinístico e conserva linhas/âncoras; não reduzir o teto global para obter
+menos shards por truncamento. O alvo experimental é de um a três shards nos
+PRs comuns, com concorrência inicialmente menor que os cinco atuais; os
+valores finais dependem do corpus e do smoke real.
+
+Menos shards reduzem repetição de prompt, sínteses e sessões, e preservam mais
+relações causais dentro da mesma investigação. Shards excessivamente grandes
+podem perder detalhes, gastar mais tokens por turno e ampliar o impacto de
+uma falha. A tolerância desejada vem de retries limitados do shard afetado,
+checkpoint do resultado concluído e sinalização explícita de cobertura.
+Falha ou omissão em qualquer área necessária mantém o review incompleto e
+impede `APPROVE`; resultados dos demais shards podem fundamentar um
+`COMMENT` com limitações, conforme a política existente.
+
 ### Turno de review
 
 1. O Workflow constrói um envelope pequeno com `runId`, `shardId`, SHA exato,
@@ -167,7 +195,8 @@ alterados juntos. Não manter dois motores em produção por tempo indeterminado
    e testes de regressão.
 4. **Prova de entrega.** Rodar `pnpm verify`, testes Workers/DO e executor,
    corpus de reviews com precisão, recall, conclusão, latência e tokens por
-   caso; depois smoke autorizado com GitHub App, AI Gateway e Cloudflare reais.
+   caso, incluindo variações de tamanho e quantidade de shards; depois smoke
+   autorizado com GitHub App, AI Gateway e Cloudflare reais.
    Confirmar PR pequeno/grande, force-push, shard falho, retry, orçamento,
    cancelamento, zero findings legítimo e comentário idempotente. Sem essa
    evidência remota, não declarar a migração pronta para produção.
