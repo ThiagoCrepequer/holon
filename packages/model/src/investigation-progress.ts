@@ -22,6 +22,17 @@ export function createInvestigationProgress(paths: readonly string[]) {
     status: "pending" as "pending" | "reviewed" | "blocked",
     note: "Verify the changed behavior, affected contracts/callers and relevant tests; revalidate prior findings when supplied.",
   }));
+  const checkpointSchema = checks.length
+    ? investigationCheckpointSchema.safeExtend({
+        checks: z
+          .array(
+            investigationCheckpointSchema.shape.checks.element.safeExtend({
+              id: z.enum(checks.map((check) => check.id)),
+            }),
+          )
+          .max(64),
+      })
+    : investigationCheckpointSchema;
   let finished = false;
   const summaries: string[] = [];
   let summaryLength = 0;
@@ -31,6 +42,7 @@ export function createInvestigationProgress(paths: readonly string[]) {
   let snapshotSummaryLength = 0;
   let snapshotRevision = 0;
   return {
+    checkpointSchema: () => checkpointSchema,
     beginRound() {
       snapshot = checks.map((check) => ({ ...check }));
       snapshotSummaryCount = summaries.length;

@@ -1,5 +1,6 @@
 import {
-  modelGenerationLimits,
+  modelShardAllocation,
+  type ModelGenerationAdmission,
   modelGenerationReservationSchema,
   runIdSchema,
   type ModelGenerationReservation,
@@ -16,82 +17,126 @@ export class ReviewGenerationBudgetStore {
   public reserve(
     rawRunId: string,
     raw: ModelGenerationReservation,
-  ): number | undefined {
+  ): ModelGenerationAdmission {
     const runId = runIdSchema.parse(rawRunId);
     const request = modelGenerationReservationSchema.parse(raw);
+    if (request.shardIndex >= request.shardCount)
+      throw new TypeError("Invalid model shard allocation");
     if (
       !this.sql.exec("SELECT 1 FROM runs WHERE id = ?", runId).toArray().length
     )
       throw new Error("Model budget run is unavailable");
+    this.sql.exec(
+      "INSERT INTO model_generation_plans(run_id, shard_count) VALUES (?,?) ON CONFLICT(run_id) DO NOTHING",
+      runId,
+      request.shardCount,
+    );
+    if (
+      this.sql
+        .exec<{ shard_count: number }>(
+          "SELECT shard_count FROM model_generation_plans WHERE run_id=?",
+          runId,
+        )
+        .one().shard_count !== request.shardCount
+    )
+      throw new Error("Model budget plan changed");
     const totals = this.sql
       .exec<{ calls: number; input: number; output: number }>(
-        "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id = ?",
+        "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=? AND (shard_index=? OR shard_index=-1)",
         runId,
+        request.shardIndex,
       )
       .one();
-    const callsExceeded = totals.calls >= modelGenerationLimits.calls;
-    const inputBytesExceeded =
-      totals.input + request.inputBytes > modelGenerationLimits.inputBytes;
-    const outputTokensExceeded =
-      totals.output + request.outputTokens > modelGenerationLimits.outputTokens;
-    if (callsExceeded || inputBytesExceeded || outputTokensExceeded) {
-      const rule = callsExceeded
-        ? "calls"
-        : inputBytesExceeded
-          ? "input_bytes"
-          : "output_tokens";
-      const current =
-        rule === "calls"
-          ? totals.calls
-          : rule === "input_bytes"
-            ? totals.input
-            : totals.output;
-      const requested =
-        rule === "calls"
-          ? 1
-          : rule === "input_bytes"
-            ? request.inputBytes
-            : request.outputTokens;
-      const limit =
-        rule === "calls"
-          ? modelGenerationLimits.calls
-          : rule === "input_bytes"
-            ? modelGenerationLimits.inputBytes
-            : modelGenerationLimits.outputTokens;
+    const limit = modelShardAllocation(
+      request.shardCount,
+      request.phase === "investigation",
+    );
+    const reject = (
+      reason: "calls" | "input_bytes" | "output_tokens",
+      consumed: number,
+      requested: number,
+      ceiling: number,
+    ): ModelGenerationAdmission => {
       try {
         this.logger.emit("model.budget_rejected", {
           severity: "error",
           runId,
-          rule,
-          current,
+          shardIndex: request.shardIndex,
+          shardCount: request.shardCount,
+          phase: request.phase,
+          rule: reason,
+          current: consumed,
           requested,
-          limit,
+          limit: ceiling,
           callsCurrent: totals.calls,
-          callsExceeded,
-          callsLimit: modelGenerationLimits.calls,
+          callsLimit: limit.calls,
           callsRequested: 1,
           inputBytesCurrent: totals.input,
-          inputBytesExceeded,
-          inputBytesLimit: modelGenerationLimits.inputBytes,
+          inputBytesLimit: limit.inputBytes,
           inputBytesRequested: request.inputBytes,
           outputTokensCurrent: totals.output,
-          outputTokensExceeded,
-          outputTokensLimit: modelGenerationLimits.outputTokens,
+          outputTokensLimit: limit.outputTokens,
           outputTokensRequested: request.outputTokens,
         });
       } catch {
         // Logging cannot alter admission or transactional accounting.
       }
-      return undefined;
+      return {
+        accepted: false,
+        reason,
+        limit: ceiling,
+        consumed,
+        requested,
+      };
+    };
+    if (totals.calls >= limit.calls)
+      return reject("calls", totals.calls, 1, limit.calls);
+    if (totals.input + request.inputBytes > limit.inputBytes)
+      return reject(
+        "input_bytes",
+        totals.input,
+        request.inputBytes,
+        limit.inputBytes,
+      );
+    const outputTokens = Math.min(
+      request.outputTokens,
+      limit.outputTokens - totals.output,
+    );
+    if (outputTokens < Math.min(request.outputTokens, 1024))
+      return reject(
+        "output_tokens",
+        totals.output,
+        request.outputTokens,
+        limit.outputTokens,
+      );
+    if (outputTokens < request.outputTokens) {
+      try {
+        this.logger.emit("model.budget_clamped", {
+          severity: "warning",
+          runId,
+          shardIndex: request.shardIndex,
+          shardCount: request.shardCount,
+          phase: request.phase,
+          rule: "output_tokens",
+          current: totals.output,
+          requested: request.outputTokens,
+          granted: outputTokens,
+          limit: limit.outputTokens,
+        });
+      } catch {
+        // Logging cannot alter admission or transactional accounting.
+      }
     }
-    return this.sql
+    const id = this.sql
       .exec<{ id: number }>(
-        "INSERT INTO model_generation_reservations(run_id,input_bytes,output_tokens) VALUES (?,?,?) RETURNING id",
+        "INSERT INTO model_generation_reservations(run_id,input_bytes,output_tokens,shard_index) VALUES (?,?,?,?) RETURNING id",
         runId,
         request.inputBytes,
-        request.outputTokens,
+        outputTokens,
+        request.shardIndex,
       )
       .one().id;
+    return { accepted: true, id, outputTokens };
   }
   public settle(rawRunId: string, id: number, outputTokens: number): void {
     const runId = runIdSchema.parse(rawRunId);

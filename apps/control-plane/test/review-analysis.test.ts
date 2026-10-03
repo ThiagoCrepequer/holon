@@ -78,6 +78,7 @@ function createMockServices(
   },
 ): ReviewServices {
   return {
+    setReviewShardCount: vi.fn(),
     createShardReviewer() {
       return { model: this.model, toolBudgetExceeded: () => false };
     },
@@ -647,6 +648,8 @@ it("replays completed shard checkpoints without repeating model calls after aggr
   );
   expect(review).toHaveBeenCalledTimes(1);
   expect(result.activeFindings).toHaveLength(1);
+  expect(services.setReviewShardCount).toHaveBeenCalledTimes(2);
+  expect(services.setReviewShardCount).toHaveBeenLastCalledWith(1);
 });
 
 it("retries a failed shard without spending another model call on its successful predecessor", async () => {

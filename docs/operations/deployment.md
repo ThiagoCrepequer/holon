@@ -4,13 +4,33 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-02
 ---
 
 # Provisionamento e deploy
 
 O primeiro deploy remoto foi executado em 2026-08-29. Os comandos abaixo são
 um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-los.
+
+## Deploy automático atual
+
+Os Workers Builds mantêm os comandos não interativos existentes, executados a
+partir da raiz do repositório:
+
+```sh
+pnpm --filter @holon/control-plane run deploy
+pnpm --filter @holon/repository-executor run deploy
+```
+
+Ambos executam `wrangler deploy`, como antes do PR #108. O bootstrap do executor
+continua disponível via `pnpm --filter @holon/repository-executor run deploy:bootstrap`
+e usa `wrangler.bootstrap.jsonc` somente no primeiro provisionamento.
+
+A [ADR-0048](../decisions/0048-restore-automatic-worker-deployments.md) restaura esse
+fluxo sem mudança de configuração remota ou novas credenciais. Não há proteção
+contra deploys durante análises ativas: a coordenação segura fica adiada.
+`pnpm run deploy:guarded` preserva a [ferramenta manual opcional](guarded-deployment.md),
+com terminal e janela exclusiva; não deve ser usado nos Workers Builds.
 
 ## Recursos
 
@@ -42,20 +62,20 @@ um runbook e causam efeitos externos; confirme conta e ambiente antes de usá-lo
    Ele não possui broker e não deve receber tráfego de review:
 
    ```bash
-   pnpm --filter @holon/repository-executor deploy:bootstrap
+   pnpm --filter @holon/repository-executor exec wrangler deploy --config wrangler.bootstrap.jsonc
    ```
 
 7. Faça deploy do control plane, que oferece o broker:
 
    ```bash
-   pnpm --filter @holon/control-plane deploy
+   pnpm --filter @holon/control-plane exec wrangler deploy
    ```
 
 8. Faça deploy do executor final com o binding para o entrypoint nomeado do
    broker:
 
    ```bash
-   pnpm --filter @holon/repository-executor deploy
+   pnpm --filter @holon/repository-executor exec wrangler deploy
    ```
 
 O Wrangler aplica as migrations de classes Durable Object, registrando Workflows,
@@ -73,12 +93,13 @@ Cada deployable pode manter uma conexão de build com o mesmo monorepo:
 | `holon-control-plane`       | `/`  | `main` | `pnpm --filter @holon/control-plane typecheck`       |
 
 O root permanece no topo porque ambos os apps dependem do workspace e do
-lockfile do monorepo. Deploy automático independente dos dois Workers fica
-desabilitado: os bindings são bidirecionais e a ordem control plane -> executor
-é parte do contrato de rollout. Uma pipeline futura pode automatizar exatamente
-essa sequência com aprovação. O executor final usa `wrangler deploy`, pois
-`wrangler versions upload` não atualiza imagens de Containers. Mantenha o
-include watch path `*` para validar mudanças compartilhadas.
+lockfile do monorepo. Os deploy commands são os dois comandos `pnpm --filter`
+listados acima; eles não exigem terminal ou confirmação da guarda. A atualização
+independente não garante ordem nem drenagem das análises. A ferramenta opcional
+`pnpm run deploy:guarded` é reservada a uma janela manual exclusiva e não substitui
+os comandos de CI. O executor usa `wrangler deploy`, pois `wrangler versions upload`
+não atualiza imagens de Containers. Mantenha o include watch path `*` para validar
+mudanças compartilhadas.
 
 A autorização inicial do Cloudflare GitHub App é interativa no dashboard. Após
 essa autorização única, as conexões, triggers e variáveis de build também podem
@@ -252,10 +273,10 @@ atual `RepositoryToolOutcome`; não retomar instâncias antigas com código novo
    de consumir mais recursos com PRs grandes. Mensagens de follow-up também ficam
    pausadas; não confundir essa pausa com perda de eventos.
 
-Não há neste patch um controlador automático de deploy ou bloqueio da API de
-criação manual de Workflows. Operações diretas também devem respeitar a pausa.
-A automação futura deve manter a fila pausada em caso de falha e exigir evidência
-de rollout concluído antes de retomá-la.
+A [guarda manual opcional](guarded-deployment.md) implementa essa sequência
+somente quando invocada explicitamente. Os Workers Builds não passam por ela.
+Não há bloqueio distribuído da API de criação manual de Workflows. Operações
+diretas e outros administradores também devem respeitar a janela exclusiva.
 
 ### Aceitação remota da correção
 

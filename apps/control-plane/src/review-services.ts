@@ -1,4 +1,7 @@
-import type { ModelGenerationReservation } from "@holon/contracts";
+import type {
+  ModelGenerationReservation,
+  ModelGenerationAdmission,
+} from "@holon/contracts";
 import {
   repositoryExecutionLimits,
   repositoryToolOutcomeSchema,
@@ -120,7 +123,7 @@ export interface WorkflowLedger
   reserveModelGeneration(
     runId: string,
     request: ModelGenerationReservation,
-  ): Promise<number | undefined>;
+  ): Promise<ModelGenerationAdmission>;
   settleModelGeneration(
     runId: string,
     id: number,
@@ -198,6 +201,7 @@ export interface GitHubMutationContext {
 }
 
 export interface ReviewServices {
+  readonly setReviewShardCount: (count: number) => void;
   createShardReviewer(
     index: number,
     totalShards: number,
@@ -432,6 +436,7 @@ export function createReviewServices(
     });
   };
   const repositoryCache = createRepositoryToolCacheStore();
+  let reviewShardCount = 1;
   const createShardReviewer = (
     shardIndex: number,
     shardCount: number,
@@ -556,6 +561,7 @@ export function createReviewServices(
       }),
       reviewInvestigationLimits.toolCalls * shardCount,
     );
+    reviewShardCount = Math.max(reviewShardCount, shardCount);
     toolBudget.beginShard(shardIndex, shardCount);
     const delegateModel =
       runtime.createModel?.(toolBudget.runner) ??
@@ -591,7 +597,14 @@ export function createReviewServices(
             repositoryCache,
             generationBudget: {
               reserve: (request) =>
-                ledger.reserveModelGeneration(job.runId, request),
+                ledger.reserveModelGeneration(job.runId, {
+                  ...request,
+                  shardIndex,
+                  shardCount:
+                    request.phase === "synthesis"
+                      ? reviewShardCount
+                      : shardCount,
+                }),
               settle: (id, outputTokens) =>
                 ledger.settleModelGeneration(job.runId, id, outputTokens),
             },
@@ -689,6 +702,9 @@ export function createReviewServices(
     createShardReviewer,
     workflow: runtime.workflow ?? env.REVIEW_WORKFLOW,
     createMutationContext: mutationContext,
+    setReviewShardCount: (count) => {
+      reviewShardCount = count;
+    },
     reconcileCheckRun: runtime.reconcileCheckRun
       ? (runId) => runtime.reconcileCheckRun!(runId, createSession)
       : (runId) => ledger.reconcileCheckRun(runId),

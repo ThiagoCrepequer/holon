@@ -286,6 +286,16 @@ e nenhuma aprovação. Erros desconhecidos e falhas de ledger/executor não são
 convertidos em falhas transitórias do modelo. Uso conhecido de rodadas concluídas
 é registrado também quando uma rodada posterior falha; uso da chamada interrompida
 pode permanecer desconhecido.
+
+Com verificações rastreadas, o host pede uma chamada de ferramenta na investigação.
+Se a primeira rodada ainda assim termina em texto, sem nenhuma chamada de ferramenta
+nem checkpoint, e restam pelo menos 60 segundos, faz uma única continuação com
+`review_checkpoint` selecionado explicitamente. As mensagens e os limites são
+compartilhados; a continuação não concede novo orçamento. Se o provider ignorar
+também essa seleção ou mantiver verificações pendentes, o resultado continua
+incompleto. O checkpoint declara cobertura, mas não substitui a validação de
+evidência dos findings.
+
 Cada shard tem 24 chamadas de ferramenta com reserva durável antes da chamada. Erro de evidência ou
 orçamento esgotado degrada o resultado. Ausência de finding anterior não prova
 correção: exige resolução explícita com evidência atual verificada; pendências
@@ -355,6 +365,15 @@ entrada serializada e 120.000 tokens de saída reservados/consumidos. Retries e
 replay compartilham esses limites. Falhas incertas mantêm suas reservas; esgotamento
 produz incompletude explícita, nunca aprovação.
 
+A [ADR-0046](../decisions/0046-protect-shard-completion-and-local-replay.md)
+divide esses tetos pelo plano imutável, com reserva de conclusão por parte. A primeira
+onda não pode consumir as parcelas seguintes. A recusa informa dimensão, limite e
+consumo, sem payloads. Checkpoints rejeitados recebem reparo limitado e não contam
+como checkpoints sem progresso. Após checkpoint aceito, o histórico de consultas
+fica restrito ao bloco mais recente e ao corrente; prompt canônico e notas aceitas
+continuam disponíveis. A [reprodução local](../operations/local-review-reproduction.md)
+valida esse encadeamento sem publicação nem chamadas obrigatórias a modelos reais.
+
 ### Concessão de Sandbox e cancelamento de ferramentas
 
 Conforme a [ADR-0043](../decisions/0043-bound-investigation-and-sandbox-lifecycle.md),
@@ -404,3 +423,12 @@ padrão pode aceitar um último componente inexistente. Somente o código de sa�
 processo permanecem fatais. Sem essa opção, a leitura posterior poderia transformar
 uma consulta a arquivo ausente em falha de infraestrutura. Fonte verificada em
 2026-09-28: [GNU realpath](https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html).
+
+### Deploy automático e ferramenta manual opcional
+
+A [ADR-0048](../decisions/0048-restore-automatic-worker-deployments.md) restaura os
+scripts independentes de deploy dos Workers Builds. A proteção contra atualização
+durante análises ativas está adiada. A guarda da ADR-0047 permanece disponível
+somente como `pnpm run deploy:guarded`, com confirmação interativa e janela exclusiva;
+não participa do deploy automático. Nenhum gate distribuído foi acrescentado ao
+runtime. Ver [procedimento atual](../operations/deployment.md).
