@@ -41,6 +41,25 @@ export interface AggregateShardReviewOptions {
   readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
 }
 
+export function formatCleanFollowUpReview(
+  headSha: string,
+  language: ReviewLanguage = "en",
+): string {
+  const heading = reviewText(
+    language,
+    "✅ **Review updated**",
+    "✅ **Revisão atualizada**",
+    "✅ **Revisión actualizada**",
+  );
+  const detail = reviewText(
+    language,
+    "No new findings confirmed. The eligible changes in this commit were reviewed.",
+    "Nenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
+    "No se confirmaron hallazgos nuevos. Se revisaron los cambios elegibles de este commit.",
+  );
+  return `${heading} · \`${headSha.slice(0, 7)}\`\n${detail}`;
+}
+
 export function formatStructuralImpactSection(
   report: StructuralImpactReport,
   language: ReviewLanguage = "en",
@@ -72,15 +91,6 @@ export function formatStructuralImpactSection(
         `- 🌐 **Downstream Impact Radius**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} reference(s) across repository outside PR`,
         `- 🌐 **Impacto nos consumidores**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} referência(s) no repositório fora do PR`,
         `- 🌐 **Impacto en consumidores**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} referencia(s) en el repositorio fuera del PR`,
-      ),
-    );
-  }
-  if (report.testGaps.length > 0) {
-    parts.push(
-      text(
-        `- 🧪 **Test Gaps**: ${report.testGaps.length} source file(s) modified without corresponding test file in PR`,
-        `- 🧪 **Lacunas de testes**: ${report.testGaps.length} arquivo(s) fonte modificado(s) sem teste correspondente no PR`,
-        `- 🧪 **Brechas de pruebas**: ${report.testGaps.length} archivo(s) fuente modificado(s) sin prueba correspondiente en el PR`,
       ),
     );
   }
@@ -317,18 +327,23 @@ export function aggregateShardReviews(
     totalShards: plan.shards.length,
   });
 
-  // Compose summary
-  const summarySections: string[] = [
-    formatVerdictBadge(verdictDetails.verdict, options.language),
-  ];
-  if (verdictDetails.reasons.length > 0) {
-    summarySections.push(verdictDetails.reasons.join(" "));
-  }
-
-  const prefix = summarySections.join("\n\n");
-  summarySections.length = 0;
+  const cleanApproval =
+    verdictDetails.verdict === "APPROVE" && sortedFindings.length === 0;
+  const prefix = cleanApproval
+    ? text(
+        "## ✅ Holon · Approved\n\n**0 active findings** · complete review",
+        "## ✅ Holon · Aprovado\n\n**0 achados ativos** · revisão completa",
+        "## ✅ Holon · Aprobado\n\n**0 hallazgos activos** · revisión completa",
+      )
+    : [
+        formatVerdictBadge(verdictDetails.verdict, options.language),
+        ...verdictDetails.reasons,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+  const summarySections: string[] = [];
   const incomplete = scopeStatus !== "complete" || isAnyShardDegraded;
-  const narrative = incomplete
+  const narrativeContent = incomplete
     ? text(
         `This review is incomplete. ${sortedFindings.length} verified finding(s) were retained from ${shardsAnalyzed} of ${plan.shards.length} planned shards. No conclusion is made about omitted changes or unfinished investigation.`,
         `Esta revisão está incompleta. ${sortedFindings.length} achado(s) verificado(s) foram mantidos em ${shardsAnalyzed} de ${plan.shards.length} partes planejadas. Não há conclusão sobre alterações omitidas ou investigação inacabada.`,
@@ -341,6 +356,10 @@ export function aggregateShardReviews(
           "Resumo narrativo indisponível; consulte os achados verificados e a cobertura da revisão.",
           "Resumen narrativo no disponible; consulte los hallazgos verificados y la cobertura de la revisión.",
         );
+
+  const narrative = cleanApproval
+    ? `${text("### Changes reviewed", "### Mudanças revisadas", "### Cambios revisados")}\n\n${narrativeContent}`
+    : narrativeContent;
 
   if (scopeStatus === "partial_by_policy") {
     summarySections.push(
@@ -380,7 +399,7 @@ export function aggregateShardReviews(
         [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
     );
 
-  if (options.publication)
+  if (options.publication && options.publication.findings.length > 0)
     summarySections.push(
       formatConfiguredFindings(
         options.publication.findings,

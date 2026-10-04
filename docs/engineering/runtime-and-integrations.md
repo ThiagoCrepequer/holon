@@ -93,6 +93,10 @@ resposta do modelo ou de tool como autorização para comentar, aprovar ou mudar
 um Check Run. Consulte `packages/github/src/publisher.ts`,
 `apps/control-plane/src/review/authorized-publication.ts` e a
 [política de veredito](../decisions/0019-derive-deterministic-review-verdict-by-policy.md).
+Publique veredito e achados inline novos em uma única review; depois recupere
+os IDs dos comentários dessa review para manter o acompanhamento entre commits.
+Em aprovações seguintes sem achados novos, o corpo curto reduz a repetição no PR;
+o Check Run mantém o diagnóstico completo.
 
 ## Configuração de deploy e operação
 

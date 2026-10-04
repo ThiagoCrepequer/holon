@@ -289,6 +289,7 @@ it("reconstructs persisted versions when callbacks are replayed after the identi
 function session(
   posts: Array<{
     readonly body: unknown;
+    readonly comments?: unknown;
     readonly event?: unknown;
     readonly route: string;
   }>,
@@ -296,11 +297,32 @@ function session(
 ) {
   return {
     api: {
-      async *iterate() {
+      async *iterate(
+        route: string,
+        parameters: { review_id?: number | undefined },
+      ) {
+        if (route.endsWith("/reviews/{review_id}/comments")) {
+          const reviewId = Number(parameters.review_id);
+          const review = posts[reviewId - 1];
+          const comments = Array.isArray(review?.comments)
+            ? review.comments
+            : [];
+          yield comments.map((comment, index) => ({
+            body: (comment as { body: string }).body,
+            id: reviewId * 100 + index + 1,
+            user: { login: "holon-reviewer[bot]", type: "Bot" },
+          }));
+          return;
+        }
         yield [];
       },
       request: (route: string, parameters: Record<string, unknown>) => {
-        posts.push({ body: parameters.body, event: parameters.event, route });
+        posts.push({
+          body: parameters.body,
+          comments: parameters.comments,
+          event: parameters.event,
+          route,
+        });
         return Promise.resolve({ data: { id: posts.length } });
       },
     },
@@ -315,6 +337,17 @@ function session(
   };
 }
 
+function publishedInlineComments(
+  posts: readonly { readonly comments?: unknown; readonly route: string }[],
+): unknown[] {
+  return posts.flatMap((post) =>
+    post.route.endsWith("/pulls/{pull_number}/reviews") &&
+    Array.isArray(post.comments)
+      ? post.comments
+      : [],
+  );
+}
+
 function runtime(
   options: {
     readonly containerId?: string | null;
@@ -325,6 +358,7 @@ function runtime(
     readonly now?: ReviewRuntime["now"];
     readonly posts?: Array<{
       readonly body: unknown;
+      readonly comments?: unknown;
       readonly event?: unknown;
       readonly route: string;
     }>;
@@ -528,13 +562,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       );
       expect(result).toEqual({ findingsPublished: cap, outcome: "completed" });
-      expect(
-        setup.posts.filter(
-          (post) =>
-            post.route ===
-            "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-        ),
-      ).toHaveLength(cap);
+      expect(publishedInlineComments(setup.posts)).toHaveLength(cap);
       expect(
         setup.posts.find((post) =>
           post.route.includes("/pulls/{pull_number}/reviews"),
@@ -627,10 +655,9 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
 
-    expect(headReads).toBe(7);
+    expect(headReads).toBe(6);
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
     ]);
@@ -665,7 +692,7 @@ describe("ReviewWorkflow", () => {
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
     ]);
     expect(
@@ -1196,6 +1223,9 @@ describe("ReviewWorkflow", () => {
               if (route.includes("check-runs")) {
                 checkRunRequests.push({ parameters, route });
               }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
+              }
               return Promise.resolve({ data: { id: 789 } });
             },
           },
@@ -1281,8 +1311,11 @@ describe("ReviewWorkflow", () => {
           ...s,
           api: {
             ...s.api,
-            request: (route: string) => {
+            request: (route: string, parameters: Record<string, unknown>) => {
               checkRunRequests.push(route);
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
+              }
               return Promise.resolve({ data: { id: 1 } });
             },
           },
@@ -1346,6 +1379,9 @@ describe("ReviewWorkflow", () => {
             request: (route: string, parameters: Record<string, unknown>) => {
               if (route.startsWith("PATCH") && route.includes("check-runs")) {
                 checkRunPatches.push({ parameters, route });
+              }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
               }
               return Promise.resolve({ data: { id: 1 } });
             },
@@ -1432,11 +1468,14 @@ describe("ReviewWorkflow", () => {
           ...s,
           api: {
             ...s.api,
-            request: (route: string) => {
+            request: (route: string, parameters: Record<string, unknown>) => {
               if (route.includes("check-runs")) {
                 return Promise.reject(
                   new Error("check run API network failure"),
                 );
+              }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
               }
               return Promise.resolve({ data: { id: 123 } });
             },
@@ -1646,11 +1685,67 @@ describe("ReviewWorkflow", () => {
     );
     expect(summaryPost).toBeDefined();
     expect(summaryPost?.event).toBe("APPROVE");
+    expect(summaryPost?.body).toContain("## ✅ Holon · Approved");
+    expect(summaryPost?.body).toContain("### Changes reviewed");
+  });
+
+  it("uses a compact approval after a prior clean review on the same PR", async () => {
+    const sha1 = "1".repeat(40);
+    const sha2 = "2".repeat(40);
+    let currentHead = sha1;
+    const reviewJobFor = (headSha: string): ReviewJob =>
+      reviewJobSchema.parse({
+        ...job,
+        envelope: {
+          ...job.envelope,
+          pullRequest: { ...job.envelope.pullRequest, headSha },
+        },
+        runId: `github:42:pr:7:head:${headSha}:base:${"b".repeat(40)}`,
+      });
+    const setup = runtime({
+      head: () => currentHead,
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: [],
+              summary: "- Reviewed the changed return path.",
+            },
+            promptTruncated: false,
+          }),
+      }),
+    });
+
+    const first = await executeReviewWorkflow(
+      env,
+      event("clean-first", reviewJobFor(sha1)),
+      immediateStep([]),
+      setup.value,
+    );
+    currentHead = sha2;
+    const second = await executeReviewWorkflow(
+      env,
+      event("clean-second", reviewJobFor(sha2)),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(first.outcome).toBe("completed");
+    expect(second.outcome).toBe("completed");
+    const reviews = setup.posts.filter((post) =>
+      post.route.endsWith("/pulls/{pull_number}/reviews"),
+    );
+    expect(reviews).toHaveLength(2);
+    expect(reviews[0]?.body).toContain("## ✅ Holon · Approved");
+    expect(reviews[1]?.event).toBe("APPROVE");
+    expect(reviews[1]?.body).toContain("✅ **Review updated** · `2222222`");
+    expect(reviews[1]?.body).not.toContain("### Changes reviewed");
   });
 
   it("reconciles findings across commits: suppresses persistent comment and notifies resolution when fixed", async () => {
     const posts: Array<{
       readonly body: unknown;
+      readonly comments?: unknown;
       readonly event?: unknown;
       readonly route: string;
     }> = [];
@@ -1704,12 +1799,7 @@ describe("ReviewWorkflow", () => {
     expect(result1.outcome).toBe("completed");
     expect(result1.findingsPublished).toBe(1);
 
-    const inlinePostsRun1 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun1).toHaveLength(1);
+    expect(publishedInlineComments(posts)).toHaveLength(1);
 
     // 2. Commit 2: finding is still present (persistent) -> duplicate suppressed!
     currentHead = sha2;
@@ -1722,12 +1812,7 @@ describe("ReviewWorkflow", () => {
     expect(result2.outcome).toBe("completed");
     expect(result2.findingsPublished).toBe(0); // Suppressed!
 
-    const inlinePostsRun2 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun2).toHaveLength(1); // No new inline comment created
+    expect(publishedInlineComments(posts)).toHaveLength(1); // No new inline comment created
 
     // 3. Commit 3: author fixes the finding -> resolved!
     currentHead = sha3;
@@ -1798,12 +1883,7 @@ describe("ReviewWorkflow", () => {
     expect(result4.outcome).toBe("completed");
     expect(result4.findingsPublished).toBe(1);
 
-    const inlinePostsRun4 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun4).toHaveLength(2); // New inline comment for reintroduced finding
+    expect(publishedInlineComments(posts)).toHaveLength(2); // New inline comment for reintroduced finding
   });
 
   it("propagates resolution reply failure for durable retry instead of silently completing", async () => {

@@ -23,13 +23,15 @@ export interface GitHubCheckRun {
 
 export type GitHubCommentListRoute =
   | "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments"
-  | "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews";
+  | "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
+  | "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments";
 
 export interface GitHubCommentListParameters {
   readonly owner: string;
   readonly per_page: number;
   readonly pull_number: number;
   readonly repo: string;
+  readonly review_id?: number | undefined;
 }
 
 export interface GitHubApi {
@@ -134,6 +136,41 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     return undefined;
   }
 
+  public async findReviewCommentsByMarkers(
+    reviewId: number,
+    markers: readonly string[],
+  ): Promise<ReadonlyMap<string, number>> {
+    const remaining = new Set(markers);
+    const matches = new Map<string, number>();
+    let pages = 0;
+    for await (const page of this.api.iterate(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments",
+      {
+        owner: this.target.owner,
+        per_page: 100,
+        pull_number: this.target.pullNumber,
+        repo: this.target.repo,
+        review_id: reviewId,
+      },
+    )) {
+      pages++;
+      for (const comment of page) {
+        if (
+          comment.user?.type !== "Bot" ||
+          comment.user.login !== this.target.expectedAuthorLogin
+        )
+          continue;
+        for (const marker of remaining) {
+          if (comment.body?.includes(marker) !== true) continue;
+          matches.set(marker, comment.id);
+          remaining.delete(marker);
+        }
+      }
+      if (remaining.size === 0 || pages >= 20) break;
+    }
+    return matches;
+  }
+
   public async findCheckRunByExternalId(
     externalId: string,
   ): Promise<number | undefined> {
@@ -213,53 +250,34 @@ export class GitHubReviewPublisher implements ReviewPublisher {
 
   public async publish(input: PublishCommentInput): Promise<number> {
     const body = withMarker(input.body, input.marker);
-    if (
-      input.line === undefined &&
-      input.path === undefined &&
-      input.side === undefined &&
-      input.startLine === undefined
-    ) {
-      const response = await this.api.request(
-        "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-        {
-          body,
-          commit_id: this.target.headSha,
-          event: input.event ?? "COMMENT",
-          owner: this.target.owner,
-          pull_number: this.target.pullNumber,
-          repo: this.target.repo,
-          request: { retries: 0 },
-        },
-      );
-      return response.data.id;
-    }
-    if (
-      input.line === undefined ||
-      input.path === undefined ||
-      input.side === undefined
-    ) {
-      throw new TypeError("Inline publication requires path, line and side");
-    }
-    if (input.startLine !== undefined && input.startLine > input.line) {
-      throw new TypeError("Inline publication startLine must not follow line");
-    }
-    const range =
-      input.startLine === undefined || input.startLine === input.line
-        ? {}
-        : { start_line: input.startLine, start_side: input.side };
+    const comments = input.comments?.map((comment) => {
+      if (comment.startLine !== undefined && comment.startLine > comment.line) {
+        throw new TypeError(
+          "Inline publication startLine must not follow line",
+        );
+      }
+      return {
+        body: withMarker(comment.body, comment.marker),
+        line: comment.line,
+        path: comment.path,
+        side: comment.side,
+        ...(comment.startLine === undefined ||
+        comment.startLine === comment.line
+          ? {}
+          : { start_line: comment.startLine, start_side: comment.side }),
+      };
+    });
     const response = await this.api.request(
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       {
         body,
         commit_id: this.target.headSha,
-        line: input.line,
+        event: input.event ?? "COMMENT",
         owner: this.target.owner,
-        path: input.path,
         pull_number: this.target.pullNumber,
         repo: this.target.repo,
         request: { retries: 0 },
-        side: input.side,
-        ...range,
+        ...(comments === undefined ? {} : { comments }),
       },
     );
     return response.data.id;

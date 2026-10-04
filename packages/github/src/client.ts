@@ -96,17 +96,25 @@ class OctokitApi implements GitHubApi {
     parameters: GitHubCommentListParameters,
   ): AsyncIterable<readonly GitHubComment[]> {
     try {
-      const responses =
-        route === "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
-          ? this.octokit.paginate.iterator(
-              "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
-              parameters,
-            )
-          : this.octokit.paginate.iterator(
-              "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-              parameters,
-            );
-      for await (const response of responses) {
+      if (
+        route ===
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments"
+      ) {
+        const reviewId = parameters.review_id;
+        if (reviewId === undefined)
+          throw new TypeError("Review comment lookup requires review_id");
+        for await (const response of this.octokit.paginate.iterator(route, {
+          ...parameters,
+          review_id: reviewId,
+        })) {
+          yield parseGitHubComments(response.data);
+        }
+        return;
+      }
+      for await (const response of this.octokit.paginate.iterator(
+        route,
+        parameters,
+      )) {
         yield parseGitHubComments(response.data);
       }
     } catch (error) {

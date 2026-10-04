@@ -3,6 +3,7 @@ import {
   createReviewRun,
   planInlinePublications,
   determineCheckRunConclusion,
+  formatCleanFollowUpReview,
   formatCheckRunOutput,
   renderFinding,
 } from "@holon/application";
@@ -35,7 +36,7 @@ import { terminateWorkflowIfActive } from "../ledger/workflow-superseding.js";
 import { consoleLogger, errorKind } from "../observability.js";
 import {
   isReviewMutationNotAuthorizedError,
-  publishAuthorized,
+  publishReviewAuthorized,
   publishResolutionAuthorized,
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
@@ -583,9 +584,6 @@ export async function executeReviewWorkflow(
       );
     }
 
-    let findingsPublished = 0;
-    const publishedCommentIds = new Map<string, number>();
-
     const inlinePlan = await step.do(
       "plan-inline-publications",
       stateStep,
@@ -599,80 +597,6 @@ export async function executeReviewWorkflow(
         );
       },
     );
-    const selectedInlineFindings = new Set(inlinePlan.inlineFingerprints);
-    for (const [index, finding] of output.activeFindings.entries()) {
-      if (!selectedInlineFindings.has(finding.fingerprint)) continue;
-
-      const result = await step.do(
-        `publish-inline-${index + 1}`,
-        publicationStep,
-        async () => {
-          const github = await services.createMutationContext();
-          try {
-            const detail = await loadReviewWithCurrentFeedback(
-              services.ledger,
-              run.id,
-              prKey,
-            );
-            const effectiveFinding = detail.activeFindings.find(
-              (candidate) => candidate.fingerprint === finding.fingerprint,
-            );
-            if (
-              effectiveFinding === undefined ||
-              classifyFindingPublication(effectiveFinding) !== "inline"
-            )
-              return { authorized: true, published: false } as const;
-            const findingId = await createFindingId(run.id, {
-              diagnostic: effectiveFinding.diagnostic,
-              endLine: effectiveFinding.location.line,
-              path: effectiveFinding.location.path,
-              startLine:
-                effectiveFinding.location.startLine ??
-                effectiveFinding.location.line,
-            });
-            let commentId: number | undefined;
-            const published = await publishAuthorized(
-              services.ledger,
-              github.publisher,
-              run.id,
-              findingId,
-              "inline",
-              renderFinding(effectiveFinding, detail.output.language),
-              {
-                line: effectiveFinding.location.line,
-                path: effectiveFinding.location.path,
-                side: "RIGHT",
-                ...(effectiveFinding.location.startLine !== undefined
-                  ? { startLine: effectiveFinding.location.startLine }
-                  : {}),
-              },
-              () => authorizeMutation(github, "review"),
-              (id) => {
-                commentId = id;
-              },
-            );
-            return { authorized: true, commentId, published } as const;
-          } catch (error) {
-            if (isReviewMutationNotAuthorizedError(error)) {
-              return { authorized: false, published: false } as const;
-            }
-            throw error;
-          }
-        },
-      );
-      if (!result.authorized) {
-        return await completeObsolete(
-          "publishing",
-          "mark-obsolete-during-publication",
-          true,
-        );
-      }
-      if (result.commentId !== undefined) {
-        publishedCommentIds.set(finding.fingerprint, result.commentId);
-      }
-      if (result.published) findingsPublished += 1;
-    }
-
     // Notify resolutions on original comment threads
     for (let index = 0; index < output.resolvedFindingsCount; index += 1) {
       const resolutionAuthorized = await step.do(
@@ -727,21 +651,60 @@ export async function executeReviewWorkflow(
           run.id,
           prKey,
         );
-        const summaryText = currentReview.summary;
+        if (currentReview.verdict === undefined) {
+          throw new Error("Review verdict is missing at publication");
+        }
+        const cleanFollowUp =
+          (await services.ledger.hasPriorPublishedReview(run.id)) &&
+          currentReview.verdict === "APPROVE" &&
+          currentReview.scopeStatus === "complete" &&
+          currentReview.activeFindings.length === 0 &&
+          currentReview.resolvedFindings.length === 0 &&
+          (currentReview.reconciliation?.unverifiedCount ?? 0) === 0;
+        const summaryText = cleanFollowUp
+          ? formatCleanFollowUpReview(
+              job.envelope.pullRequest.headSha,
+              currentReview.output.language,
+            )
+          : currentReview.summary;
+        const selected = new Set(inlinePlan.inlineFingerprints);
+        const inlineFindings = await Promise.all(
+          currentReview.activeFindings
+            .filter(
+              (finding) =>
+                selected.has(finding.fingerprint) &&
+                classifyFindingPublication(finding) === "inline",
+            )
+            .map(async (finding) => ({
+              body: renderFinding(finding, currentReview.output.language),
+              findingId: await createFindingId(run.id, {
+                diagnostic: finding.diagnostic,
+                endLine: finding.location.line,
+                path: finding.location.path,
+                startLine: finding.location.startLine ?? finding.location.line,
+              }),
+              fingerprint: finding.fingerprint,
+              line: finding.location.line,
+              path: finding.location.path,
+              side: "RIGHT" as const,
+              ...(finding.location.startLine === undefined
+                ? {}
+                : { startLine: finding.location.startLine }),
+            })),
+        );
         try {
-          const published = await publishAuthorized(
+          const publication = await publishReviewAuthorized(
             services.ledger,
             github.publisher,
             run.id,
-            "summary",
-            "summary",
             summaryText,
-            { event: currentReview.verdict },
+            currentReview.verdict,
+            inlineFindings,
             () => authorizeMutation(github, "review"),
           );
           return {
             authorized: true,
-            published,
+            ...publication,
             checkpoint: buildReviewAnalysisCheckpoint(currentReview),
           } as const;
         } catch (error) {
@@ -761,6 +724,12 @@ export async function executeReviewWorkflow(
     }
 
     output = summaryResult.checkpoint;
+    const findingsPublished = summaryResult.published
+      ? summaryResult.commentIds.length
+      : 0;
+    const publishedCommentIds = new Map(
+      summaryResult.commentIds.map(({ fingerprint, id }) => [fingerprint, id]),
+    );
 
     // Persist tracked findings in ledger
     await step.do("save-pr-findings", publicationStep, async () => {

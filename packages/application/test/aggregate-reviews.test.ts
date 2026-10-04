@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateShardReviews,
+  formatCleanFollowUpReview,
   formatCheckRunOutput,
   formatReconciliationSection,
   formatStructuralImpactSection,
 } from "../src/index.js";
 
 describe("aggregateShardReviews", () => {
+  it("formats a compact follow-up review in the configured language", () => {
+    expect(formatCleanFollowUpReview("ee02be7" + "a".repeat(33), "pt-BR")).toBe(
+      "✅ **Revisão atualizada** · `ee02be7`\nNenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
+    );
+  });
   const fileA = {
     mode: "structural" as const,
     patch:
@@ -415,7 +421,12 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.shardsAnalyzed).toBe(2);
     expect(aggregated.findings).toHaveLength(0);
     expect(aggregated.verdict).toBe("APPROVE");
-    expect(aggregated.summary).toContain("Verdict: Approved");
+    expect(aggregated.summary).toContain("## ✅ Holon · Approved");
+    expect(aggregated.summary).toContain(
+      "**0 active findings** · complete review",
+    );
+    expect(aggregated.summary).toContain("### Changes reviewed");
+    expect(aggregated.summary).not.toContain("Findings: 0 active");
   });
 
   describe("reconciliation formatting", () => {
@@ -530,13 +541,6 @@ describe("aggregateShardReviews", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [
-          {
-            expectedTestPathPattern: "src/user.test.ts",
-            reason: "no_test_file_modified" as const,
-            sourcePath: "src/user.ts",
-          },
-        ],
         totalDownstreamReferencesCount: 1,
       };
 
@@ -546,7 +550,6 @@ describe("aggregateShardReviews", () => {
       expect(formatted).toContain("Exported symbol removed (src/user.ts:5)");
       expect(formatted).toContain("Symbols Modified");
       expect(formatted).toContain("Downstream Impact Radius");
-      expect(formatted).toContain("Test Gaps");
     });
 
     it("returns empty string when report has no impactful changes", () => {
@@ -555,7 +558,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
         totalDownstreamReferencesCount: 0,
       };
       expect(formatStructuralImpactSection(emptyReport)).toBe("");
@@ -568,7 +570,6 @@ describe("aggregateShardReviews", () => {
         downstreamReferences: [],
         repositoryScanTruncated: true,
         securitySurfaces: [],
-        testGaps: [],
       });
 
       expect(formatted).toContain("Repository Scan");
@@ -600,7 +601,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
       };
 
       const aggregated = aggregateShardReviews(plan, shardResults, {
@@ -634,7 +634,6 @@ describe("aggregateShardReviews", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [],
       };
 
       const formatted = formatStructuralImpactSection(report);
@@ -648,7 +647,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
       };
       const aggregatedWithEmpty = aggregateShardReviews(
         plan,

@@ -59,6 +59,9 @@ describe("Think review prompt boundary", () => {
     expect(reviewInstructions).toContain(
       "do not use ellipses, rewrite indentation, or combine distant lines",
     );
+    expect(reviewInstructions).toContain(
+      "up to three short Markdown bullets describing the changes reviewed",
+    );
   });
 
   it("marks oversized patch omission instead of silently claiming coverage", () => {

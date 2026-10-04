@@ -230,13 +230,6 @@ describe("RepositoryExecutorService", () => {
         downstreamReferences: [],
         repositoryScanTruncated: false,
         securitySurfaces: [],
-        testGaps: [
-          {
-            expectedTestPathPattern: "src/index.test.ts",
-            reason: "no_test_file_modified",
-            sourcePath: "src/index.ts",
-          },
-        ],
         totalDownstreamReferencesCount: 0,
       },
       surface: [
