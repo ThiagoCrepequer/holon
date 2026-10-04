@@ -18,6 +18,11 @@ solicitação explícita do usuário define o objetivo e o escopo do trabalho.
 5. Para implementação, use o [guia de engenharia](docs/engineering/README.md)
    para localizar princípios de TypeScript, módulos, testes e fontes oficiais
    do runtime. Leia o tópico necessário, não todos os guias de uma vez.
+6. Para marca, sites, landing pages e interfaces, consulte
+   [identidade e design system](docs/brand/README.md). Use a Semente oficial,
+   as fontes locais e os tokens semânticos. `docs/brand/explorations/` é um
+   arquivo histórico e não define a identidade ativa. O UI Kit é referência
+   estática; sua existência não significa que há um admin em produção.
 
 Não carregue documentação ou skills sem relação com o pedido. Instruções de
 skills externas complementam este arquivo: não substituem pedidos do usuário,

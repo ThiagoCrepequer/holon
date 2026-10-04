@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1770 1130" width="1770" height="1130">
+<rect width="1770" height="1130" fill="#F5F6F3"/>
+<defs><filter id="invert" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="1 1"/><feFuncG type="table" tableValues="1 1"/><feFuncB type="table" tableValues="1 1"/></feComponentTransfer></filter></defs>
+<text x="60" y="77" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="bold" letter-spacing="-2" fill="#17243A">holon</text>
+<text x="60" y="117" font-family="Arial, Helvetica, sans-serif" font-size="23" fill="#536171">Seis caminhos para uma nova identidade</text>
+<text x="1710" y="76" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="34" fill="#596579">ὅλον</text>
+<text x="1710" y="117" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#89919B">estudo inicial · 2026-10-04</text>
+<g transform="translate(60 187)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">01 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">Forma-símbolo</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><path d="M72 18A36 36 0 1 0 83 54" fill="none" stroke="#17243A" stroke-width="12" stroke-linecap="round"/>
+<path d="M76 16l10 8" fill="none" stroke="#4177EF" stroke-width="12" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="10" fill="#4177EF"/></svg>
+<text x="212" y="154" font-family="Arial, Helvetica, sans-serif" font-size="55" font-weight="bold" font-style="normal" letter-spacing="-3" fill="#17243A">holon</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">Órbita</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Parte dentro do todo</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Um ponto com identidade própria</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">participa de um conjunto aberto.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><path d="M72 18A36 36 0 1 0 83 54" fill="none" stroke="#17243A" stroke-width="12" stroke-linecap="round"/>
+<path d="M76 16l10 8" fill="none" stroke="#17243A" stroke-width="12" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="10" fill="#17243A"/></g></svg>
+</g>
+<g transform="translate(610 187)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">02 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">App e avatar</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><path d="M18 18h18v25h28V18h18v64H64V57H36v25H18Z" fill="#17243A"/>
+<path d="M36 43h28v14H36Z" fill="#F36D45"/>
+<circle cx="50" cy="50" r="4" fill="#FFFFFF"/></svg>
+<text x="212" y="154" font-family="Arial, Helvetica, sans-serif" font-size="47" font-weight="bold" font-style="normal" letter-spacing="1" fill="#17243A">HOLON</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">Encaixe</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Monograma H</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Duas partes formam um H legível.</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Funciona em avatar e favicon.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><path d="M18 18h18v25h28V18h18v64H64V57H36v25H18Z" fill="#17243A"/>
+<path d="M36 43h28v14H36Z" fill="#17243A"/>
+<circle cx="50" cy="50" r="4" fill="#FFFFFF"/></g></svg>
+</g>
+<g transform="translate(1160 187)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">03 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">Sistema visual</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><path d="M70 14H29c-9 0-15 6-15 15v42c0 9 6 15 15 15h42c9 0 15-6 15-15V52" fill="none" stroke="#17243A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M43 64h17c3 0 5-2 5-5V41c0-3-2-5-5-5H41c-3 0-5 2-5 5v13" fill="none" stroke="#735BE8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<text x="212" y="154" font-family="Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="normal" font-style="normal" letter-spacing="-3" fill="#17243A">holon</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">Molduras</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Contexto em camadas</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">O recorte interno ganha contexto</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">sem perder sua própria borda.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><path d="M70 14H29c-9 0-15 6-15 15v42c0 9 6 15 15 15h42c9 0 15-6 15-15V52" fill="none" stroke="#17243A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M43 64h17c3 0 5-2 5-5V41c0-3-2-5-5-5H41c-3 0-5 2-5 5v13" fill="none" stroke="#17243A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+</g>
+<g transform="translate(60 637)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">04 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">Marca editorial</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><text x="50" y="72" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="77" font-weight="bold" fill="#17243A">ὅ</text>
+<path d="M19 85h62" stroke="#CE7637" stroke-width="5" stroke-linecap="round"/></svg>
+<text x="212" y="154" font-family="Georgia, Times New Roman, serif" font-size="55" font-weight="bold" font-style="normal" letter-spacing="-4" fill="#17243A">holon</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">ὅλον</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Raiz grega</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">A raiz grega ocupa o centro.</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Uma marca editorial e autoral.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><text x="50" y="72" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="77" font-weight="bold" fill="#17243A">ὅ</text>
+<path d="M19 85h62" stroke="#17243A" stroke-width="5" stroke-linecap="round"/></g></svg>
+</g>
+<g transform="translate(610 637)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">05 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">Produto técnico</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><path d="M18 76h22V51h22V27h16" fill="none" stroke="#17243A" stroke-width="11" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="18" cy="76" r="8" fill="#17243A"/>
+<circle cx="78" cy="27" r="10" fill="#FFFFFF" stroke="#0C9A91" stroke-width="8"/>
+<path d="M55 69l7 7 16-17" fill="none" stroke="#0C9A91" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<text x="212" y="154" font-family="Menlo, Monaco, monospace" font-size="45" font-weight="bold" font-style="normal" letter-spacing="-4" fill="#17243A">holon</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">Rastro</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Revisão além do diff</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Um caminho liga mudança e</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">conclusão verificada.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><path d="M18 76h22V51h22V27h16" fill="none" stroke="#17243A" stroke-width="11" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="18" cy="76" r="8" fill="#17243A"/>
+<circle cx="78" cy="27" r="10" fill="#FFFFFF" stroke="#17243A" stroke-width="8"/>
+<path d="M55 69l7 7 16-17" fill="none" stroke="#17243A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+</g>
+<g transform="translate(1160 637)">
+<rect width="530" height="430" rx="28" fill="#FFFFFF" stroke="#E4E7E9" stroke-width="1"/>
+<text x="30" y="46" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="bold" fill="#89919B">06 / 06</text>
+<text x="500" y="46" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#89919B">Marca orgânica</text>
+<rect x="30" y="78" width="156" height="156" rx="28" fill="#F2F4F5"/>
+<svg x="51" y="99" width="114" height="114" viewBox="0 0 100 100"><path d="M17 69C11 39 37 17 80 18c5 35-12 64-43 65-10 0-17-5-20-14Z" fill="none" stroke="#17243A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42 65c-5-15 7-30 24-29 3 16-10 31-24 29Z" fill="#8864E7"/></svg>
+<text x="212" y="154" font-family="Georgia, Times New Roman, serif" font-size="55" font-weight="normal" font-style="italic" letter-spacing="-3" fill="#17243A">holon</text>
+<text x="32" y="286" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="bold" fill="#17243A">Semente</text>
+<text x="32" y="316" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#5A6777">Todo vivo, parte viva</text>
+<text x="32" y="351" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">Uma forma viva contém outra.</text>
+<text x="32" y="374" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5A6777">A planta e a semente em uma marca.</text>
+<rect x="448" y="270" width="52" height="52" rx="13" fill="#17243A"/>
+<svg x="457" y="279" width="34" height="34" viewBox="0 0 100 100"><g opacity="0.98" filter="url(#invert)"><path d="M17 69C11 39 37 17 80 18c5 35-12 64-43 65-10 0-17-5-20-14Z" fill="none" stroke="#17243A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42 65c-5-15 7-30 24-29 3 16-10 31-24 29Z" fill="#17243A"/></g></svg>
+</g>
+<text x="60" y="1110" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#66717D">A escolha de direção define o símbolo; tipografia, cor e aplicações serão refinadas depois.</text>
+</svg>

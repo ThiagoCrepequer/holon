@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "brand:check": "node tooling/brand/tokens.mjs --check",
+    "brand:generate": "node tooling/brand/tokens.mjs",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "format": "oxfmt .",
