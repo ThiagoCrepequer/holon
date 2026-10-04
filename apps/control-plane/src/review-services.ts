@@ -86,6 +86,7 @@ export interface RepositoryExecutorBinding {
 
 export interface WorkflowLedger
   extends PublicationLedger, ReviewDecisionLedger, FindingLifecycleLedger {
+  hasPriorPublishedReview(runId: string): Promise<boolean>;
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
   saveRunConfiguration(
@@ -455,6 +456,10 @@ export function createReviewServices(
         findCommentByMarker: (marker, kind) =>
           executeGitHubOperation(() =>
             delegate.findCommentByMarker(marker, kind),
+          ),
+        findReviewCommentsByMarkers: (reviewId, markers) =>
+          executeGitHubOperation(() =>
+            delegate.findReviewCommentsByMarkers(reviewId, markers),
           ),
         publish: (input) =>
           executeGitHubOperation(() => delegate.publish(input)),

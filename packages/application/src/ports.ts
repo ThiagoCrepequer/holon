@@ -143,12 +143,18 @@ export interface ReviewDecisionLedger {
 
 export interface PublishCommentInput {
   readonly body: string;
+  readonly comments?:
+    | readonly {
+        readonly body: string;
+        readonly line: number;
+        readonly marker: string;
+        readonly path: string;
+        readonly side: "RIGHT";
+        readonly startLine?: number | undefined;
+      }[]
+    | undefined;
   readonly event?: ReviewVerdict | undefined;
-  readonly line?: number;
   readonly marker: string;
-  readonly path?: string;
-  readonly side?: "RIGHT";
-  readonly startLine?: number;
 }
 
 export interface ReviewPublisher {
@@ -162,6 +168,10 @@ export interface ReviewPublisher {
     marker: string,
     kind: "inline" | "summary",
   ): Promise<{ readonly body: string; readonly id: number } | undefined>;
+  findReviewCommentsByMarkers?(
+    reviewId: number,
+    markers: readonly string[],
+  ): Promise<ReadonlyMap<string, number>>;
   publish(input: PublishCommentInput): Promise<number>;
   replyToComment?(commentId: number, body: string): Promise<number>;
   updateCheckRun?(input: UpdateCheckRunInput): Promise<void>;

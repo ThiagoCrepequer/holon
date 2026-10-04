@@ -164,7 +164,6 @@ resultado. O plano de implementação está detalhado abaixo.
 - [x] Extração sintática de símbolos modificados (`extractChangedSymbols`) com visibilidade (`isExported`) e classificação (`added`, `modified`, `deleted`);
 - [x] Rastreamento de referências downstream (_blast radius_ / call graph aproximado) em arquivos fora do PR (`findDownstreamReferences`);
 - [x] Detecção de quebras de contrato declarativas (`detectContractBreaks`): remoção de exports públicos e migrações SQL destrutivas (`DROP TABLE`, `DROP COLUMN`);
-- [x] Detecção de lacunas de testes (`detectTestGaps`): lógica alterada sem arquivo de teste correspondente no PR;
 - [x] Análise de superfícies de segurança, dependências e egress (`detectSecuritySurfaces`);
 - [x] Orquestrador unificado (`analyzeStructuralImpact`) executado durante a preparação do repositório no Sandbox Container;
 - [x] Enriquecimento do prompt da Fase 1 da LLM com seções determinísticas de impacto estrutural para orientação cirúrgica de ferramentas;

@@ -66,9 +66,6 @@ export function buildShardReviewContext(
             (signal) =>
               shard.files.some((file) => file.path === signal.targetPath),
           ),
-          testGaps: structuralImpact.testGaps.filter((signal) =>
-            shard.files.some((file) => file.path === signal.sourcePath),
-          ),
           securitySurfaces: structuralImpact.securitySurfaces.filter((signal) =>
             shard.files.some((file) => file.path === signal.path),
           ),

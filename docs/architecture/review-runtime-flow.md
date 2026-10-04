@@ -59,7 +59,8 @@ sequenceDiagram
     WF->>WF: validar schema e evidência no diff
     WF->>GH: reler head/base
     alt SHAs iguais e run ainda atual
-      WF->>GH: publicar review e Check Run
+      WF->>GH: publicar uma review com veredito e achados inline
+      WF->>GH: publicar Check Run
       WF->>LE: registrar IDs e concluir
     else run obsoleta
       WF->>LE: terminalizar sem publicar
@@ -116,6 +117,14 @@ contra linhas RIGHT do diff canônico. Resolve um finding anterior apenas com
 evidência positiva da correção. Antes de publicar, relê head/base, compara com a
 run, usa claim condicional no ledger e reconcilia IDs externos após resposta
 ambígua. Todos os caminhos terminais exigem cleanup durável do Sandbox.
+
+A review enviada ao GitHub reúne o veredito e os novos achados inline na mesma
+submissão. O host consulta os comentários dessa review para salvar seus IDs no
+ledger e reconciliar retries. A primeira aprovação sem achados usa um resumo
+estruturado das mudanças; aprovações posteriores sem achados novos usam uma
+mensagem curta com o SHA. O Check Run continua com o resultado completo.
+Sinais heurísticos de ausência de teste correspondente não são calculados nem
+publicados.
 
 ## Funcionalidades retiradas
 

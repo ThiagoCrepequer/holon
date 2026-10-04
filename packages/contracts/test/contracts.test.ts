@@ -38,7 +38,6 @@ import {
   changedSymbolSchema,
   downstreamReferenceSchema,
   contractBreakSignalSchema,
-  testGapSignalSchema,
   securitySurfaceSignalSchema,
   healthCheckReportSchema,
   trackedFindingSchema,
@@ -1351,15 +1350,6 @@ describe("check run contracts", () => {
       expect(contractBreakSignalSchema.parse(signal)).toEqual(signal);
     });
 
-    it("validates testGapSignalSchema correctly", () => {
-      const gap = {
-        expectedTestPathPattern: "test/billing.test.ts",
-        reason: "no_test_file_modified" as const,
-        sourcePath: "src/billing.ts",
-      };
-      expect(testGapSignalSchema.parse(gap)).toEqual(gap);
-    });
-
     it("validates securitySurfaceSignalSchema correctly", () => {
       const sec = {
         excerpt: "const token = env.SECRET_KEY;",
@@ -1393,7 +1383,6 @@ describe("check run contracts", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [],
         totalDownstreamReferencesCount: 1,
       };
       expect(structuralImpactReportSchema.parse(report)).toEqual(report);
