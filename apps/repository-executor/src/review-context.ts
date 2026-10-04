@@ -36,42 +36,41 @@ function serializeBoundedContext(context: ReviewContext): {
   readonly context: ReviewContext;
   readonly serialized: string;
 } {
-  const encode = (changedLineCount: number) => {
-    const candidate = reviewContextSchema.parse({
-      ...context,
-      changedLines: context.changedLines.slice(0, changedLineCount),
-      truncated:
-        (context.truncated ?? false) ||
-        changedLineCount < context.changedLines.length,
-    });
-    const serialized = JSON.stringify(candidate);
-    return {
-      bytes: new TextEncoder().encode(serialized).byteLength,
-      context: candidate,
-      serialized,
-    };
+  const encoder = new TextEncoder();
+  const serialized = JSON.stringify(context);
+  if (encoder.encode(serialized).byteLength <= maximumContextBytes) {
+    return { context, serialized };
+  }
+
+  const emptyContext = {
+    ...context,
+    changedLines: [],
+    truncated: true,
   };
-
-  const complete = encode(context.changedLines.length);
-  if (complete.bytes <= maximumContextBytes) return complete;
-
-  let lowerBound = 0;
-  let upperBound = context.changedLines.length - 1;
-  let selected = encode(0);
-  if (selected.bytes > maximumContextBytes) {
+  let bytes = encoder.encode(JSON.stringify(emptyContext)).byteLength;
+  if (bytes > maximumContextBytes) {
     throw new RangeError("Review context metadata exceeds the byte limit");
   }
-  while (lowerBound <= upperBound) {
-    const midpoint = Math.floor((lowerBound + upperBound) / 2);
-    const candidate = encode(midpoint);
-    if (candidate.bytes <= maximumContextBytes) {
-      selected = candidate;
-      lowerBound = midpoint + 1;
-    } else {
-      upperBound = midpoint - 1;
-    }
+
+  let changedLineCount = 0;
+  for (const changedLine of context.changedLines) {
+    const lineBytes = encoder.encode(JSON.stringify(changedLine)).byteLength;
+    const nextBytes = bytes + lineBytes + (changedLineCount > 0 ? 1 : 0);
+    if (nextBytes > maximumContextBytes) break;
+    bytes = nextBytes;
+    changedLineCount++;
   }
-  return selected;
+
+  const boundedContext = reviewContextSchema.parse({
+    ...context,
+    changedLines: context.changedLines.slice(0, changedLineCount),
+    truncated: true,
+  });
+  const boundedSerialized = JSON.stringify(boundedContext);
+  if (encoder.encode(boundedSerialized).byteLength > maximumContextBytes) {
+    throw new RangeError("Review context exceeds the byte limit");
+  }
+  return { context: boundedContext, serialized: boundedSerialized };
 }
 
 export function buildReviewArtifacts(

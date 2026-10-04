@@ -12,7 +12,6 @@ import {
   SandboxRuntimeError,
   type SandboxPort,
 } from "../src/executor-service.js";
-import { buildReviewArtifacts } from "../src/review-context.js";
 
 const request = executorRequestSchema.parse({
   baseSha: "b".repeat(40),
@@ -1135,7 +1134,6 @@ describe("RepositoryExecutorService", () => {
       ].join("\n"),
     });
 
-    buildReviewArtifacts(amplifiedRequest, []);
     const prepared = await service.prepareRepository(amplifiedRequest);
     const context = await service.loadContext(request.runId);
     expect(prepared.contextBytes).toBeLessThanOrEqual(8_000_000);
