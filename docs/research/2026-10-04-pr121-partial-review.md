@@ -72,3 +72,38 @@ O veredito permanece conservador quando faltar narrativa. O teste focado
 reproduziu `ZodError` antes da mudança e passou depois. Não houve novo deploy
 nem reprodução remota após a correção; esta análise descreve a execução
 anterior e a prova local do contrato alterado.
+
+## Atualização em 2026-10-04: comentários da revisão seguinte
+
+A revisão do head `ad69f06b30f7579d5c41c98511436a6c84893def` publicou dois
+comentários inline e solicitou alterações. Ambos trazem um excerto correto do
+diff, mas não identificam um consumidor quebrado nem uma falha observada:
+
+- Em `packages/contracts/src/review-output.ts`, o comentário afirma que
+  `summary` passou a opcional. A propriedade continua exigida por
+  `z.strictObject`; apenas o valor vazio foi aceito. O parser de transporte
+  força `isDegraded: true` nesse caso, e os demais usos de produção validam a
+  saída normalizada. Não foi demonstrada incompatibilidade.
+- Em `packages/github/src/client.ts`, o comentário alerta que mover
+  `GitHubAppCredentials` poderia quebrar imports. `client.ts` continua
+  exportando o tipo de `authentication.ts`, o barrel de `@holon/github` continua
+  exportando `client.ts`, e o consumidor de produção importa o tipo pelo pacote.
+  O typecheck do monorepo passou. Não foi demonstrada quebra.
+
+Os dois são falsos positivos como findings bloqueadores. A verificação do host
+confirmou apenas posição e excerto do patch, não a correção causal da alegação.
+O prompt já dizia que sinais estruturais não são defeitos automáticos, mas a
+resposta converteu pedidos de verificação em findings. A instrução foi
+refinada para exigir consumidor/operação e falha concreta, incluindo distinção
+entre campo obrigatório e valor vazio e entre remoção e reexport de tipo. O
+analisador estrutural também emitia a pista incorreta
+`exported_symbol_removed` para `GitHubAppCredentials`: sua extração reconhecia
+a declaração removida, mas não a reexportação de tipo adicionada no mesmo
+módulo. O detector agora suprime essa pista somente para `interface` ou `type`
+preservados por reexportação de tipo; remoções de símbolos de runtime e de
+outros nomes continuam sinalizadas. O teste reproduziu a pista antes da
+correção e passou depois.
+
+O corpus V4 guarda controles negativos sintéticos para as duas situações. Testes
+locais verificam o prompt e que o grader conta as alegações como findings
+inesperados; ainda falta avaliação live do Agent para medir a redução real.

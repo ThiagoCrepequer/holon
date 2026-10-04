@@ -54,6 +54,16 @@ it("accepts explicit silence and an exact numeric confidence representation", ()
   ).toBe(0.85);
 });
 
+it("keeps summary mandatory even for degraded model output", () => {
+  expect(
+    modelReviewOutputSchema.safeParse({ findings: [], isDegraded: true })
+      .success,
+  ).toBe(false);
+  expect(() =>
+    parseModelReviewTransport({ findings: [], isDegraded: true }),
+  ).toThrow();
+});
+
 it.each(["", "   "])(
   "retains model findings when the narrative summary is blank (%j)",
   (summary) => {

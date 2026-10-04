@@ -16,6 +16,7 @@ limiar numérico ainda devem ser recalibrados com um corpus maior.
 
 - apontar um comportamento defeituoso, risco de seguranca ou quebra de contrato;
 - explicar o caminho causal entre a mudanca e o impacto;
+- identificar o consumidor ou a operação afetada e o comportamento que falha;
 - citar evidencia recuperada do diff ou do repositorio;
 - usar uma linha que pertença ao diff atual;
 - distinguir fato observado de inferencia;
@@ -32,6 +33,10 @@ limiar numérico ainda devem ser recalibrados com um corpus maior.
 - alegar compreensão estrutural de um arquivo classificado como `textual`;
 - publicar a mesma conclusao em varias linhas;
 - classificar como erro uma preferencia de estilo.
+- transformar uma solicitação para verificar compatibilidade em defeito sem
+  demonstrar uma quebra. Mover uma declaração preservando seu reexport de tipo
+  não prova ruptura; aceitar string vazia num campo obrigatório não o torna
+  opcional. É preciso examinar exports, produtores, normalização e consumidores.
 
 ## Severidade
 
@@ -103,8 +108,16 @@ instrução adversarial acompanhada de regressão real e contexto explicitamente
 parcial. Essas amostras provam o runner, não
 representam uma métrica de qualidade do produto nem autorizam gates numéricos.
 
+A V4 acrescenta dois controles negativos sintéticos baseados nos falsos
+positivos do PR #121: um campo obrigatório que passa a aceitar string vazia com
+normalização no produtor e uma interface movida com reexport de tipo preservado.
+O grader marca comentários que aleguem quebra nesses casos como achados
+inesperados, mesmo com excertos corretos do patch. Essa avaliação offline não
+prova que o Agent real deixará de produzi-los; isso exige execução live com o
+runtime atual.
+
 Em Pull Requests, o workflow de avaliação executa os testes do subject mockado e
-as recordings sintéticas V3, sem secrets nem chamadas a provedores durante a
+as recordings sintéticas V4, sem secrets nem chamadas a provedores durante a
 avaliação. O subject live é acionado somente por `workflow_dispatch` sobre
 `main`, usa o GitHub Environment
 `live-evaluation` e não clona repositório nem publica review. Seu relatório
