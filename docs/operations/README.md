@@ -23,3 +23,5 @@ Estes documentos distinguem comandos de validação local de efeitos remotos. Um
 dry-run não prova credenciais, bindings, cotas nem comportamento de produção.
 
 - [Configuração de repositório e editores](repository-configuration.md)
+
+- [Memória do repositório](repository-memory.md): comandos de proposta, aprovação, inspeção e revogação.

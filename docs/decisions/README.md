@@ -98,3 +98,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0048 — Restaurar deploy automático dos Workers](0048-restore-automatic-worker-deployments.md) — substitui o bloqueio obrigatório da ADR-0047; guarda preservada como ferramenta manual opcional.
 
 - [ADR-0049 — Usar Agents SDK e Think na revisão](0049-use-cloudflare-think-for-pr-review.md) — substitui o motor próprio das ADRs 0018 e 0046; preserva um teto agregado por run e a validação causal.
+
+- [ADR-0051 — Aprender regras do repositório com aprovação de mantenedor](0051-learn-repository-rules-with-maintainer-approval.md): memória funcional, outbox e snapshots por run.

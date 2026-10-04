@@ -35,3 +35,5 @@ Se um desenho contradizer um ADR aceito, o ADR prevalece e o documento de
 arquitetura deve ser corrigido.
 
 - [Configuração imutável por run](../decisions/0037-compile-repository-configuration-per-run.md) e [operação](../operations/repository-configuration.md).
+
+- [Memória incremental do repositório](repository-memory.md): captura, governança humana e snapshots de regras.

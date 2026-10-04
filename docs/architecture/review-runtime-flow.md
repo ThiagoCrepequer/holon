@@ -151,3 +151,7 @@ históricas do ledger permanecem sem leitores. A avaliação live do motor antig
 foi retirada; a avaliação offline recorded permanece. Um smoke remoto com a
 rota e o modelo reais ainda é necessário para provar streaming, tool calling e
 `think_final_answer`; build local e testes Workerd não comprovam essa integração.
+
+## Memória incremental — 2026-10-04
+
+Pela [ADR-0051](../decisions/0051-learn-repository-rules-with-maintainer-approval.md), antes da análise a run sela memória relevante aos paths preparados. Shards recebem regras aprovadas e pistas históricas com origem. Análise e feedback criam outbox transacional para memória por repositório, entregue pelo alarm do ledger. A memória orienta investigação e não altera a validação causal, a evidência ou o veredito. Consulte [o fluxo de memória](repository-memory.md).

@@ -71,6 +71,7 @@ it.each(["", "   "])(
       summary,
       findings: [finding],
       resolutions: [],
+      investigations: [],
       isDegraded: false,
       outputLimitations: [],
     };

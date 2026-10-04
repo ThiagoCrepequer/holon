@@ -69,3 +69,7 @@ O MVP sera considerado validado quando uma bateria de PRs representativos
 mostrar que o sistema encontra regressões contextuais reais, publica comentarios
 nas linhas corretas, nao duplica efeitos em redeliveries e mantem uma taxa de
 falsos positivos aceitavel definida pelo contrato de qualidade.
+
+## Evolução aprovada — memória incremental
+
+A [ADR-0051](../decisions/0051-learn-repository-rules-with-maintainer-approval.md), de 2026-10-04, amplia o produto com observações persistentes, propostas de regras e aprovação de mantenedor por repositório. Isso não inclui conversa livre persistente, RAG vetorial, memória organizacional ou supressão automática de achados.

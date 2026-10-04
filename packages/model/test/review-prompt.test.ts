@@ -214,3 +214,37 @@ it("uses only validated dynamic routes and disables gateway payload logging", ()
     "cf-aig-skip-cache": "true",
   });
 });
+
+it("includes immutable memory context with precedence and rejects foreign run identity", () => {
+  const memory = {
+    identity: {
+      installationId: 99,
+      repositoryId: 42,
+      pullRequestNumber: 7,
+      runId: job.runId,
+      headSha: job.envelope.pullRequest.headSha,
+      baseSha: job.envelope.pullRequest.baseSha,
+    },
+    memoryName: "99/42",
+    revision: 3,
+    capturedAt: "2026-10-04T00:00:00Z",
+    expiresAt: "2026-11-04T00:00:00Z",
+    rules: [],
+    observations: [],
+  };
+  const context = { changedLines: [], files: [], truncated: false, memory };
+  const prompt = preflightReviewPrompt(job, context).prompt;
+  expect(prompt).toContain('"revision":3');
+  expect(prompt).toContain(
+    "Explicit base configuration and host policies take precedence",
+  );
+  expect(() =>
+    preflightReviewPrompt(job, {
+      ...context,
+      memory: {
+        ...memory,
+        identity: { ...memory.identity, installationId: 100 },
+      },
+    }),
+  ).toThrow("identity_mismatch");
+});

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { investigationObservationSchema } from "./repository-memory.js";
 import {
   reviewTextLimits,
   limitReviewText,
@@ -76,6 +77,7 @@ export const reviewResolutionSchema = reviewFindingSchema
   });
 export const modelReviewOutputSchema = z
   .strictObject({
+    investigations: z.array(investigationObservationSchema).max(4).optional(),
     resolutions: z.array(reviewResolutionSchema).max(8).optional(),
     findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
     isDegraded: z.boolean().optional(),
@@ -184,6 +186,7 @@ const resilientLocation = z
  */
 const reviewTransportFields = z
   .object({
+    investigations: z.array(investigationObservationSchema).max(4).optional(),
     resolutions: z
       .array(
         z
@@ -225,6 +228,7 @@ const reviewTransportFields = z
 /** JSON Schema surface for Think's forced final-answer tool. The permissive
  * transport parser below remains the host-side authority after inference. */
 export const modelReviewPromptSchema = z.object({
+  investigations: z.array(investigationObservationSchema).max(4),
   findings: z.array(
     z.object({
       confidence: z.number(),
@@ -291,6 +295,9 @@ export function modelReviewOutputFromTransport(
 ): ModelReviewOutput {
   const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
+    ...(transport.investigations
+      ? { investigations: transport.investigations }
+      : {}),
     ...(transport.resolutions !== undefined
       ? {
           resolutions: transport.resolutions.map((resolution) => ({

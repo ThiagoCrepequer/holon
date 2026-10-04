@@ -11,6 +11,7 @@
   },
   "durable_objects": {
     "bindings": [
+      { "name": "REPOSITORY_MEMORIES", "class_name": "RepositoryMemoryObject" },
       {
         "name": "PROJECT_IDENTIFICATION_REGISTRY",
         "class_name": "ProjectIdentificationRegistryObject",
@@ -44,6 +45,10 @@
     {
       "tag": "review-agent-v1",
       "new_sqlite_classes": ["ReviewAgent"],
+    },
+    {
+      "tag": "repository-memory",
+      "new_sqlite_classes": ["RepositoryMemoryObject"],
     },
   ],
   "queues": {

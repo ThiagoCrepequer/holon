@@ -191,6 +191,7 @@ it("completes a Think prompt workflow with a simulated structured model response
               isDegraded: false,
               outputLimitations: [],
               resolutions: [],
+              investigations: [],
               summary: "No verified regressions.",
             }),
           });

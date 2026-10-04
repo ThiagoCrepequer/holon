@@ -31,6 +31,15 @@ export function redactModelReviewOutput(
   output: ModelReviewOutput,
 ): ModelReviewOutput {
   return {
+    ...(output.investigations
+      ? {
+          investigations: output.investigations.map((item) => ({
+            ...item,
+            summary: redactSecrets(item.summary),
+            excerpt: redactSecrets(item.excerpt),
+          })),
+        }
+      : {}),
     ...(output.resolutions !== undefined
       ? {
           resolutions: output.resolutions.map((resolution) => ({

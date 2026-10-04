@@ -6,6 +6,11 @@ import type {
   ReviewDecisionContext,
   ReviewLedger,
 } from "@holon/application";
+import {
+  type MemorySnapshot,
+  memoryRecordResultSchema,
+  reconciledReviewOutputSchema as memoryReviewOutputSchema,
+} from "@holon/contracts";
 import type {
   ModelGenerationReservation,
   ModelGenerationAdmission,
@@ -62,6 +67,7 @@ import { ReviewAnalysisStore } from "./review-analysis-store.js";
 import { ReviewGenerationBudgetStore } from "./review-generation-budget-store.js";
 import { ReviewToolBudgetStore } from "./review-tool-budget-store.js";
 import { RunConfigurationStore } from "./run-configuration-store.js";
+import { RunMemoryStore } from "./run-memory-store.js";
 import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 export interface PublicationRow extends Record<string, SqlStorageValue> {
@@ -612,6 +618,10 @@ export class ReviewLedgerObject
   }
   public override async alarm(): Promise<void> {
     const startedAt = new Date();
+    this.ctx.storage.sql.exec(
+      "DELETE FROM run_memory_snapshots WHERE expires_at<=?",
+      startedAt.toISOString(),
+    );
     const cleanup = this.dueCleanup(startedAt.toISOString());
 
     if (cleanup !== undefined) {
@@ -653,10 +663,44 @@ export class ReviewLedgerObject
       }
     }
 
+    await this.deliverMemory();
     await this.reconcileChecks();
     await this.processDueWorkflowSupersession(startedAt.toISOString());
 
     await this.ensureMaintenanceAlarm();
+  }
+
+  public loadRunMemory(runId: string): Promise<MemorySnapshot | undefined> {
+    return Promise.resolve(new RunMemoryStore(this.ctx.storage).load(runId));
+  }
+  public async saveRunMemory(snapshot: MemorySnapshot): Promise<void> {
+    new RunMemoryStore(this.ctx.storage).save(snapshot);
+    await this.ensureMaintenanceAlarm();
+  }
+  private async deliverMemory(): Promise<void> {
+    const store = new RunMemoryStore(this.ctx.storage);
+    for (const pending of store.due()) {
+      try {
+        const delivery = pending.delivery;
+        const identity = delivery.observation.source;
+        const currentName =
+          await this.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+            String(identity.installationId),
+          ).register(identity.installationId, identity.repositoryId);
+        if (currentName === delivery.memoryName) {
+          const result = memoryRecordResultSchema.parse(
+            await this.env.REPOSITORY_MEMORIES.getByName(currentName).record(
+              delivery.observation,
+            ),
+          );
+          if (result === "capacity_exceeded")
+            throw new Error("Repository memory capacity exceeded");
+        }
+        store.complete(pending.id);
+      } catch {
+        store.retry(pending.id, pending.attempts + 1);
+      }
+    }
   }
 
   private latestRunId(): string | undefined {
@@ -830,6 +874,10 @@ export class ReviewLedgerObject
              UNION ALL
              SELECT next_attempt_at FROM workflow_supersessions WHERE state = 'pending'
              UNION ALL
+             SELECT expires_at AS next_attempt_at FROM run_memory_snapshots
+             UNION ALL
+             SELECT next_attempt_at FROM memory_outbox
+             UNION ALL
              SELECT next_attempt_at FROM check_run_tasks WHERE revision > completed_revision
            )) AS next_attempt_at`,
       )
@@ -887,13 +935,52 @@ export class ReviewLedgerObject
     );
   }
 
-  public saveReviewAnalysis(
+  public async saveReviewAnalysis(
     runId: string,
     output: ReconciledReviewOutput,
   ): Promise<ReviewAnalysisCheckpoint> {
-    return Promise.resolve(
-      new ReviewAnalysisStore(this.ctx.storage).save(runId, output),
-    );
+    const store = new RunMemoryStore(this.ctx.storage);
+    const validated = memoryReviewOutputSchema.parse(output);
+    const result = this.ctx.storage.transactionSync(() => {
+      const checkpoint = new ReviewAnalysisStore(this.ctx.storage).save(
+        runId,
+        validated,
+      );
+      const snapshot = store.load(runId);
+      if (snapshot) {
+        for (const finding of validated.activeFindings.filter((candidate) =>
+          validated.updatedTrackedFindings.some(
+            (tracked) =>
+              tracked.fingerprint === candidate.fingerprint &&
+              tracked.lastSeenRunId === runId &&
+              tracked.lastSeenHeadSha === snapshot.identity.headSha,
+          ),
+        ))
+          store.enqueue(snapshot, {
+            id: `finding:${runId}:${finding.fingerprint}`,
+            kind: "finding",
+            path: finding.location.path,
+            line: finding.location.line,
+            summary: finding.diagnostic.slice(0, 1500),
+            fingerprint: finding.fingerprint,
+            createdAt: snapshot.capturedAt,
+          });
+        for (const [index, investigation] of (
+          validated.investigations ?? []
+        ).entries())
+          store.enqueue(snapshot, {
+            id: `investigation:${runId}:${index}`,
+            kind: "investigation",
+            path: investigation.path,
+            line: investigation.line,
+            summary: investigation.summary,
+            createdAt: snapshot.capturedAt,
+          });
+      }
+      return checkpoint;
+    });
+    await this.ensureMaintenanceAlarm();
+    return result;
   }
 
   public loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput> {
@@ -1072,10 +1159,39 @@ export class ReviewLedgerObject
     return Promise.resolve(row !== undefined);
   }
 
-  public applyFindingFeedback(
+  public async applyFindingFeedback(
     input: ApplyFindingFeedbackInput,
   ): Promise<AppliedFindingFeedback> {
-    return Promise.resolve(this.findingStore.applyFindingFeedback(input));
+    const result = this.ctx.storage.transactionSync(() => {
+      const applied = this.findingStore.applyFindingFeedback(input);
+      if (applied.feedback && applied.outcome === "applied") {
+        const store = new RunMemoryStore(this.ctx.storage);
+        const finding = this.findingStore.findFindingByCommentId(
+          input.prKey,
+          input.targetCommentId,
+        );
+        const snapshot = finding
+          ? store.source(finding.lastSeenRunId)
+          : undefined;
+        if (snapshot && finding)
+          store.enqueue(snapshot, {
+            id: `feedback:${input.githubCommentId}`,
+            kind: "feedback",
+            path: finding.filePath,
+            line: finding.line,
+            summary: input.reason ?? finding.diagnostic.slice(0, 1500),
+            ...(input.reason ? { feedbackReason: input.reason } : {}),
+            createdAt: input.createdAt,
+            authorLogin: input.authorLogin,
+            commentId: input.githubCommentId,
+            label: input.label,
+            fingerprint: finding.fingerprint,
+          });
+      }
+      return applied;
+    });
+    await this.ensureMaintenanceAlarm();
+    return result;
   }
 
   public completeFeedbackReply(
