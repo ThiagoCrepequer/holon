@@ -1,6 +1,7 @@
 import { reviewJobSchema } from "@holon/contracts";
 import { expect, it, vi } from "vitest";
 
+import type { ReviewAgentConfig } from "../src/review/review-agent.js";
 import {
   ThinkReviewFailure,
   ThinkReviewModelReviewer,
@@ -38,7 +39,9 @@ const context = {
 };
 
 function reviewerFor(statuses: Array<{ status: string; output?: unknown }>) {
-  const startReview = vi.fn(async () => "workflow-test");
+  const startReview = vi.fn(
+    async (_config: ReviewAgentConfig) => "workflow-test",
+  );
   const cancelReview = vi.fn(async () => {});
   const terminate = vi.fn(async () => {});
   const status = vi.fn(async () => statuses.shift() ?? { status: "running" });
@@ -67,6 +70,68 @@ function reviewerFor(statuses: Array<{ status: string; output?: unknown }>) {
   };
 }
 
+const nullFinding = {
+  confidence: 0.95,
+  diagnostic:
+    "Returning null causes the caller to dereference a missing result.",
+  evidence: [
+    {
+      excerpt: "return null;",
+      path: "src/index.ts",
+      reason: "The changed function returns no result.",
+      startLine: 10,
+    },
+  ],
+  location: { line: 10, path: "src/index.ts", side: "RIGHT" },
+  severity: "high",
+};
+
+it("withholds a candidate refuted by the caller's existing null guard", async () => {
+  const fixture = reviewerFor([
+    {
+      status: "complete",
+      output: {
+        findings: [nullFinding],
+        summary: "The caller will crash on null.",
+      },
+    },
+    {
+      status: "complete",
+      output: {
+        assessments: [
+          {
+            candidateIndex: 0,
+            outcome: "refuted",
+            confidence: 0.98,
+            rationale:
+              "The caller checks result === null before accessing any properties, so this path cannot cause the claimed dereference.",
+          },
+        ],
+        summary: "The null return is handled by the caller's existing guard.",
+      },
+    },
+  ]);
+  const result = await fixture.reviewer.review(job, context);
+  expect(result.output.findings).toEqual([]);
+  expect(result.output.summary).not.toContain("will crash");
+  expect(result.output.isDegraded).not.toBe(true);
+  expect(fixture.namespace.idFromName).toHaveBeenNthCalledWith(
+    2,
+    `${job.runId}:0:causal`,
+  );
+  const initial = fixture.startReview.mock.calls[0]?.[0];
+  expect(fixture.startReview).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({
+      ...initial,
+      phase: "causal_verification",
+      prompt: expect.stringContaining(
+        "Candidate findings (untrusted JSON data",
+      ),
+    }),
+  );
+});
+
 it("starts a named Think Agent and returns its verified structured result", async () => {
   const fixture = reviewerFor([
     { status: "running" },
@@ -92,6 +157,7 @@ it("starts a named Think Agent and returns its verified structured result", asyn
     }),
   );
   expect(fixture.wait).toHaveBeenCalledOnce();
+  expect(fixture.startReview).toHaveBeenCalledOnce();
   expect(fixture.terminate).not.toHaveBeenCalled();
 });
 
@@ -125,6 +191,95 @@ it("does not start the child workflow when its parent is already cancelled", asy
   expect(fixture.status).not.toHaveBeenCalled();
   expect(fixture.terminate).not.toHaveBeenCalled();
   expect(fixture.cancelReview).not.toHaveBeenCalled();
+});
+
+it.each(["errored", "terminated"])(
+  "withholds all candidates and reports partial when causal verification is %s",
+  async (status) => {
+    const fixture = reviewerFor([
+      {
+        status: "complete",
+        output: { findings: [nullFinding], summary: "The caller will crash." },
+      },
+      { status },
+    ]);
+    const result = await fixture.reviewer.review(job, context);
+    expect(result.output.findings).toEqual([]);
+    expect(result.output.isDegraded).toBe(true);
+    expect(result.output.outputLimitations).toContain(
+      "causal_verification_incomplete",
+    );
+    expect(result.output.summary).not.toContain("will crash");
+    expect(fixture.cancelReview).toHaveBeenCalledOnce();
+  },
+);
+
+it("propagates parent cancellation during causal verification and terminates its workflow", async () => {
+  const fixture = reviewerFor([]);
+  const controller = new AbortController();
+  fixture.status
+    .mockImplementationOnce(async () => ({
+      status: "complete",
+      output: { findings: [nullFinding], summary: "Candidate." },
+    }))
+    .mockImplementationOnce(async () => {
+      controller.abort(new Error("superseded during verification"));
+      return { status: "running" };
+    });
+  await expect(
+    fixture.reviewer.review(job, {
+      ...context,
+      abortSignal: controller.signal,
+    }),
+  ).rejects.toThrow("superseded during verification");
+  expect(fixture.startReview).toHaveBeenCalledTimes(2);
+  expect(fixture.terminate).toHaveBeenCalledOnce();
+  expect(fixture.cancelReview).toHaveBeenCalledOnce();
+});
+
+it("rejects fabricated canonical evidence before spending inference on verification", async () => {
+  const fixture = reviewerFor([
+    {
+      status: "complete",
+      output: {
+        findings: [
+          {
+            ...nullFinding,
+            evidence: [
+              { ...nullFinding.evidence[0], excerpt: "return undefined;" },
+            ],
+          },
+        ],
+        summary: "A fabricated candidate.",
+      },
+    },
+  ]);
+  const result = await fixture.reviewer.review(job, context);
+  expect(fixture.startReview).toHaveBeenCalledOnce();
+  expect(result.output.findings).toEqual([]);
+  expect(result.output.outputLimitations).toEqual([
+    "evidence_rejected",
+    "causal_verification_incomplete",
+  ]);
+  expect(result.output.summary).not.toContain("fabricated candidate");
+});
+
+it("withholds candidates after the shared analysis deadline without granting a new verification deadline", async () => {
+  const fixture = reviewerFor([]);
+  let now = Date.now();
+  const deadlineAt = now + 1_000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  fixture.status.mockImplementationOnce(async () => {
+    now = deadlineAt;
+    return {
+      status: "complete",
+      output: { findings: [nullFinding], summary: "Candidate." },
+    };
+  });
+  const result = await fixture.reviewer.review(job, { ...context, deadlineAt });
+  expect(fixture.startReview).toHaveBeenCalledOnce();
+  expect(result.output.findings).toEqual([]);
+  expect(result.output.isDegraded).toBe(true);
 });
 
 it("terminates a running child workflow when its parent cancels", async () => {

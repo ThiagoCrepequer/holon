@@ -35,6 +35,11 @@ normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 
 Plano de funcionalidade proposto: [Identificação de tecnologias e versões por projeto](planning/project-version-identification-plan.md), com monorepos, inferência assistida, cache e integração ao workflow.
 
+A verificação de candidatos antes da publicação segue a
+[ADR-0050](decisions/0050-verify-finding-causality-before-publication.md), o
+[contrato de qualidade](product/review-quality-contract.md#verificação-causal-antes-da-publicação)
+e o [fluxo atual](architecture/review-runtime-flow.md).
+
 ## Semantica dos documentos
 
 | Tipo           | Autoridade                                    | Politica de alteracao                                    |

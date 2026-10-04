@@ -8,6 +8,7 @@ const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as RunId;
 const config = {
   deadlineAt: Date.now() + 60_000,
+  phase: "investigation" as const,
   prKey: "github:42:pr:7",
   prompt: "review",
   runId,
@@ -15,7 +16,11 @@ const config = {
   totalShards: 1,
 };
 
-function harness(outcomes: RepositoryToolOutcome[], reserve = true) {
+function harness(
+  outcomes: RepositoryToolOutcome[],
+  reserve = true,
+  phase: "investigation" | "causal_verification" = "investigation",
+) {
   const dispose = vi.fn();
   const cancel = vi.fn(async () => {});
   const startTool = vi.fn(async () => ({
@@ -25,7 +30,7 @@ function harness(outcomes: RepositoryToolOutcome[], reserve = true) {
   }));
   const reserveAnalysisToolCall = vi.fn(async () => reserve);
   const agent = Object.assign(Object.create(ReviewAgent.prototype), {
-    getConfig: () => config,
+    getConfig: () => ({ ...config, phase }),
     isReviewAuthorized: async () => true,
     env: {
       REPOSITORY_EXECUTOR: { startTool },
@@ -67,14 +72,26 @@ it("allows a corrected query after a safe rejection but stops on infrastructure 
   expect(dispose).toHaveBeenCalledTimes(3);
 });
 
-it("stops the turn before touching the executor when the durable tool ceiling is reached", async () => {
-  const { agent, execute, startTool } = harness([], false);
-  await expect(execute({ path: "src/index.ts" }, {})).rejects.toThrow(
-    "Review tool budget exhausted",
-  );
-  expect(startTool).not.toHaveBeenCalled();
-  expect(() => agent.beforeStep()).toThrow("Review tool budget exhausted");
-});
+it.each(["investigation", "causal_verification"] as const)(
+  "stops %s before touching the executor when the durable tool ceiling is reached",
+  async (phase) => {
+    const { agent, execute, startTool, reserveAnalysisToolCall } = harness(
+      [],
+      false,
+      phase,
+    );
+    await expect(execute({ path: "src/index.ts" }, {})).rejects.toThrow(
+      "Review tool budget exhausted",
+    );
+    expect(startTool).not.toHaveBeenCalled();
+    expect(reserveAnalysisToolCall).toHaveBeenCalledWith(
+      runId,
+      config.shardIndex,
+      config.totalShards,
+    );
+    expect(() => agent.beforeStep()).toThrow("Review tool budget exhausted");
+  },
+);
 
 it("refuses repository reads after the run loses authorization", async () => {
   const { agent, execute, startTool, reserveAnalysisToolCall } = harness([]);
@@ -122,6 +139,7 @@ it("cancels and disposes an in-flight repository operation when the turn aborts"
 it("disables message and tool payload storage when tracing payloads are turned off", async () => {
   const agent = Object.assign(Object.create(ReviewAgent.prototype), {
     env: { AGENT_TRACE_PAYLOADS: "disabled" },
+    getConfig: () => config,
     getSystemPrompt: () => "Read-only review instructions",
     isReviewAuthorized: async () => true,
   }) as ReviewAgent;

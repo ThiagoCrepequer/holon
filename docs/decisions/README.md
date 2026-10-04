@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-04
 ---
 
 # Decisões
@@ -98,3 +98,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0048 — Restaurar deploy automático dos Workers](0048-restore-automatic-worker-deployments.md) — substitui o bloqueio obrigatório da ADR-0047; guarda preservada como ferramenta manual opcional.
 
 - [ADR-0049 — Usar Agents SDK e Think na revisão](0049-use-cloudflare-think-for-pr-review.md) — substitui o motor próprio das ADRs 0018 e 0046; preserva um teto agregado por run e a validação causal.
+
+- [ADR-0050 — Verificar causalidade antes da publicação](0050-verify-finding-causality-before-publication.md) — complementa a ADR-0049 com uma conversa isolada para confirmar ou refutar candidatos e um gate determinístico no host.

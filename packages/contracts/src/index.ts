@@ -1,4 +1,5 @@
 export * from "./check-run.js";
+export * from "./causal-verification.js";
 export * from "./executor.js";
 export * from "./feedback.js";
 export * from "./finding-lifecycle.js";
