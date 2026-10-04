@@ -16,23 +16,21 @@ representava o Agent Think e, portanto, não deve ser usada para estimar sua
 qualidade ou custo. Uma avaliação live futura deve iniciar o Agent real, com
 Workflow, tools e orçamento equivalentes ao runtime de PR.
 
-## Pull Requests
+## Avaliação offline
 
-`.github/workflows/evaluation-offline.yml` executa o corpus V3 contra
-recordings sintéticas, publica resumo no GitHub Actions Job Summary e retém o
-relatório `recorded-output.json` como artifact por 14 dias. Não recebe secrets
-nem chama provider externo. O relatório contém configuração, IDs, métricas e
-categorias de falha, sem patches ou respostas integrais.
-
-Para reproduzir localmente:
+Os testes do pacote `@holon/evaluation` fazem parte do gate geral `pnpm verify`
+no CI. A execução do corpus V3 contra recordings sintéticas é manual:
 
 ```bash
 pnpm --filter @holon/evaluation evaluate:recorded
 ```
 
-Um resultado verde prova apenas a estabilidade do corpus e dos graders
-registrados. Não prova a qualidade do modelo escolhido, execução de tools,
-Sandbox, GitHub App ou publicação remota. Consulte
+O comando grava `artifacts/evaluation/recorded-output.json` localmente, sem
+secrets ou chamada a provider externo. O relatório contém configuração, IDs,
+métricas e categorias de falha, sem patches ou respostas integrais. Um resultado
+verde prova apenas a estabilidade do corpus e dos graders registrados. Não
+prova a qualidade do modelo escolhido, execução de tools, Sandbox, GitHub App
+ou publicação remota. Consulte
 [teste e evidência](../engineering/testing-and-evidence.md) para separar os
 níveis de prova.
 
