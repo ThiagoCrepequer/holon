@@ -46,3 +46,5 @@ export default {
 
 export { ProjectIdentificationCacheObject } from "./project-identification/project-identification-cache.js";
 export { ProjectIdentificationRegistryObject } from "./project-identification/project-identification-registry.js";
+
+export { RepositoryMemoryObject } from "./memory/repository-memory-object.js";

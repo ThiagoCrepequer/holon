@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { investigationObservationSchema } from "./repository-memory.js";
 import {
   reviewTextLimits,
   limitReviewText,
@@ -76,6 +77,7 @@ export const reviewResolutionSchema = reviewFindingSchema
   });
 export const modelReviewOutputSchema = z
   .strictObject({
+    investigations: z.array(investigationObservationSchema).max(4).optional(),
     resolutions: z.array(reviewResolutionSchema).max(8).optional(),
     findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
     isDegraded: z.boolean().optional(),
@@ -184,6 +186,7 @@ const resilientLocation = z
  */
 const reviewTransportFields = z
   .object({
+    investigations: z.array(investigationObservationSchema).max(4).optional(),
     resolutions: z
       .array(
         z
@@ -222,22 +225,28 @@ const reviewTransportFields = z
   })
   .strip();
 
-/** JSON Schema surface for Think's forced final-answer tool. The permissive
- * transport parser below remains the host-side authority after inference. */
+/** JSON Schema surface for Think's forced final-answer tool. Evidence remains
+ * structurally permissive here so the host can reject unevidenced candidates
+ * individually instead of aborting Think's entire prompt workflow. */
 export const modelReviewPromptSchema = z.object({
+  investigations: z.array(investigationObservationSchema).max(4),
   findings: z.array(
     z.object({
       confidence: z.number(),
       diagnostic: z.string(),
-      evidence: z.array(
-        z.object({
-          endLine: z.number().int().nullable(),
-          excerpt: z.string(),
-          path: z.string(),
-          reason: z.string(),
-          startLine: z.number().int(),
-        }),
-      ),
+      evidence: z
+        .array(
+          z.object({
+            endLine: z.number().int().nullable(),
+            excerpt: z.string(),
+            path: z.string(),
+            reason: z.string(),
+            startLine: z.number().int(),
+          }),
+        )
+        .describe(
+          "Provide at least one source excerpt supporting this candidate. Candidates without valid evidence are rejected and make the review partial.",
+        ),
       location: z.object({
         line: z.number().int(),
         path: z.string(),
@@ -254,15 +263,19 @@ export const modelReviewPromptSchema = z.object({
     z.object({
       confidence: z.number(),
       diagnostic: z.string(),
-      evidence: z.array(
-        z.object({
-          endLine: z.number().int().nullable(),
-          excerpt: z.string(),
-          path: z.string(),
-          reason: z.string(),
-          startLine: z.number().int(),
-        }),
-      ),
+      evidence: z
+        .array(
+          z.object({
+            endLine: z.number().int().nullable(),
+            excerpt: z.string(),
+            path: z.string(),
+            reason: z.string(),
+            startLine: z.number().int(),
+          }),
+        )
+        .describe(
+          "Provide at least one source excerpt proving this resolution. Resolutions without valid evidence are rejected and make the review partial.",
+        ),
       fingerprint: z.string(),
       location: z.object({
         line: z.number().int(),
@@ -277,7 +290,55 @@ export const modelReviewPromptSchema = z.object({
 
 export const modelReviewTransportSchema = z.preprocess((value) => {
   if (typeof value !== "object" || value === null) return value;
-  return { ...value, outputLimitations: reviewOutputLimitations(value) };
+  const raw = value as Record<string, unknown>;
+  // Invalid envelopes still fail. Recovery applies only to candidate evidence.
+  const envelope = reviewTransportFields
+    .omit({ findings: true, resolutions: true })
+    .safeParse(raw);
+  if (!envelope.success) return raw;
+  const limitations = new Set([
+    ...(envelope.data.outputLimitations ?? []),
+    ...reviewOutputLimitations(raw),
+  ]);
+  let rejected = false;
+  const retainEvidenced = (candidate: unknown) => {
+    if (typeof candidate !== "object" || candidate === null) return true;
+    const evidence = resilientEvidence.safeParse(
+      (candidate as Record<string, unknown>).evidence,
+    );
+    const valid =
+      evidence.success &&
+      reviewFindingSchema.shape.evidence.safeParse(
+        evidence.data.map((item) => ({
+          ...item,
+          ...(item.endLine === null ? { endLine: undefined } : {}),
+        })),
+      ).success;
+    if (!valid) rejected = true;
+    return valid;
+  };
+  const findings = Array.isArray(raw.findings)
+    ? raw.findings.slice(0, reviewTextLimits.findings).filter(retainEvidenced)
+    : raw.findings;
+  // Preserve the existing hard limit on the resolution envelope.
+  const resolutions =
+    Array.isArray(raw.resolutions) && raw.resolutions.length <= 8
+      ? raw.resolutions.filter(retainEvidenced)
+      : raw.resolutions;
+  if (rejected) limitations.add("evidence_rejected");
+  return {
+    ...raw,
+    findings,
+    resolutions,
+    ...(rejected
+      ? {
+          isDegraded: true,
+          summary:
+            "Review incomplete: candidates without valid evidence were rejected. Retained candidates still require verification.",
+        }
+      : {}),
+    outputLimitations: [...limitations],
+  };
 }, reviewTransportFields);
 
 export function parseModelReviewTransport(value: unknown): ModelReviewOutput {
@@ -291,6 +352,9 @@ export function modelReviewOutputFromTransport(
 ): ModelReviewOutput {
   const transport = reviewTransportFields.parse(raw);
   return modelReviewOutputSchema.parse({
+    ...(transport.investigations
+      ? { investigations: transport.investigations }
+      : {}),
     ...(transport.resolutions !== undefined
       ? {
           resolutions: transport.resolutions.map((resolution) => ({

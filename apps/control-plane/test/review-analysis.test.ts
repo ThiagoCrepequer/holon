@@ -78,6 +78,7 @@ function createMockServices(
   },
 ): ReviewServices {
   return {
+    resolveMemory: () => Promise.reject(new Error("unused")),
     createShardReviewer() {
       return { model: this.model };
     },
@@ -1113,4 +1114,50 @@ it("shares wave preparation with a delayed shard instead of rebuilding while a p
   });
   expect(result.totalShards).toBe(2);
   expect(prepare).toHaveBeenCalledTimes(3);
+});
+
+it("admits investigation discoveries only with canonical changed-line evidence", async () => {
+  const context = {
+    changedLines: [{ line: 10, path: "src/index.ts", side: "RIGHT" as const }],
+    files: [
+      {
+        mode: "structural" as const,
+        patch: canonicalPatch,
+        path: "src/index.ts",
+      },
+    ],
+    truncated: false,
+  };
+  const services = createMockServices(context, {
+    output: {
+      findings: [],
+      summary: "Review complete",
+      investigations: [
+        {
+          path: "src/index.ts",
+          line: 10,
+          excerpt: "return null;",
+          summary:
+            "This branch returns before invoking the downstream consumer.",
+        },
+        {
+          path: "src/index.ts",
+          line: 10,
+          excerpt: "invented();",
+          summary:
+            "An invented observation must never enter repository memory.",
+        },
+      ],
+    },
+    promptTruncated: false,
+  });
+  const result = await analyzeReview(job, services, () => {});
+  expect(result.investigations).toEqual([
+    {
+      path: "src/index.ts",
+      line: 10,
+      excerpt: "return null;",
+      summary: "This branch returns before invoking the downstream consumer.",
+    },
+  ]);
 });

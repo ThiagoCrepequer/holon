@@ -101,4 +101,6 @@ vigentes; os textos anteriores são preservados como histórico.
 
 - [ADR-0050 — Verificar causalidade antes da publicação](0050-verify-finding-causality-before-publication.md) — complementa a ADR-0049 com uma conversa isolada para confirmar ou refutar candidatos e um gate determinístico no host.
 
-- [ADR-0051 — Responder perguntas sobre findings](0051-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.
+- [ADR-0051 — Aprender regras do repositório com aprovação de mantenedor](0051-learn-repository-rules-with-maintainer-approval.md): memória funcional, outbox e snapshots por run.
+
+- [ADR-0052 — Responder perguntas sobre findings](0052-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.

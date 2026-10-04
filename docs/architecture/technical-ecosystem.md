@@ -291,7 +291,7 @@ Agent Think substituiu o motor próprio conforme
 Perguntas sobre findings usam os mesmos SDKs em
 `FindingClarificationAgent`/`FindingClarificationWorkflow`, com bindings próprios
 e leitura autenticada de blobs Git delimitados no control plane, conforme
-[ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md).
+[ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md).
 
 ## Regras para agentes de codigo
 

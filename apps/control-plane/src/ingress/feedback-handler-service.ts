@@ -24,6 +24,7 @@ import {
   createKeyringTelemetryOptions,
   resolveControlPlaneKeyring,
 } from "../github/github-credentials.js";
+import { handleMemoryComment } from "../memory/memory-comment.js";
 import {
   consoleLogger,
   errorKind,
@@ -150,8 +151,9 @@ export async function handleFeedbackCommentWebhook(
       resolved.prKey,
     );
     if (decision === undefined) return { actionTaken: "ignored" };
+    const isMemoryCommand = event.body.trim().startsWith("/holon memory ");
     const session =
-      dependencies.publisher === undefined
+      dependencies.publisher === undefined || isMemoryCommand
         ? await createSession(env, event, dependencies, logger)
         : undefined;
     const publisher = await resolvePublisher(
@@ -160,6 +162,10 @@ export async function handleFeedbackCommentWebhook(
       dependencies,
       session,
     );
+    if (isMemoryCommand) {
+      if (!session) throw new Error("Memory command session unavailable");
+      return await handleMemoryComment(env, event, session, publisher);
+    }
     return await processFeedbackComment(
       {
         authorAssociation: event.authorAssociation,

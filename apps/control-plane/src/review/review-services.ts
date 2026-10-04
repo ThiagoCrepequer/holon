@@ -48,6 +48,10 @@ import {
 } from "../github/github-operations.js";
 import type { DesiredCheckRun } from "../ledger/check-run-reconciliation.js";
 import type { WorkflowController } from "../ledger/workflow-superseding.js";
+import {
+  resolveRunMemory,
+  type RunMemoryLedger,
+} from "../memory/run-memory.js";
 import { errorKind, type StructuredLogger } from "../observability.js";
 import { createProjectIdentifier } from "../project-identification/project-identification-service.js";
 import type { PublicationLedger } from "./authorized-publication.js";
@@ -83,7 +87,8 @@ export interface WorkflowLedger
     PublicationLedger,
     ReviewDecisionLedger,
     FindingLifecycleLedger,
-    RunConfigurationLedger {
+    RunConfigurationLedger,
+    RunMemoryLedger {
   hasPriorPublishedReview(runId: string): Promise<boolean>;
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
@@ -170,6 +175,9 @@ export interface GitHubMutationContext {
 }
 
 export interface ReviewServices {
+  resolveMemory(
+    paths: string[],
+  ): Promise<import("@holon/contracts").MemorySnapshot>;
   createShardReviewer(
     index: number,
     totalShards: number,
@@ -481,6 +489,7 @@ export function createReviewServices(
   };
 
   return {
+    resolveMemory: (paths) => resolveRunMemory(env, job, ledger, paths),
     executor,
     ledger,
     model,

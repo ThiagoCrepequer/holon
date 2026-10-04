@@ -1,5 +1,5 @@
 ---
-id: ADR-0051
+id: ADR-0052
 kind: decision
 status: accepted
 date: 2026-10-04

@@ -92,7 +92,7 @@ O host libera apenas confirmados; incerteza gera parcialidade. As fases
 compartilham o orçamento e o deadline da run.
 
 Após publicação, perguntas na discussão inline usam um Agent/Workflow próprio
-no control plane conforme [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md).
+no control plane conforme [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md).
 Essa investigação consulta blobs Git autenticados no SHA fixado, com limites
 próprios; não reabre C05 nem a run. O ledger conserva a autoridade para retirar
 um diagnóstico e recalcular o Check Run existente.

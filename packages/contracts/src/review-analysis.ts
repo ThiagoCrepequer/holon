@@ -5,6 +5,7 @@ import {
   trackedFindingSchema,
 } from "./finding-lifecycle.js";
 import { reviewOutputPreferencesSchema } from "./repository-config/input.js";
+import { investigationObservationSchema } from "./repository-memory.js";
 import { repositoryPolicySourceSchema } from "./repository-policy.js";
 import { reviewExecutionLimits } from "./review-execution-limits.js";
 import { reviewTextLimits } from "./review-limits.js";
@@ -13,6 +14,7 @@ import { structuralImpactReportSchema } from "./structural-analysis.js";
 
 export const reconciledReviewOutputSchema = aggregatedReviewResultSchema.extend(
   {
+    investigations: z.array(investigationObservationSchema).max(256).optional(),
     output: reviewOutputPreferencesSchema,
     analysisIsDegraded: z.boolean().optional(),
     verdictPolicy: z
@@ -40,6 +42,7 @@ export type ReconciledReviewOutput = z.infer<
 /** Only publication identifiers and bounded metadata cross a Workflow checkpoint. */
 export const reviewAnalysisCheckpointSchema = reconciledReviewOutputSchema
   .omit({
+    investigations: true,
     findings: true,
     activeFindings: true,
     resolvedFindings: true,
@@ -65,6 +68,7 @@ export function buildReviewAnalysisCheckpoint(
   output: ReconciledReviewOutput,
 ): ReviewAnalysisCheckpoint {
   const {
+    investigations: _investigations,
     findings: _findings,
     activeFindings,
     resolvedFindings,

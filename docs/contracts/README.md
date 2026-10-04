@@ -99,6 +99,24 @@ persistidos; registros incompletos são rejeitados.
 
 A [ADR-0036](../decisions/0036-use-single-current-development-contracts.md) governa nomes e evolução dos contratos: um formato atual por responsabilidade, sem APIs de compatibilidade.
 
+## Rejeição de evidências por candidato — 2026-10-04
+
+O schema do prompt orienta o modelo a fornecer pelo menos um excerto por finding
+ou resolução. Essa superfície permanece estruturalmente permissiva para que o
+Think entregue a resposta ao host mesmo quando um candidato não tiver evidência.
+O transporte valida as evidências de cada candidato, incluindo paths e intervalos
+de linhas, antes de validar a saída agregada. Candidatos sem evidências válidas
+são descartados individualmente; os demais seguem pelos gates canônico e causal.
+Não são criadas evidências substitutas.
+
+Qualquer descarte força `isDegraded: true`, adiciona `evidence_rejected` e troca
+a narrativa do modelo por um aviso de análise incompleta, evitando repetir
+alegações descartadas. Limitações anteriores são preservadas na normalização.
+Mesmo com zero candidatos retidos, a saída não pode produzir aprovação. O
+envelope continua obrigatório e limitado: formatos inválidos de `findings`,
+resumo ausente, metadados inválidos e mais de oito resoluções continuam causando
+erro. Os schemas do domínio continuam exigindo evidência não vazia.
+
 ## Configuração compilada — 2026-09-09
 
 `repository-config/input.ts` é a entrada estrutural única; `snapshot.ts` separa
@@ -117,4 +135,4 @@ A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/f
 
 ## Perguntas em findings
 
-`finding-clarification.ts` valida admissão, identidade do Agent, registro persistido, leituras e resposta. A resposta limita explicação a 5.000 caracteres, cenário a 2.000 e até seis referências, com linhas positivas e trecho de até 2.000 caracteres. O host exige correspondência às leituras efetivas, não apenas um schema válido. A fase `finding_clarification` usa reservas separadas por pergunta. A [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md) define autoridade e efeitos.
+`finding-clarification.ts` valida admissão, identidade do Agent, registro persistido, leituras e resposta. A resposta limita explicação a 5.000 caracteres, cenário a 2.000 e até seis referências, com linhas positivas e trecho de até 2.000 caracteres. O host exige correspondência às leituras efetivas, não apenas um schema válido. A fase `finding_clarification` usa reservas separadas por pergunta. A [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md) define autoridade e efeitos.

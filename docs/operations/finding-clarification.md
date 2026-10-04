@@ -9,7 +9,7 @@ last-reviewed: 2026-10-04
 
 # Perguntas sobre findings na discussão do PR
 
-A [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md) define a
+A [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md) define a
 investigação posterior à publicação. A funcionalidade usa o evento já assinado
 `pull_request_review_comment.created`, a Queue e a configuração da GitHub App.
 
@@ -62,7 +62,7 @@ conclusão; respostas anteriores não contam como evidência.
 ## Ativação e prova remota
 
 O código e `wrangler.jsonc` incluem `FINDING_CLARIFICATION_AGENTS` e
-`FINDING_CLARIFICATION_WORKFLOW`; a migração SQLite 20 é aditiva. Não editar
+`FINDING_CLARIFICATION_WORKFLOW`; a migração SQLite 21 é aditiva. Não editar
 migrações já aplicadas. Nenhum secret novo ou permissão GitHub adicional é
 necessário além de Contents read, Pull requests read/write e Checks read/write
 já exigidos pelo fluxo de review. Verifique a instalação e configuração reais

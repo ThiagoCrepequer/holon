@@ -20,8 +20,10 @@ eventos abaixo. `wrangler tail` acompanha somente eventos novos.
 Para um shard, `agent_workflow_failed` significa apenas que o
 `ReviewShardWorkflow` terminou com status `errored`. Esse código não distingue
 falha do provider, orçamento, tool ou runtime. O ID da instância do shard é
-`review-` seguido do SHA-256 hexadecimal de `<runId>:<shardIndex>` (índice
-começa em zero). Consulte
+`review-` seguido do SHA-256 hexadecimal de `<runId>:<shardIndex>:<phase>` (índice
+começa em zero; fase `investigation` ou `causal_verification`). Para execuções
+anteriores à separação das fases, confirme a fórmula no artefato implantado.
+Consulte
 `wrangler workflows instances describe holon-review-shard-workflow <id> --no-step-output`
 e correlacione com os eventos do Agent antes de atribuir uma causa. Evite
 imprimir step output ou trace payload em relatórios operacionais: eles podem
@@ -38,6 +40,12 @@ quando `wrangler describe` a trunca. Essa saída pode conter código privado:
 inspecione em processo, sem imprimir ou persistir payload, e relate somente
 estado, etapa e falhas de schema. Veja a
 [investigação do PR #121](../research/2026-10-04-pr121-partial-review.md).
+
+Na execução do PR #124 em 2026-10-04, dois candidatos com `evidence: []`
+causaram `too_small` em `findings[0].evidence` e `findings[1].evidence` após o
+step concluído. A correção descarta candidatos sem evidências válidas e conserva
+o shard como degradado, com `evidence_rejected`; não o transforma em análise
+limpa. Veja a [investigação do PR #124](../research/2026-10-04-pr124-empty-evidence.md).
 
 | Evento                                                                   | Interpretação                                                                                                                                                              |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

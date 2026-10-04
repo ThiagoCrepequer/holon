@@ -100,6 +100,15 @@ no GitHub ou chamar um modelo, sem escolher a implementacao concreta.
 : Implementacao de uma porta que traduz entre contratos internos e um SDK, API
 ou servico externo.
 
+**Repository memory**
+: Memória funcional isolada por instalação, repositório e geração; reúne observações com proveniência e regras submetidas à aprovação humana.
+
+**Memory snapshot**
+: Seleção privada e imutável de regras aprovadas e observações para uma run; shards e retries usam o mesmo conteúdo.
+
+**Memory rule**
+: Orientação com escopo, evidências, digest, validade e estado; apenas aprovação atual de mantenedor concede uso em novas runs. Não altera políticas do host.
+
 ## Termos de documentacao
 
 **Fato confirmado**

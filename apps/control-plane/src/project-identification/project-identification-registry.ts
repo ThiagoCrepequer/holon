@@ -109,6 +109,7 @@ export class ProjectIdentificationRegistryObject extends DurableObject<Cloudflar
       .toArray();
     for (const row of rows) {
       await this.env.PROJECT_IDENTIFICATION_CACHE.getByName(row.name).revoke();
+      await this.env.REPOSITORY_MEMORIES.getByName(row.name).revoke();
       this.ctx.storage.sql.exec(
         "DELETE FROM purge_queue WHERE name=?",
         row.name,

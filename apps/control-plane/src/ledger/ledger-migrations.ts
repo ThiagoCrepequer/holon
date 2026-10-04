@@ -402,6 +402,14 @@ const ledgerMigrations: readonly LedgerMigration[] = [
   {
     version: 20,
     statements: `
+      CREATE TABLE run_memory_snapshots(run_id TEXT PRIMARY KEY, expires_at TEXT NOT NULL, snapshot_json TEXT NOT NULL);
+      CREATE TABLE run_memory_sources(run_id TEXT PRIMARY KEY, source_json TEXT NOT NULL);
+      CREATE TABLE memory_outbox(id TEXT PRIMARY KEY, delivery_json TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL);
+    `,
+  },
+  {
+    version: 21,
+    statements: `
       CREATE TABLE finding_clarifications (id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL, tool_calls INTEGER NOT NULL, read_bytes INTEGER NOT NULL);
       CREATE INDEX finding_clarifications_run ON finding_clarifications(run_id);
       CREATE TABLE clarification_reads (question_id INTEGER NOT NULL, payload TEXT NOT NULL);

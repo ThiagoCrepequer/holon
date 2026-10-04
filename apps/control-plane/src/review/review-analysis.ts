@@ -1,3 +1,4 @@
+import { projectRepositoryMemory } from "@holon/application";
 import {
   projectConfigurationGuidance,
   RepositoryConfigurationError,
@@ -8,6 +9,7 @@ import {
   verifyFindingsWithCanonicalEvidence,
   type EvidenceRejection,
 } from "@holon/application";
+import type { MemorySnapshot } from "@holon/contracts";
 import { reviewExecutionLimits } from "@holon/contracts";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
@@ -59,6 +61,7 @@ type ReviewAnalysisServices = Pick<
 
 export interface ReviewAnalysisExecution<T extends Rpc.Serializable<T>> {
   readonly configuration: RunConfigurationRef;
+  readonly memory?: MemorySnapshot;
   runStep<R extends Rpc.Serializable<R>>(
     name: string,
     phase: "preparation" | "analysis",
@@ -124,6 +127,7 @@ async function reviewShards(
   effectivePolicy?: RepositoryPolicy,
   configuration?: RunConfigurationRef,
   cancellation?: AbortController,
+  memory?: MemorySnapshot,
 ): Promise<{
   readonly results: readonly ShardReviewResult[];
   readonly anyPromptTruncated: boolean;
@@ -165,6 +169,12 @@ async function reviewShards(
         deadlineAt,
       ),
       reviewGuidance: supplemental,
+      memory: memory
+        ? projectRepositoryMemory(
+            memory,
+            shard.files.map((file) => file.path),
+          )
+        : undefined,
     };
     try {
       const reviewResult = await reviewer.model.review(job, shardContext);
@@ -183,6 +193,29 @@ async function reviewShards(
         verification.rejections,
       );
       const verifiedFindings = verification.findings;
+      const investigations = (modelOutput.investigations ?? []).filter(
+        (item) =>
+          verifyFindingsWithCanonicalEvidence(
+            [
+              {
+                confidence: 1,
+                diagnostic: item.summary,
+                severity: "low",
+                location: { path: item.path, line: item.line, side: "RIGHT" },
+                evidence: [
+                  {
+                    path: item.path,
+                    startLine: item.line,
+                    excerpt: item.excerpt,
+                    reason: "Investigation observation",
+                  },
+                ],
+              },
+            ],
+            shardContext,
+          ).findings.length === 1,
+      );
+
       const evidenceRejected =
         verifiedFindings.length !== modelOutput.findings.length;
       if (
@@ -240,6 +273,7 @@ async function reviewShards(
           verifiedFindings.includes(finding),
         ),
         resolutions: modelOutput.resolutions,
+        investigations,
         isDegraded:
           modelOutput.isDegraded ||
           reviewResult.promptTruncated ||
@@ -391,9 +425,8 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
             bytes: new TextEncoder().encode(JSON.stringify(guidance))
               .byteLength,
           });
-          preflightReviewPrompt(
-            job,
-            buildShardReviewContext(
+          preflightReviewPrompt(job, {
+            ...buildShardReviewContext(
               shard,
               context.structuralImpact,
               baseline,
@@ -401,7 +434,13 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               false,
               guidance,
             ),
-          );
+            memory: execution.memory
+              ? projectRepositoryMemory(
+                  execution.memory,
+                  shard.files.map((file) => file.path),
+                )
+              : undefined,
+          });
         }
       }
       emit("review.coverage_planned", {
@@ -542,6 +581,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                   effectivePolicy,
                   execution?.configuration,
                   cancellation,
+                  execution?.memory,
                 );
               },
             ).catch((error: unknown) => {
@@ -726,6 +766,12 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       const output = reconciledReviewOutputSchema.parse({
         ...finalAggregated,
         output: outputPreferences,
+        investigations: shardResults
+          .filter(
+            (result) =>
+              result.status === "success" && result.isDegraded !== true,
+          )
+          .flatMap((result) => result.investigations ?? []),
         analysisIsDegraded: rawAggregated.isDegraded === true,
         verdictPolicy,
         activeFindings: reconciled.activeFindings,

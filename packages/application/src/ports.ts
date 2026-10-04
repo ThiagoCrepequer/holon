@@ -24,6 +24,7 @@ import type {
 import type { ShardReviewGuidance } from "./configuration-projections.js";
 
 export type ReviewContext = ReviewShardContext & {
+  readonly memory?: import("@holon/contracts").MemorySnapshot | undefined;
   readonly abortSignal?: AbortSignal | undefined;
   readonly repositoryGuidance?: ShardReviewGuidance | undefined;
   readonly deadlineAt?: number | undefined;
