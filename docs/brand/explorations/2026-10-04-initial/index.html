@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Holon — direções de logo</title>
+    <style>
+      :root {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #17243a;
+        background: #f5f6f3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 1380px;
+        padding: 48px 28px 72px;
+        margin: auto;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 38px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 54px;
+        letter-spacing: -3px;
+      }
+      header p {
+        margin: 8px 0 0;
+        font-size: 21px;
+        color: #536171;
+      }
+      header em {
+        font:
+          34px Georgia,
+          serif;
+        color: #596579;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .card {
+        background: white;
+        border: 1px solid #e4e7e9;
+        border-radius: 24px;
+        padding: 24px;
+        min-height: 420px;
+      }
+      .card-head {
+        display: flex;
+        justify-content: space-between;
+        color: #89919b;
+        font-size: 13px;
+        font-weight: bold;
+      }
+      .preview {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 28px 0 30px;
+      }
+      .symbol {
+        width: 118px;
+        height: 118px;
+        flex: none;
+        border-radius: 20px;
+        background: #f2f4f5;
+        display: grid;
+        place-items: center;
+      }
+      .symbol img {
+        width: 86px;
+        height: 86px;
+      }
+      .preview .lockup {
+        width: 220px;
+        height: 68px;
+        object-fit: contain;
+        object-position: left;
+        max-width: calc(100% - 132px);
+      }
+      .copy h2 {
+        font-size: 27px;
+        margin: 0 0 5px;
+      }
+      .copy span {
+        color: #5a6777;
+      }
+      .copy p {
+        color: #5a6777;
+        line-height: 1.45;
+        min-height: 64px;
+      }
+      .sizes {
+        border-top: 1px solid #edf0f2;
+        padding-top: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #89919b;
+        font-size: 12px;
+      }
+      .sizes img {
+        margin-right: 12px;
+      }
+      footer {
+        color: #66717d;
+        margin-top: 28px;
+      }
+      @media (max-width: 1000px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 650px) {
+        main {
+          padding: 24px 16px 50px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        header em {
+          display: none;
+        }
+        h1 {
+          font-size: 44px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>holon</h1>
+          <p>Seis caminhos para uma nova identidade</p>
+        </div>
+        <em>ὅλον</em>
+      </header>
+      <section class="grid">
+        <article class="card">
+          <div class="card-head">
+            <span>01 / 06</span><span>Forma-símbolo</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="01-orbita.svg" alt="Símbolo Órbita" />
+            </div>
+            <img
+              class="lockup"
+              src="01-orbita-wordmark.svg"
+              alt="Assinatura Holon — Órbita"
+            />
+          </div>
+          <div class="copy">
+            <h2>Órbita</h2>
+            <span>Parte dentro do todo</span>
+            <p>
+              O círculo permanece aberto: o ponto central tem identidade própria
+              e pertence ao conjunto.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="01-orbita.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="01-orbita.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="01-orbita-mono.svg" alt="" />
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <span>02 / 06</span><span>App e avatar</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="02-encaixe.svg" alt="Símbolo Encaixe" />
+            </div>
+            <img
+              class="lockup"
+              src="02-encaixe-wordmark.svg"
+              alt="Assinatura Holon — Encaixe"
+            />
+          </div>
+          <div class="copy">
+            <h2>Encaixe</h2>
+            <span>Monograma H</span>
+            <p>
+              Dois lados se unem por uma ponte. A leitura de H favorece
+              reconhecimento imediato.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="02-encaixe.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="02-encaixe.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="02-encaixe-mono.svg" alt="" />
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <span>03 / 06</span><span>Sistema visual</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="03-molduras.svg" alt="Símbolo Molduras" />
+            </div>
+            <img
+              class="lockup"
+              src="03-molduras-wordmark.svg"
+              alt="Assinatura Holon — Molduras"
+            />
+          </div>
+          <div class="copy">
+            <h2>Molduras</h2>
+            <span>Contexto em camadas</span>
+            <p>
+              O recorte interno vive dentro do contexto maior, sem perder sua
+              própria borda.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="03-molduras.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="03-molduras.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="03-molduras-mono.svg" alt="" />
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <span>04 / 06</span><span>Marca editorial</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="04-greek.svg" alt="Símbolo ὅλον" />
+            </div>
+            <img
+              class="lockup"
+              src="04-greek-wordmark.svg"
+              alt="Assinatura Holon — ὅλον"
+            />
+          </div>
+          <div class="copy">
+            <h2>ὅλον</h2>
+            <span>Raiz grega</span>
+            <p>
+              A origem do nome vira identidade. A palavra e o sinal tipográfico
+              ocupam o centro.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="04-greek.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="04-greek.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="04-greek-mono.svg" alt="" />
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <span>05 / 06</span><span>Produto técnico</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="05-rastro.svg" alt="Símbolo Rastro" />
+            </div>
+            <img
+              class="lockup"
+              src="05-rastro-wordmark.svg"
+              alt="Assinatura Holon — Rastro"
+            />
+          </div>
+          <div class="copy">
+            <h2>Rastro</h2>
+            <span>Revisão além do diff</span>
+            <p>
+              Um caminho parte da mudança e chega a uma conclusão verificada.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="05-rastro.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="05-rastro.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="05-rastro-mono.svg" alt="" />
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <span>06 / 06</span><span>Marca orgânica</span>
+          </div>
+          <div class="preview">
+            <div class="symbol">
+              <img src="06-semente.svg" alt="Símbolo Semente" />
+            </div>
+            <img
+              class="lockup"
+              src="06-semente-wordmark.svg"
+              alt="Assinatura Holon — Semente"
+            />
+          </div>
+          <div class="copy">
+            <h2>Semente</h2>
+            <span>Todo vivo, parte viva</span>
+            <p>
+              Uma forma orgânica contém outra; a metáfora natural da planta e da
+              semente.
+            </p>
+          </div>
+          <div class="sizes">
+            <span>16 px</span
+            ><img width="16" height="16" src="06-semente.svg" alt="" /><span
+              >32 px</span
+            ><img width="32" height="32" src="06-semente.svg" alt="" /><span
+              >Monocromático</span
+            ><img width="40" height="40" src="06-semente-mono.svg" alt="" />
+          </div>
+        </article>
+      </section>
+      <footer>
+        Estudo inicial. A direção escolhida pode ser refinada em tipografia, cor
+        e aplicações.
+      </footer>
+    </main>
+  </body>
+</html>
