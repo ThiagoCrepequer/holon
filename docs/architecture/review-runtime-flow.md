@@ -82,6 +82,12 @@ limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard
 com no máximo 64 shards e três análises simultâneas. Contexto omitido gera
 limitação explícita; não é tratado como cobertura.
 
+O analisador estrutural produz pistas para investigar contratos, não findings.
+Uma declaração de `interface` ou `type` movida e reexportada como tipo no mesmo
+módulo não recebe a pista de símbolo exportado removido. Isso não substitui a
+verificação de consumidores nem comprova que uma reexportação aponta para um
+destino válido.
+
 ## Agent e tools
 
 Um `ReviewAgent` isolado por run/shard deriva de `Think`. `ReviewShardWorkflow`
