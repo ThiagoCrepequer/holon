@@ -17,6 +17,17 @@ mostram estados e etapas sem imprimir os resultados privados. Um Workflow pai
 concluído ainda pode representar análise parcial: confirme o Check Run e os
 eventos abaixo. `wrangler tail` acompanha somente eventos novos.
 
+Para um shard, `agent_workflow_failed` significa apenas que o
+`ReviewShardWorkflow` terminou com status `errored`. Esse código não distingue
+falha do provider, orçamento, tool ou runtime. O ID da instância do shard é
+`review-` seguido do SHA-256 hexadecimal de `<runId>:<shardIndex>` (índice
+começa em zero). Consulte
+`wrangler workflows instances describe holon-review-shard-workflow <id> --no-step-output`
+e correlacione com os eventos do Agent antes de atribuir uma causa. Evite
+imprimir step output ou trace payload em relatórios operacionais: eles podem
+conter código privado. Sem acesso à instância ou ao trace, registre a causa
+interna como não determinada.
+
 | Evento                                                                   | Interpretação                                                                                                                                                              |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `model.budget_rejected`                                                  | O ledger recusou uma inferência pelo teto **agregado da run**. `rule`, `current`, `requested` e `limit` identificam a dimensão; shard e fase ajudam a localizar a chamada. |
