@@ -3,6 +3,8 @@ import { expect, it } from "vitest";
 import {
   modelReviewOutputSchema,
   modelReviewPromptSchema,
+  modelReviewTransportSchema,
+  modelReviewOutputFromTransport,
   parseModelReviewTransport,
 } from "../src/review-output.js";
 
@@ -22,6 +24,61 @@ const finding = {
   ],
   suggestion: null,
 };
+it("rejects unevidenced candidates individually and retains the partial marker across parsing", () => {
+  const transport = modelReviewTransportSchema.parse({
+    summary: "Both candidates are defects.",
+    findings: [{ ...finding, evidence: [] }, finding],
+    resolutions: [
+      { ...finding, fingerprint: `fp:${"a".repeat(64)}`, evidence: [] },
+      { ...finding, fingerprint: `fp:${"b".repeat(64)}` },
+    ],
+    isDegraded: false,
+    outputLimitations: ["investigation_incomplete"],
+  });
+  const parsed = modelReviewOutputFromTransport(transport);
+  expect(parsed.findings).toHaveLength(1);
+  expect(parsed.resolutions).toHaveLength(1);
+  expect(parsed.resolutions?.[0]?.fingerprint).toBe(`fp:${"b".repeat(64)}`);
+  expect(parsed.isDegraded).toBe(true);
+  expect(parsed.outputLimitations).toEqual(
+    expect.arrayContaining(["evidence_rejected", "investigation_incomplete"]),
+  );
+  expect(parsed.summary).not.toContain("Both candidates are defects");
+  expect(parseModelReviewTransport(transport)).toEqual(parsed);
+});
+
+it("does not turn an entirely rejected response into a clean review", () => {
+  expect(
+    parseModelReviewTransport({
+      summary: "Two defects found.",
+      findings: [
+        { ...finding, evidence: [] },
+        { ...finding, evidence: [] },
+      ],
+      isDegraded: false,
+    }),
+  ).toMatchObject({
+    findings: [],
+    isDegraded: true,
+    outputLimitations: ["evidence_rejected"],
+  });
+});
+it.each([
+  { summary: undefined },
+  { isDegraded: "false" },
+  { outputLimitations: ["unknown_limitation"] },
+])(
+  "keeps invalid envelope metadata rejected during safe parsing: %j",
+  (metadata) => {
+    expect(
+      modelReviewTransportSchema.safeParse({
+        summary: "Incomplete response.",
+        findings: [{ ...finding, evidence: [] }],
+        ...metadata,
+      }).success,
+    ).toBe(false);
+  },
+);
 it.each([undefined, null, {}, "none"])(
   "rejects invalid findings rather than certifying a clean review: %j",
   (findings) => {

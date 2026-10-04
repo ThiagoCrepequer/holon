@@ -175,82 +175,111 @@ it("does not start a shard workflow for an expired or obsolete run", async () =>
   });
 });
 
-it("completes a Think prompt workflow with a simulated structured model response", async () => {
-  const ledger = env.REVIEW_LEDGERS.getByName(prKey);
-  await ledger.claimRun(run, "think-prompt-integration");
-  await ledger.transition(
-    runId,
-    "queued",
-    "running",
-    new Date().toISOString(),
-    "think-prompt-integration:start",
-  );
-  const model = new MockLanguageModelV4({
-    doStream: async () => ({
-      stream: new ReadableStream({
-        start(controller) {
-          controller.enqueue({
-            type: "tool-call",
-            toolCallId: "final-answer",
-            toolName: "think_final_answer",
-            input: JSON.stringify({
-              findings: [],
-              isDegraded: false,
-              outputLimitations: [],
-              resolutions: [],
-              investigations: [],
-              summary: "No verified regressions.",
-            }),
-          });
-          controller.enqueue({
-            type: "finish",
-            finishReason: { unified: "tool-calls", raw: "tool_calls" },
-            usage: {
-              inputTokens: {
-                total: 10,
-                noCache: 10,
-                cacheRead: 0,
-                cacheWrite: 0,
+it.each([false, true])(
+  "completes a Think prompt workflow with unevidenced candidates: %s",
+  async (unevidenced) => {
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    await ledger.claimRun(run, "think-prompt-integration");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      new Date().toISOString(),
+      "think-prompt-integration:start",
+    );
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: "tool-call",
+              toolCallId: "final-answer",
+              toolName: "think_final_answer",
+              input: JSON.stringify({
+                findings: unevidenced
+                  ? Array.from({ length: 2 }, () => ({
+                      confidence: 0.9,
+                      diagnostic:
+                        "Removing this guard permits an unauthorized write.",
+                      evidence: [],
+                      location: {
+                        path: "src/a.ts",
+                        line: 10,
+                        side: "RIGHT",
+                        startLine: null,
+                      },
+                      severity: "high",
+                      suggestion: null,
+                    }))
+                  : [],
+                isDegraded: false,
+                outputLimitations: [],
+                resolutions: [],
+                investigations: [],
+                summary: "No verified regressions.",
+              }),
+            });
+            controller.enqueue({
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool_calls" },
+              usage: {
+                inputTokens: {
+                  total: 10,
+                  noCache: 10,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                },
+                outputTokens: { total: 10, text: 10, reasoning: 0 },
               },
-              outputTokens: { total: 10, text: 10, reasoning: 0 },
-            },
-          });
-          controller.close();
-        },
+            });
+            controller.close();
+          },
+        }),
       }),
-    }),
-  });
-  const agent = await getAgentByName(env.REVIEW_AGENTS, `${runId}:2`);
-  const workflowId = await runInDurableObject(
-    agent,
-    async (instance: ReviewAgent) => {
-      vi.spyOn(instance, "getModel").mockReturnValue(model);
-      return await instance.startReview({
-        deadlineAt: Date.now() + 60_000,
-        phase: "investigation" as const,
-        prKey,
-        prompt: "Review this changed line.",
-        runId,
-        shardIndex: 2,
-        totalShards: 3,
-      });
-    },
-  );
-  const workflow = await env.REVIEW_SHARD_WORKFLOW.get(workflowId);
-  let status = await workflow.status();
-  for (
-    let attempt = 0;
-    attempt < 100 &&
-    status.status !== "complete" &&
-    status.status !== "errored";
-    attempt++
-  ) {
-    await scheduler.wait(50);
-    status = await workflow.status();
-  }
-  expect(status).toMatchObject({
-    status: "complete",
-    output: { findings: [], summary: "No verified regressions." },
-  });
-  expect(model.doStreamCalls).toHaveLength(1);
-}, 15_000);
+    });
+    const shardIndex = unevidenced ? 3 : 2;
+    const agent = await getAgentByName(
+      env.REVIEW_AGENTS,
+      `${runId}:${shardIndex}`,
+    );
+    const workflowId = await runInDurableObject(
+      agent,
+      async (instance: ReviewAgent) => {
+        vi.spyOn(instance, "getModel").mockReturnValue(model);
+        return await instance.startReview({
+          deadlineAt: Date.now() + 60_000,
+          phase: "investigation" as const,
+          prKey,
+          prompt: "Review this changed line.",
+          runId,
+          shardIndex,
+          totalShards: 4,
+        });
+      },
+    );
+    const workflow = await env.REVIEW_SHARD_WORKFLOW.get(workflowId);
+    let status = await workflow.status();
+    for (
+      let attempt = 0;
+      attempt < 100 &&
+      status.status !== "complete" &&
+      status.status !== "errored";
+      attempt++
+    ) {
+      await scheduler.wait(50);
+      status = await workflow.status();
+    }
+    expect(status).toMatchObject({
+      status: "complete",
+      output: unevidenced
+        ? {
+            findings: [],
+            isDegraded: true,
+            outputLimitations: ["evidence_rejected"],
+          }
+        : { findings: [], summary: "No verified regressions." },
+    });
+    expect(model.doStreamCalls).toHaveLength(1);
+  },
+  15_000,
+);
