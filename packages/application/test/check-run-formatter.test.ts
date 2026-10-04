@@ -179,19 +179,12 @@ describe("check-run-formatter", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [
-          {
-            expectedTestPathPattern: "src/a.test.ts",
-            reason: "no_test_file_modified",
-            sourcePath: "src/a.ts",
-          },
-        ],
         totalDownstreamReferencesCount: 1,
       },
       summary: "Summary text",
     });
     expect(outputWithImpact.summary).toContain(
-      "- **Structural Impact**: 1 symbol(s) modified, 1 downstream reference(s), ⚠️ 1 contract investigation lead(s), 1 test gap(s)",
+      "- **Structural Impact**: 1 symbol(s) modified, 1 downstream reference(s), ⚠️ 1 contract investigation lead(s)",
     );
 
     const outputWithFallbackCount = formatCheckRunOutput({
@@ -209,7 +202,6 @@ describe("check-run-formatter", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [],
       },
       summary: "Summary text",
     });
@@ -224,7 +216,6 @@ describe("check-run-formatter", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
       },
       summary: "Summary text",
     });

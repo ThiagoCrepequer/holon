@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="pt-BR" data-holon-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Referência de marca, design system e UI Kit do Holon."
+    />
+    <title>Holon — Brand Guidelines & UI Kit</title>
+    <link
+      rel="icon"
+      href="../assets/logo/holon-favicon.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="kit.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#content">Pular para o conteúdo</a>
+    <div class="layout">
+      <aside class="rail">
+        <a class="brand" href="#essence" aria-label="Holon, início do guia"
+          ><img
+            class="brand-light"
+            src="../assets/logo/holon-lockup-primary.svg"
+            alt="" /><img
+            class="brand-dark"
+            src="../assets/logo/holon-lockup-inverse.svg"
+            alt=""
+        /></a>
+        <div class="eyebrow">Brand Guidelines<br />Design System · UI Kit</div>
+        <nav aria-label="Seções do guia">
+          <a href="#essence"><span>01</span>Essência</a
+          ><a href="#logo"><span>02</span>Assinatura</a
+          ><a href="#color"><span>03</span>Cor</a
+          ><a href="#typography"><span>04</span>Tipografia</a
+          ><a href="#rhythm"><span>05</span>Ritmo e forma</a
+          ><a href="#components"><span>06</span>Componentes</a
+          ><a href="#states"><span>07</span>Estados</a
+          ><a href="#applications"><span>08</span>Aplicações</a
+          ><a href="#resources"><span>09</span>Arquivos</a>
+        </nav>
+        <div class="theme-control">
+          <label for="theme">Tema do guia</label
+          ><select id="theme">
+            <option value="light">Claro</option>
+            <option value="dark">Escuro</option>
+          </select>
+        </div>
+        <p class="rail-note">
+          Semente · identidade ativa<br />Atualizado em 2026-10-04<br />Exemplos
+          com dados fictícios.
+        </p>
+      </aside>
+      <main id="content">
+        <section id="essence">
+          <div class="eyebrow">01 / Essência · Holon</div>
+          <div class="hero">
+            <div>
+              <h1>
+                Cada mudança,<br /><em class="editorial">no seu contexto.</em>
+              </h1>
+              <p class="lead">
+                Uma parte com identidade própria. Um todo que ajuda a
+                compreendê-la.
+              </p>
+              <p class="intro">
+                A Semente aproxima a precisão de uma ferramenta técnica da
+                atenção de quem investiga. Esta é a referência para construir
+                todas as expressões visuais do Holon.
+              </p>
+              <div class="hero-links">
+                <a class="button" href="#components">Explorar o UI Kit</a
+                ><a class="button secondary" href="../README.md"
+                  >Ler os guias</a
+                >
+              </div>
+            </div>
+            <div class="seed-stage">
+              <img
+                class="brand-light"
+                src="../assets/logo/holon-symbol-primary.svg"
+                alt="Semente Holon: núcleo violeta envolvido por contorno escuro"
+              /><img
+                class="brand-dark"
+                src="../assets/logo/holon-symbol-inverse.svg"
+                alt="Semente Holon em fundo escuro"
+              /><span class="stage-caption">parte ↔ todo</span>
+            </div>
+          </div>
+          <div class="principles">
+            <div>
+              <h3>Contexto</h3>
+              <p>
+                Uma conclusão fica mais clara quando a relação entre as partes
+                está visível.
+              </p>
+            </div>
+            <div>
+              <h3>Precisão</h3>
+              <p>
+                Hierarquia, evidência e linguagem concreta ajudam a decidir.
+              </p>
+            </div>
+            <div>
+              <h3>Serenidade</h3>
+              <p>
+                Espaço, contraste e feedback claro respeitam a atenção de quem
+                trabalha.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="logo">
+          <div class="eyebrow">02 / Assinatura</div>
+          <h2>Uma forma que contém outra.</h2>
+          <p class="intro">
+            O contorno e o núcleo preservam suas identidades. A assinatura usa
+            lettering próprio em contornos, baseado em Manrope, para manter
+            proporção e espaçamento em qualquer ambiente.
+          </p>
+          <div class="grid three">
+            <div>
+              <div class="logo-board">
+                <img
+                  src="../assets/logo/holon-lockup-primary.svg"
+                  alt="Assinatura principal do Holon"
+                />
+              </div>
+              <span class="caption">Principal · Tinta + Núcleo</span>
+            </div>
+            <div>
+              <div class="logo-board ink">
+                <img
+                  src="../assets/logo/holon-lockup-inverse.svg"
+                  alt="Assinatura inversa do Holon"
+                />
+              </div>
+              <span class="caption">Inversa · Papel + Violeta claro</span>
+            </div>
+            <div>
+              <div class="logo-board white">
+                <img
+                  src="../assets/logo/holon-lockup-mono.svg"
+                  alt="Assinatura monocromática do Holon"
+                />
+              </div>
+              <span class="caption">Monocromática · uma tinta</span>
+            </div>
+          </div>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Escala</h3>
+              <div class="size-demo">
+                <figure>
+                  <img
+                    src="../assets/logo/holon-symbol-micro.svg"
+                    width="16"
+                    height="16"
+                    alt="Símbolo a 16 pixels"
+                  />
+                  <figcaption>16 px</figcaption>
+                </figure>
+                <figure>
+                  <img
+                    src="../assets/logo/holon-symbol-primary.svg"
+                    width="24"
+                    height="24"
+                    alt="Símbolo a 24 pixels"
+                  />
+                  <figcaption>24 px</figcaption>
+                </figure>
+                <figure>
+                  <img
+                    src="../assets/logo/holon-symbol-primary.svg"
+                    width="32"
+                    height="32"
+                    alt="Símbolo a 32 pixels"
+                  />
+                  <figcaption>32 px</figcaption>
+                </figure>
+                <figure>
+                  <img
+                    src="../assets/logo/holon-symbol-primary.svg"
+                    width="48"
+                    height="48"
+                    alt="Símbolo a 48 pixels"
+                  />
+                  <figcaption>48 px</figcaption>
+                </figure>
+                <figure>
+                  <img
+                    src="../assets/logo/holon-symbol-primary.svg"
+                    width="96"
+                    height="96"
+                    alt="Símbolo a 96 pixels"
+                  />
+                  <figcaption>96 px</figcaption>
+                </figure>
+              </div>
+              <p class="note">
+                Padrão a partir de 24 px. A versão micro reforça o traço em 16
+                px. Assinatura horizontal: mínimo de 112 px de largura.
+              </p>
+            </div>
+            <div class="panel">
+              <h3>Área de proteção</h3>
+              <p>
+                Reserve ¼ da largura exibida do símbolo em cada lado da
+                assinatura. Para um símbolo de 40 px, deixe 10 px livres no
+                layout. O SVG e o PNG usam enquadramento compacto; esse espaço
+                de proteção é externo ao arquivo.
+              </p>
+              <p class="note">
+                Preservar a inclinação, o espaço interno e as cores. Não girar,
+                deformar, preencher o vazio nem adicionar efeitos.
+              </p>
+              <a href="../logo.md">Regras completas da logo →</a>
+            </div>
+          </div>
+        </section>
+
+        <section id="color">
+          <div class="eyebrow">03 / Cor</div>
+          <h2>Mineral por fora. Vivo por dentro.</h2>
+          <p class="intro">
+            Papel e tinta sustentam a leitura. O violeta concentra a presença de
+            marca e orienta ações. As cores semânticas se adaptam ao tema sem
+            mudar de função.
+          </p>
+          <div class="swatches">
+            <div class="swatch">
+              <div class="swatch-color" style="background: #faf9f6"></div>
+              <div class="swatch-label">
+                <strong>Papel 50</strong><code>#FAF9F6</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #17243a"></div>
+              <div class="swatch-label">
+                <strong>Tinta 900</strong><code>#17243A</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #8864e7"></div>
+              <div class="swatch-label">
+                <strong>Núcleo</strong><code>#8864E7</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #603eb0"></div>
+              <div class="swatch-label">
+                <strong>Violeta 700</strong><code>#603EB0</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #c4adf2"></div>
+              <div class="swatch-label">
+                <strong>Violeta 300</strong><code>#C4ADF2</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #f3f1eb"></div>
+              <div class="swatch-label">
+                <strong>Papel 100</strong><code>#F3F1EB</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #55657b"></div>
+              <div class="swatch-label">
+                <strong>Tinta 600</strong><code>#55657B</code>
+              </div>
+            </div>
+            <div class="swatch">
+              <div class="swatch-color" style="background: #e8eee6"></div>
+              <div class="swatch-label">
+                <strong>Sálvia 100</strong><code>#E8EEE6</code>
+              </div>
+            </div>
+          </div>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Marca e ação</h3>
+              <p>
+                O núcleo da logo usa <code>#8864E7</code>. Botões claros usam um
+                violeta mais profundo para preservar o contraste com o texto
+                branco.
+              </p>
+              <div class="row">
+                <button
+                  class="button demo-action"
+                  data-demo="Ação primária demonstrada."
+                >
+                  Ação primária</button
+                ><a href="../foundations.md">Fundamentos de cor</a>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Significado em palavras</h3>
+              <div class="row">
+                <span class="badge success">✓ Sem achados</span
+                ><span class="badge warning">◐ Parcial</span
+                ><span class="badge danger">× Falhou</span
+                ><span class="badge info">↻ Em andamento</span>
+              </div>
+              <p class="note" style="margin-top: 16px">
+                Cor acompanha rótulo. Completude da revisão e gravidade do
+                achado são informações distintas.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="typography">
+          <div class="eyebrow">04 / Tipografia</div>
+          <h2>Clareza com uma voz própria.</h2>
+          <p class="intro">
+            Três famílias, três funções. A expressão editorial aparece em pontos
+            de ênfase; a interface mantém leitura estável.
+          </p>
+          <div class="grid three">
+            <div class="panel">
+              <span class="eyebrow">Interface e leitura</span>
+              <div class="font-specimen">Aa</div>
+              <h3>Manrope</h3>
+              <p class="note">
+                400 · 500 · 600 · 700<br />Textos, navegação, títulos e
+                controles.
+              </p>
+            </div>
+            <div class="panel">
+              <span class="eyebrow">Expressão editorial</span>
+              <div class="font-specimen font-editorial"><em>Aa</em></div>
+              <h3>Instrument Serif</h3>
+              <p class="note">
+                400 · normal e itálico<br />Uma frase, uma citação, um foco.
+              </p>
+            </div>
+            <div class="panel">
+              <span class="eyebrow">Conteúdo técnico</span>
+              <div class="font-specimen font-mono">01</div>
+              <h3>IBM Plex Mono</h3>
+              <p class="note">
+                400 · 500<br />Código, commits, caminhos e números.
+              </p>
+            </div>
+          </div>
+          <div class="type-example">
+            <span class="caption">48 / 57,6<br />Manrope 600</span>
+            <p
+              style="
+                font-size: clamp(32px, 4vw, 48px);
+                font-weight: 600;
+                line-height: 1.2;
+                letter-spacing: -0.03em;
+              "
+            >
+              Ver a mudança inteira.
+            </p>
+          </div>
+          <div class="type-example">
+            <span class="caption">36 / 43,2<br />Manrope 600</span>
+            <p
+              style="
+                font-size: clamp(28px, 3vw, 36px);
+                font-weight: 600;
+                line-height: 1.2;
+                letter-spacing: -0.03em;
+              "
+            >
+              Contexto antes da conclusão.
+            </p>
+          </div>
+          <div class="type-example">
+            <span class="caption">16 / 26<br />Manrope 400</span>
+            <p>
+              Uma boa revisão torna a evidência fácil de encontrar e explica o
+              impacto de uma mudança com palavras que a equipe consegue
+              verificar.
+            </p>
+          </div>
+          <div class="type-example">
+            <span class="caption">13 / 21<br />Mono 400</span>
+            <p
+              class="font-mono"
+              style="font-size: 13px; overflow-wrap: anywhere"
+            >
+              src/payments/refund.ts · 7e29b4a · linha 42
+            </p>
+          </div>
+        </section>
+
+        <section id="rhythm">
+          <div class="eyebrow">05 / Ritmo e forma</div>
+          <h2>Espaço para entender as relações.</h2>
+          <p class="intro">
+            A unidade é 4 px. Proximidade mostra relação; intervalos maiores
+            separam assuntos. O gesto orgânico fica na marca, enquanto a
+            interface usa superfícies simples.
+          </p>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Escala de espaçamento</h3>
+              <div class="space-list">
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 4px"></div>
+                  4
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 8px"></div>
+                  8
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 12px"></div>
+                  12
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 16px"></div>
+                  16
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 24px"></div>
+                  24
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 32px"></div>
+                  32
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 48px"></div>
+                  48
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 64px"></div>
+                  64
+                </div>
+                <div class="space-unit">
+                  <div class="space-bar" style="height: 96px"></div>
+                  96
+                </div>
+              </div>
+              <p class="note" style="margin-top: 24px">
+                8 px entre ícone e rótulo · 24 px dentro de cards · 32–48 px
+                entre grupos.
+              </p>
+            </div>
+            <div class="panel">
+              <h3>Raios</h3>
+              <div class="radius-list">
+                <div class="radius-sample" style="border-radius: 6px">6</div>
+                <div class="radius-sample" style="border-radius: 10px">10</div>
+                <div class="radius-sample" style="border-radius: 16px">16</div>
+                <div class="radius-sample" style="border-radius: 24px">24</div>
+              </div>
+              <p class="note" style="margin-top: 24px">
+                Pequenos agrupamentos · controles · cards · painéis destacados.
+              </p>
+            </div>
+          </div>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Composição responsiva</h3>
+              <p>
+                4 colunas no mobile, 8 no tablet e 12 no desktop. Conteúdo
+                padrão até 1200 px; leitura longa até 704 px.
+              </p>
+              <p class="note">
+                Em telas estreitas, empilhar antes de reduzir. Código e tabelas
+                podem ter rolagem própria.
+              </p>
+            </div>
+            <div class="panel">
+              <h3>Movimento discreto</h3>
+              <p>
+                120 ms para feedback, 180 ms para transições pequenas e 280 ms
+                para mudanças de contexto.
+              </p>
+              <p class="note">
+                Respeitar movimento reduzido. Progresso pertence à execução; a
+                logo não funciona como loader.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="components">
+          <div class="eyebrow">06 / Componentes</div>
+          <h2>Unidades completas. Um sistema coerente.</h2>
+          <p class="intro">
+            Controles nativos, foco visível, hierarquia e estados explícitos.
+            Todos os exemplos abaixo são locais e usam dados fictícios.
+          </p>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Ações</h3>
+              <div class="row">
+                <button
+                  class="button demo-action"
+                  data-demo="O botão primário prioriza a ação principal."
+                >
+                  Ver revisão</button
+                ><button
+                  class="button secondary demo-action"
+                  data-demo="O botão secundário oferece uma alternativa."
+                >
+                  Configurar</button
+                ><button
+                  class="button quiet demo-action"
+                  data-demo="A ação discreta mantém menor peso visual."
+                >
+                  Copiar link
+                </button>
+              </div>
+              <div class="row demo-block">
+                <button class="button" disabled>Indisponível</button
+                ><button class="button secondary" disabled aria-busy="true">
+                  Salvando…</button
+                ><button
+                  class="button danger demo-action"
+                  data-demo="Exemplo de aparência destrutiva. Nenhum dado foi removido."
+                >
+                  Remover
+                </button>
+              </div>
+              <div class="row demo-block">
+                <button
+                  class="button small demo-action"
+                  data-demo="Controle compacto: 32 px de altura visual."
+                >
+                  32 px</button
+                ><button
+                  class="button demo-action"
+                  data-demo="Controle padrão: 44 px de altura."
+                >
+                  44 px</button
+                ><button
+                  class="button large demo-action"
+                  data-demo="Controle destacado: 52 px de altura."
+                >
+                  52 px
+                </button>
+              </div>
+              <p class="note" style="margin-top: 20px">
+                Um primário por contexto. Alvo padrão de toque: 44 × 44 px.
+              </p>
+            </div>
+            <div class="panel">
+              <h3>Entrada com contexto</h3>
+              <form id="demo-form" novalidate>
+                <div class="field">
+                  <label for="repository">Repositório de demonstração</label
+                  ><input
+                    id="repository"
+                    type="text"
+                    value="acme/payments"
+                    autocomplete="off"
+                    aria-describedby="repository-help repository-error"
+                    required
+                  /><span class="helper" id="repository-help"
+                    >Formato organização/repositório. Nenhum acesso será
+                    feito.</span
+                  ><span class="field-error" id="repository-error" hidden
+                    >Use o formato organização/repositório, sem espaços.</span
+                  >
+                </div>
+                <label class="check"
+                  ><input type="checkbox" checked /> Exibir evidências junto aos
+                  achados</label
+                ><button class="button secondary" type="submit">
+                  Validar exemplo
+                </button>
+                <p id="form-status" class="live-feedback" role="status"></p>
+              </form>
+            </div>
+          </div>
+          <div class="panel demo-block">
+            <div class="tabs" role="tablist" aria-label="Exemplo de revisão">
+              <button
+                class="tab"
+                id="findings-tab"
+                role="tab"
+                aria-selected="true"
+                aria-controls="findings-panel"
+                tabindex="0"
+              >
+                Achados</button
+              ><button
+                class="tab"
+                id="execution-tab"
+                role="tab"
+                aria-selected="false"
+                aria-controls="execution-panel"
+                tabindex="-1"
+              >
+                Execução
+              </button>
+            </div>
+            <div
+              id="findings-panel"
+              role="tabpanel"
+              aria-labelledby="findings-tab"
+              tabindex="0"
+            >
+              <div class="finding-heading">
+                <div>
+                  <h4>Validar o limite antes de processar o estorno</h4>
+                  <p class="note">
+                    <code>src/payments/refund.ts:42</code> · exemplo fictício
+                  </p>
+                </div>
+                <span class="badge warning">P2 · Moderado</span>
+              </div>
+              <p>
+                O valor recebido pode ultrapassar o saldo disponível. A
+                validação deve acontecer antes da chamada que efetiva o estorno.
+              </p>
+              <pre
+                aria-label="Trecho de código ilustrativo"
+              ><code><span class="code-remove">− await refund(amount);</span>
+<span class="code-add">+ assertRefundable(amount, balance);</span>
+<span class="code-add">+ await refund(amount);</span></code></pre>
+              <button class="button quiet" id="open-finding">
+                Abrir exemplo completo →
+              </button>
+            </div>
+            <div
+              id="execution-panel"
+              role="tabpanel"
+              aria-labelledby="execution-tab"
+              tabindex="0"
+              hidden
+            >
+              <h4>Contexto desta demonstração</h4>
+              <p>
+                Repositório <code>acme/payments</code> · PR #128 · commit
+                <code>7e29b4a</code>.
+              </p>
+              <span class="badge success">✓ Execução concluída</span>
+              <p class="note" style="margin-top: 16px">
+                Esta execução é fictícia e existe apenas para demonstrar o
+                layout. O estado real deve vir do domínio da aplicação.
+              </p>
+            </div>
+          </div>
+          <div
+            class="table-scroll"
+            role="region"
+            aria-label="Tabela de revisões fictícias"
+            tabindex="0"
+          >
+            <table>
+              <caption class="helper" style="text-align: left; padding: 16px">
+                Revisões fictícias · estados distintos com texto e cor
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Pull request</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Commit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>#128 · Validar estorno</td>
+                  <td><span class="badge">1 achado confirmado</span></td>
+                  <td><code>7e29b4a</code></td>
+                </tr>
+                <tr>
+                  <td>#127 · Ajustar mensagens</td>
+                  <td><span class="badge success">✓ Sem achados</span></td>
+                  <td><code>de921c7</code></td>
+                </tr>
+                <tr>
+                  <td>#126 · Atualizar contratos</td>
+                  <td><span class="badge warning">◐ Revisão parcial</span></td>
+                  <td><code>41ad83f</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p
+            id="demo-feedback"
+            class="live-feedback"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </section>
+
+        <section id="iconography">
+          <div class="eyebrow">Sistema auxiliar / Ícones</div>
+          <h2>Um traço, uma função.</h2>
+          <p class="intro">
+            Grade de 24 px, traço de 1,75 px e terminações arredondadas. Ícones
+            funcionais usam currentColor e acompanham rótulos ou nomes
+            acessíveis.
+          </p>
+          <div class="icon-grid">
+            <span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m5 12 4 4L19 6" /></svg
+              ><code>check</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 6 12 12M18 6 6 18" /></svg
+              ><code>close</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m9 5 7 7-7 7" /></svg
+              ><code>chevron-right</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 12h16m-6-6 6 6-6 6" /></svg
+              ><code>arrow-right</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="m16 16 5 5" /></svg
+              ><code>search</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="8" y="8" width="12" height="12" rx="2" />
+                <path d="M15 4H6a2 2 0 0 0-2 2v9" /></svg
+              ><code>copy</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M13 4h7v7M20 4 10 14M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"
+                /></svg
+              ><code>external-link</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v6" />
+                <circle
+                  cx="12"
+                  cy="7.5"
+                  r=".8"
+                  fill="currentColor"
+                  stroke="none"
+                /></svg
+              ><code>info</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m12 3 10 18H2L12 3Z" />
+                <path d="M12 9v5" />
+                <circle
+                  cx="12"
+                  cy="17.5"
+                  r=".8"
+                  fill="currentColor"
+                  stroke="none"
+                /></svg
+              ><code>warning</code></span
+            ><span class="icon-sample"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="5" r="2" />
+                <circle cx="6" cy="19" r="2" />
+                <circle cx="18" cy="19" r="2" />
+                <path d="M6 7v10M18 17V9a4 4 0 0 0-4-4h-1m3-3-3 3 3 3" /></svg
+              ><code>pull-request</code></span
+            >
+          </div>
+        </section>
+        <section id="states">
+          <div class="eyebrow">07 / Estados</div>
+          <h2>O resultado inclui seus limites.</h2>
+          <p class="intro">
+            Uma interface confiável mostra o que aconteceu, o que ainda falta e
+            qual ação está disponível. Sucesso visual depende da completude
+            real.
+          </p>
+          <div class="grid two">
+            <div class="alert success">
+              <strong>✓ Nenhum achado confirmado</strong>
+              <p>Os trechos elegíveis desta revisão foram analisados.</p>
+            </div>
+            <div class="alert warning">
+              <strong>◐ Revisão parcial</strong>
+              <p>
+                Parte do escopo ficou pendente. Consulte os detalhes da
+                execução.
+              </p>
+            </div>
+            <div class="alert danger">
+              <strong>× Não foi possível concluir</strong>
+              <p>Consulte a execução antes de iniciar uma nova tentativa.</p>
+            </div>
+            <div class="alert info">
+              <strong>↻ Revisão em andamento</strong>
+              <p>Investigando o contexto dos arquivos alterados.</p>
+            </div>
+          </div>
+          <div class="grid two">
+            <div class="panel empty">
+              <img src="../assets/logo/holon-avatar.svg" alt="" />
+              <h3>As revisões aparecerão aqui.</h3>
+              <p class="note">
+                Este exemplo mostra um repositório sem revisões registradas.
+              </p>
+              <button
+                class="button secondary demo-action"
+                data-demo="Estado vazio demonstrado. Em uma aplicação, esta ação abriria a integração correspondente."
+              >
+                Entender a integração
+              </button>
+            </div>
+            <div class="panel">
+              <label class="field-label" for="state-demo"
+                >Experimentar estados do componente</label
+              ><select id="state-demo">
+                <option value="loading">Carregando</option>
+                <option value="success">Concluído</option>
+                <option value="partial">Parcial</option>
+                <option value="error">Falhou</option>
+              </select>
+              <div
+                id="state-preview"
+                class="state-preview"
+                role="status"
+                aria-live="polite"
+              ></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="applications">
+          <div class="eyebrow">08 / Aplicações</div>
+          <h2>Uma marca. Diferentes intensidades.</h2>
+          <p class="intro">
+            Páginas de apresentação podem ampliar o gesto editorial. Painéis
+            concentram a atenção nos objetos de trabalho. Os dois compartilham
+            fontes, cores e ritmo.
+          </p>
+          <div class="grid two">
+            <div class="mock-site">
+              <img
+                class="mini-brand brand-light"
+                src="../assets/logo/holon-lockup-primary.svg"
+                alt="Holon"
+              /><img
+                class="mini-brand brand-dark"
+                src="../assets/logo/holon-lockup-inverse.svg"
+                alt="Holon"
+              />
+              <h3>
+                Entenda a mudança.<br /><em class="editorial"
+                  >Enxergue o contexto.</em
+                >
+              </h3>
+              <p class="note">Revisão de código orientada por evidência.</p>
+              <a class="button" href="#components">Ver exemplo de revisão</a
+              ><img
+                class="decor"
+                src="../assets/logo/holon-symbol-primary.svg"
+                alt=""
+                aria-hidden="true"
+              />
+            </div>
+            <div class="mock-console">
+              <div class="mock-nav">
+                <img
+                  src="../assets/logo/holon-symbol-primary.svg"
+                  alt="Holon"
+                />
+              </div>
+              <div class="mock-main">
+                <span class="eyebrow">Painel · demonstração</span>
+                <h3 style="margin-top: 12px">Revisões</h3>
+                <p class="note"><code>acme/payments</code></p>
+                <div class="mini-row">
+                  <strong>#128 · Validar estorno</strong><br /><span
+                    class="badge"
+                    >1 achado confirmado</span
+                  >
+                </div>
+                <div class="mini-row">
+                  <strong>#127 · Ajustar mensagens</strong><br /><span
+                    class="badge success"
+                    >✓ Sem achados</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel demo-block">
+            <h3>Escrever como Holon</h3>
+            <p>“Nenhum achado confirmado nos trechos revisados.”</p>
+            <p class="note">
+              Conclusão delimitada, em linguagem direta. Contexto, evidência e
+              limitações devem acompanhar o resultado quando necessário.
+            </p>
+            <a href="../brand-and-voice.md">Guia de voz e conteúdo →</a>
+          </div>
+        </section>
+
+        <section id="resources">
+          <div class="eyebrow">09 / Arquivos e continuidade</div>
+          <h2>Uma referência para construir.</h2>
+          <p class="intro">
+            Use os arquivos oficiais e os tokens semânticos. As explorações
+            anteriores ficam preservadas como repertório, fora da identidade
+            ativa.
+          </p>
+          <div class="resources">
+            <a
+              class="button"
+              href="../assets/logo/holon-lockup-primary.svg"
+              download
+              >Assinatura SVG</a
+            ><a
+              class="button secondary"
+              href="../assets/logo/holon-symbol-primary.svg"
+              download
+              >Símbolo SVG</a
+            ><a
+              class="button secondary"
+              href="../assets/logo/holon-symbol-primary-2048.png"
+              download
+              >Símbolo PNG · 2048 px</a
+            ><a class="button secondary" href="../tokens/tokens.json" download
+              >Tokens JSON</a
+            ><a class="button secondary" href="../tokens/tokens.css" download
+              >Tokens CSS</a
+            >
+          </div>
+          <div class="grid two">
+            <div>
+              <h3>Implementação</h3>
+              <p class="note">
+                Fontes locais, temas claro/escuro e componentes de referência.
+                Conecte comportamentos ao domínio real em cada aplicação.
+              </p>
+              <a href="../implementation.md">Integração e manutenção →</a>
+            </div>
+            <div>
+              <h3>Arquivo criativo</h3>
+              <p class="note">
+                As duas rodadas e a variante preliminar Recursão foram
+                preservadas. A direção ativa é a Semente original.
+              </p>
+              <a href="../explorations/README.md">Abrir as explorações →</a>
+            </div>
+          </div>
+        </section>
+        <footer>
+          Holon · Brand Guidelines / Design System / UI Kit<br />Referência
+          visual local · 2026-10-04 · Todos os dados de produto desta página são
+          fictícios.
+        </footer>
+      </main>
+    </div>
+    <dialog id="finding-dialog" aria-labelledby="dialog-title">
+      <div class="dialog-head">
+        <div>
+          <span class="eyebrow">Exemplo fictício</span>
+          <h2 id="dialog-title">Um achado precisa de contexto.</h2>
+        </div>
+        <button
+          class="button quiet"
+          id="close-finding"
+          aria-label="Fechar exemplo"
+        >
+          ×
+        </button>
+      </div>
+      <p>
+        Esta sobreposição demonstra título, evidência e retorno ao ponto de
+        origem. Em uma aplicação, o conteúdo deve explicar uma condição
+        verificável e seu impacto.
+      </p>
+      <p class="note">
+        Arquivo: <code>src/payments/refund.ts:42</code><br />Gravidade
+        ilustrativa: P2 · Moderado
+      </p>
+      <div class="alert info">
+        <strong>Princípio de composição</strong>
+        <p>
+          A conclusão aparece perto da evidência. Detalhes adicionais aprofundam
+          o contexto sem esconder limitações.
+        </p>
+      </div>
+    </dialog>
+  </body>
+</html>

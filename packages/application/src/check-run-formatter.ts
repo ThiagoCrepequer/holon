@@ -162,9 +162,6 @@ export function formatCheckRunOutput(
         `⚠️ ${si.contractBreaks.length} contract investigation lead(s)`,
       );
     }
-    if (si.testGaps.length > 0) {
-      parts.push(`${si.testGaps.length} test gap(s)`);
-    }
     if (si.repositoryScanTruncated === true) {
       parts.push("downstream scan partial");
     }

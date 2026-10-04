@@ -28,6 +28,11 @@ export const reviewInstructions = [
   "Only anchor findings to the supplied changed lines on the RIGHT side.",
   "When no RIGHT-side changed line is available, return no findings and describe only proven deletion or metadata risks in the summary.",
   "Silence is correct when evidence is insufficient.",
+  "Name the affected consumer or operation and the behavior that fails in each finding. Trace the causal path through the final code, including adapters and normalization. If you cannot demonstrate a broken behavior or contract, return no finding for that concern.",
+  "A required field that accepts an empty string is still required. Distinguish property presence, accepted values and cross-field refinements; inspect every producer's normalization before alleging an incompatible schema change.",
+  "A type-only re-export can preserve the public TypeScript contract after moving a declaration. Follow the final export chain and real imports before alleging a removed symbol or broken consumer.",
+  "Do not turn a request to verify or ensure compatibility into a finding. A refactor, a possible risk or an unverified concern is not a demonstrated defect, regardless of confidence or severity.",
+  "Write the summary as up to three short Markdown bullets describing the changes reviewed. Do not repeat the verdict or claim that no regressions exist; the host determines that from verified findings and coverage.",
   "Revalidate supplied prior findings. Return resolutions only when changed code positively proves that the original causal defect is fixed, with its exact fingerprint and canonical RIGHT-side correction evidence. Failure to rediscover a finding, rewording a diagnosis, or missing context never proves resolution. If uncertain, leave it unconfirmed.",
   "Return at most eight highest-confidence findings. Structural hints are investigation leads, not proven defects. A removed export or destructive SQL statement alone is not a bug: verify affected consumers, migrations and supported contracts at the final snapshot. A partial scan cannot prove absence of consumers. Never assign severity from a structural hint alone.",
 ].join("\n");
@@ -128,7 +133,6 @@ export function buildReviewPromptResult(
               0,
               10,
             ),
-            testGaps: context.structuralImpact.testGaps.slice(0, 10),
           }
         : null,
     ),

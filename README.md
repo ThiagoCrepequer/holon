@@ -1,5 +1,10 @@
 # Holon
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/assets/logo/holon-lockup-inverse.svg">
+  <img src="docs/brand/assets/logo/holon-lockup-primary.svg" alt="Holon — cada mudança, no seu contexto" width="240">
+</picture>
+
 Holon e uma plataforma de revisao de Pull Requests por IA, integrada ao GitHub
 por meio de um GitHub App e projetada para executar sobre a plataforma
 Cloudflare.
@@ -38,6 +43,7 @@ imagem do executor sem realizar deploy.
 - [ADR-0038: análise paralela e publicação](docs/decisions/0038-harden-parallel-review-and-publication.md)
 - [Ecossistema tecnico](docs/architecture/technical-ecosystem.md)
 - [Guia de engenharia e contexto](docs/engineering/README.md)
+- [Identidade, design system e UI Kit](docs/brand/README.md)
 - [Skills do projeto](.agents/skills/README.md)
 - [Desenvolvimento local](docs/operations/local-development.md)
 - [Configuracao do GitHub App](docs/operations/github-app.md)

@@ -18,6 +18,11 @@ solicitação explícita do usuário define o objetivo e o escopo do trabalho.
 5. Para implementação, use o [guia de engenharia](docs/engineering/README.md)
    para localizar princípios de TypeScript, módulos, testes e fontes oficiais
    do runtime. Leia o tópico necessário, não todos os guias de uma vez.
+6. Para marca, sites, landing pages e interfaces, consulte
+   [identidade e design system](docs/brand/README.md). Use a Semente oficial,
+   as fontes locais e os tokens semânticos. `docs/brand/explorations/` é um
+   arquivo histórico e não define a identidade ativa. O UI Kit é referência
+   estática; sua existência não significa que há um admin em produção.
 
 Não carregue documentação ou skills sem relação com o pedido. Instruções de
 skills externas complementam este arquivo: não substituem pedidos do usuário,
@@ -44,19 +49,20 @@ vigente está em `docs/architecture/` e nos ADRs aceitos.
 ## Comandos do projeto
 
 Execute na raiz. `pnpm` deve ser `11.24.0` e o Node deve satisfazer o intervalo
-de `package.json` (`>=24 <25`).
+de `package.json` (`>=24.11 <25`).
 
-| Objetivo                         | Comando              |
-| -------------------------------- | -------------------- |
-| Instalar dependências            | `pnpm install`       |
-| Formatar arquivos                | `pnpm format`        |
-| Conferir formatação sem escrever | `pnpm format:check`  |
-| Lint                             | `pnpm lint`          |
-| Typecheck                        | `pnpm typecheck`     |
-| Testes                           | `pnpm test`          |
-| Testes com cobertura mínima      | `pnpm test:coverage` |
-| Build e dry-runs                 | `pnpm build`         |
-| Gate local completo              | `pnpm verify`        |
+| Objetivo                         | Comando                  |
+| -------------------------------- | ------------------------ |
+| Instalar dependências            | `pnpm install`           |
+| Formatar arquivos                | `pnpm format`            |
+| Conferir formatação sem escrever | `pnpm format:check`      |
+| Lint                             | `pnpm lint`              |
+| Typecheck                        | `pnpm typecheck`         |
+| Testes                           | `pnpm test`              |
+| Direção dos imports              | `pnpm test:architecture` |
+| Testes com cobertura mínima      | `pnpm test:coverage`     |
+| Build e dry-runs                 | `pnpm build`             |
+| Gate local completo              | `pnpm verify`            |
 
 `pnpm build` não faz deploy, mas requer Docker para construir a imagem do
 Sandbox. Antes de escolher comandos filtrados, consulte os scripts do workspace

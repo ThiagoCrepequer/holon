@@ -2,7 +2,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
 
-import { ReviewToolBudgetStore } from "../src/review-tool-budget-store.js";
+import { ReviewToolBudgetStore } from "../src/ledger/review-tool-budget-store.js";
 
 afterEach(() => reset());
 
@@ -109,7 +109,8 @@ it("keeps review state and tool budgets without administrative storage", async (
 });
 
 it("migrates consumed budgets atomically without changing core rows and is replay safe", async () => {
-  const { applyLedgerMigrations } = await import("../src/ledger-migrations.js");
+  const { applyLedgerMigrations } =
+    await import("../src/ledger/ledger-migrations.js");
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:9");
   const runId =
     `github:42:pr:9:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;

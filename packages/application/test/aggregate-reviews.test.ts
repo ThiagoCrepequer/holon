@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateShardReviews,
+  formatCleanFollowUpReview,
   formatCheckRunOutput,
   formatReconciliationSection,
   formatStructuralImpactSection,
 } from "../src/index.js";
 
 describe("aggregateShardReviews", () => {
+  it("formats a compact follow-up review in the configured language", () => {
+    expect(formatCleanFollowUpReview("ee02be7" + "a".repeat(33), "pt-BR")).toBe(
+      "## ✅ Holon · Revisão atualizada\n\n**0 novos achados** · `ee02be7`\n\n### Mudanças revisadas\n\nNenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
+    );
+  });
   const fileA = {
     mode: "structural" as const,
     patch:
@@ -78,7 +84,7 @@ describe("aggregateShardReviews", () => {
       );
       expect(result.summary).not.toContain("safe to merge");
       expect(result.summary).not.toContain("No regressions exist");
-      expect(result.summary).toContain("incomplete");
+      expect(result.summary).toContain("## ⚠️ Holon · Incomplete review");
       expect(result.summary).toContain("0 verified finding");
       expect(result.verdict).toBe("COMMENT");
     },
@@ -99,6 +105,7 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.scopeStatus).toBe("unsupported");
     expect(aggregated.findings).toHaveLength(0);
     expect(aggregated.summary).toContain("No eligible changes were found");
+    expect(aggregated.summary).toContain("## 💬 Holon · No eligible changes");
     expect(aggregated.verdict).toBe("COMMENT");
   });
 
@@ -172,7 +179,11 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.summary).toContain(
       "Analyzed module A.\n\nAnalyzed module B.",
     );
-    expect(aggregated.summary).toContain("Verdict: Changes requested");
+    expect(aggregated.summary).toContain("## 🚩 Holon · Changes requested");
+    expect(aggregated.summary).toContain(
+      "**2 active findings** · complete review",
+    );
+    expect(aggregated.summary).toContain("### Changes reviewed");
   });
 
   it("handles shard failures with partial_by_failure status", () => {
@@ -219,10 +230,55 @@ describe("aggregateShardReviews", () => {
       "Shard 2 (shard-1) failed during analysis: Gateway timeout",
     );
     expect(aggregated.verdict).toBe("COMMENT");
+    expect(aggregated.summary).toContain("### Review limitations");
+    expect(aggregated.summary).toContain("## ⚠️ Holon · Incomplete review");
     expect(aggregated.summary).toContain(
-      "Partial review: some changes could not be analyzed due to an execution failure.",
+      "**1 verified finding** · partial coverage (1/2 shards analyzed)",
     );
-    expect(aggregated.summary).toContain("Verdict: Informational Comment");
+    expect(aggregated.summary).not.toContain("### Verdict:");
+  });
+
+  it("explains a five-of-six failed review in Portuguese without the old verdict layout", () => {
+    const shards = Array.from({ length: 6 }, (_, index) => ({
+      ...shard0,
+      id: `shard-${index}`,
+      index,
+      totalShards: 6,
+    }));
+    const results = shards.map((shard, index) =>
+      index === 4
+        ? {
+            shardId: shard.id,
+            shardIndex: index,
+            status: "failure" as const,
+            findings: [],
+            summary: "",
+            errorReason: "agent_workflow_failed",
+          }
+        : {
+            shardId: shard.id,
+            shardIndex: index,
+            status: "success" as const,
+            findings: [],
+            summary: "No regression found.",
+          },
+    );
+    const aggregated = aggregateShardReviews({ ...plan, shards }, results, {
+      language: "pt-BR",
+    });
+
+    expect(aggregated.verdict).toBe("COMMENT");
+    expect(aggregated.summary).toContain("## ⚠️ Holon · Revisão incompleta");
+    expect(aggregated.summary).toContain(
+      "**0 achados verificados** · cobertura parcial (5/6 partes analisadas)",
+    );
+    expect(aggregated.summary).toContain("### Cobertura");
+    expect(aggregated.summary).toContain("### Limitações da revisão");
+    expect(aggregated.summary).toContain(
+      "A parte 5 (shard-4) falhou durante a análise: agent_workflow_failed.",
+    );
+    expect(aggregated.summary).not.toContain("### Veredito:");
+    expect(aggregated.summary).not.toContain("No regression found.");
   });
 
   it("preserves failure coverage regardless of shard order when context is also omitted", () => {
@@ -330,9 +386,8 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.findings[0]!.location.line).toBe(10);
     expect(aggregated.findings[1]!.location.line).toBe(11);
     expect(aggregated.summary).toContain("Low-severity observations:");
-    expect(aggregated.summary).toContain(
-      "Partial review: at least one eligible patch or context section was omitted by a deterministic host budget.",
-    );
+    expect(aggregated.summary).toContain("### Review limitations");
+    expect(aggregated.summary).toContain("deterministic host limit");
   });
 
   it("truncates summary exceeding character limit", () => {
@@ -415,7 +470,12 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.shardsAnalyzed).toBe(2);
     expect(aggregated.findings).toHaveLength(0);
     expect(aggregated.verdict).toBe("APPROVE");
-    expect(aggregated.summary).toContain("Verdict: Approved");
+    expect(aggregated.summary).toContain("## ✅ Holon · Approved");
+    expect(aggregated.summary).toContain(
+      "**0 active findings** · complete review",
+    );
+    expect(aggregated.summary).toContain("### Changes reviewed");
+    expect(aggregated.summary).not.toContain("Findings: 0 active");
   });
 
   describe("reconciliation formatting", () => {
@@ -530,13 +590,6 @@ describe("aggregateShardReviews", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [
-          {
-            expectedTestPathPattern: "src/user.test.ts",
-            reason: "no_test_file_modified" as const,
-            sourcePath: "src/user.ts",
-          },
-        ],
         totalDownstreamReferencesCount: 1,
       };
 
@@ -546,7 +599,6 @@ describe("aggregateShardReviews", () => {
       expect(formatted).toContain("Exported symbol removed (src/user.ts:5)");
       expect(formatted).toContain("Symbols Modified");
       expect(formatted).toContain("Downstream Impact Radius");
-      expect(formatted).toContain("Test Gaps");
     });
 
     it("returns empty string when report has no impactful changes", () => {
@@ -555,7 +607,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
         totalDownstreamReferencesCount: 0,
       };
       expect(formatStructuralImpactSection(emptyReport)).toBe("");
@@ -568,7 +619,6 @@ describe("aggregateShardReviews", () => {
         downstreamReferences: [],
         repositoryScanTruncated: true,
         securitySurfaces: [],
-        testGaps: [],
       });
 
       expect(formatted).toContain("Repository Scan");
@@ -600,7 +650,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
       };
 
       const aggregated = aggregateShardReviews(plan, shardResults, {
@@ -634,7 +683,6 @@ describe("aggregateShardReviews", () => {
           },
         ],
         securitySurfaces: [],
-        testGaps: [],
       };
 
       const formatted = formatStructuralImpactSection(report);
@@ -648,7 +696,6 @@ describe("aggregateShardReviews", () => {
         contractBreaks: [],
         downstreamReferences: [],
         securitySurfaces: [],
-        testGaps: [],
       };
       const aggregatedWithEmpty = aggregateShardReviews(
         plan,
@@ -685,7 +732,7 @@ describe("aggregateShardReviews", () => {
 
       expect(aggregated.isDegraded).toBe(true);
       expect(aggregated.verdict).toBe("COMMENT");
-      expect(aggregated.summary).toContain("Verdict: Informational Comment");
+      expect(aggregated.summary).toContain("## ⚠️ Holon · Incomplete review");
       expect(aggregated.summary).toContain("The review is incomplete");
       expect(aggregated.summary).not.toContain("All reviewed files clean");
     });

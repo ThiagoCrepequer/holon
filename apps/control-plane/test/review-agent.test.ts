@@ -6,7 +6,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
-import type { ReviewAgent } from "../src/review-agent.js";
+import type { ReviewAgent } from "../src/review/review-agent.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();

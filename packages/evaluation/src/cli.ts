@@ -1,8 +1,8 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { baselineCorpusV3 } from "../corpus/v3/index.js";
-import { baselineRecordingsV3 } from "../recordings/v3/index.js";
+import { baselineCorpusV4 } from "../corpus/v4/index.js";
+import { baselineRecordingsV4 } from "../recordings/v4/index.js";
 import { evalRunConfigurationSchema } from "./contracts.js";
 import { createEvaluationReport, renderEvaluationSummary } from "./report.js";
 import { runEvaluationSuite } from "./runner.js";
@@ -34,16 +34,16 @@ async function main(): Promise<void> {
     throw new TypeError("evaluation mode must be recorded");
   const sourceRevision = safeRunMetadata("GITHUB_SHA", "local");
   const configuration = evalRunConfigurationSchema.parse({
-    corpusVersion: "baseline-v3",
+    corpusVersion: "baseline-v4",
     mode: "recorded-output",
     modelReference: null,
     policyVersion: "review-policy-v1",
-    promptVersion: "review-prompt-v1",
-    subjectVersion: "recorded-output-v3",
+    promptVersion: "review-prompt-v2",
+    subjectVersion: "recorded-output-v4",
   });
-  const subject = createRecordedSubject(baselineRecordingsV3);
+  const subject = createRecordedSubject(baselineRecordingsV4);
   const suite = await runEvaluationSuite(
-    baselineCorpusV3,
+    baselineCorpusV4,
     subject,
     configuration,
   );

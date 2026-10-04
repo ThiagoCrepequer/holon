@@ -1,11 +1,11 @@
 import { reviewJobSchema } from "@holon/contracts";
 import { expect, it, vi } from "vitest";
 
-import type { ReviewAgentConfig } from "../src/review-agent.js";
+import type { ReviewAgentConfig } from "../src/review/review-agent.js";
 import {
   ThinkReviewFailure,
   ThinkReviewModelReviewer,
-} from "../src/think-reviewer.js";
+} from "../src/review/think-reviewer.js";
 
 const job = reviewJobSchema.parse({
   envelope: {

@@ -186,9 +186,6 @@ importers:
       '@cloudflare/sandbox':
         specifier: 'catalog:'
         version: 0.13.0-next.751.1
-      '@holon/application':
-        specifier: workspace:*
-        version: link:../../packages/application
       '@holon/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -256,9 +253,6 @@ importers:
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@holon/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@holon/model':
         specifier: workspace:*
         version: link:../model
@@ -347,9 +341,6 @@ importers:
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@holon/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@yarnpkg/parsers':
         specifier: 3.1.0
         version: 3.1.0
@@ -368,9 +359,6 @@ importers:
 
   packages/repository-analysis:
     dependencies:
-      '@holon/application':
-        specifier: workspace:*
-        version: link:../application
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts

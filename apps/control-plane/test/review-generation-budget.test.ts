@@ -2,7 +2,7 @@ import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
 
-import { ReviewGenerationBudgetStore } from "../src/review-generation-budget-store.js";
+import { ReviewGenerationBudgetStore } from "../src/ledger/review-generation-budget-store.js";
 afterEach(() => reset());
 const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as const;

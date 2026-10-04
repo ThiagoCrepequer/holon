@@ -74,13 +74,18 @@ export const reviewResolutionSchema = reviewFindingSchema
   .extend({
     fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
   });
-export const modelReviewOutputSchema = z.strictObject({
-  resolutions: z.array(reviewResolutionSchema).max(8).optional(),
-  findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
-  isDegraded: z.boolean().optional(),
-  summary: z.string().trim().min(1).max(reviewTextLimits.summary),
-  outputLimitations: reviewOutputLimitationsSchema.optional(),
-});
+export const modelReviewOutputSchema = z
+  .strictObject({
+    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
+    findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
+    isDegraded: z.boolean().optional(),
+    summary: z.string().trim().max(reviewTextLimits.summary),
+    outputLimitations: reviewOutputLimitationsSchema.optional(),
+  })
+  .refine((output) => output.summary.length > 0 || output.isDegraded === true, {
+    message: "blank summary requires degraded output",
+    path: ["summary"],
+  });
 
 /**
  * JSON-Schema-portable model boundary. Optional domain fields are required but
@@ -138,7 +143,7 @@ const resilientSuggestion = z.preprocess(
       : value,
   z.string().min(1).max(reviewTextLimits.suggestion).nullable(),
 );
-const resilientSummary = boundedText(reviewTextLimits.summary);
+const resilientSummary = boundedText(reviewTextLimits.summary, 0);
 
 const resilientSeverity = z.preprocess(
   (val) => (typeof val === "string" ? val.toLowerCase().trim() : val),
@@ -321,7 +326,9 @@ export function modelReviewOutputFromTransport(
       ? { isDegraded: transport.isDegraded }
       : {}),
     summary: transport.summary,
-    ...(transport.outputLimitations?.length ? { isDegraded: true } : {}),
+    ...(transport.summary.length === 0 || transport.outputLimitations?.length
+      ? { isDegraded: true }
+      : {}),
     ...(transport.outputLimitations?.length
       ? { outputLimitations: transport.outputLimitations }
       : {}),

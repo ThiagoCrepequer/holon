@@ -4,14 +4,14 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-04
 ---
 
 # Desenvolvimento local
 
 ## Requisitos
 
-- Node.js 24 ou posterior dentro da major 24.
+- Node.js 24.11 ou posterior dentro da major 24; a CI usa 24.19.0.
 - pnpm 11.24.0 habilitado por Corepack.
 - Docker CLI e daemon compatível para construir o Sandbox.
 

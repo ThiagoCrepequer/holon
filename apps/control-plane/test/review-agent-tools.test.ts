@@ -2,7 +2,7 @@ import type { RepositoryToolOutcome } from "@holon/contracts";
 import type { RunId } from "@holon/domain";
 import { expect, it, vi } from "vitest";
 
-import { ReviewAgent } from "../src/review-agent.js";
+import { ReviewAgent } from "../src/review/review-agent.js";
 
 const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as RunId;

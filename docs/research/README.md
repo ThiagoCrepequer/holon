@@ -31,6 +31,7 @@ Nao criam uma decisao por si so.
 
 - [PR #99: rollout do Sandbox e amplificação da falha](2026-09-28-review-99-rollout-and-failure-amplification.md)
 - [Exemplos e runtime de Cloudflare Agents para o review](2026-10-03-cloudflare-agents-examples-and-runtime-audit.md)
+- [PR #121: review parcial e formato do feedback](2026-10-04-pr121-partial-review.md)
 
 ## Politica de manutencao
 

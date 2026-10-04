@@ -24,7 +24,7 @@ do candidato refutado. Não medem a qualidade das inferências reais.
 ## Avaliação offline
 
 Os testes do pacote `@holon/evaluation` fazem parte do gate geral `pnpm verify`
-no CI. A execução do corpus V3 contra recordings sintéticas é manual:
+no CI. A execução do corpus V4 contra recordings sintéticas é manual:
 
 ```bash
 pnpm --filter @holon/evaluation evaluate:recorded
@@ -35,7 +35,10 @@ secrets ou chamada a provider externo. O relatório contém configuração, IDs,
 métricas e categorias de falha, sem patches ou respostas integrais. Um resultado
 verde prova apenas a estabilidade do corpus e dos graders registrados. Não
 prova a qualidade do modelo escolhido, execução de tools, Sandbox, GitHub App
-ou publicação remota. Consulte
+ou publicação remota. A V4 acrescenta controles negativos para campo requerido
+com string vazia e reexport de tipo, motivados pelo PR #121. Eles permitem medir
+uma futura avaliação live; as recordings não demonstram que o Agent real
+evitará os dois falsos positivos. Consulte
 [teste e evidência](../engineering/testing-and-evidence.md) para separar os
 níveis de prova.
 
@@ -45,7 +48,7 @@ níveis de prova.
 formatação, lint, tipos, testes com os limites de cobertura existentes e build
 em dry-run dos dois Workers, incluindo a imagem Docker do executor. O módulo
 puro de decisão causal teve 100% de linhas e branches cobertos. Os testes do
-control plane passaram (253 casos), incluindo as duas conversas Think,
+control plane passaram (259 casos após integrar `main`), incluindo as duas conversas Think,
 leitura simulada do chamador, refutação, saldo compartilhado, cancelamento e
 deadline. O Sandbox e o provider remoto não foram usados nesse teste causal.
 

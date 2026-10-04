@@ -57,7 +57,7 @@ projects:
     description: Toolchain e configuração raiz.
     compatibility:
       runtimes:
-        node: ">=24 <25"
+        node: ">=24.11 <25"
       frameworks:
         typescript: "7.x"
     instructions:
@@ -165,7 +165,7 @@ projects:
     description: Validação local e JSON Schema.
     compatibility:
       runtimes:
-        node: ">=24 <25"
+        node: ">=24.11 <25"
     instructions:
       - |
         Compare leitura por ref e working tree, inclusive maiúsculas.

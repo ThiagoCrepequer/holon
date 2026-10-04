@@ -16,7 +16,6 @@ import {
   classifyFindingPublication,
   reviewText,
   determineReviewVerdict,
-  formatVerdictBadge,
   type Finding,
   type FindingSeverity,
   type ReviewVerdictPolicyOptions,
@@ -25,6 +24,7 @@ import {
 import { verifyFindingsWithCanonicalEvidence } from "./evidence.js";
 import { formatConfiguredFindings } from "./inline-publication-plan.js";
 import { fitPublicationSummary } from "./publication-summary.js";
+import { formatReviewSummaryHeader } from "./review-summary-header.js";
 
 export interface AggregateShardReviewOptions {
   readonly publication?:
@@ -39,6 +39,31 @@ export interface AggregateShardReviewOptions {
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
+}
+
+export function formatCleanFollowUpReview(
+  headSha: string,
+  language: ReviewLanguage = "en",
+): string {
+  const heading = reviewText(
+    language,
+    "## ✅ Holon · Review updated\n\n**0 new findings**",
+    "## ✅ Holon · Revisão atualizada\n\n**0 novos achados**",
+    "## ✅ Holon · Revisión actualizada\n\n**0 hallazgos nuevos**",
+  );
+  const detail = reviewText(
+    language,
+    "No new findings confirmed. The eligible changes in this commit were reviewed.",
+    "Nenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
+    "No se confirmaron hallazgos nuevos. Se revisaron los cambios elegibles de este commit.",
+  );
+  const section = reviewText(
+    language,
+    "### Changes reviewed",
+    "### Mudanças revisadas",
+    "### Cambios revisados",
+  );
+  return `${heading} · \`${headSha.slice(0, 7)}\`\n\n${section}\n\n${detail}`;
 }
 
 export function formatStructuralImpactSection(
@@ -72,15 +97,6 @@ export function formatStructuralImpactSection(
         `- 🌐 **Downstream Impact Radius**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} reference(s) across repository outside PR`,
         `- 🌐 **Impacto nos consumidores**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} referência(s) no repositório fora do PR`,
         `- 🌐 **Impacto en consumidores**: ${report.totalDownstreamReferencesCount ?? report.downstreamReferences.length} referencia(s) en el repositorio fuera del PR`,
-      ),
-    );
-  }
-  if (report.testGaps.length > 0) {
-    parts.push(
-      text(
-        `- 🧪 **Test Gaps**: ${report.testGaps.length} source file(s) modified without corresponding test file in PR`,
-        `- 🧪 **Lacunas de testes**: ${report.testGaps.length} arquivo(s) fonte modificado(s) sem teste correspondente no PR`,
-        `- 🧪 **Brechas de pruebas**: ${report.testGaps.length} archivo(s) fuente modificado(s) sin prueba correspondiente en el PR`,
       ),
     );
   }
@@ -220,10 +236,22 @@ export function aggregateShardReviews(
       ),
       scopeStatus: "unsupported",
       shardsAnalyzed: 0,
-      summary: text(
-        "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
-        "Nenhuma alteração elegível após excluir arquivos binários, de lock, gerados, de terceiros, minificados e sensíveis reconhecidos.",
-        "No hay cambios elegibles tras excluir archivos binarios, de lock, generados, de terceros, minificados y sensibles reconocidos.",
+      summary: fitPublicationSummary(
+        formatReviewSummaryHeader({
+          verdict: verdictDetails.verdict,
+          activeFindingsCount: 0,
+          scopeStatus: "unsupported",
+          shardsAnalyzed: 0,
+          totalShards: 0,
+          language: options.language,
+        }),
+        `${text("### Coverage", "### Cobertura", "### Cobertura")}\n\n${text(
+          "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
+          "Nenhuma alteração elegível após excluir arquivos binários, de lock, gerados, de terceiros, minificados e sensíveis reconhecidos.",
+          "No hay cambios elegibles tras excluir archivos binarios, de lock, generados, de terceros, minificados y sensibles reconocidos.",
+        )}`,
+        "",
+        options.language,
       ),
       totalShards: 0,
       verdict: verdictDetails.verdict,
@@ -317,22 +345,27 @@ export function aggregateShardReviews(
     totalShards: plan.shards.length,
   });
 
-  // Compose summary
-  const summarySections: string[] = [
-    formatVerdictBadge(verdictDetails.verdict, options.language),
-  ];
-  if (verdictDetails.reasons.length > 0) {
-    summarySections.push(verdictDetails.reasons.join(" "));
-  }
-
-  const prefix = summarySections.join("\n\n");
-  summarySections.length = 0;
+  const cleanApproval =
+    verdictDetails.verdict === "APPROVE" && sortedFindings.length === 0;
+  const prefix = [
+    formatReviewSummaryHeader({
+      verdict: verdictDetails.verdict,
+      activeFindingsCount: sortedFindings.length,
+      scopeStatus,
+      isDegraded: isAnyShardDegraded,
+      shardsAnalyzed,
+      totalShards: plan.shards.length,
+      language: options.language,
+    }),
+    ...(cleanApproval ? [] : verdictDetails.reasons),
+  ].join("\n\n");
+  const summarySections: string[] = [];
   const incomplete = scopeStatus !== "complete" || isAnyShardDegraded;
-  const narrative = incomplete
+  const narrativeContent = incomplete
     ? text(
-        `This review is incomplete. ${sortedFindings.length} verified finding(s) were retained from ${shardsAnalyzed} of ${plan.shards.length} planned shards. No conclusion is made about omitted changes or unfinished investigation.`,
-        `Esta revisão está incompleta. ${sortedFindings.length} achado(s) verificado(s) foram mantidos em ${shardsAnalyzed} de ${plan.shards.length} partes planejadas. Não há conclusão sobre alterações omitidas ou investigação inacabada.`,
-        `Esta revisión está incompleta. Se conservaron ${sortedFindings.length} hallazgo(s) verificado(s) en ${shardsAnalyzed} de ${plan.shards.length} partes previstas. No hay conclusión sobre cambios omitidos ni investigación sin terminar.`,
+        "No conclusion is made about omitted changes or unfinished investigation.",
+        "Não há conclusão sobre alterações omitidas ou investigação inacabada.",
+        "No hay conclusión sobre cambios omitidos ni investigación sin terminar.",
       )
     : shardSummaries.length
       ? shardSummaries.join("\n\n")
@@ -342,20 +375,23 @@ export function aggregateShardReviews(
           "Resumen narrativo no disponible; consulte los hallazgos verificados y la cobertura de la revisión.",
         );
 
+  const narrative = `${incomplete ? text("### Coverage", "### Cobertura", "### Cobertura") : text("### Changes reviewed", "### Mudanças revisadas", "### Cambios revisados")}\n\n${narrativeContent}`;
+
+  const limitations: string[] = [];
   if (scopeStatus === "partial_by_policy") {
-    summarySections.push(
+    limitations.push(
       text(
-        "Partial review: at least one eligible patch or context section was omitted by a deterministic host budget.",
-        "Revisão parcial: ao menos um patch elegível ou seção de contexto foi omitido por um limite determinístico do host.",
-        "Revisión parcial: al menos un patch elegible o sección de contexto fue omitido por un límite determinista del host.",
+        "Some eligible patches or context sections were omitted by a deterministic host limit.",
+        "Alguns patches elegíveis ou seções de contexto foram omitidos por um limite determinístico do host.",
+        "Algunos patches elegibles o secciones de contexto fueron omitidos por un límite determinista del host.",
       ),
     );
-  } else if (scopeStatus === "partial_by_failure") {
-    summarySections.push(
+  } else if (scopeStatus === "partial_by_failure" && !omissionReasons.length) {
+    limitations.push(
       text(
-        "Partial review: some changes could not be analyzed due to an execution failure.",
-        "Revisão parcial: algumas alterações não puderam ser analisadas devido a uma falha de execução.",
-        "Revisión parcial: algunos cambios no pudieron analizarse por un fallo de ejecución.",
+        "Some changes could not be analyzed because execution failed.",
+        "Algumas alterações não puderam ser analisadas porque a execução falhou.",
+        "Algunos cambios no pudieron analizarse porque falló la ejecución.",
       ),
     );
   }
@@ -371,16 +407,15 @@ export function aggregateShardReviews(
   }
 
   if (omissionReasons.length)
+    limitations.push(
+      [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
+    );
+  if (limitations.length)
     summarySections.push(
-      text(
-        "Review limitations:\n",
-        "Limitações da revisão:\n",
-        "Limitaciones de la revisión:\n",
-      ) +
-        [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
+      `${text("### Review limitations", "### Limitações da revisão", "### Limitaciones de la revisión")}\n\n${limitations.join("\n\n")}`,
     );
 
-  if (options.publication)
+  if (options.publication && options.publication.findings.length > 0)
     summarySections.push(
       formatConfiguredFindings(
         options.publication.findings,

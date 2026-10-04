@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Testes e evidência de entrega
@@ -30,7 +30,10 @@ quando desenvolvimento guiado por testes ajudar a tarefa.
 | Avaliação de review                                       | Corpus, recordings, graders e adapter live somente quando autorizado.                                             | Findings falsos/omitidos, cobertura e mudança de modelo/prompt.              |
 
 Os testes concretos ficam em `apps/*/test`, `packages/*/test` e
-`tooling/config-cli/test`. O control plane usa a configuração Vitest Workers;
+`tooling/config-cli/test`. O teste de direção de imports fica em
+`tooling/architecture` e verifica também ciclos de imports relativos; roda por
+`pnpm test:architecture`, `pnpm test` e `pnpm test:coverage`. O control plane
+usa a configuração Vitest Workers;
 o executor possui testes Node e `vitest.worker.config.ts`. Consulte os scripts
 de cada `package.json` antes de escolher comando filtrado.
 
@@ -45,7 +48,10 @@ de cada `package.json` antes de escolher comando filtrado.
    uma função privada. Prefira a interface observável do módulo.
 4. Mantenha testes significativos de regressão; não reduza limiares de
    cobertura, exclua produção do cálculo ou remova falhas para obter verde.
-5. Teste local de modelo com mock não mede qualidade de review. Use
+5. Para healthchecks, separe liveness, presença dos bindings atuais e prova de
+   disponibilidade remota. Um binding antigo não satisfaz o contrato vigente;
+   teste a configuração esperada e a rejeição de aliases retirados.
+6. Teste local de modelo com mock não mede qualidade de review. Use
    [avaliações](../operations/evaluations.md) para corpus e live manual,
    distinguindo sua evidência de integração GitHub/Cloudflare real.
 

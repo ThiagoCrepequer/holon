@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Diagnóstico de análise parcial ou interrompida
@@ -16,6 +16,28 @@ instância de `holon-review-workflow`, os `ReviewShardWorkflow` e os logs do
 mostram estados e etapas sem imprimir os resultados privados. Um Workflow pai
 concluído ainda pode representar análise parcial: confirme o Check Run e os
 eventos abaixo. `wrangler tail` acompanha somente eventos novos.
+
+Para um shard, `agent_workflow_failed` significa apenas que o
+`ReviewShardWorkflow` terminou com status `errored`. Esse código não distingue
+falha do provider, orçamento, tool ou runtime. O ID da instância do shard é
+`review-` seguido do SHA-256 hexadecimal de `<runId>:<shardIndex>` (índice
+começa em zero). Consulte
+`wrangler workflows instances describe holon-review-shard-workflow <id> --no-step-output`
+e correlacione com os eventos do Agent antes de atribuir uma causa. Evite
+imprimir step output ou trace payload em relatórios operacionais: eles podem
+conter código privado. Sem acesso à instância ou ao trace, registre a causa
+interna como não determinada.
+
+Quando a instância terminar com erro após `review-shard:wait-1`, confira o tipo
+do erro e o schema da resposta antes de atribuir a falha ao provider. Na
+execução do PR #121 em 2026-10-04, um `ZodError` resultou de `summary` vazio
+aceito pelo schema do prompt e rejeitado pelo parser de transporte. A
+[API de step do Cloudflare Workflows](https://developers.cloudflare.com/api/resources/workflows/subresources/instances/methods/step/)
+(documentação verificada em 2026-10-04) permite consultar a saída integral
+quando `wrangler describe` a trunca. Essa saída pode conter código privado:
+inspecione em processo, sem imprimir ou persistir payload, e relate somente
+estado, etapa e falhas de schema. Veja a
+[investigação do PR #121](../research/2026-10-04-pr121-partial-review.md).
 
 | Evento                                                                   | Interpretação                                                                                                                                                              |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,6 +62,6 @@ usuário solicitar. Os logs estruturados não devem conter prompt, diff,
 argumento de ferramenta, resposta integral, stack, erro arbitrário ou
 credencial. Falhas de log não alteram admissão, veredito ou cleanup.
 
-Implementação: `apps/control-plane/src/review-agent.ts`,
-`review-generation-budget-store.ts`, `review-tool-budget-store.ts`,
-`review-analysis.ts` e `review-workflow.ts`.
+Implementação: `apps/control-plane/src/review/review-agent.ts`,
+`ledger/review-generation-budget-store.ts`, `ledger/review-tool-budget-store.ts`,
+`review/review-analysis.ts` e `review/review-workflow.ts`.

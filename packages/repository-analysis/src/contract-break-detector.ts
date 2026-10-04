@@ -46,18 +46,61 @@ function isContractBoundary(
   return true;
 }
 
+function addedTypeReexports(
+  files: readonly { readonly patch: string; readonly path: string }[],
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const byPath = new Map<string, Set<string>>();
+  for (const file of files) {
+    if (!/\.(?:[cm]?ts|tsx)$/iu.test(file.path)) continue;
+    let patches;
+    try {
+      patches = parsePatch(file.patch);
+    } catch {
+      continue;
+    }
+    for (const patch of patches) {
+      for (const hunk of patch.hunks ?? []) {
+        for (const line of hunk.lines) {
+          if (!line.startsWith("+")) continue;
+          const reexport =
+            /^\+\s*export\s+type\s*\{([^}]+)\}\s*from\s*["'][^"']+["']\s*;?\s*$/u.exec(
+              line,
+            );
+          if (reexport?.[1] === undefined) continue;
+          const names = byPath.get(file.path) ?? new Set<string>();
+          for (const entry of reexport[1].split(",")) {
+            const specifier =
+              /^\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/u.exec(
+                entry,
+              );
+            const publicName = specifier?.[2] ?? specifier?.[1];
+            if (publicName !== undefined) names.add(publicName);
+          }
+          byPath.set(file.path, names);
+        }
+      }
+    }
+  }
+  return byPath;
+}
+
 export function detectContractBreaks(
   files: readonly { readonly patch: string; readonly path: string }[],
   changedSymbols: readonly ChangedSymbol[],
   downstreamReferences?: readonly DownstreamReference[],
 ): readonly ContractBreakSignal[] {
   const breaks: ContractBreakSignal[] = [];
+  const reexports = addedTypeReexports(files);
 
   // 1. Detect removed exported symbols on contract boundaries
   for (const symbol of changedSymbols) {
     if (
       symbol.isExported &&
       symbol.change === "deleted" &&
+      !(
+        (symbol.kind === "interface" || symbol.kind === "type") &&
+        reexports.get(symbol.path)?.has(symbol.name)
+      ) &&
       isContractBoundary(symbol.path, symbol.name, downstreamReferences)
     ) {
       breaks.push({

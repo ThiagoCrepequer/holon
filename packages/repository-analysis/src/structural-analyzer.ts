@@ -8,7 +8,6 @@ import {
 } from "./downstream-tracer.js";
 import { detectSecuritySurfaces } from "./security-surface-detector.js";
 import { extractChangedSymbols } from "./symbol-extractor.js";
-import { detectTestGaps } from "./test-gap-detector.js";
 
 export interface StructuralAnalysisInput {
   readonly changedFiles: readonly {
@@ -36,7 +35,6 @@ export function analyzeStructuralImpact(
     changedSymbols,
     downstream.references,
   );
-  const testGaps = detectTestGaps(input.changedFiles);
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);
 
   return {
@@ -45,7 +43,6 @@ export function analyzeStructuralImpact(
     downstreamReferences: downstream.references.slice(0, 100),
     repositoryScanTruncated: input.repositoryScanTruncated ?? false,
     securitySurfaces: securitySurfaces.slice(0, 50),
-    testGaps: testGaps.slice(0, 50),
     totalDownstreamReferencesCount: downstream.totalCount,
   };
 }

@@ -31,6 +31,21 @@ const job = reviewJobSchema.parse({
 });
 
 describe("Think review prompt boundary", () => {
+  it("requires a demonstrated broken caller before reporting contract concerns", () => {
+    expect(reviewInstructions).toContain(
+      "Name the affected consumer or operation and the behavior that fails",
+    );
+    expect(reviewInstructions).toContain(
+      "A required field that accepts an empty string is still required",
+    );
+    expect(reviewInstructions).toContain(
+      "A type-only re-export can preserve the public TypeScript contract",
+    );
+    expect(reviewInstructions).toContain(
+      "Do not turn a request to verify or ensure compatibility into a finding",
+    );
+  });
+
   it("delimits untrusted patch content and restricts evidence to changed lines", () => {
     const context = {
       changedLines: [
@@ -58,6 +73,9 @@ describe("Think review prompt boundary", () => {
     );
     expect(reviewInstructions).toContain(
       "do not use ellipses, rewrite indentation, or combine distant lines",
+    );
+    expect(reviewInstructions).toContain(
+      "up to three short Markdown bullets describing the changes reviewed",
     );
   });
 

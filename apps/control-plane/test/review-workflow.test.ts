@@ -22,12 +22,12 @@ import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CheckRunReconciliationStore } from "../src/check-run-reconciliation.js";
+import { CheckRunReconciliationStore } from "../src/ledger/check-run-reconciliation.js";
 import {
   executeReviewWorkflow,
   parseAppId,
   type ReviewRuntime,
-} from "../src/review-workflow.js";
+} from "../src/review/review-workflow.js";
 import {
   configurationReader,
   defaultScopePolicy,
@@ -211,6 +211,8 @@ it("publishes the latest human severity even when feedback arrives after analysi
     post.route.includes("/pulls/{pull_number}/reviews"),
   );
   expect(summary?.event).toBe("APPROVE");
+  expect(summary?.body).toContain("## ✅ Holon · Approved");
+  expect(summary?.body).not.toContain("### Verdict:");
   expect((await ledger.loadPrFindings("github:42:pr:7"))[0]?.severity).toBe(
     "low",
   );
@@ -289,6 +291,7 @@ it("reconstructs persisted versions when callbacks are replayed after the identi
 function session(
   posts: Array<{
     readonly body: unknown;
+    readonly comments?: unknown;
     readonly event?: unknown;
     readonly route: string;
   }>,
@@ -296,11 +299,32 @@ function session(
 ) {
   return {
     api: {
-      async *iterate() {
+      async *iterate(
+        route: string,
+        parameters: { review_id?: number | undefined },
+      ) {
+        if (route.endsWith("/reviews/{review_id}/comments")) {
+          const reviewId = Number(parameters.review_id);
+          const review = posts[reviewId - 1];
+          const comments = Array.isArray(review?.comments)
+            ? review.comments
+            : [];
+          yield comments.map((comment, index) => ({
+            body: (comment as { body: string }).body,
+            id: reviewId * 100 + index + 1,
+            user: { login: "holon-reviewer[bot]", type: "Bot" },
+          }));
+          return;
+        }
         yield [];
       },
       request: (route: string, parameters: Record<string, unknown>) => {
-        posts.push({ body: parameters.body, event: parameters.event, route });
+        posts.push({
+          body: parameters.body,
+          comments: parameters.comments,
+          event: parameters.event,
+          route,
+        });
         return Promise.resolve({ data: { id: posts.length } });
       },
     },
@@ -315,6 +339,17 @@ function session(
   };
 }
 
+function publishedInlineComments(
+  posts: readonly { readonly comments?: unknown; readonly route: string }[],
+): unknown[] {
+  return posts.flatMap((post) =>
+    post.route.endsWith("/pulls/{pull_number}/reviews") &&
+    Array.isArray(post.comments)
+      ? post.comments
+      : [],
+  );
+}
+
 function runtime(
   options: {
     readonly containerId?: string | null;
@@ -325,6 +360,7 @@ function runtime(
     readonly now?: ReviewRuntime["now"];
     readonly posts?: Array<{
       readonly body: unknown;
+      readonly comments?: unknown;
       readonly event?: unknown;
       readonly route: string;
     }>;
@@ -528,13 +564,7 @@ describe("ReviewWorkflow", () => {
         setup.value,
       );
       expect(result).toEqual({ findingsPublished: cap, outcome: "completed" });
-      expect(
-        setup.posts.filter(
-          (post) =>
-            post.route ===
-            "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
-        ),
-      ).toHaveLength(cap);
+      expect(publishedInlineComments(setup.posts)).toHaveLength(cap);
       expect(
         setup.posts.find((post) =>
           post.route.includes("/pulls/{pull_number}/reviews"),
@@ -627,10 +657,9 @@ describe("ReviewWorkflow", () => {
       ),
     ).resolves.toEqual({ findingsPublished: 1, outcome: "completed" });
 
-    expect(headReads).toBe(7);
+    expect(headReads).toBe(6);
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
       "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
     ]);
@@ -665,7 +694,7 @@ describe("ReviewWorkflow", () => {
     ).resolves.toEqual({ findingsPublished: 0, outcome: "obsolete" });
     expect(setup.posts.map((post) => post.route)).toEqual([
       "POST /repos/{owner}/{repo}/check-runs",
-      "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
       "PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}",
     ]);
     expect(
@@ -1196,6 +1225,9 @@ describe("ReviewWorkflow", () => {
               if (route.includes("check-runs")) {
                 checkRunRequests.push({ parameters, route });
               }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
+              }
               return Promise.resolve({ data: { id: 789 } });
             },
           },
@@ -1281,8 +1313,11 @@ describe("ReviewWorkflow", () => {
           ...s,
           api: {
             ...s.api,
-            request: (route: string) => {
+            request: (route: string, parameters: Record<string, unknown>) => {
               checkRunRequests.push(route);
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
+              }
               return Promise.resolve({ data: { id: 1 } });
             },
           },
@@ -1346,6 +1381,9 @@ describe("ReviewWorkflow", () => {
             request: (route: string, parameters: Record<string, unknown>) => {
               if (route.startsWith("PATCH") && route.includes("check-runs")) {
                 checkRunPatches.push({ parameters, route });
+              }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
               }
               return Promise.resolve({ data: { id: 1 } });
             },
@@ -1432,11 +1470,14 @@ describe("ReviewWorkflow", () => {
           ...s,
           api: {
             ...s.api,
-            request: (route: string) => {
+            request: (route: string, parameters: Record<string, unknown>) => {
               if (route.includes("check-runs")) {
                 return Promise.reject(
                   new Error("check run API network failure"),
                 );
+              }
+              if (route.includes("/reviews")) {
+                return s.api.request(route, parameters);
               }
               return Promise.resolve({ data: { id: 123 } });
             },
@@ -1578,11 +1619,9 @@ describe("ReviewWorkflow", () => {
     const summaryPost = setup.posts.find((p) =>
       p.route.includes("/pulls/{pull_number}/reviews"),
     );
-    expect(summaryPost?.body).toContain("This review is incomplete.");
+    expect(summaryPost?.body).toContain("## ⚠️ Holon · Incomplete review");
     expect(summaryPost?.body).not.toContain("Shard 2 review succeeded.");
-    expect(summaryPost?.body).toContain(
-      "Partial review: some changes could not be analyzed due to an execution failure.",
-    );
+    expect(summaryPost?.body).toContain("## ⚠️ Holon · Incomplete review");
   });
 
   it("handles unsupported plans with 0 eligible files in review-workflow", async () => {
@@ -1646,11 +1685,68 @@ describe("ReviewWorkflow", () => {
     );
     expect(summaryPost).toBeDefined();
     expect(summaryPost?.event).toBe("APPROVE");
+    expect(summaryPost?.body).toContain("## ✅ Holon · Approved");
+    expect(summaryPost?.body).toContain("### Changes reviewed");
+  });
+
+  it("uses a compact approval after a prior clean review on the same PR", async () => {
+    const sha1 = "1".repeat(40);
+    const sha2 = "2".repeat(40);
+    let currentHead = sha1;
+    const reviewJobFor = (headSha: string): ReviewJob =>
+      reviewJobSchema.parse({
+        ...job,
+        envelope: {
+          ...job.envelope,
+          pullRequest: { ...job.envelope.pullRequest, headSha },
+        },
+        runId: `github:42:pr:7:head:${headSha}:base:${"b".repeat(40)}`,
+      });
+    const setup = runtime({
+      head: () => currentHead,
+      model: () => ({
+        review: () =>
+          Promise.resolve({
+            output: {
+              findings: [],
+              summary: "- Reviewed the changed return path.",
+            },
+            promptTruncated: false,
+          }),
+      }),
+    });
+
+    const first = await executeReviewWorkflow(
+      env,
+      event("clean-first", reviewJobFor(sha1)),
+      immediateStep([]),
+      setup.value,
+    );
+    currentHead = sha2;
+    const second = await executeReviewWorkflow(
+      env,
+      event("clean-second", reviewJobFor(sha2)),
+      immediateStep([]),
+      setup.value,
+    );
+
+    expect(first.outcome).toBe("completed");
+    expect(second.outcome).toBe("completed");
+    const reviews = setup.posts.filter((post) =>
+      post.route.endsWith("/pulls/{pull_number}/reviews"),
+    );
+    expect(reviews).toHaveLength(2);
+    expect(reviews[0]?.body).toContain("## ✅ Holon · Approved");
+    expect(reviews[1]?.event).toBe("APPROVE");
+    expect(reviews[1]?.body).toContain("## ✅ Holon · Review updated");
+    expect(reviews[1]?.body).toContain("**0 new findings** · `2222222`");
+    expect(reviews[1]?.body).toContain("### Changes reviewed");
   });
 
   it("reconciles findings across commits: suppresses persistent comment and notifies resolution when fixed", async () => {
     const posts: Array<{
       readonly body: unknown;
+      readonly comments?: unknown;
       readonly event?: unknown;
       readonly route: string;
     }> = [];
@@ -1704,12 +1800,7 @@ describe("ReviewWorkflow", () => {
     expect(result1.outcome).toBe("completed");
     expect(result1.findingsPublished).toBe(1);
 
-    const inlinePostsRun1 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun1).toHaveLength(1);
+    expect(publishedInlineComments(posts)).toHaveLength(1);
 
     // 2. Commit 2: finding is still present (persistent) -> duplicate suppressed!
     currentHead = sha2;
@@ -1722,12 +1813,7 @@ describe("ReviewWorkflow", () => {
     expect(result2.outcome).toBe("completed");
     expect(result2.findingsPublished).toBe(0); // Suppressed!
 
-    const inlinePostsRun2 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun2).toHaveLength(1); // No new inline comment created
+    expect(publishedInlineComments(posts)).toHaveLength(1); // No new inline comment created
 
     // 3. Commit 3: author fixes the finding -> resolved!
     currentHead = sha3;
@@ -1798,12 +1884,7 @@ describe("ReviewWorkflow", () => {
     expect(result4.outcome).toBe("completed");
     expect(result4.findingsPublished).toBe(1);
 
-    const inlinePostsRun4 = posts.filter(
-      (p) =>
-        p.route.includes("/pulls/{pull_number}/comments") &&
-        !p.route.includes("/replies"),
-    );
-    expect(inlinePostsRun4).toHaveLength(2); // New inline comment for reintroduced finding
+    expect(publishedInlineComments(posts)).toHaveLength(2); // New inline comment for reintroduced finding
   });
 
   it("propagates resolution reply failure for durable retry instead of silently completing", async () => {
@@ -2199,7 +2280,8 @@ it("schedules durable cleanup and preserves the original analysis failure", asyn
 });
 
 it("shares one repository preparation across concurrent shard requests", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
+  const { createReviewServices } =
+    await import("../src/review/review-services.js");
   const setup = runtime();
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {

@@ -1,4 +1,4 @@
-import type { RepositoryExecutorBinding } from "../src/review-services.js";
+import type { RepositoryExecutorBinding } from "../src/review/review-services.js";
 
 function unexpectedExecutorCall(): never {
   throw new TypeError("Unexpected executor call in test");

@@ -11,8 +11,8 @@ import {
 import { ModelProviderRequestError } from "@holon/model";
 import { describe, expect, it, vi } from "vitest";
 
-import { analyzeReview } from "../src/review-analysis.js";
-import type { ReviewServices } from "../src/review-services.js";
+import { analyzeReview } from "../src/review/review-analysis.js";
+import type { ReviewServices } from "../src/review/review-services.js";
 import {
   configurationReader,
   defaultRunConfiguration,
@@ -148,7 +148,7 @@ describe("analyzeReview", () => {
       );
       const result = await analyzeReview(job, services, vi.fn());
       expect(result.totalShards).toBe(2);
-      expect(result.summary).toContain("This review is incomplete");
+      expect(result.summary).toContain("## ⚠️ Holon · Incomplete review");
       expect(result.summary).not.toContain("Everything looks correct");
     },
   );
@@ -163,7 +163,7 @@ describe("analyzeReview", () => {
     const result = await analyzeReview(job, services, vi.fn());
     expect(result.scopeStatus).toBe("partial_by_policy");
     expect(result.verdict).toBe("COMMENT");
-    expect(result.summary).toContain("This review is incomplete");
+    expect(result.summary).toContain("## ⚠️ Holon · Incomplete review");
     expect(result.summary).not.toContain("No eligible changes");
     expect(review).not.toHaveBeenCalled();
   });
@@ -354,13 +354,6 @@ describe("analyzeReview", () => {
               line: 10,
               kind: "network_egress",
               excerpt: "return null;",
-            },
-          ],
-          testGaps: [
-            {
-              sourcePath: "src/index.ts",
-              reason: "no_test_file_modified",
-              expectedTestPathPattern: "*.test.ts",
             },
           ],
           repositoryScanTruncated: true,
