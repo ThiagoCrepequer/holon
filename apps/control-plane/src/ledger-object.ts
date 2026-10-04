@@ -1055,6 +1055,23 @@ export class ReviewLedgerObject
     return Promise.resolve(this.findingStore.loadLatestReviewDecision(prKey));
   }
 
+  public hasPriorPublishedReview(rawRunId: string): Promise<boolean> {
+    const runId = runIdSchema.parse(rawRunId);
+    const row = this.ctx.storage.sql
+      .exec<{ present: number }>(
+        `SELECT 1 AS present
+         FROM publications AS publication
+         JOIN runs AS run ON run.id = publication.run_id
+         JOIN runs AS current_run ON current_run.id = ?
+         WHERE run.pr_key = current_run.pr_key AND publication.run_id <> current_run.id
+           AND publication.kind = 'summary' AND publication.state = 'published'
+         LIMIT 1`,
+        runId,
+      )
+      .toArray()[0];
+    return Promise.resolve(row !== undefined);
+  }
+
   public applyFindingFeedback(
     input: ApplyFindingFeedbackInput,
   ): Promise<AppliedFindingFeedback> {

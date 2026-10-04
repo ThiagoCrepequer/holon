@@ -13,8 +13,10 @@ import {
   publishAuthorized,
   publishFailureNoticeAuthorized,
   publishResolutionAuthorized,
+  publishReviewAuthorized,
   ReviewMutationNotAuthorizedError,
   type PublicationLedger,
+  type ReviewInlinePublication,
 } from "../src/authorized-publication.js";
 
 const runId =
@@ -56,6 +58,146 @@ function publisher(
 }
 
 describe("authorized publication", () => {
+  it("reuses an already published clean review without another GitHub mutation", async () => {
+    const state = ledger(() =>
+      Promise.resolve({
+        outcome: "published",
+        record: {
+          findingId: "summary",
+          id: createPublicationId(runId, "summary"),
+          kind: "summary",
+          marker: buildPublicationMarker(runId, "summary"),
+          runId,
+          state: "published",
+          githubCommentId: 321,
+        } as const,
+      }),
+    );
+    const github = publisher();
+
+    await expect(
+      publishReviewAuthorized(
+        state,
+        github,
+        runId,
+        "Clean review",
+        "APPROVE",
+        [],
+        async () => true,
+      ),
+    ).resolves.toEqual({ commentIds: [], published: false });
+    expect(github.publish).not.toHaveBeenCalled();
+  });
+
+  it("requires every inline ID from the submitted review before tracking findings", async () => {
+    const state = ledger((next) =>
+      Promise.resolve({
+        outcome: "published",
+        record: { ...next, state: "published", githubCommentId: 321 },
+      }),
+    );
+    const finding = {
+      body: "Verified defect",
+      findingId,
+      fingerprint: `fp:${"c".repeat(64)}`,
+      line: 10,
+      path: "src/index.ts",
+      side: "RIGHT",
+    } satisfies ReviewInlinePublication;
+    const github = publisher();
+
+    await expect(
+      publishReviewAuthorized(
+        state,
+        github,
+        runId,
+        "Defect review",
+        "REQUEST_CHANGES",
+        [finding],
+        async () => true,
+      ),
+    ).rejects.toThrow("Review comment reconciliation is unavailable");
+
+    const incomplete: ReviewPublisher = {
+      ...github,
+      findReviewCommentsByMarkers: () => Promise.resolve(new Map()),
+    };
+    await expect(
+      publishReviewAuthorized(
+        state,
+        incomplete,
+        runId,
+        "Defect review",
+        "REQUEST_CHANGES",
+        [finding],
+        async () => true,
+      ),
+    ).rejects.toThrow("Published review is missing an inline comment");
+    expect(github.publish).not.toHaveBeenCalled();
+  });
+
+  it("reconciles one review and its inline IDs after a lost ledger acknowledgement", async () => {
+    let claimed: PublicationRecord | undefined;
+    let posted = false;
+    const state = ledger(async (next) => {
+      const previous = claimed;
+      claimed = next;
+      return {
+        outcome: previous ? "reconcile" : "claimed",
+        record: previous ?? next,
+      };
+    });
+    state.completePublication.mockRejectedValueOnce(
+      new Error("lost ledger acknowledgement"),
+    );
+    const marker = buildPublicationMarker(runId, findingId);
+    const github: ReviewPublisher & { publish: ReturnType<typeof vi.fn> } = {
+      findCommentByMarker: () => Promise.resolve(posted ? 321 : undefined),
+      findReviewCommentsByMarkers: (_reviewId, markers) =>
+        Promise.resolve(new Map(markers.map((value) => [value, 777]))),
+      publish: vi.fn(async () => {
+        posted = true;
+        return 321;
+      }),
+    };
+    const finding = {
+      body: "Verified defect",
+      findingId,
+      fingerprint: `fp:${"c".repeat(64)}`,
+      line: 10,
+      path: "src/index.ts",
+      side: "RIGHT" as const,
+    } satisfies ReviewInlinePublication;
+
+    await expect(
+      publishReviewAuthorized(
+        state,
+        github,
+        runId,
+        "Summary",
+        "REQUEST_CHANGES",
+        [finding],
+        () => Promise.resolve(true),
+      ),
+    ).rejects.toThrow("lost ledger acknowledgement");
+    await expect(
+      publishReviewAuthorized(
+        state,
+        github,
+        runId,
+        "Summary",
+        "REQUEST_CHANGES",
+        [finding],
+        () => Promise.resolve(true),
+      ),
+    ).resolves.toEqual({
+      commentIds: [{ fingerprint: finding.fingerprint, id: 777 }],
+      published: false,
+    });
+    expect(github.publish).toHaveBeenCalledOnce();
+    expect(github.publish.mock.calls[0]?.[0].comments[0].marker).toBe(marker);
+  });
+
   it("reconciles a resolution reply accepted before the ledger completion failed", async () => {
     let persisted: PublicationRecord | undefined;
     const state = ledger(async (next) => {
@@ -182,7 +324,7 @@ describe("authorized publication", () => {
         findingId,
         "inline",
         "body",
-        { line: 10, path: "src/index.ts", side: "RIGHT" },
+        {},
         () => Promise.resolve(true),
       ),
     ).resolves.toBe(true);

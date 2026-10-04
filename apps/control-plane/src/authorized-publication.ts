@@ -8,6 +8,7 @@ import {
   type FindingFingerprint,
   type FindingId,
   type PublicationRecord,
+  type ReviewVerdict,
   type RunId,
 } from "@holon/domain";
 
@@ -97,6 +98,108 @@ export async function publishAuthorized(
   await ledger.completePublication(id, githubCommentId);
   onPublished?.(githubCommentId);
   return true;
+}
+
+export interface ReviewInlinePublication {
+  readonly fingerprint: FindingFingerprint;
+  readonly findingId: FindingId;
+  readonly body: string;
+  readonly line: number;
+  readonly path: string;
+  readonly side: "RIGHT";
+  readonly startLine?: number | undefined;
+}
+
+/** A single GitHub review owns its verdict and all newly published findings. */
+export async function publishReviewAuthorized(
+  ledger: PublicationLedger,
+  publisher: ReviewPublisher,
+  runId: RunId,
+  body: string,
+  event: ReviewVerdict,
+  findings: readonly ReviewInlinePublication[],
+  authorizeImmediatelyBeforeMutation: () => Promise<boolean>,
+): Promise<{
+  readonly commentIds: readonly {
+    readonly fingerprint: FindingFingerprint;
+    readonly id: number;
+  }[];
+  readonly published: boolean;
+}> {
+  await requireAuthorization(() => ledger.authorizeMutation(runId, "review"));
+  const marker = buildPublicationMarker(runId, "summary");
+  const publicationId = createPublicationId(runId, "summary");
+  let claim: Awaited<ReturnType<ReviewLedger["claimPublication"]>>;
+  try {
+    claim = await ledger.claimPublication({
+      findingId: "summary",
+      id: publicationId,
+      kind: "summary",
+      marker,
+      runId,
+      state: "publishing",
+    });
+  } catch (error) {
+    if (isReviewMutationNotAuthorizedError(error)) {
+      throw new ReviewMutationNotAuthorizedError();
+    }
+    throw error;
+  }
+
+  let reviewId: number;
+  let published = false;
+  if (claim.outcome === "published") {
+    if (claim.record.githubCommentId === undefined) {
+      throw new Error("Published review is missing its GitHub id");
+    }
+    reviewId = claim.record.githubCommentId;
+  } else {
+    const existingId =
+      claim.outcome === "reconcile"
+        ? await publisher.findCommentByMarker(marker, "summary")
+        : undefined;
+    if (existingId !== undefined) {
+      reviewId = existingId;
+      await ledger.completePublication(publicationId, reviewId);
+    } else {
+      await requireAuthorization(authorizeImmediatelyBeforeMutation);
+      reviewId = await publisher.publish({
+        body,
+        comments: findings.map((finding) => ({
+          body: finding.body,
+          line: finding.line,
+          marker: buildPublicationMarker(runId, finding.findingId),
+          path: finding.path,
+          side: finding.side,
+          ...(finding.startLine === undefined
+            ? {}
+            : { startLine: finding.startLine }),
+        })),
+        event,
+        marker,
+      });
+      published = true;
+      await ledger.completePublication(publicationId, reviewId);
+    }
+  }
+
+  if (findings.length === 0) return { commentIds: [], published };
+  const lookup = publisher.findReviewCommentsByMarkers?.bind(publisher);
+  if (lookup === undefined) {
+    throw new TypeError("Review comment reconciliation is unavailable");
+  }
+  const markers = findings.map((finding) =>
+    buildPublicationMarker(runId, finding.findingId),
+  );
+  const ids = await lookup(reviewId, markers);
+  const commentIds = findings.map((finding, index) => {
+    const id = ids.get(markers[index]!);
+    if (id === undefined) {
+      throw new Error("Published review is missing an inline comment");
+    }
+    return { fingerprint: finding.fingerprint, id };
+  });
+  return { commentIds, published };
 }
 
 export async function publishResolutionAuthorized(

@@ -76,7 +76,7 @@ class FakeGitHubApi implements GitHubApi {
 }
 
 describe("GitHubReviewPublisher", () => {
-  it("publishes inline comments using right-side line coordinates", async () => {
+  it("publishes inline findings and verdict in one review", async () => {
     const api = new FakeGitHubApi();
     const publisher = new GitHubReviewPublisher(api, {
       headSha: "a".repeat(40),
@@ -88,27 +88,40 @@ describe("GitHubReviewPublisher", () => {
 
     await expect(
       publisher.publish({
-        body: "Problem",
-        line: 10,
-        marker: "<!-- marker -->",
-        path: "src/index.ts",
-        side: "RIGHT",
+        body: "Summary",
+        comments: [
+          {
+            body: "Problem",
+            line: 10,
+            marker: "<!-- inline -->",
+            path: "src/index.ts",
+            side: "RIGHT",
+          },
+        ],
+        event: "REQUEST_CHANGES",
+        marker: "<!-- summary -->",
       }),
     ).resolves.toBe(123);
 
     expect(api.requests[0]).toEqual({
       parameters: {
-        body: "Problem\n\n<!-- marker -->",
+        body: "Summary\n\n<!-- summary -->",
         commit_id: "a".repeat(40),
-        line: 10,
+        comments: [
+          {
+            body: "Problem\n\n<!-- inline -->",
+            line: 10,
+            path: "src/index.ts",
+            side: "RIGHT",
+          },
+        ],
+        event: "REQUEST_CHANGES",
         owner: "acme",
-        path: "src/index.ts",
         pull_number: 7,
         repo: "api",
         request: { retries: 0 },
-        side: "RIGHT",
       },
-      route: "POST /repos/{owner}/{repo}/pulls/{pull_number}/comments",
+      route: "POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews",
     });
   });
 
@@ -123,20 +136,28 @@ describe("GitHubReviewPublisher", () => {
     });
 
     await publisher.publish({
-      body: "Problem",
-      line: 12,
+      body: "Summary",
+      comments: [
+        {
+          body: "Problem",
+          line: 12,
+          marker: "<!-- inline -->",
+          path: "src/index.ts",
+          side: "RIGHT",
+          startLine: 10,
+        },
+      ],
       marker: "<!-- marker -->",
-      path: "src/index.ts",
-      side: "RIGHT",
-      startLine: 10,
     });
 
-    expect(api.requests[0]?.parameters).toMatchObject({
-      line: 12,
-      side: "RIGHT",
-      start_line: 10,
-      start_side: "RIGHT",
-    });
+    expect(api.requests[0]?.parameters.comments).toMatchObject([
+      {
+        line: 12,
+        side: "RIGHT",
+        start_line: 10,
+        start_side: "RIGHT",
+      },
+    ]);
   });
 
   it("publishes the summary as one submitted pull request review", async () => {
@@ -207,6 +228,35 @@ describe("GitHubReviewPublisher", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("resolves inline IDs only from the submitted review and its bot", async () => {
+    const api = new FakeGitHubApi();
+    const publisher = new GitHubReviewPublisher(api, {
+      headSha: "a".repeat(40),
+      expectedAuthorLogin: "holon-reviewer[bot]",
+      owner: "acme",
+      pullNumber: 7,
+      repo: "api",
+    });
+    api.reviewComments = [
+      {
+        body: "Problem\n<!-- inline-1 -->",
+        id: 10,
+        user: { login: "holon-reviewer[bot]", type: "Bot" },
+      },
+      {
+        body: "copied <!-- inline-2 -->",
+        id: 11,
+        user: { login: "other[bot]", type: "Bot" },
+      },
+    ];
+
+    const found = await publisher.findReviewCommentsByMarkers(123, [
+      "<!-- inline-1 -->",
+      "<!-- inline-2 -->",
+    ]);
+    expect([...found]).toEqual([["<!-- inline-1 -->", 10]]);
+  });
+
   it("fails closed when another user or bot copies a deterministic marker", async () => {
     const api = new FakeGitHubApi();
     const publisher = new GitHubReviewPublisher(api, {
@@ -251,7 +301,7 @@ describe("GitHubReviewPublisher", () => {
     expect(api.pagesVisited).toBe(20);
   });
 
-  it("rejects incomplete inline coordinates", async () => {
+  it("rejects inverted inline ranges", async () => {
     const publisher = new GitHubReviewPublisher(new FakeGitHubApi(), {
       headSha: "a".repeat(40),
       expectedAuthorLogin: "holon-reviewer[bot]",
@@ -261,19 +311,18 @@ describe("GitHubReviewPublisher", () => {
     });
     await expect(
       publisher.publish({
-        body: "Problem",
-        line: 10,
+        body: "Summary",
+        comments: [
+          {
+            body: "Problem",
+            line: 10,
+            marker: "<!-- inline -->",
+            path: "src/index.ts",
+            side: "RIGHT",
+            startLine: 11,
+          },
+        ],
         marker: "<!-- marker -->",
-      }),
-    ).rejects.toThrow();
-    await expect(
-      publisher.publish({
-        body: "Problem",
-        line: 10,
-        marker: "<!-- marker -->",
-        path: "src/index.ts",
-        side: "RIGHT",
-        startLine: 11,
       }),
     ).rejects.toThrow("startLine");
   });
