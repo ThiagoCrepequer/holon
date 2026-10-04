@@ -4,7 +4,6 @@ import {
   analyzeStructuralImpact,
   detectContractBreaks,
   detectSecuritySurfaces,
-  detectTestGaps,
   extractChangedSymbols,
   findDownstreamReferences,
 } from "../src/index.js";
@@ -319,121 +318,6 @@ describe("contract-break-detector", () => {
   });
 });
 
-describe("test-gap-detector", () => {
-  it("detects source files modified without corresponding tests for TS, Go and Python", () => {
-    const files = [
-      {
-        patch: [
-          "--- a/src/payment.ts",
-          "+++ b/src/payment.ts",
-          "@@ -0,0 +1,1 @@",
-          "+const x = 1;",
-        ].join("\n"),
-        path: "src/payment.ts",
-      },
-      {
-        patch: [
-          "--- a/pkg/service.go",
-          "+++ b/pkg/service.go",
-          "@@ -0,0 +1,1 @@",
-          "+func Run() {}",
-        ].join("\n"),
-        path: "pkg/service.go",
-      },
-      {
-        patch: [
-          "--- a/app/user.py",
-          "+++ b/app/user.py",
-          "@@ -0,0 +1,1 @@",
-          "+def run(): pass",
-        ].join("\n"),
-        path: "app/user.py",
-      },
-      {
-        patch: "+# Readme",
-        path: "README.md", // non-source file should not trigger gap
-      },
-    ];
-
-    const gaps = detectTestGaps(files);
-    expect(gaps).toHaveLength(3);
-    expect(
-      gaps.find((g) => g.sourcePath === "src/payment.ts")
-        ?.expectedTestPathPattern,
-    ).toBe("src/payment.test.ts");
-    expect(
-      gaps.find((g) => g.sourcePath === "pkg/service.go")
-        ?.expectedTestPathPattern,
-    ).toBe("pkg/service_test.go");
-    expect(
-      gaps.find((g) => g.sourcePath === "app/user.py")?.expectedTestPathPattern,
-    ).toBe("tests/test_user.py");
-  });
-
-  it("returns empty array when only non-source files are modified", () => {
-    const files = [
-      {
-        patch: "+# Doc",
-        path: "docs/architecture.md",
-      },
-    ];
-    expect(detectTestGaps(files)).toEqual([]);
-  });
-
-  it("handles .mjs, .cjs, .rs, .java without returning the source path itself", () => {
-    const files = [
-      { patch: "+export const x = 1;", path: "src/handler.mjs" },
-      { patch: "+module.exports = {};", path: "src/util.cjs" },
-      { patch: "+fn run() {}", path: "src/engine.rs" },
-      { patch: "+class Engine {}", path: "src/Engine.java" },
-    ];
-    const gaps = detectTestGaps(files);
-    expect(gaps).toHaveLength(4);
-    expect(
-      gaps.find((g) => g.sourcePath === "src/handler.mjs")
-        ?.expectedTestPathPattern,
-    ).toBe("src/handler.test.ts");
-    expect(
-      gaps.find((g) => g.sourcePath === "src/util.cjs")
-        ?.expectedTestPathPattern,
-    ).toBe("src/util.test.ts");
-    expect(
-      gaps.find((g) => g.sourcePath === "src/engine.rs")
-        ?.expectedTestPathPattern,
-    ).toBe("tests/engine.rs");
-    expect(
-      gaps.find((g) => g.sourcePath === "src/Engine.java")
-        ?.expectedTestPathPattern,
-    ).toBe("src/EngineTest.java");
-  });
-
-  it("does not report a gap when corresponding test file is in diff", () => {
-    const files = [
-      {
-        patch: [
-          "--- a/src/payment.ts",
-          "+++ b/src/payment.ts",
-          "@@ -0,0 +1,1 @@",
-          "+const x = 1;",
-        ].join("\n"),
-        path: "src/payment.ts",
-      },
-      {
-        patch: [
-          "--- a/src/payment.test.ts",
-          "+++ b/src/payment.test.ts",
-          "@@ -0,0 +1,1 @@",
-          "+const t = 1;",
-        ].join("\n"),
-        path: "src/payment.test.ts",
-      },
-    ];
-
-    const gaps = detectTestGaps(files);
-    expect(gaps).toHaveLength(0);
-  });
-});
-
 describe("security-surface-detector", () => {
   it("detects added dependencies and secret/egress patterns", () => {
     const files = [
@@ -500,7 +384,6 @@ describe("analyzeStructuralImpact", () => {
     expect(report.downstreamReferences).toHaveLength(2);
     expect(report.totalDownstreamReferencesCount).toBe(2);
     expect(report.securitySurfaces).toHaveLength(1);
-    expect(report.testGaps).toHaveLength(1);
     expect(report.repositoryScanTruncated).toBe(false);
   });
 

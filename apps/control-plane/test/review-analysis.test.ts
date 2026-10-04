@@ -356,13 +356,6 @@ describe("analyzeReview", () => {
               excerpt: "return null;",
             },
           ],
-          testGaps: [
-            {
-              sourcePath: "src/index.ts",
-              reason: "no_test_file_modified",
-              expectedTestPathPattern: "*.test.ts",
-            },
-          ],
           repositoryScanTruncated: true,
         },
       };

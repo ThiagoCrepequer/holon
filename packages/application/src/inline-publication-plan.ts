@@ -90,6 +90,7 @@ export function formatConfiguredFindings(
   })[],
   output: { maxInlineComments: number; language: "en" | "pt-BR" | "es" },
 ): string {
+  if (findings.length === 0) return "";
   const plan = planInlinePublications(findings, output.maxInlineComments);
   const pending = findings.filter(
     (finding) => finding.identityAmbiguous === true,

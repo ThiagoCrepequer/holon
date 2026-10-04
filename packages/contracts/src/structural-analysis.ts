@@ -54,21 +54,6 @@ export const contractBreakSignalSchema = z.strictObject({
 
 export type ContractBreakSignal = z.infer<typeof contractBreakSignalSchema>;
 
-export const testGapReasonSchema = z.enum([
-  "no_test_file_modified",
-  "zero_coverage_on_changed_lines",
-]);
-
-export type TestGapReason = z.infer<typeof testGapReasonSchema>;
-
-export const testGapSignalSchema = z.strictObject({
-  expectedTestPathPattern: z.string().min(1).max(1_100),
-  reason: testGapReasonSchema,
-  sourcePath: repositoryPathSchema,
-});
-
-export type TestGapSignal = z.infer<typeof testGapSignalSchema>;
-
 export const securitySurfaceKindSchema = z.enum([
   "new_dependency",
   "manifest_modified",
@@ -93,7 +78,6 @@ export const structuralImpactReportSchema = z.strictObject({
   downstreamReferences: z.array(downstreamReferenceSchema).max(100),
   repositoryScanTruncated: z.boolean().optional(),
   securitySurfaces: z.array(securitySurfaceSignalSchema).max(50),
-  testGaps: z.array(testGapSignalSchema).max(50),
   totalDownstreamReferencesCount: z.number().int().nonnegative().optional(),
 });
 
