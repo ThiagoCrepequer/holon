@@ -77,3 +77,5 @@ e o [fluxo atual](architecture/review-runtime-flow.md).
 - [Configuração de repositório e editor](operations/repository-configuration.md) — contrato, CLI, limites e rollout da ADR-0037.
 
 - [Migração proposta da observabilidade para Grafana](planning/observability-stack-migration.md): arquitetura futura, biblioteca de instrumentação, entrega durável, métricas e validação após a retirada do admin.
+
+Perguntas e contestações em findings seguem a [ADR-0051](decisions/0051-answer-finding-questions-in-pr-threads.md) e o [guia de uso e operação](operations/finding-clarification.md).

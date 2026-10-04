@@ -114,3 +114,7 @@ independentes dos manifests temporários e do limite de publicação inline.
 ## Contratos do core de review (2026-09-27)
 
 A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `review.documentation` integra o snapshot compilado e seu digest; instruções e compatibilidade seguem o contrato único de configuração. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md).
+
+## Perguntas em findings
+
+`finding-clarification.ts` valida admissão, identidade do Agent, registro persistido, leituras e resposta. A resposta limita explicação a 5.000 caracteres, cenário a 2.000 e até seis referências, com linhas positivas e trecho de até 2.000 caracteres. O host exige correspondência às leituras efetivas, não apenas um schema válido. A fase `finding_clarification` usa reservas separadas por pergunta. A [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md) define autoridade e efeitos.

@@ -183,3 +183,9 @@ describe("review application policies", () => {
     expect(summary).toContain("publication budget");
   });
 });
+
+it("explains how to ask about the finding in its own inline discussion", () => {
+  expect(renderFinding(output.findings[0]!, "pt-BR")).toContain(
+    "/holon ask <pergunta>",
+  );
+});

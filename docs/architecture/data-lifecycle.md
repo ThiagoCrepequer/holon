@@ -105,3 +105,7 @@ A migration 17 remove os históricos exclusivos do admin conforme
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
 Findings funcionais em `pr_findings`, feedback e publicações permanecem.
 Retenção geral e deleção por instalação do ledger continuam pendentes antes do piloto.
+
+## Perguntas em findings — 2026-10-04
+
+Pela [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md), o ledger guarda texto da pergunta limitado/redigido, decisão, conclusão mínima e IDs de reconciliação. `clarification_reads` contém temporariamente até 64 KiB de linhas redigidas; resposta, obsolescência e alarm de expiração removem as leituras. A resposta retém somente os trechos citados necessários à auditoria. As reservas conservam apenas contadores/bytes/tokens. Think precisa de estado temporário para o prompt durável; o novo Agent mantém `storeMessages/storeTools=false`, não usa o trace de payloads das reviews e destrói seu estado um dia após publicação/obsolescência. Até duas trocas publicadas da mesma discussão/head entram como contexto de uma pergunta seguinte, sem dispensar nova leitura. Retenção geral do ledger e deleção por instalação permanecem pendentes antes do piloto.

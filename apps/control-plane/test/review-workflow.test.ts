@@ -328,6 +328,9 @@ function session(
         return Promise.resolve({ data: { id: posts.length } });
       },
     },
+    discussionReader: () => {
+      throw new Error("Discussion reader unused in this test");
+    },
     configurationReader: () => configurationReader(),
     currentHeadSha: () => Promise.resolve(readHead()),
     currentPullRequestRefs: () =>
@@ -456,6 +459,9 @@ describe("ReviewWorkflow", () => {
         createSession: () =>
           Promise.resolve({
             ...session(setup.posts),
+            discussionReader: () => {
+              throw new Error("Discussion reader unused in this test");
+            },
             configurationReader: () =>
               configurationReader({
                 ".holon.yml": `output:\n  language: ${language}\ninstructions:\n  - private-guidance-never-log\n`,
@@ -553,6 +559,9 @@ describe("ReviewWorkflow", () => {
         createSession: () =>
           Promise.resolve({
             ...session(setup.posts),
+            discussionReader: () => {
+              throw new Error("Discussion reader unused in this test");
+            },
             configurationReader: readerFactory,
             pullRequestDiff: async () => canonicalPatch + "\n" + secondPatch,
           }),
@@ -761,6 +770,9 @@ describe("ReviewWorkflow", () => {
               }
               return request(route, parameters);
             },
+          },
+          discussionReader: () => {
+            throw new Error("Discussion reader unused in this test");
           },
           configurationReader: () =>
             configurationReader({
@@ -1320,6 +1332,9 @@ describe("ReviewWorkflow", () => {
               }
               return Promise.resolve({ data: { id: 1 } });
             },
+          },
+          discussionReader: () => {
+            throw new Error("Discussion reader unused in this test");
           },
           configurationReader: () => configurationReader(),
           currentHeadSha: () => Promise.resolve("b".repeat(40)),

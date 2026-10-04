@@ -3,8 +3,17 @@ import { z } from "zod";
 import { deliveryIdSchema, positiveIntegerSchema } from "./shared.js";
 const repository = z.strictObject({
   id: positiveIntegerSchema,
-  name: z.string().min(1).max(100),
-  owner: z.string().min(1).max(100),
+  name: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9_.-]+$/u)
+    .refine((name) => name !== "." && name !== ".."),
+  owner: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9-]+$/u),
 });
 const feedbackBase = {
   deliveryId: deliveryIdSchema.transform(
@@ -12,7 +21,9 @@ const feedbackBase = {
   ),
   installationId: positiveIntegerSchema,
   pullRequestNumber: positiveIntegerSchema,
-  repository: repository.extend({ fullName: z.string().min(1).max(201) }),
+  repository: repository
+    .extend({ fullName: z.string().min(1).max(201) })
+    .refine((value) => value.fullName === `${value.owner}/${value.name}`),
   authorLogin: z.string().min(1).max(100),
 };
 export const feedbackCommentEventSchema = z.strictObject({

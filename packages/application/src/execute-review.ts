@@ -1,5 +1,5 @@
 import type { ReviewJob } from "@holon/contracts";
-import { reviewMessage, type ReviewLanguage } from "@holon/domain";
+import { reviewMessage, reviewText, type ReviewLanguage } from "@holon/domain";
 import {
   classifyFindingPublication,
   createPrKey,
@@ -45,7 +45,13 @@ export function renderFinding(
       return `- ${item.path}:${range} — ${item.reason}: ${excerpt}`;
     })
     .join("\n");
-  return `${finding.diagnostic}${suggestion}\n\n${reviewMessage(language, "evidence")}:\n${evidence}`;
+  const questionHint = reviewText(
+    language,
+    "To clarify or contest this finding, reply with `/holon ask <question>`.",
+    "Para esclarecer ou contestar este finding, responda com `/holon ask <pergunta>`.",
+    "Para aclarar o cuestionar este hallazgo, responde con `/holon ask <pregunta>`.",
+  );
+  return `${finding.diagnostic}${suggestion}\n\n${reviewMessage(language, "evidence")}:\n${evidence}\n\n${questionHint}`;
 }
 
 export function selectValidFindings(

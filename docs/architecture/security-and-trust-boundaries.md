@@ -183,3 +183,7 @@ o nome histórico `getSanitizedAdminRunDetail` não autoriza logging do payload.
 ## Endurecimento do core (2026-09-27)
 
 A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) definiu a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados e reconciliação durável dos checks. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md) retirou a ingestão de CI e restringiu as tools do Agent a leitura e busca. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+
+## Perguntas sobre findings
+
+O texto da pergunta não concede privilégios. O host relê comentário raiz, pergunta e PR com token de instalação restrito ao repository ID, confere autoria/identidades e autoriza o autor do PR ou mantenedor atual. Somente um finding canônico com head/base e decisão ainda atuais é investigado. O modelo recebe `read_file` limitado, sem tools genéricas, MCP, bash ou rede. O leitor Git verifica SHA, modo regular e limites; aplica a política de exclusão original. Evidência do modelo precisa coincidir com linhas lidas. Somente o host altera finding, Check Run e comentário. Perguntas não habilitam `AGENT_TRACE_PAYLOADS`; mensagens e tools não são registradas como trace do Agent.

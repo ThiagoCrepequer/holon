@@ -288,6 +288,11 @@ UI/admin e suas bibliotecas foram retirados pela
 Agent Think substituiu o motor próprio conforme
 [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).
 
+Perguntas sobre findings usam os mesmos SDKs em
+`FindingClarificationAgent`/`FindingClarificationWorkflow`, com bindings próprios
+e leitura autenticada de blobs Git delimitados no control plane, conforme
+[ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md).
+
 ## Regras para agentes de codigo
 
 - Ler os ADRs aceitos no índice de decisões antes de alterar fronteiras do MVP.

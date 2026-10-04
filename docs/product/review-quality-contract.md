@@ -156,3 +156,7 @@ O conjunto de avaliação deve crescer com:
 - PRs contendo somente arquivos excluídos e PRs mistos;
 - diffs grandes, truncados e com force-push;
 - reentrega do mesmo webhook.
+
+## Esclarecimento e contestação de findings
+
+O autor pode perguntar na discussão inline por menção ou `/holon ask`. A investigação posterior, definida pela [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md), deve responder com cenário e evidências verificadas, buscando também guards e contratos que refutem o diagnóstico. Confirmação, delimitação, refutação e insuficiência de evidência são resultados distintos. Uma refutação validada retira o finding e recalcula o Check Run preservando cobertura/degradação originais; não cria aprovação de uma review parcial nem remove a discussão. O caso local com provider simulado comprova composição e políticas, não precisão em perguntas reais.

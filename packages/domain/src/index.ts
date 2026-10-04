@@ -18,3 +18,4 @@ export { reviewText } from "./review-language.js";
 export * from "./review-messages.js";
 
 export type { ReviewLanguage } from "./review-language.js";
+export * from "./finding-question.js";

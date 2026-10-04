@@ -113,3 +113,6 @@ ou servico externo.
 
 **Decisao**
 : Escolha registrada em ADR com status `accepted`.
+
+**Finding clarification**
+: Investigação limitada de uma pergunta explícita na discussão de um finding publicado. Tem identidade e orçamento próprios, ligados à decisão original e ao SHA atual, sem iniciar outra review run. Pode confirmar, delimitar, refutar ou declarar insuficiência de evidência.

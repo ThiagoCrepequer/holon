@@ -48,6 +48,9 @@ function installationSession() {
       },
       request: () => Promise.resolve({ data: { id: 1 } }),
     },
+    discussionReader: () => {
+      throw new Error("Discussion reader unused in this test");
+    },
     configurationReader: () => configurationReader(),
     currentHeadSha: () => Promise.resolve("a".repeat(40)),
     currentPullRequestRefs: () =>
@@ -203,6 +206,9 @@ describe("current executor RPC contract", () => {
 
     const sessionWithoutRefs = {
       ...installationSession(),
+      discussionReader: () => {
+        throw new Error("Discussion reader unused in this test");
+      },
       configurationReader: () => configurationReader(),
       currentHeadSha: () => Promise.resolve("a".repeat(40)),
       currentPullRequestRefs: undefined,

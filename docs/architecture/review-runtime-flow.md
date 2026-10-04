@@ -180,3 +180,7 @@ históricas do ledger permanecem sem leitores. A avaliação live do motor antig
 foi retirada; a avaliação offline recorded permanece. Um smoke remoto com a
 rota e o modelo reais ainda é necessário para provar streaming, tool calling e
 `think_final_answer`; build local e testes Workerd não comprovam essa integração.
+
+## Perguntas posteriores à publicação
+
+Após uma review concluída, uma resposta explícita ao finding segue webhook HMAC → Queue → validação autenticada da discussão e autorização → admissão no ledger → `FindingClarificationAgent`/`FindingClarificationWorkflow`. O Agent lê arquivos regulares do snapshot GitHub no head SHA fixado, aplica exclusões recompiladas no base SHA e reservas próprias. O Workflow valida trechos contra leituras, registra a conclusão e reconcilia a resposta no comentário raiz. Uma refutação retira o finding e recalcula o Check Run canônico; não publica nova review nem apaga o diagnóstico original. Novo head/base ou perda de autoridade impedem a mutação/publicação. Veja a [ADR-0051](../decisions/0051-answer-finding-questions-in-pr-threads.md).

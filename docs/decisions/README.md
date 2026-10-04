@@ -100,3 +100,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0049 — Usar Agents SDK e Think na revisão](0049-use-cloudflare-think-for-pr-review.md) — substitui o motor próprio das ADRs 0018 e 0046; preserva um teto agregado por run e a validação causal.
 
 - [ADR-0050 — Verificar causalidade antes da publicação](0050-verify-finding-causality-before-publication.md) — complementa a ADR-0049 com uma conversa isolada para confirmar ou refutar candidatos e um gate determinístico no host.
+
+- [ADR-0051 — Responder perguntas sobre findings](0051-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.

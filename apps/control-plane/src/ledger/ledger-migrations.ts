@@ -399,6 +399,16 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     CREATE TABLE model_generation_plans (run_id TEXT PRIMARY KEY, shard_count INTEGER NOT NULL CHECK(shard_count BETWEEN 1 AND 64));
   `,
   },
+  {
+    version: 20,
+    statements: `
+      CREATE TABLE finding_clarifications (id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL, tool_calls INTEGER NOT NULL, read_bytes INTEGER NOT NULL);
+      CREATE INDEX finding_clarifications_run ON finding_clarifications(run_id);
+      CREATE TABLE clarification_reads (question_id INTEGER NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE clarification_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, input_bytes INTEGER NOT NULL, output_tokens INTEGER NOT NULL, settled INTEGER NOT NULL);
+      CREATE INDEX clarification_generations_question ON clarification_generations(question_id);
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

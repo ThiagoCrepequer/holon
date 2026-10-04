@@ -8,6 +8,10 @@ import { createWebhookApp } from "./ingress/webhook-handler.js";
 export { ReviewLedgerObject } from "./ledger/ledger-object.js";
 export { ReviewWorkflow } from "./review/review-workflow.js";
 export { ReviewAgent, ReviewShardWorkflow } from "./review/review-agent.js";
+export {
+  FindingClarificationAgent,
+  FindingClarificationWorkflow,
+} from "./clarification/finding-clarification-agent.js";
 export { GitHubCredentialBrokerEntrypoint } from "./github/credential-broker.js";
 
 const app = createWebhookApp();

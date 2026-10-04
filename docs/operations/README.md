@@ -23,3 +23,5 @@ Estes documentos distinguem comandos de validação local de efeitos remotos. Um
 dry-run não prova credenciais, bindings, cotas nem comportamento de produção.
 
 - [Configuração de repositório e editores](repository-configuration.md)
+
+- [Perguntas sobre findings](finding-clarification.md): invocação na discussão, autorização, limites e ativação dos bindings.
