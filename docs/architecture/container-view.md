@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-04
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
@@ -85,6 +85,11 @@ C06 opera por shard conforme [ADR-0049](../decisions/0049-use-cloudflare-think-f
 O `ReviewShardWorkflow` usa `step.prompt` para um turno durável do Think; o
 control plane valida a saída e o diff canônico no host. Tools ficam restritas
 a leitura e busca via C05.
+Quando há candidatos válidos, C06 usa outra conversa e Workflow no mesmo
+binding para tentar refutá-los, conforme
+[ADR-0050](../decisions/0050-verify-finding-causality-before-publication.md).
+O host libera apenas confirmados; incerteza gera parcialidade. As fases
+compartilham o orçamento e o deadline da run.
 
 ## Componentes adiados ou rejeitados
 

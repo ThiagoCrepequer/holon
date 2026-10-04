@@ -36,6 +36,7 @@ export const reviewOutputLimitationCodes = [
   "finalization_failed",
   "tool_budget_exhausted",
   "evidence_rejected",
+  "causal_verification_incomplete",
 ] as const;
 
 export function reviewOutputLimitations(raw: unknown): string[] {

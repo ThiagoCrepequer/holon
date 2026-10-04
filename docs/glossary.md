@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-10-04
 ---
 
 # Glossario
@@ -59,6 +59,12 @@ foi criada.
 : Política que decide qual run pode agir usando, nesta ordem, o relógio causal
 do PR (`updatedAt`), o recebimento do webhook e o run ID como desempate
 determinístico. Ordem de consumo da Queue não concede autoridade.
+
+**Causal verification**
+: Verificação de um candidato a finding por um turno que tenta refutar o
+caminho da mudança ao impacto. Produz `confirmed`, `refuted` ou `inconclusive`;
+o host decide o que pode ser publicado. Distingue-se de causal admission, que
+trata a autoridade temporal de uma run.
 
 **Credential broker**
 : Entrypoint confiável do control plane que autoriza container, run e
