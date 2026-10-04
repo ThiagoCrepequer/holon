@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -117,6 +117,11 @@ contra linhas RIGHT do diff canônico. Resolve um finding anterior apenas com
 evidência positiva da correção. Antes de publicar, relê head/base, compara com a
 run, usa claim condicional no ledger e reconcilia IDs externos após resposta
 ambígua. Todos os caminhos terminais exigem cleanup durável do Sandbox.
+
+O schema da resposta estruturada exige o campo `summary`, mas permite texto
+vazio. Nesse caso, a normalização marca o shard como degradado, conserva os
+candidatos a finding para a verificação de evidência e impede aprovação por
+ausência de narrativa. Campos inválidos de finding continuam rejeitados.
 
 A review enviada ao GitHub reúne o veredito e os novos achados inline na mesma
 submissão. O host consulta os comentários dessa review para salvar seus IDs no

@@ -31,7 +31,7 @@ owners: [core-team]
   achados. Outros vereditos ainda usavam `formatVerdictBadge`; o plano sem
   arquivos elegíveis e a atualização por feedback tinham caminhos próprios.
 
-## Limite da investigação
+## Limite da investigação inicial
 
 Uma consulta somente leitura a `wrangler whoami` falhou na leitura do macOS
 Keychain (`exit 51`). A instância, seus steps, os eventos estruturados e o
@@ -46,3 +46,29 @@ Quando houver acesso somente leitura, consulte a instância acima com
 e correlacione `review.shard_failed`, `model.budget_rejected` e eventos do
 Agent pelo `runId` e índice 4. Preserve prompts, patches, outputs de tools e
 credenciais fora do relatório.
+
+## Atualização em 2026-10-04: causa confirmada
+
+Com o token local de `.env.cloudflare`, uma consulta somente leitura à
+instância confirmou status `errored` e erro `ZodError` após a conclusão de
+`review-shard:wait-1`. O step `review-shard:submit-1` havia concluído. A API de
+[saída integral de step do Cloudflare Workflows](https://developers.cloudflare.com/api/resources/workflows/subresources/instances/methods/step/)
+foi consultada para evitar o truncamento do resultado em `wrangler describe`.
+O payload permaneceu em memória; este relatório não inclui seu conteúdo nem a
+credencial.
+
+A resposta estruturada satisfez `modelReviewPromptSchema`, continha dois
+**candidatos** a finding e retornou `summary` vazio. O parse local dessa mesma
+resposta em `parseModelReviewTransport` falhou em `summary` (`too_small`, mínimo
+de um caractere). Portanto, a conclusão do modelo ocorreu, mas a validação
+posterior no host descartou o shard inteiro. Esses dois candidatos não
+passaram pela verificação de evidência canônica e não podem ser classificados
+como achados verificados. O erro observado explica `agent_workflow_failed`;
+não há evidência de falha de provider, orçamento ou tools nesse shard.
+
+A correção mantém `summary` como campo obrigatório, aceita texto vazio apenas
+como saída degradada e preserva os candidatos para a verificação de evidência.
+O veredito permanece conservador quando faltar narrativa. O teste focado
+reproduziu `ZodError` antes da mudança e passou depois. Não houve novo deploy
+nem reprodução remota após a correção; esta análise descreve a execução
+anterior e a prova local do contrato alterado.

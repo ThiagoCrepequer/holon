@@ -28,6 +28,17 @@ imprimir step output ou trace payload em relatórios operacionais: eles podem
 conter código privado. Sem acesso à instância ou ao trace, registre a causa
 interna como não determinada.
 
+Quando a instância terminar com erro após `review-shard:wait-1`, confira o tipo
+do erro e o schema da resposta antes de atribuir a falha ao provider. Na
+execução do PR #121 em 2026-10-04, um `ZodError` resultou de `summary` vazio
+aceito pelo schema do prompt e rejeitado pelo parser de transporte. A
+[API de step do Cloudflare Workflows](https://developers.cloudflare.com/api/resources/workflows/subresources/instances/methods/step/)
+(documentação verificada em 2026-10-04) permite consultar a saída integral
+quando `wrangler describe` a trunca. Essa saída pode conter código privado:
+inspecione em processo, sem imprimir ou persistir payload, e relate somente
+estado, etapa e falhas de schema. Veja a
+[investigação do PR #121](../research/2026-10-04-pr121-partial-review.md).
+
 | Evento                                                                   | Interpretação                                                                                                                                                              |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `model.budget_rejected`                                                  | O ledger recusou uma inferência pelo teto **agregado da run**. `rule`, `current`, `requested` e `limit` identificam a dimensão; shard e fase ajudam a localizar a chamada. |

@@ -4,7 +4,7 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-10-04
 ---
 
 # Contrato de qualidade da review
@@ -66,6 +66,12 @@ degradada comunica revisão incompleta e quantidade de partes analisadas, sem
 converter ausência de achados verificados em aprovação. Alterações sem arquivos
 elegíveis têm estado próprio. Atualizações por feedback humano e aprovações
 posteriores sem novos achados mantêm a mesma identificação visual.
+
+Se o modelo devolver `summary` vazio, o host marca o shard como degradado e
+continua a validar cada candidato a finding contra a evidência canônica. O
+resumo narrativo ausente não descarta sozinho esses candidatos, mas também não
+autoriza aprovação. Achados publicados ainda precisam satisfazer todos os
+critérios de evidência e ancoragem acima.
 
 Se todos os arquivos forem binários, lockfiles, gerados, vendorizados,
 minificados ou corresponderem às heurísticas de caminhos
