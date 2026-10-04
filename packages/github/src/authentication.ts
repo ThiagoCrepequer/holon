@@ -2,11 +2,16 @@ import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 import githubAppJwt from "universal-github-app-jwt";
 
-import type { GitHubAppCredentials } from "./client.js";
 import {
   executeGitHubAppAuthenticationRequest,
   executeGitHubRequest,
 } from "./errors.js";
+
+export interface GitHubAppCredentials {
+  readonly appId: number;
+  readonly appSlug: string;
+  readonly privateKey: string;
+}
 
 /** Keep SDK caching and clock correction while identifying the failing boundary. */
 export async function createDiagnosticAppAuth(

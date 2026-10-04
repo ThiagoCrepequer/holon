@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "catalog:",
-    "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
     "@holon/project-identification": "workspace:*",

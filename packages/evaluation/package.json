@@ -24,7 +24,6 @@
   "dependencies": {
     "@holon/application": "workspace:*",
     "@holon/contracts": "workspace:*",
-    "@holon/domain": "workspace:*",
     "@holon/model": "workspace:*",
     "@holon/project-identification": "workspace:*",
     "zod": "catalog:"
