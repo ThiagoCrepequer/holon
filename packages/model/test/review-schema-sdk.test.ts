@@ -1,8 +1,24 @@
-import { modelReviewTransportSchema } from "@holon/contracts";
+import {
+  causalVerificationSchema,
+  modelReviewTransportSchema,
+} from "@holon/contracts";
 import { Output } from "ai";
 import { describe, expect, it } from "vitest";
 
 describe("SDK review schema integration", () => {
+  it("exports the causal verifier as a strict provider object schema with no finding fields", async () => {
+    const format = await Output.object({ schema: causalVerificationSchema })
+      .responseFormat;
+    expect(format).toMatchObject({
+      type: "json",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["assessments", "summary"],
+      },
+    });
+    expect(JSON.stringify(format)).not.toContain('"findings"');
+  });
   it("exports a provider object schema and preserves normalization metadata", async () => {
     const output = Output.object({ schema: modelReviewTransportSchema });
     const format = await output.responseFormat;

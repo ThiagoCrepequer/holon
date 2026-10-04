@@ -4,12 +4,13 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
   - ../decisions/0039-partition-large-reviews-and-bound-concurrency.md
   - ../decisions/0049-use-cloudflare-think-for-pr-review.md
+  - ../decisions/0050-verify-finding-causality-before-publication.md
 ---
 
 # Fluxo de execução de uma review
@@ -54,7 +55,19 @@ sequenceDiagram
         end
       end
       AG-->>AW: resposta estruturada
-      AW-->>WF: resultado do shard
+      AW-->>WF: candidatos do shard
+      WF->>WF: validar evidência no diff canônico
+      opt Há candidatos válidos
+        WF->>AG: startReview em conversa isolada, fase causal_verification
+        AG->>AW: Workflow com identidade por fase
+        AW->>AG: step.prompt para tentar refutar candidatos
+        AG->>LE: reservar inferências e tools no mesmo saldo
+        AG->>GW: até oito passos de verificação
+        AG->>EX: inspecionar guardas, chamadores e contratos
+        AG-->>AW: confirmed/refuted/inconclusive por candidato
+        AW-->>WF: avaliações e resumo corrigido
+        WF->>WF: liberar apenas confirmados; incerteza gera parcialidade
+      end
     end
     WF->>WF: validar schema e evidência no diff
     WF->>GH: reler head/base
@@ -83,13 +96,23 @@ limitação explícita; não é tratado como cobertura.
 
 ## Agent e tools
 
-Um `ReviewAgent` isolado por run/shard deriva de `Think`. `ReviewShardWorkflow`
-usa `ThinkWorkflow.step.prompt` para a revisão. A identidade do Workflow é
+Um `ReviewAgent` isolado por run/shard/fase deriva de `Think`. `ReviewShardWorkflow`
+usa `ThinkWorkflow.step.prompt` para investigação e, quando há candidatos
+válidos, outro Agent e Workflow para verificação causal (ADR-0050). A identidade do Workflow é
 estável em retries. Antes de cada turno, tool e conclusão, o Agent consulta o
 ledger e o deadline. `getTools` registra somente `read_file`, `search_text` e
 `search_structure`. MCP, bash e edição não são expostos. O executor revalida
 path, escopo, política de egress, tamanho, deadline e autoridade no limite de
 confiança próprio. Código e resultado de busca são dados não confiáveis.
+
+O verificador tenta refutar cada candidato, lendo guardas, chamadores e contratos
+fora do patch quando necessários. Sua saída estrita não contém findings novos:
+apenas índice, resultado, confiança, justificativa e resumo corrigido. O host
+exige exatamente uma avaliação por candidato e conserva somente `confirmed`
+com confiança de pelo menos 0,8, usando o menor valor entre as duas fases.
+Refutação confiável descarta o candidato; incerteza ou resposta inválida bloqueia
+sua publicação e marca a revisão parcial. Limitações anteriores não são apagadas.
+Resoluções anteriores seguem seu gate existente de evidência positiva.
 
 O provider é AI SDK por AI Gateway Dynamic Route. `AGENT_TRACE_PAYLOADS` está
 `enabled` durante o beta; **desabilitar quando o usuário solicitar**. Os spans
@@ -103,6 +126,9 @@ entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
 de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
 por run entre todos os shards. Esses limites não são uma estimativa exata de
 tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
+As duas fases compartilham esses tetos e o mesmo deadline. A investigação
+admite 16 passos; a verificação admite oito e um timeout de cinco minutos,
+sempre subordinado ao deadline da análise. Sem candidatos não há fase extra.
 
 O adapter espera o estado do Workflow do shard até o deadline da análise.
 Cancelamento ou deadline terminam o Workflow filho; run obsoleta bloqueia novos
@@ -110,6 +136,9 @@ turnos e tools. Falhas terminais do shard viram resultado parcial explícito.
 Falha de preparação, ledger ou Sandbox continua erro de infraestrutura do
 Workflow pai. A análise nunca aprova uma área não examinada apenas porque os
 shards concluídos não encontraram problemas.
+Falha da verificação retém os candidatos e acrescenta
+`causal_verification_incomplete`; cancelamento do pai é propagado sem resultado
+publicável. Uma saída degradada não pode gerar `APPROVE`, mesmo sem findings.
 
 O host valida a saída do Think com Zod e verifica cada finding e resolução
 contra linhas RIGHT do diff canônico. Resolve um finding anterior apenas com

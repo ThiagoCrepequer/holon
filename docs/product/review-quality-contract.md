@@ -4,7 +4,7 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-31
+last-reviewed: 2026-10-04
 ---
 
 # Contrato de qualidade da review
@@ -69,6 +69,28 @@ Remoções, renames e metadata-only elegíveis ainda recebem review. Sem uma lin
 adicionada no lado `RIGHT`, o modelo deve retornar zero findings e registrar no
 resumo apenas riscos comprovados que não podem ser ancorados inline.
 
+## Verificação causal antes da publicação
+
+Conforme a [ADR-0050](../decisions/0050-verify-finding-causality-before-publication.md),
+um candidato com evidência canônica válida passa por outra conversa Think,
+isolada da investigação inicial. O verificador procura guardas, chamadores e
+contratos capazes de refutar o impacto. Premissas fora do patch exigem inspeção;
+busca limitada sem resultados não comprova ausência.
+
+- `confirmed` com confiança de pelo menos 0,8: pode permanecer, preservando
+  diagnóstico e evidência, com confiança final limitada pela investigação inicial.
+- `refuted` com confiança suficiente: é descartado, e o resumo inicial é substituído.
+- `inconclusive` ou confiança insuficiente: fica fora da saída publicável e a revisão fica parcial.
+- Schema inválido, candidatos sem avaliação, falha ou limite esgotado: nenhum
+  candidato não confirmado é liberado; a revisão registra
+  `causal_verification_incomplete` e não pode aprovar o PR.
+
+As duas fases compartilham o mesmo snapshot, saldo e deadline. Sem candidatos
+não há inferência extra. Esta verificação não executa testes nem constitui
+prova formal do diagnóstico. Resoluções de achados anteriores preservam seu
+gate próprio. A melhora de precisão, recall e custo depende de avaliação com
+casos e provider reais.
+
 ## Avaliação
 
 O pacote `@holon/evaluation` inicia a baseline offline com schema estrito,
@@ -77,7 +99,8 @@ matching one-to-one de findings, precisão, recall, severidade, confiança,
 parcialidade e termos obrigatórios/proibidos. A configuração registra versões
 de corpus, política, prompt e subject. Os modos obrigatórios em PR não chamam
 modelo, GitHub ou Cloudflare; o subject é injetado e toda saída é revalidada. O
-adapter live manual chama somente a rota autenticada já adotada no AI Gateway.
+adapter live do motor anterior foi retirado pela ADR-0049; a futura avaliação
+deve exercitar as duas fases do Agent real.
 Findings com evidência ausente do patch canônico são rejeitados antes do
 grading e contabilizados separadamente.
 
@@ -91,11 +114,9 @@ representam uma métrica de qualidade do produto nem autorizam gates numéricos.
 
 Em Pull Requests, o workflow de avaliação executa os testes do subject mockado e
 as recordings sintéticas V3, sem secrets nem chamadas a provedores durante a
-avaliação. O subject live é acionado somente por `workflow_dispatch` sobre
-`main`, usa o GitHub Environment
-`live-evaluation` e não clona repositório nem publica review. Seu relatório
-persiste IDs, versões, métricas, falhas enumeradas e telemetria de uso; não
-persiste prompt, patch, evidência ou resposta integral.
+avaliação. Uma avaliação live futura deverá registrar IDs, versões, métricas,
+falhas enumeradas e uso, sem persistir prompt, patch, evidência ou resposta
+integral, conforme o [runbook](../operations/evaluations.md).
 
 O conjunto de avaliação deve crescer com:
 

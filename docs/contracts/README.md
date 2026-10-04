@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-04
 ---
 
 # Contratos
@@ -15,16 +15,27 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 ## Contratos implementados
 
-| Modulo                 | Contratos principais                                                          |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| `webhook.ts`           | Envelope atual preserva `pull_request.updated_at`                             |
-| `executor.ts`          | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados |
-| `repository-policy.ts` | YAML normalizado, digests, exclusões e rigor de veredito                      |
-| `review-output.ts`     | Findings estruturados, evidências, resumo e registro de publicação            |
-| `health.ts`            | Contrato do healthcheck funcional                                             |
-| `shared.ts`            | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados   |
+| Modulo                   | Contratos principais                                                           |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `webhook.ts`             | Envelope atual preserva `pull_request.updated_at`                              |
+| `executor.ts`            | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados  |
+| `repository-policy.ts`   | YAML normalizado, digests, exclusões e rigor de veredito                       |
+| `review-output.ts`       | Findings estruturados, evidências, resumo e registro de publicação             |
+| `causal-verification.ts` | Avaliações restritas a candidatos, resultado causal, confiança e justificativa |
+| `health.ts`              | Contrato do healthcheck funcional                                              |
+| `shared.ts`              | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados    |
 
 ## Regras
+
+`causalVerificationSchema` valida o `think_final_answer` da fase de
+verificação e sua leitura pelo host. Aceita até oito avaliações, com índice
+inteiro de 0 a 7, resultado `confirmed`/`refuted`/`inconclusive`, confiança
+entre 0 e 1, justificativa de 30 a 2.000 caracteres e resumo de até 10.000.
+Campos desconhecidos são rejeitados. O host exige cobertura única e exaustiva
+dos candidatos efetivos, conforme a
+[ADR-0050](../decisions/0050-verify-finding-causality-before-publication.md).
+`causal_verification_incomplete` integra as limitações de saída e a fase causal
+integra o pedido de reserva no mesmo orçamento da run.
 
 - Schemas são independentes de SDK e provedor.
 - Toda estrutura produzida por modelo é validada em runtime.

@@ -39,6 +39,7 @@ it("admits only the latest running review and exposes only read-only repository 
   await runInDurableObject(agent, async (instance: ReviewAgent) => {
     const config = {
       deadlineAt: Date.now() + 60_000,
+      phase: "investigation" as const,
       prKey,
       prompt: "review",
       runId,
@@ -88,6 +89,9 @@ it("admits only the latest running review and exposes only read-only repository 
     await expect(
       instance.startReview({ ...config, prompt: "different" }),
     ).rejects.toThrow("identity changed");
+    await expect(
+      instance.startReview({ ...config, phase: "causal_verification" }),
+    ).rejects.toThrow("identity changed");
     const beforeToolCall = (toolName: string) =>
       instance.beforeToolCall({ toolName } as Parameters<
         ReviewAgent["beforeToolCall"]
@@ -120,6 +124,7 @@ it("refuses a turn after its fixed deadline", async () => {
   await runInDurableObject(agent, async (instance: ReviewAgent) => {
     instance.configure({
       deadlineAt: Date.now() - 1,
+      phase: "investigation" as const,
       prKey,
       prompt: "review",
       runId,
@@ -142,6 +147,7 @@ it("does not start a shard workflow for an expired or obsolete run", async () =>
     await expect(
       instance.startReview({
         deadlineAt: Date.now() - 1,
+        phase: "investigation" as const,
         prKey,
         prompt: "review",
         runId,
@@ -158,6 +164,7 @@ it("does not start a shard workflow for an expired or obsolete run", async () =>
     await expect(
       instance.startReview({
         deadlineAt: Date.now() + 60_000,
+        phase: "investigation" as const,
         prKey,
         prompt: "review",
         runId,
@@ -219,6 +226,7 @@ it("completes a Think prompt workflow with a simulated structured model response
       vi.spyOn(instance, "getModel").mockReturnValue(model);
       return await instance.startReview({
         deadlineAt: Date.now() + 60_000,
+        phase: "investigation" as const,
         prKey,
         prompt: "Review this changed line.",
         runId,
