@@ -13,8 +13,12 @@ last-reviewed: 2026-10-04
 
 O símbolo oficial preserva a geometria da **Semente da rodada inicial**: um
 contorno orgânico envolvente, com inclinação ascendente e um núcleo
-cheio. O desenho usa uma prancheta de 100 × 100 unidades, traço externo de
-9 unidades e proporção fixa. O espaço entre núcleo e contorno é parte da marca.
+cheio. O desenho foi construído em coordenadas de 100 × 100 unidades, com traço
+externo de 9 unidades e proporção fixa. Os símbolos isolados usam o recorte
+quadrado `viewBox="8.5 10.5 80 80"`: o desenho ocupa aproximadamente 93% da
+largura e altura, com cerca de 3–4% de respiro em cada lado. A versão micro
+compartilha esse enquadramento e usa traço de 10 unidades. O espaço entre núcleo
+e contorno é parte da marca.
 
 O lettering é `holon`, em Manrope 600, com espaçamento óptico ajustado. O
 arquivo final usa contornos vetoriais. Não redigitar o nome para reconstruir a
@@ -34,11 +38,17 @@ assinatura; a tipografia de interface pode variar em tamanho sem alterar a logo.
 
 ## Área de proteção
 
-Considere **S** a largura da prancheta do símbolo, não apenas a área pintada.
-Reserve **S/4** livres em cada lado do símbolo ou da assinatura completa.
-Exemplo: símbolo de 40 px → 10 px de proteção. Essa área não recebe texto,
-borda, fotografia ou outra marca. O espaço interno entre símbolo e lettering
-já está resolvido no SVG horizontal de 304 × 100 unidades.
+Considere **S** a largura exibida do símbolo. Reserve **S/4** livres em cada lado
+do símbolo ou da assinatura completa, usando margem, padding ou gap no layout.
+Exemplo: símbolo de 40 px → 10 px de proteção externa. Essa área não recebe
+texto, borda, fotografia ou outra marca; ela não deve ser embutida como espaço
+vazio adicional no SVG ou PNG. Assim, o tamanho do arquivo continua próximo ao
+tamanho visual da marca e o layout controla seu espaçamento.
+
+Nas assinaturas completas, use a largura do símbolo dentro da composição como
+**S**. O espaço interno entre símbolo e lettering já está resolvido no SVG
+horizontal de 304 × 100 unidades. Avatar e favicon têm composição própria e
+preservam seu enquadramento.
 
 Para co-branding, separe marcas por pelo menos **S/2**. Use divisor apenas
 quando houver relação editorial clara; não combine símbolos em uma marca nova.
@@ -84,8 +94,16 @@ não se aplicam à logo oficial.
 
 Prefira SVG para web e interface. PNG deve ser exportado do vetor no tamanho
 necessário, mantendo transparência ou um fundo aprovado; use 2× para posições
-rasterizadas em telas de alta densidade. Arquivos PNG de avatar acompanham o kit.
-Não converter repetidamente a partir de PNGs antigos.
+rasterizadas em telas de alta densidade. O símbolo principal está disponível em
+PNG transparente, proporção 1:1 e com o mesmo enquadramento compacto do SVG:
+
+- [1024 × 1024 px](assets/logo/holon-symbol-primary-1024.png).
+- [2048 × 2048 px](assets/logo/holon-symbol-primary-2048.png).
+
+Esses arquivos foram rasterizados diretamente do SVG na resolução de destino.
+Arquivos PNG de avatar também acompanham o kit. Não converter repetidamente a
+partir de PNGs antigos nem acrescentar borda transparente para simular a área
+de proteção; controle esse espaço na aplicação.
 
 A paleta é definida em sRGB. Para impressão, converter para o perfil indicado
 pela gráfica e aprovar uma prova; não tratar valores CMYK automáticos como uma
