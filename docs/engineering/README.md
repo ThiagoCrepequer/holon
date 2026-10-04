@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Guia de engenharia do Holon
@@ -51,17 +51,18 @@ interna resolveria.
 
 ## Encontre o contexto pela mudança
 
-| Se a tarefa envolve…                               | Comece por…                                                                                                                               | Depois confira…                                                                                 |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Veredito, findings ou cobertura                    | [Contrato de qualidade](../product/review-quality-contract.md), [fluxo](../architecture/review-runtime-flow.md)                           | Domínio, aplicação, output schema e corpus de avaliação.                                        |
-| Webhook, eventos ou resposta ao GitHub             | [Fronteiras de confiança](../architecture/security-and-trust-boundaries.md), [estado](../architecture/state-and-idempotency.md)           | Handler, publisher, ledger, permissões e testes de redelivery.                                  |
-| Queue, Workflow, DO, Sandbox ou modelo             | [Runtime e integrações](runtime-and-integrations.md)                                                                                      | Bindings, contrato de porta/RPC, falhas, retries e testes Workerd.                              |
-| Configuração por repositório ou versões do projeto | [Operação da configuração](../operations/repository-configuration.md), [identificação](../architecture/project-version-identification.md) | Compilador, CLI, schemas, snapshot, digests e testes.                                           |
-| Feedback humano, evidência de CI ou publicação     | [Fluxo](../architecture/review-runtime-flow.md), [estado](../architecture/state-and-idempotency.md)                                       | Entrada do evento, ledger, publisher, autorização e comentário reconciliado.                    |
-| Código TypeScript ou fronteira de módulo           | [Tipos e módulos](typescript-and-module-design.md)                                                                                        | `tooling/typescript/base.json`, imports e callers reais.                                        |
-| Testes, avaliação ou entrega                       | [Testes e evidência](testing-and-evidence.md)                                                                                             | Scripts afetados, [desenvolvimento local](../operations/local-development.md) e runbook remoto. |
-| Secrets, GitHub App ou deploy                      | [Operação](../operations/README.md) e [segurança](../architecture/security-and-trust-boundaries.md)                                       | Ambiente, artefato, permissões, rotação e autorização antes do efeito remoto.                   |
-| Incidente ou comportamento histórico               | [Pesquisas](../research/README.md)                                                                                                        | Código/configuração atuais e ADR que governa o estado presente.                                 |
+| Se a tarefa envolve…                               | Comece por…                                                                                                                               | Depois confira…                                                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Veredito, findings ou cobertura                    | [Contrato de qualidade](../product/review-quality-contract.md), [fluxo](../architecture/review-runtime-flow.md)                           | Domínio, aplicação, output schema e corpus de avaliação.                                            |
+| Webhook, eventos ou resposta ao GitHub             | [Fronteiras de confiança](../architecture/security-and-trust-boundaries.md), [estado](../architecture/state-and-idempotency.md)           | Handler, publisher, ledger, permissões e testes de redelivery.                                      |
+| Queue, Workflow, DO, Sandbox ou modelo             | [Runtime e integrações](runtime-and-integrations.md)                                                                                      | Bindings, contrato de porta/RPC, falhas, retries e testes Workerd.                                  |
+| Configuração por repositório ou versões do projeto | [Operação da configuração](../operations/repository-configuration.md), [identificação](../architecture/project-version-identification.md) | Compilador, CLI, schemas, snapshot, digests e testes.                                               |
+| Feedback humano, evidência de CI ou publicação     | [Fluxo](../architecture/review-runtime-flow.md), [estado](../architecture/state-and-idempotency.md)                                       | Entrada do evento, ledger, publisher, autorização e comentário reconciliado.                        |
+| Código TypeScript ou fronteira de módulo           | [Tipos e módulos](typescript-and-module-design.md)                                                                                        | `tooling/typescript/base.json`, imports e callers reais.                                            |
+| Marca, site, LP ou interface                       | [Identidade e design system](../brand/README.md)                                                                                          | Tokens semânticos, assets oficiais, estados, responsividade e [UI Kit](../brand/ui-kit/index.html). |
+| Testes, avaliação ou entrega                       | [Testes e evidência](testing-and-evidence.md)                                                                                             | Scripts afetados, [desenvolvimento local](../operations/local-development.md) e runbook remoto.     |
+| Secrets, GitHub App ou deploy                      | [Operação](../operations/README.md) e [segurança](../architecture/security-and-trust-boundaries.md)                                       | Ambiente, artefato, permissões, rotação e autorização antes do efeito remoto.                       |
+| Incidente ou comportamento histórico               | [Pesquisas](../research/README.md)                                                                                                        | Código/configuração atuais e ADR que governa o estado presente.                                     |
 
 ## Fluxo de trabalho
 
