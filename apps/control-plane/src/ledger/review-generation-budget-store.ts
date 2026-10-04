@@ -6,7 +6,7 @@ import {
   type ModelGenerationReservation,
 } from "@holon/contracts";
 
-import { consoleLogger, type StructuredLogger } from "./observability.js";
+import { consoleLogger, type StructuredLogger } from "../observability.js";
 
 /** Call only inside the ledger transaction. Uncertain calls retain their full reservation. */
 export class ReviewGenerationBudgetStore {

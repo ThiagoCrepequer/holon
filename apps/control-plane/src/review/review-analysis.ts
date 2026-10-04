@@ -36,13 +36,27 @@ import {
 import { buildReviewPlan } from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
-import { errorKind } from "./observability.js";
+import { errorKind } from "../observability.js";
 import { resolveReviewGuidance } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
 import { buildShardReviewContext } from "./review-shard-context.js";
 import { ThinkReviewFailure } from "./think-reviewer.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
+type ReviewAnalysisServices = Pick<
+  ReviewServices,
+  | "createShardReviewer"
+  | "ensureContext"
+  | "getProjectIdentification"
+  | "loadContext"
+> & {
+  readonly executor: Pick<ReviewServices["executor"], "acquireReviewLease">;
+  readonly ledger: Pick<
+    ReviewServices["ledger"],
+    "loadPrFindings" | "loadRunConfiguration"
+  >;
+};
+
 export interface ReviewAnalysisExecution<T extends Rpc.Serializable<T>> {
   readonly configuration: RunConfigurationRef;
   runStep<R extends Rpc.Serializable<R>>(
@@ -99,7 +113,7 @@ function reviewedFiles(
 
 async function reviewShards(
   job: ReviewJob,
-  services: ReviewServices,
+  services: ReviewAnalysisServices,
   plan: ReturnType<typeof buildReviewPlan>,
   structuralImpact: StructuralImpactReport | undefined,
   inputTruncated = false,
@@ -279,20 +293,20 @@ async function reviewShards(
 
 export function analyzeReview(
   job: ReviewJob,
-  services: ReviewServices,
+  services: ReviewAnalysisServices,
   emit: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
 ): Promise<ReconciledReviewOutput>;
 export function analyzeReview<T extends Rpc.Serializable<T>>(
   job: ReviewJob,
-  services: ReviewServices,
+  services: ReviewAnalysisServices,
   emit: EmitReviewEvent,
   effectivePolicy: RepositoryPolicy | undefined,
   execution: ReviewAnalysisExecution<T>,
 ): Promise<T>;
 export async function analyzeReview<T extends Rpc.Serializable<T>>(
   job: ReviewJob,
-  services: ReviewServices,
+  services: ReviewAnalysisServices,
   emit: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
   execution?: ReviewAnalysisExecution<T>,

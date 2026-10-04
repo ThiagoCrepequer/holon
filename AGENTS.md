@@ -44,19 +44,20 @@ vigente está em `docs/architecture/` e nos ADRs aceitos.
 ## Comandos do projeto
 
 Execute na raiz. `pnpm` deve ser `11.24.0` e o Node deve satisfazer o intervalo
-de `package.json` (`>=24 <25`).
+de `package.json` (`>=24.11 <25`).
 
-| Objetivo                         | Comando              |
-| -------------------------------- | -------------------- |
-| Instalar dependências            | `pnpm install`       |
-| Formatar arquivos                | `pnpm format`        |
-| Conferir formatação sem escrever | `pnpm format:check`  |
-| Lint                             | `pnpm lint`          |
-| Typecheck                        | `pnpm typecheck`     |
-| Testes                           | `pnpm test`          |
-| Testes com cobertura mínima      | `pnpm test:coverage` |
-| Build e dry-runs                 | `pnpm build`         |
-| Gate local completo              | `pnpm verify`        |
+| Objetivo                         | Comando                  |
+| -------------------------------- | ------------------------ |
+| Instalar dependências            | `pnpm install`           |
+| Formatar arquivos                | `pnpm format`            |
+| Conferir formatação sem escrever | `pnpm format:check`      |
+| Lint                             | `pnpm lint`              |
+| Typecheck                        | `pnpm typecheck`         |
+| Testes                           | `pnpm test`              |
+| Direção dos imports              | `pnpm test:architecture` |
+| Testes com cobertura mínima      | `pnpm test:coverage`     |
+| Build e dry-runs                 | `pnpm build`             |
+| Gate local completo              | `pnpm verify`            |
 
 `pnpm build` não faz deploy, mas requer Docker para construir a imagem do
 Sandbox. Antes de escolher comandos filtrados, consulte os scripts do workspace

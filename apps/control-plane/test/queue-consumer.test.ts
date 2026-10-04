@@ -4,7 +4,7 @@ import worker from "../src/index.js";
 import {
   dispatchReviewMessages,
   type QueueMessagePort,
-} from "../src/queue-consumer.js";
+} from "../src/ingress/queue-consumer.js";
 
 const envelope = {
   action: "opened",

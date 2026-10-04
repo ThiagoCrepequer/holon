@@ -3,7 +3,7 @@ import { createPrivateKey } from "node:crypto";
 import { createInstallationSession } from "@holon/github";
 import { expect, it, vi } from "vitest";
 
-import { executeGitHubOperation } from "../src/github-operations.js";
+import { executeGitHubOperation } from "../src/github/github-operations.js";
 
 it("identifies the real Workers PKCS1 signing rejection through the Workflow adapter", async () => {
   const keys = await crypto.subtle.generateKey(

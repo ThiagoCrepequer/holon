@@ -1,7 +1,7 @@
 import type { ReviewJob } from "@holon/contracts";
 import { reviewTimeBudget } from "@holon/model";
 
-import { githubRetryDelay } from "./github-operations.js";
+import { githubRetryDelay } from "../github/github-operations.js";
 
 export const stateStep = {
   retries: { backoff: "exponential", delay: "1 second", limit: 3 },

@@ -2,6 +2,7 @@ import { formatConfiguredFindings } from "@holon/application";
 import {
   formatReconciliationSection,
   fitPublicationSummary,
+  formatReviewSummaryHeader,
 } from "@holon/application";
 import {
   reconciledReviewOutputSchema,
@@ -11,7 +12,6 @@ import { reviewMessage } from "@holon/domain";
 import {
   applyFeedbackToFindings,
   determineReviewVerdict,
-  formatVerdictBadge,
   type FindingFeedbackRecord,
 } from "@holon/domain";
 
@@ -90,7 +90,15 @@ export function refreshReviewFeedback(
   });
   const summary = fitPublicationSummary(
     [
-      formatVerdictBadge(verdictDetails.verdict, output.output.language),
+      formatReviewSummaryHeader({
+        verdict: verdictDetails.verdict,
+        activeFindingsCount: activeFindings.length,
+        scopeStatus: output.scopeStatus,
+        isDegraded,
+        shardsAnalyzed: output.shardsAnalyzed,
+        totalShards: output.totalShards,
+        language: output.output.language,
+      }),
       verdictDetails.reasons.join(" "),
     ].join("\n\n"),
     reviewMessage(output.output.language, "feedbackUpdated"),

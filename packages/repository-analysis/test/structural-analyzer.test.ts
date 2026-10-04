@@ -234,6 +234,93 @@ describe("downstream-tracer", () => {
 });
 
 describe("contract-break-detector", () => {
+  it("does not report a removed interface when its original module re-exports the moved type", () => {
+    const changedFiles = [
+      {
+        path: "packages/github/src/client.ts",
+        patch: [
+          "--- a/packages/github/src/client.ts",
+          "+++ b/packages/github/src/client.ts",
+          "@@ -1,4 +1,1 @@",
+          "-export interface GitHubAppCredentials {",
+          "-  readonly appId: number;",
+          "-  readonly privateKey: string;",
+          "-}",
+          '+export type { GitHubAppCredentials } from "./authentication.js";',
+        ].join("\n"),
+      },
+      {
+        path: "packages/github/src/authentication.ts",
+        patch: [
+          "--- a/packages/github/src/authentication.ts",
+          "+++ b/packages/github/src/authentication.ts",
+          "@@ -0,0 +1,4 @@",
+          "+export interface GitHubAppCredentials {",
+          "+  readonly appId: number;",
+          "+  readonly privateKey: string;",
+          "+}",
+        ].join("\n"),
+      },
+    ];
+
+    const report = analyzeStructuralImpact({
+      changedFiles,
+      repositoryFiles: [],
+    });
+
+    expect(report.changedSymbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          change: "deleted",
+          kind: "interface",
+          name: "GitHubAppCredentials",
+          path: "packages/github/src/client.ts",
+        }),
+      ]),
+    );
+    expect(report.contractBreaks).toEqual([]);
+  });
+
+  it("retains removal signals when a type re-export does not preserve the exported runtime symbol", () => {
+    const patch = [
+      "--- a/src/client.ts",
+      "+++ b/src/client.ts",
+      "@@ -1,1 +1,1 @@",
+      "-export function createClient() {}",
+      '+export type { createClient } from "./authentication.js";',
+    ].join("\n");
+    const symbols = extractChangedSymbols([{ path: "src/client.ts", patch }]);
+
+    expect(
+      detectContractBreaks([{ path: "src/client.ts", patch }], symbols),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "exported_symbol_removed",
+        path: "src/client.ts",
+      }),
+    ]);
+  });
+
+  it("does not suppress an unrelated type removal because another name was re-exported", () => {
+    const patch = [
+      "--- a/src/client.ts",
+      "+++ b/src/client.ts",
+      "@@ -1,1 +1,1 @@",
+      "-export interface RemovedCredentials {}",
+      '+export type { CurrentCredentials } from "./authentication.js";',
+    ].join("\n");
+    const symbols = extractChangedSymbols([{ path: "src/client.ts", patch }]);
+
+    expect(
+      detectContractBreaks([{ path: "src/client.ts", patch }], symbols),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "exported_symbol_removed",
+        path: "src/client.ts",
+      }),
+    ]);
+  });
+
   it("detects removed exported symbols", () => {
     const symbols = [
       {

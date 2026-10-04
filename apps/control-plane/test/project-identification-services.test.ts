@@ -7,7 +7,7 @@ import { afterEach, it, expect, vi } from "vitest";
 import {
   createReviewServices,
   type RepositoryExecutorBinding,
-} from "../src/review-services.js";
+} from "../src/review/review-services.js";
 import { defaultScopePolicy } from "./configuration-fixtures.js";
 import { toolOperation } from "./executor-fixture.js";
 import { unconfiguredExecutor } from "./executor-fixture.js";

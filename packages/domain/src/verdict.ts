@@ -329,33 +329,3 @@ export function determineReviewVerdict(
     verdict: "APPROVE",
   };
 }
-
-export function formatVerdictBadge(
-  verdict: ReviewVerdict,
-  language: ReviewLanguage = "en",
-): string {
-  switch (verdict) {
-    case "APPROVE":
-      return reviewText(
-        language,
-        "### Verdict: Approved",
-        "### Veredito: Aprovado",
-        "### Veredicto: Aprobado",
-      );
-    case "REQUEST_CHANGES":
-      return reviewText(
-        language,
-        "### Verdict: Changes requested",
-        "### Veredito: Alterações solicitadas",
-        "### Veredicto: Cambios solicitados",
-      );
-    case "COMMENT":
-    default:
-      return reviewText(
-        language,
-        "### Verdict: Informational Comment",
-        "### Veredito: Comentário informativo",
-        "### Veredicto: Comentario informativo",
-      );
-  }
-}

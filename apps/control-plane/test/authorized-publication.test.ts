@@ -17,7 +17,7 @@ import {
   ReviewMutationNotAuthorizedError,
   type PublicationLedger,
   type ReviewInlinePublication,
-} from "../src/authorized-publication.js";
+} from "../src/review/authorized-publication.js";
 
 const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as RunId;

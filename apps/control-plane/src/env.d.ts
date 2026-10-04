@@ -1,4 +1,4 @@
-import type { RepositoryExecutorBinding } from "./review-services.js";
+import type { RepositoryExecutorBinding } from "./review/review-services.js";
 
 declare global {
   namespace Cloudflare {

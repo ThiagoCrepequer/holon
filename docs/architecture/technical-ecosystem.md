@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -18,7 +18,7 @@ related:
 Este documento descreve a estrutura materializada no repositório. Consulte o
 [índice de decisões](../decisions/README.md) para distinguir ADRs aceitos de
 decisões substituídas; o mapa abaixo foi conferido contra os manifests em
-2026-10-03.
+2026-10-04.
 
 ## Estrutura atual
 
@@ -27,6 +27,11 @@ holon/
 |-- apps/
 |   |-- control-plane/
 |   |   |-- src/
+|   |   |   |-- github/
+|   |   |   |-- ingress/
+|   |   |   |-- ledger/
+|   |   |   |-- project-identification/
+|   |   |   `-- review/
 |   |   |-- test/
 |   |   `-- wrangler.jsonc
 |   |-- repository-executor/
@@ -46,6 +51,7 @@ holon/
 |   |-- repository-config/
 |   `-- test-kit/
 |-- tooling/
+|   |-- architecture/
 |   |-- config-cli/
 |   `-- typescript/
 |-- .github/workflows/ci.yml
@@ -60,6 +66,15 @@ holon/
 é implantado sozinho. `tooling` contém configuração compartilhada e comandos locais que invocam
 os casos de uso, sem duplicar regras de negócio. Testes de composição vertical com Workerd ficam no control plane;
 políticas puras ficam junto ao pacote ou app que as possui.
+
+No control plane, `src/index.ts` compõe o Worker e exporta as classes exigidas
+pelo Wrangler. `ingress` recebe HTTP e Queue; `review` coordena Workflow,
+análise e publicação; `ledger` mantém o estado transacional por PR;
+`project-identification` compõe identificação e seus Durable Objects; `github`
+contém broker e operações específicas do host. `observability.ts` continua
+compartilhado no app. Essas pastas não criam novos deploys nem packages. Os
+imports entre essas pastas devem formar um grafo sem ciclos; a composição fica
+em `index.ts`.
 
 ## Grafo permitido
 
@@ -94,23 +109,29 @@ flowchart TD
     CLI --> RA
     CP --> GH
     CP --> MO
+    CP --> RA
     CP --> CT
     CP --> AP
+    CP --> DO
     EX --> RA
     EX --> CT
+    EX --> DO
     GH --> AP
     GH --> CT
+    GH --> RA
     MO --> AP
     MO --> CT
+    MO --> DO
     RA --> CT
+    RA --> DO
     PI --> AP
     PI --> CT
-    PI --> DO
     EV --> CT
     EV --> AP
     EV --> MO
     EV -. somente testes .-> TK
     CT --> DO
+    AP --> CT
     AP --> DO
     TK -. somente testes .-> CT
 ```
@@ -218,16 +239,17 @@ pacote podem usar caminhos relativos ou subpath imports do Node. Nao usar
 
 ## Contrato de tarefas
 
-| Tarefa         | Escopo                  | Cache Turborepo | Regra                                     |
-| -------------- | ----------------------- | --------------- | ----------------------------------------- |
-| `format`       | repositorio             | Nao             | Pode escrever arquivos                    |
-| `format:check` | repositorio             | Sim, logs       | Nao altera arquivos                       |
-| `lint`         | pacotes                 | Sim, logs       | Oxlint type-aware, zero warnings no CI    |
-| `typecheck`    | pacotes                 | Sim             | `tsc --noEmit` e `wrangler types --check` |
-| `test`         | pacotes                 | Sim             | Vitest deterministico                     |
-| `build`        | apps/pacotes compilados | Sim             | Outputs declarados                        |
-| `dev`          | apps                    | Nunca           | Persistente e interativo                  |
-| `deploy`       | apps                    | Nunca           | Efeito externo e autorizacao explicita    |
+| Tarefa              | Escopo                  | Cache Turborepo | Regra                                     |
+| ------------------- | ----------------------- | --------------- | ----------------------------------------- |
+| `format`            | repositorio             | Nao             | Pode escrever arquivos                    |
+| `format:check`      | repositorio             | Sim, logs       | Nao altera arquivos                       |
+| `lint`              | pacotes                 | Sim, logs       | Oxlint type-aware, zero warnings no CI    |
+| `test:architecture` | fontes de produção      | Nao             | Direções, manifests, ciclos locais e SDKs |
+| `typecheck`         | pacotes                 | Sim             | `tsc --noEmit` e `wrangler types --check` |
+| `test`              | pacotes                 | Sim             | Imports, testes Node e Vitest             |
+| `build`             | apps/pacotes compilados | Sim             | Outputs declarados                        |
+| `dev`               | apps                    | Nunca           | Persistente e interativo                  |
+| `deploy`            | apps                    | Nunca           | Efeito externo e autorizacao explicita    |
 
 Remote cache nao faz parte do bootstrap. Secrets nunca entram em outputs, logs,
 inputs globais ou artefatos de cache.
@@ -238,7 +260,7 @@ inputs globais ou artefatos de cache.
 2. Verificar formatacao.
 3. Executar lint type-aware e falhar em disable comments nao usados.
 4. Gerar ou conferir tipos Wrangler e executar typecheck.
-5. Executar testes puros.
+5. Verificar as direções de import em `tooling/architecture` e executar testes puros.
 6. Executar testes Workers no plugin oficial.
 7. Fazer `wrangler deploy --dry-run` por deployable, sem publicar.
 
@@ -256,7 +278,7 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 | `diff`                       | Selecionada         | Adapter proprio e fixtures obrigatorias            |
 | Cloudflare Workflows         | Selecionada         | Coordenação durável com retries delimitados        |
 | Cloudflare Sandbox SDK       | Selecionada `@next` | Versão exata e imagem correspondente fixadas       |
-| Dependency Cruiser           | Adiada              | Introduzir se regras de pacote nao bastarem        |
+| Dependency Cruiser           | Adiada              | Gate de imports local cobre o grafo atual          |
 | Knip                         | Adiada              | Introduzir quando houver massa de exports/deps     |
 | Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0049                   |
 | MCP e RAG                    | Adiados             | Fora do MVP one-shot                               |

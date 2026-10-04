@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { createWebhookApp } from "../src/webhook-handler.js";
+import { createWebhookApp } from "../src/ingress/webhook-handler.js";
 it("serves the build's public schema without bindings or authentication and revalidates its content ETag", async () => {
   const app = createWebhookApp();
   const response = await app.request(

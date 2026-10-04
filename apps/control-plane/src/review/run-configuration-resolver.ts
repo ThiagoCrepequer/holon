@@ -13,14 +13,19 @@ import {
 } from "@holon/contracts";
 import { parseRepositoryConfigurationYaml } from "@holon/repository-config";
 
-import type { WorkflowLedger } from "./review-services.js";
+export interface RunConfigurationLedger {
+  findRunConfiguration(runId: string): Promise<RunConfigurationRef | undefined>;
+  loadRunConfiguration(
+    reference: RunConfigurationRef,
+  ): Promise<RunConfigurationSnapshot>;
+  saveRunConfiguration(
+    snapshot: RunConfigurationSnapshot,
+  ): Promise<RunConfigurationRef>;
+}
 
 export async function resolveRunConfiguration(
   job: ReviewJob,
-  ledger: Pick<
-    WorkflowLedger,
-    "findRunConfiguration" | "loadRunConfiguration" | "saveRunConfiguration"
-  >,
+  ledger: RunConfigurationLedger,
   createReader: () => Promise<ConfigurationSnapshotReader>,
   emit?: (
     event: string,

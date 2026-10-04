@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import {
   ThinkReviewFailure,
   ThinkReviewModelReviewer,
-} from "../src/think-reviewer.js";
+} from "../src/review/think-reviewer.js";
 
 const job = reviewJobSchema.parse({
   envelope: {

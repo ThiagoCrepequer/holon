@@ -22,12 +22,12 @@ import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CheckRunReconciliationStore } from "../src/check-run-reconciliation.js";
+import { CheckRunReconciliationStore } from "../src/ledger/check-run-reconciliation.js";
 import {
   executeReviewWorkflow,
   parseAppId,
   type ReviewRuntime,
-} from "../src/review-workflow.js";
+} from "../src/review/review-workflow.js";
 import {
   configurationReader,
   defaultScopePolicy,
@@ -211,6 +211,8 @@ it("publishes the latest human severity even when feedback arrives after analysi
     post.route.includes("/pulls/{pull_number}/reviews"),
   );
   expect(summary?.event).toBe("APPROVE");
+  expect(summary?.body).toContain("## ✅ Holon · Approved");
+  expect(summary?.body).not.toContain("### Verdict:");
   expect((await ledger.loadPrFindings("github:42:pr:7"))[0]?.severity).toBe(
     "low",
   );
@@ -1617,11 +1619,9 @@ describe("ReviewWorkflow", () => {
     const summaryPost = setup.posts.find((p) =>
       p.route.includes("/pulls/{pull_number}/reviews"),
     );
-    expect(summaryPost?.body).toContain("This review is incomplete.");
+    expect(summaryPost?.body).toContain("## ⚠️ Holon · Incomplete review");
     expect(summaryPost?.body).not.toContain("Shard 2 review succeeded.");
-    expect(summaryPost?.body).toContain(
-      "Partial review: some changes could not be analyzed due to an execution failure.",
-    );
+    expect(summaryPost?.body).toContain("## ⚠️ Holon · Incomplete review");
   });
 
   it("handles unsupported plans with 0 eligible files in review-workflow", async () => {
@@ -1738,8 +1738,9 @@ describe("ReviewWorkflow", () => {
     expect(reviews).toHaveLength(2);
     expect(reviews[0]?.body).toContain("## ✅ Holon · Approved");
     expect(reviews[1]?.event).toBe("APPROVE");
-    expect(reviews[1]?.body).toContain("✅ **Review updated** · `2222222`");
-    expect(reviews[1]?.body).not.toContain("### Changes reviewed");
+    expect(reviews[1]?.body).toContain("## ✅ Holon · Review updated");
+    expect(reviews[1]?.body).toContain("**0 new findings** · `2222222`");
+    expect(reviews[1]?.body).toContain("### Changes reviewed");
   });
 
   it("reconciles findings across commits: suppresses persistent comment and notifies resolution when fixed", async () => {
@@ -2279,7 +2280,8 @@ it("schedules durable cleanup and preserves the original analysis failure", asyn
 });
 
 it("shares one repository preparation across concurrent shard requests", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
+  const { createReviewServices } =
+    await import("../src/review/review-services.js");
   const setup = runtime();
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {

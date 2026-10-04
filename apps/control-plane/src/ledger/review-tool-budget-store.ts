@@ -4,7 +4,7 @@ import {
   runIdSchema,
 } from "@holon/contracts";
 
-import { consoleLogger, type StructuredLogger } from "./observability.js";
+import { consoleLogger, type StructuredLogger } from "../observability.js";
 /** Durable reservations enforce tool limits across retries and eviction. */
 export class ReviewToolBudgetStore {
   public constructor(

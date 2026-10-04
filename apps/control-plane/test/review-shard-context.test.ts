@@ -5,7 +5,7 @@ import type {
 } from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
-import { buildShardReviewContext } from "../src/review-shard-context.js";
+import { buildShardReviewContext } from "../src/review/review-shard-context.js";
 
 function project(
   root: string,

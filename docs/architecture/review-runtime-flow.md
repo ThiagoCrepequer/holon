@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -82,6 +82,12 @@ limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard
 com no máximo 64 shards e três análises simultâneas. Contexto omitido gera
 limitação explícita; não é tratado como cobertura.
 
+O analisador estrutural produz pistas para investigar contratos, não findings.
+Uma declaração de `interface` ou `type` movida e reexportada como tipo no mesmo
+módulo não recebe a pista de símbolo exportado removido. Isso não substitui a
+verificação de consumidores nem comprova que uma reexportação aponta para um
+destino válido.
+
 ## Agent e tools
 
 Um `ReviewAgent` isolado por run/shard deriva de `Think`. `ReviewShardWorkflow`
@@ -118,11 +124,22 @@ evidência positiva da correção. Antes de publicar, relê head/base, compara c
 run, usa claim condicional no ledger e reconcilia IDs externos após resposta
 ambígua. Todos os caminhos terminais exigem cleanup durável do Sandbox.
 
+O schema da resposta estruturada exige o campo `summary`, mas permite texto
+vazio. Nesse caso, a normalização marca o shard como degradado, conserva os
+candidatos a finding para a verificação de evidência e impede aprovação por
+ausência de narrativa. Campos inválidos de finding continuam rejeitados.
+
 A review enviada ao GitHub reúne o veredito e os novos achados inline na mesma
 submissão. O host consulta os comentários dessa review para salvar seus IDs no
 ledger e reconciliar retries. A primeira aprovação sem achados usa um resumo
 estruturado das mudanças; aprovações posteriores sem achados novos usam uma
 mensagem curta com o SHA. O Check Run continua com o resultado completo.
+Todos os resumos de review usam cabeçalho `Holon` com resultado, contagem e
+cobertura, seguido por seções para mudanças revisadas ou limites da análise.
+Uma falha ou degradação de shard aparece como revisão incompleta, mesmo com
+zero achados verificados; arquivos sem alterações elegíveis recebem um estado
+próprio, sem aprovação implícita. O mesmo formato é aplicado após feedback
+humano e nas aprovações curtas posteriores.
 Sinais heurísticos de ausência de teste correspondente não são calculados nem
 publicados.
 

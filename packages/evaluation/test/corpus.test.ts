@@ -6,8 +6,14 @@ import {
   confidenceThresholdRegression,
 } from "../corpus/v2/index.js";
 import { baselineCorpusV3 } from "../corpus/v3/index.js";
+import {
+  baselineCorpusV4,
+  preservedTypeReexport,
+  requiredButEmptySummary,
+} from "../corpus/v4/index.js";
 import { baselineRecordingsV2 } from "../recordings/v2/index.js";
 import { baselineRecordingsV3 } from "../recordings/v3/index.js";
+import { baselineRecordingsV4 } from "../recordings/v4/index.js";
 import {
   createRecordedSubject,
   evalCaseSchema,
@@ -20,6 +26,7 @@ describe("versioned baseline corpora", () => {
     ["baseline-v1", baselineCorpusV1],
     ["baseline-v2", baselineCorpusV2],
     ["baseline-v3", baselineCorpusV3],
+    ["baseline-v4", baselineCorpusV4],
   ] as const)(
     "keeps %s unique, schema-valid and synthetic",
     (_name, corpus) => {
@@ -87,5 +94,93 @@ describe("versioned baseline corpora", () => {
       passedCases: 5,
       totalCases: 5,
     });
+  });
+
+  it("executes v4 negative controls with their controlled recordings", async () => {
+    const result = await runEvaluationSuite(
+      baselineCorpusV4,
+      createRecordedSubject(baselineRecordingsV4),
+      {
+        ...evaluationConfiguration,
+        corpusVersion: "baseline-v4",
+        subjectVersion: "recorded-output-v4",
+      },
+    );
+
+    expect(result).toMatchObject({
+      completedCases: 7,
+      failedCases: 0,
+      passedCases: 7,
+      totalCases: 7,
+    });
+  });
+
+  it("counts the two observed contract concerns as false positives even when patch evidence matches", async () => {
+    const falsePositives = {
+      [requiredButEmptySummary.id]: {
+        confidence: 0.95,
+        diagnostic:
+          "The summary field became optional and may break existing output consumers.",
+        evidence: [
+          {
+            excerpt: "summary: z.string().max(1000),",
+            path: "src/review-output.ts",
+            reason: "The minimum length requirement was removed.",
+            startLine: 2,
+          },
+        ],
+        location: {
+          line: 2,
+          path: "src/review-output.ts",
+          side: "RIGHT" as const,
+        },
+        severity: "high" as const,
+      },
+      [preservedTypeReexport.id]: {
+        confidence: 0.95,
+        diagnostic:
+          "Moving the Credentials interface may break imports from the old module.",
+        evidence: [
+          {
+            excerpt: 'export type { Credentials } from "./authentication.js";',
+            path: "src/client.ts",
+            reason: "The interface declaration moved to another file.",
+            startLine: 1,
+          },
+        ],
+        location: { line: 1, path: "src/client.ts", side: "RIGHT" as const },
+        severity: "medium" as const,
+      },
+    };
+    const result = await runEvaluationSuite(
+      [requiredButEmptySummary, preservedTypeReexport],
+      async ({ caseId }) => ({
+        output: {
+          findings: [falsePositives[caseId as keyof typeof falsePositives]],
+          summary: "A contract change should be checked.",
+        },
+        partial: false,
+      }),
+      {
+        ...evaluationConfiguration,
+        corpusVersion: "baseline-v4",
+        subjectVersion: "observed-false-positives",
+      },
+    );
+
+    expect(result).toMatchObject({
+      completedCases: 2,
+      failedCases: 2,
+      metrics: { rejectedFindings: 0, unexpectedFindings: 2 },
+    });
+    expect(
+      result.caseRuns.every(
+        (caseRun) =>
+          caseRun.outcome === "completed" &&
+          caseRun.grade.failures.some(
+            (failure) => failure.kind === "unexpected_finding",
+          ),
+      ),
+    ).toBe(true);
   });
 });

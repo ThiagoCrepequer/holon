@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   createWebhookApp,
   readBoundedRequestBody,
-} from "../src/webhook-handler.js";
+} from "../src/ingress/webhook-handler.js";
 
 async function sign(secret: string, body: string): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -282,8 +282,8 @@ describe("GitHub webhook HTTP boundary", () => {
       executor: false,
     });
 
-    // Fully operational healthcheck
-    const resHealthy = await app.request(
+    // A legacy binding cannot satisfy the current executor contract.
+    const resLegacyExecutor = await app.request(
       "http://localhost/healthz",
       undefined,
       {
@@ -292,6 +292,24 @@ describe("GitHub webhook HTTP boundary", () => {
         AI_GATEWAY_ID: "gw-1",
         REVIEW_LEDGERS: {} as unknown as DurableObjectNamespace,
         SANDBOX: {} as unknown as Fetcher,
+      },
+    );
+    expect(resLegacyExecutor.status).toBe(503);
+    await expect(resLegacyExecutor.json()).resolves.toMatchObject({
+      checks: { aiGateway: true, database: true, executor: false },
+      status: "degraded",
+    });
+
+    // Fully configured healthcheck; it does not probe remote availability.
+    const resHealthy = await app.request(
+      "http://localhost/healthz",
+      undefined,
+      {
+        AI_GATEWAY_ACCOUNT_ID: "acc-1",
+        AI_GATEWAY_API_TOKEN: "tok-1",
+        AI_GATEWAY_ID: "gw-1",
+        REVIEW_LEDGERS: {} as unknown as DurableObjectNamespace,
+        REPOSITORY_EXECUTOR: {} as Cloudflare.Env["REPOSITORY_EXECUTOR"],
       },
     );
     expect(resHealthy.status).toBe(200);

@@ -5,7 +5,10 @@ import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { retry } from "@octokit/plugin-retry";
 import { throttling } from "@octokit/plugin-throttling";
 
-import { createDiagnosticAppAuth } from "./authentication.js";
+import {
+  createDiagnosticAppAuth,
+  type GitHubAppCredentials,
+} from "./authentication.js";
 import { readConfigurationJson } from "./configuration-json.js";
 import { createConfigurationSnapshotReader } from "./configuration-reader.js";
 import {
@@ -25,11 +28,7 @@ import type {
 
 const InstallationOctokit = Octokit.plugin(paginateRest, retry, throttling);
 
-export interface GitHubAppCredentials {
-  readonly appId: number;
-  readonly appSlug: string;
-  readonly privateKey: string;
-}
+export type { GitHubAppCredentials } from "./authentication.js";
 
 export interface GitHubInstallationSession {
   configurationReader(

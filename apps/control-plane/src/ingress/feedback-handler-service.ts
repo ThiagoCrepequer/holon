@@ -23,12 +23,12 @@ import {
 import {
   createKeyringTelemetryOptions,
   resolveControlPlaneKeyring,
-} from "./github-credentials.js";
+} from "../github/github-credentials.js";
 import {
   consoleLogger,
   errorKind,
   type StructuredLogger,
-} from "./observability.js";
+} from "../observability.js";
 
 export interface FeedbackHandlerDependencies {
   readonly authorizeThreadResolver?: (

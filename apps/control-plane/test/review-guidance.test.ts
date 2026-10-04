@@ -6,7 +6,7 @@ import {
 import { parseRepositoryConfigurationYaml } from "@holon/repository-config";
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveReviewGuidance } from "../src/review-guidance.js";
+import { resolveReviewGuidance } from "../src/review/review-guidance.js";
 import { configurationReader } from "./configuration-fixtures.js";
 const base = "b".repeat(40);
 async function compile(yaml: string) {

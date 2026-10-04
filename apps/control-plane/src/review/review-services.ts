@@ -1,25 +1,15 @@
 import type {
-  ModelGenerationAdmission,
-  ModelGenerationReservation,
-} from "@holon/contracts";
-import type { RepositoryToolOperation } from "@holon/contracts";
-import type {
-  RunConfigurationRef,
-  RunConfigurationSnapshot,
-} from "@holon/contracts";
-
-import type { DesiredCheckRun } from "./check-run-reconciliation.js";
-function shouldEnrichProjects(value: string): boolean {
-  return value === "enrich";
-}
-import type {
   FindingLifecycleLedger,
   ModelReviewer,
   ReviewDecisionLedger,
   ReviewPublisher,
 } from "@holon/application";
+import type {
+  ModelGenerationAdmission,
+  ModelGenerationReservation,
+} from "@holon/contracts";
+import type { RepositoryToolOperation } from "@holon/contracts";
 import {
-  projectIdentificationResultSchema,
   type ProjectIdentificationResult,
   type ProjectMetadataRequest,
 } from "@holon/contracts";
@@ -46,26 +36,30 @@ import {
   GitHubReviewPublisher,
   type GitHubInstallationSession,
 } from "@holon/github";
-import { GatewayProjectIdentificationModel } from "@holon/model";
-import {
-  interpretProjects,
-  detectorRevision,
-} from "@holon/project-identification";
 import { NonRetryableError } from "cloudflare:workflows";
 
-import type { PublicationLedger } from "./authorized-publication.js";
 import {
   createKeyringTelemetryOptions,
   resolveControlPlaneKeyring,
-} from "./github-credentials.js";
+} from "../github/github-credentials.js";
 import {
   executeGitHubOperation,
   GitHubTransientError,
-} from "./github-operations.js";
-import { errorKind, type StructuredLogger } from "./observability.js";
-import { configurationScopePolicy } from "./run-configuration-resolver.js";
+} from "../github/github-operations.js";
+import type { DesiredCheckRun } from "../ledger/check-run-reconciliation.js";
+import type { WorkflowController } from "../ledger/workflow-superseding.js";
+import { errorKind, type StructuredLogger } from "../observability.js";
+import { createProjectIdentifier } from "../project-identification/project-identification-service.js";
+import type { PublicationLedger } from "./authorized-publication.js";
+import {
+  configurationScopePolicy,
+  type RunConfigurationLedger,
+} from "./run-configuration-resolver.js";
 import { ThinkReviewModelReviewer } from "./think-reviewer.js";
-import type { WorkflowController } from "./workflow-superseding.js";
+
+function shouldEnrichProjects(value: string): boolean {
+  return value === "enrich";
+}
 
 export interface RepositoryExecutorBinding {
   discoverProjectMetadata(
@@ -85,17 +79,14 @@ export interface RepositoryExecutorBinding {
 }
 
 export interface WorkflowLedger
-  extends PublicationLedger, ReviewDecisionLedger, FindingLifecycleLedger {
+  extends
+    PublicationLedger,
+    ReviewDecisionLedger,
+    FindingLifecycleLedger,
+    RunConfigurationLedger {
   hasPriorPublishedReview(runId: string): Promise<boolean>;
   scheduleCheckRun(runId: string, desired: DesiredCheckRun): Promise<number>;
   reconcileCheckRun(runId: string): Promise<number | undefined>;
-  saveRunConfiguration(
-    snapshot: RunConfigurationSnapshot,
-  ): Promise<RunConfigurationRef>;
-  loadRunConfiguration(
-    reference: RunConfigurationRef,
-  ): Promise<RunConfigurationSnapshot>;
-  findRunConfiguration(runId: string): Promise<RunConfigurationRef | undefined>;
   saveReviewAnalysis(
     runId: string,
     output: ReconciledReviewOutput,
@@ -508,130 +499,13 @@ export function createReviewServices(
         projectIdentification = result;
     },
     getProjectIdentification: () => projectIdentification,
-    identifyProjects: async (
-      policy,
-      input,
-      discoveryOnly = false,
-      deadlineAt = Date.now() + 120000,
-    ) => {
-      const unavailable = (reason: string): ProjectIdentificationResult => ({
-        snapshotSha: job.envelope.pullRequest.headSha,
-        inventoryDigest: "0".repeat(64),
-        detectorRevision,
-        projects: [],
-        status: "unavailable",
-        limitations: [reason],
-      });
-      const cacheName = await env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
-        String(job.envelope.installationId),
-      ).register(job.envelope.installationId, job.envelope.repository.id);
-      if (!cacheName) return unavailable("access-revoked");
-      if (!input && !(await executor.hasContext(job.runId)))
-        await prepareRepository(1, policy);
-      const request: ProjectMetadataRequest = {
-        runId: job.runId,
-        installationId: job.envelope.installationId,
-        repositoryId: job.envelope.repository.id,
-        snapshotSha: job.envelope.pullRequest.headSha,
-        policyDigest: policy.effectivePolicyDigest,
-        modelRevision:
-          env.AI_MODEL_ID +
-          ":" +
-          detectorRevision +
-          ":" +
-          env.PROJECT_IDENTIFICATION_PROFILE,
-        mode: "affected",
-        deadlineAt,
-      };
-      let result: ProjectIdentificationResult;
-      try {
-        result =
-          input ??
-          projectIdentificationResultSchema.parse(
-            await executor.discoverProjectMetadata(request),
-          );
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes("PROJECT_METADATA_AUTHORITY")
-        )
-          throw error;
-        return unavailable("metadata-unavailable");
-      }
-      if (!input && result.metadataChanged) {
-        try {
-          const base = projectIdentificationResultSchema.parse(
-            await executor.discoverProjectMetadata({
-              ...request,
-              snapshotSha: job.envelope.pullRequest.baseSha,
-            }),
-          );
-          result = {
-            ...result,
-            baseline: {
-              snapshotSha: base.snapshotSha,
-              projects: base.projects,
-              status: base.status === "complete" ? "complete" : "partial",
-              limitations: base.limitations,
-            },
-          };
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message.includes("PROJECT_METADATA_AUTHORITY")
-          )
-            throw error;
-          result = {
-            ...result,
-            baseline: {
-              snapshotSha: job.envelope.pullRequest.baseSha,
-              projects: [],
-              status: "unavailable",
-              limitations: ["base-metadata-unavailable"],
-            },
-          };
-        }
-      }
-      if (discoveryOnly) return result;
-      const usage = { inputTokens: 0, outputTokens: 0, modelCalls: 0 };
-      const cache = env.PROJECT_IDENTIFICATION_CACHE.getByName(cacheName);
-      const identificationModel =
-        runtime.identificationModel ??
-        new GatewayProjectIdentificationModel(
-          {
-            accountId: env.AI_GATEWAY_ACCOUNT_ID,
-            apiToken: env.AI_GATEWAY_API_TOKEN,
-            gatewayId: env.AI_GATEWAY_ID,
-            model: env.AI_MODEL_ID,
-          },
-          (consumedInput, output) => {
-            usage.inputTokens += consumedInput;
-            usage.outputTokens += output;
-          },
-        );
-      let interpreted: ProjectIdentificationResult;
-      try {
-        interpreted = await interpretProjects(result, {
-          cache,
-          owner: job.runId,
-          model: identificationModel,
-          deadlineAt,
-          onAttempt: () => {
-            usage.modelCalls++;
-          },
-        });
-      } catch {
-        interpreted = {
-          ...result,
-          status: "partial",
-          limitations: [
-            ...result.limitations,
-            "identification-cache-unavailable",
-          ],
-        };
-      }
-      return { ...interpreted, usage };
-    },
+    identifyProjects: createProjectIdentifier(
+      env,
+      job,
+      executor,
+      prepareRepository,
+      runtime.identificationModel,
+    ),
     prepareRepository,
     readCurrentHead: async () => {
       const github = await createSession();

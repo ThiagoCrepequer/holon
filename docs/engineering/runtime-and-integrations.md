@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Runtime e integrações do Holon
@@ -19,8 +19,8 @@ os ADRs aceitos governam as escolhas. Confirme o comportamento em código,
 
 O control plane recebe o webhook GitHub, valida assinatura e evento, normaliza
 o envelope e o envia à Queue. O consumidor reconcilia entregas repetidas e
-inicia ou encontra o Workflow da run. Consulte `apps/control-plane/src/webhook-handler.ts`,
-`queue-consumer.ts` e `review-workflow.ts`.
+inicia ou encontra o Workflow da run. Consulte `apps/control-plane/src/ingress/webhook-handler.ts`,
+`ingress/queue-consumer.ts` e `review/review-workflow.ts`.
 
 - Trate body, headers, diff, arquivos, comentários, Queue e RPC como dados não
   confiáveis até validação na fronteira. Verifique tamanho, schema, instalação,
@@ -37,8 +37,8 @@ inicia ou encontra o Workflow da run. Consulte `apps/control-plane/src/webhook-h
 `ReviewWorkflow` coordena preparação, análise, agregação, publicação e
 terminalização. `ReviewLedgerObject` guarda autoridade, checkpoints e claims.
 O executor mantém o checkout e contexto efêmero no Sandbox da run. Consulte
-`apps/control-plane/src/review-workflow.ts`, `ledger-object.ts`,
-`review-analysis-store.ts`, `apps/repository-executor/src/executor-service.ts`
+`apps/control-plane/src/review/review-workflow.ts`, `ledger/ledger-object.ts`,
+`ledger/review-analysis-store.ts`, `apps/repository-executor/src/executor-service.ts`
 e [estado e idempotência](../architecture/state-and-idempotency.md).
 
 - Para cada etapa durável, identifique input serializável, resultado persistido,
@@ -57,7 +57,7 @@ e [estado e idempotência](../architecture/state-and-idempotency.md).
 O executor prepara o snapshot no SHA exato e expõe operações de leitura
 limitadas. `packages/repository-analysis` decide elegibilidade e planejamento;
 `packages/project-identification` interpreta metadados permitidos;
-`apps/control-plane/src/review-agent.ts` implementa a política de revisão sobre
+`apps/control-plane/src/review/review-agent.ts` implementa a política de revisão sobre
 Think; `packages/model` mantém prompt, tools tipadas e provider AI SDK/AI Gateway.
 Consulte [fronteiras de confiança](../architecture/security-and-trust-boundaries.md),
 [contratos](../contracts/README.md) e
@@ -84,14 +84,14 @@ Consulte [fronteiras de confiança](../architecture/security-and-trust-boundarie
 A configuração por repositório é compilada por run e mantém proveniência,
 digests e escopo. O CLI usa o mesmo compilador para validação local e schema de
 editor. Feedback permanece no código atual. Consulte `packages/repository-config`,
-`tooling/config-cli`, `apps/control-plane/src/feedback-handler-service.ts`
+`tooling/config-cli`, `apps/control-plane/src/ingress/feedback-handler-service.ts`
 e [configuração operacional](../operations/repository-configuration.md).
 
 A publicação pertence ao host. Verifique head/base no GitHub, claim no ledger,
 marcador determinístico e reconciliação após resposta ambígua. Não trate uma
 resposta do modelo ou de tool como autorização para comentar, aprovar ou mudar
 um Check Run. Consulte `packages/github/src/publisher.ts`,
-`apps/control-plane/src/authorized-publication.ts` e a
+`apps/control-plane/src/review/authorized-publication.ts` e a
 [política de veredito](../decisions/0019-derive-deterministic-review-verdict-by-policy.md).
 Publique veredito e achados inline novos em uma única review; depois recupere
 os IDs dos comentários dessa review para manter o acompanhamento entre commits.
