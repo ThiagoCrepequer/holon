@@ -12,6 +12,7 @@ export * from "./configuration-projections.js";
 export * from "./configuration-compatibility.js";
 
 export * from "./repository-configuration-error.js";
+export * from "./review-summary-header.js";
 
 export {
   planInlinePublications,

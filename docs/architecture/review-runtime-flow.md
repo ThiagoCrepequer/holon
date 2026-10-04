@@ -123,6 +123,12 @@ submissão. O host consulta os comentários dessa review para salvar seus IDs no
 ledger e reconciliar retries. A primeira aprovação sem achados usa um resumo
 estruturado das mudanças; aprovações posteriores sem achados novos usam uma
 mensagem curta com o SHA. O Check Run continua com o resultado completo.
+Todos os resumos de review usam cabeçalho `Holon` com resultado, contagem e
+cobertura, seguido por seções para mudanças revisadas ou limites da análise.
+Uma falha ou degradação de shard aparece como revisão incompleta, mesmo com
+zero achados verificados; arquivos sem alterações elegíveis recebem um estado
+próprio, sem aprovação implícita. O mesmo formato é aplicado após feedback
+humano e nas aprovações curtas posteriores.
 Sinais heurísticos de ausência de teste correspondente não são calculados nem
 publicados.
 

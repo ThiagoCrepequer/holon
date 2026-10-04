@@ -16,7 +16,6 @@ import {
   classifyFindingPublication,
   reviewText,
   determineReviewVerdict,
-  formatVerdictBadge,
   type Finding,
   type FindingSeverity,
   type ReviewVerdictPolicyOptions,
@@ -25,6 +24,7 @@ import {
 import { verifyFindingsWithCanonicalEvidence } from "./evidence.js";
 import { formatConfiguredFindings } from "./inline-publication-plan.js";
 import { fitPublicationSummary } from "./publication-summary.js";
+import { formatReviewSummaryHeader } from "./review-summary-header.js";
 
 export interface AggregateShardReviewOptions {
   readonly publication?:
@@ -47,9 +47,9 @@ export function formatCleanFollowUpReview(
 ): string {
   const heading = reviewText(
     language,
-    "✅ **Review updated**",
-    "✅ **Revisão atualizada**",
-    "✅ **Revisión actualizada**",
+    "## ✅ Holon · Review updated\n\n**0 new findings**",
+    "## ✅ Holon · Revisão atualizada\n\n**0 novos achados**",
+    "## ✅ Holon · Revisión actualizada\n\n**0 hallazgos nuevos**",
   );
   const detail = reviewText(
     language,
@@ -57,7 +57,13 @@ export function formatCleanFollowUpReview(
     "Nenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
     "No se confirmaron hallazgos nuevos. Se revisaron los cambios elegibles de este commit.",
   );
-  return `${heading} · \`${headSha.slice(0, 7)}\`\n${detail}`;
+  const section = reviewText(
+    language,
+    "### Changes reviewed",
+    "### Mudanças revisadas",
+    "### Cambios revisados",
+  );
+  return `${heading} · \`${headSha.slice(0, 7)}\`\n\n${section}\n\n${detail}`;
 }
 
 export function formatStructuralImpactSection(
@@ -230,10 +236,22 @@ export function aggregateShardReviews(
       ),
       scopeStatus: "unsupported",
       shardsAnalyzed: 0,
-      summary: text(
-        "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
-        "Nenhuma alteração elegível após excluir arquivos binários, de lock, gerados, de terceiros, minificados e sensíveis reconhecidos.",
-        "No hay cambios elegibles tras excluir archivos binarios, de lock, generados, de terceros, minificados y sensibles reconocidos.",
+      summary: fitPublicationSummary(
+        formatReviewSummaryHeader({
+          verdict: verdictDetails.verdict,
+          activeFindingsCount: 0,
+          scopeStatus: "unsupported",
+          shardsAnalyzed: 0,
+          totalShards: 0,
+          language: options.language,
+        }),
+        `${text("### Coverage", "### Cobertura", "### Cobertura")}\n\n${text(
+          "No eligible changes were found after excluding binary, lock, generated, vendored, minified, and recognized sensitive files.",
+          "Nenhuma alteração elegível após excluir arquivos binários, de lock, gerados, de terceiros, minificados e sensíveis reconhecidos.",
+          "No hay cambios elegibles tras excluir archivos binarios, de lock, generados, de terceros, minificados y sensibles reconocidos.",
+        )}`,
+        "",
+        options.language,
       ),
       totalShards: 0,
       verdict: verdictDetails.verdict,
@@ -329,25 +347,25 @@ export function aggregateShardReviews(
 
   const cleanApproval =
     verdictDetails.verdict === "APPROVE" && sortedFindings.length === 0;
-  const prefix = cleanApproval
-    ? text(
-        "## ✅ Holon · Approved\n\n**0 active findings** · complete review",
-        "## ✅ Holon · Aprovado\n\n**0 achados ativos** · revisão completa",
-        "## ✅ Holon · Aprobado\n\n**0 hallazgos activos** · revisión completa",
-      )
-    : [
-        formatVerdictBadge(verdictDetails.verdict, options.language),
-        ...verdictDetails.reasons,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+  const prefix = [
+    formatReviewSummaryHeader({
+      verdict: verdictDetails.verdict,
+      activeFindingsCount: sortedFindings.length,
+      scopeStatus,
+      isDegraded: isAnyShardDegraded,
+      shardsAnalyzed,
+      totalShards: plan.shards.length,
+      language: options.language,
+    }),
+    ...(cleanApproval ? [] : verdictDetails.reasons),
+  ].join("\n\n");
   const summarySections: string[] = [];
   const incomplete = scopeStatus !== "complete" || isAnyShardDegraded;
   const narrativeContent = incomplete
     ? text(
-        `This review is incomplete. ${sortedFindings.length} verified finding(s) were retained from ${shardsAnalyzed} of ${plan.shards.length} planned shards. No conclusion is made about omitted changes or unfinished investigation.`,
-        `Esta revisão está incompleta. ${sortedFindings.length} achado(s) verificado(s) foram mantidos em ${shardsAnalyzed} de ${plan.shards.length} partes planejadas. Não há conclusão sobre alterações omitidas ou investigação inacabada.`,
-        `Esta revisión está incompleta. Se conservaron ${sortedFindings.length} hallazgo(s) verificado(s) en ${shardsAnalyzed} de ${plan.shards.length} partes previstas. No hay conclusión sobre cambios omitidos ni investigación sin terminar.`,
+        "No conclusion is made about omitted changes or unfinished investigation.",
+        "Não há conclusão sobre alterações omitidas ou investigação inacabada.",
+        "No hay conclusión sobre cambios omitidos ni investigación sin terminar.",
       )
     : shardSummaries.length
       ? shardSummaries.join("\n\n")
@@ -357,24 +375,23 @@ export function aggregateShardReviews(
           "Resumen narrativo no disponible; consulte los hallazgos verificados y la cobertura de la revisión.",
         );
 
-  const narrative = cleanApproval
-    ? `${text("### Changes reviewed", "### Mudanças revisadas", "### Cambios revisados")}\n\n${narrativeContent}`
-    : narrativeContent;
+  const narrative = `${incomplete ? text("### Coverage", "### Cobertura", "### Cobertura") : text("### Changes reviewed", "### Mudanças revisadas", "### Cambios revisados")}\n\n${narrativeContent}`;
 
+  const limitations: string[] = [];
   if (scopeStatus === "partial_by_policy") {
-    summarySections.push(
+    limitations.push(
       text(
-        "Partial review: at least one eligible patch or context section was omitted by a deterministic host budget.",
-        "Revisão parcial: ao menos um patch elegível ou seção de contexto foi omitido por um limite determinístico do host.",
-        "Revisión parcial: al menos un patch elegible o sección de contexto fue omitido por un límite determinista del host.",
+        "Some eligible patches or context sections were omitted by a deterministic host limit.",
+        "Alguns patches elegíveis ou seções de contexto foram omitidos por um limite determinístico do host.",
+        "Algunos patches elegibles o secciones de contexto fueron omitidos por un límite determinista del host.",
       ),
     );
-  } else if (scopeStatus === "partial_by_failure") {
-    summarySections.push(
+  } else if (scopeStatus === "partial_by_failure" && !omissionReasons.length) {
+    limitations.push(
       text(
-        "Partial review: some changes could not be analyzed due to an execution failure.",
-        "Revisão parcial: algumas alterações não puderam ser analisadas devido a uma falha de execução.",
-        "Revisión parcial: algunos cambios no pudieron analizarse por un fallo de ejecución.",
+        "Some changes could not be analyzed because execution failed.",
+        "Algumas alterações não puderam ser analisadas porque a execução falhou.",
+        "Algunos cambios no pudieron analizarse porque falló la ejecución.",
       ),
     );
   }
@@ -390,13 +407,12 @@ export function aggregateShardReviews(
   }
 
   if (omissionReasons.length)
+    limitations.push(
+      [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
+    );
+  if (limitations.length)
     summarySections.push(
-      text(
-        "Review limitations:\n",
-        "Limitações da revisão:\n",
-        "Limitaciones de la revisión:\n",
-      ) +
-        [...new Set(omissionReasons)].map((reason) => `- ${reason}`).join("\n"),
+      `${text("### Review limitations", "### Limitações da revisão", "### Limitaciones de la revisión")}\n\n${limitations.join("\n\n")}`,
     );
 
   if (options.publication && options.publication.findings.length > 0)

@@ -148,7 +148,7 @@ describe("analyzeReview", () => {
       );
       const result = await analyzeReview(job, services, vi.fn());
       expect(result.totalShards).toBe(2);
-      expect(result.summary).toContain("This review is incomplete");
+      expect(result.summary).toContain("## ⚠️ Holon · Incomplete review");
       expect(result.summary).not.toContain("Everything looks correct");
     },
   );
@@ -163,7 +163,7 @@ describe("analyzeReview", () => {
     const result = await analyzeReview(job, services, vi.fn());
     expect(result.scopeStatus).toBe("partial_by_policy");
     expect(result.verdict).toBe("COMMENT");
-    expect(result.summary).toContain("This review is incomplete");
+    expect(result.summary).toContain("## ⚠️ Holon · Incomplete review");
     expect(result.summary).not.toContain("No eligible changes");
     expect(review).not.toHaveBeenCalled();
   });

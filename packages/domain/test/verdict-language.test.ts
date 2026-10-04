@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { determineReviewVerdict, formatVerdictBadge } from "../src/verdict.js";
+import { determineReviewVerdict } from "../src/verdict.js";
 
 it.each(["en", "pt-BR", "es"] as const)(
   "keeps verdict semantics while localizing %s",
@@ -14,13 +14,6 @@ it.each(["en", "pt-BR", "es"] as const)(
     expect(result.blockingFindingsCount).toBe(1);
     expect(result.reasons[0]).toContain(
       { en: "critical", "pt-BR": "crítico", es: "crítico" }[language],
-    );
-    expect(formatVerdictBadge("APPROVE", language)).toBe(
-      {
-        en: "### Verdict: Approved",
-        "pt-BR": "### Veredito: Aprovado",
-        es: "### Veredicto: Aprobado",
-      }[language],
     );
   },
 );

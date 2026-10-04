@@ -59,6 +59,14 @@ que a review foi parcial. JS/TS recebe investigação estrutural; demais patches
 textuais elegíveis recebem review textual e exigem silêncio mais conservador
 quando o patch e as tools textuais não provarem o caminho causal.
 
+O feedback publicado usa o mesmo formato de cabeçalho e cobertura para
+aprovação, alterações solicitadas e comentário informativo. A aprovação com
+zero achados só comunica revisão completa. Falha, limite ou investigação
+degradada comunica revisão incompleta e quantidade de partes analisadas, sem
+converter ausência de achados verificados em aprovação. Alterações sem arquivos
+elegíveis têm estado próprio. Atualizações por feedback humano e aprovações
+posteriores sem novos achados mantêm a mesma identificação visual.
+
 Se todos os arquivos forem binários, lockfiles, gerados, vendorizados,
 minificados ou corresponderem às heurísticas de caminhos
 potencialmente sensíveis, a run publica resumo determinístico sem consumo de

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { FindingCandidate } from "../src/finding.js";
-import { determineReviewVerdict, formatVerdictBadge } from "../src/verdict.js";
+import { determineReviewVerdict } from "../src/verdict.js";
 
 function makeFinding(
   severity: "critical" | "high" | "medium" | "low",
@@ -208,18 +208,6 @@ describe("determineReviewVerdict", () => {
       });
       expect(result.verdict).toBe("COMMENT");
       expect(result.reasons[0]).toContain("automated approvals are disabled");
-    });
-  });
-
-  describe("formatVerdictBadge", () => {
-    it("formats markdown badges correctly", () => {
-      expect(formatVerdictBadge("APPROVE")).toBe("### Verdict: Approved");
-      expect(formatVerdictBadge("REQUEST_CHANGES")).toBe(
-        "### Verdict: Changes requested",
-      );
-      expect(formatVerdictBadge("COMMENT")).toBe(
-        "### Verdict: Informational Comment",
-      );
     });
   });
 });
