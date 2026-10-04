@@ -1,14 +1,14 @@
 import {
   dispatchFollowUpMessages,
   processFollowUp,
-} from "./follow-up-queue.js";
-import { dispatchReviewMessages } from "./queue-consumer.js";
-import { createWebhookApp } from "./webhook-handler.js";
+} from "./ingress/follow-up-queue.js";
+import { dispatchReviewMessages } from "./ingress/queue-consumer.js";
+import { createWebhookApp } from "./ingress/webhook-handler.js";
 
-export { ReviewLedgerObject } from "./ledger-object.js";
-export { ReviewWorkflow } from "./review-workflow.js";
-export { ReviewAgent, ReviewShardWorkflow } from "./review-agent.js";
-export { GitHubCredentialBrokerEntrypoint } from "./credential-broker.js";
+export { ReviewLedgerObject } from "./ledger/ledger-object.js";
+export { ReviewWorkflow } from "./review/review-workflow.js";
+export { ReviewAgent, ReviewShardWorkflow } from "./review/review-agent.js";
+export { GitHubCredentialBrokerEntrypoint } from "./github/credential-broker.js";
 
 const app = createWebhookApp();
 
@@ -40,5 +40,5 @@ export default {
   },
 } satisfies ExportedHandler<Cloudflare.Env>;
 
-export { ProjectIdentificationCacheObject } from "./project-identification-cache.js";
-export { ProjectIdentificationRegistryObject } from "./project-identification-registry.js";
+export { ProjectIdentificationCacheObject } from "./project-identification/project-identification-cache.js";
+export { ProjectIdentificationRegistryObject } from "./project-identification/project-identification-registry.js";

@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Guia de engenharia do Holon
@@ -30,19 +30,19 @@ Leia o trecho pertinente à tarefa; o guia não substitui código, manifests,
 
 ## Mapa do repositório
 
-| Local                                                                          | Responsabilidade                                                                       | Onde confirmar                                                                              |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `apps/control-plane`                                                           | Webhook, Queue, Workflow, ledger, composição, feedback e publicação.                   | `src/index.ts`, `src/review-workflow.ts`, `src/ledger-object.ts`, Wrangler e testes do app. |
-| `apps/repository-executor`                                                     | Snapshot e ferramentas de leitura sobre Sandbox isolado; política de egress e cleanup. | `src/executor-service.ts`, `src/repository-tools.ts`, Wrangler, Dockerfile e testes.        |
-| `packages/domain`                                                              | Identidades, estados e invariantes sem SDK de infraestrutura.                          | `src/index.ts` e testes puros.                                                              |
-| `packages/application`                                                         | Casos de uso, portas, agregação, evidência e políticas de publicação.                  | `src/ports.ts`, `src/execute-review.ts` e testes.                                           |
-| `packages/contracts`                                                           | Schemas runtime das fronteiras externas e payloads persistidos.                        | `src/index.ts`, schemas, exemplos e testes de rejeição.                                     |
-| `packages/github` e `packages/model`                                           | Adapters GitHub e de modelo.                                                           | `package.json`, exports, `src` e testes de contrato/comportamento.                          |
-| `packages/repository-analysis`, `repository-config` e `project-identification` | Diff, elegibilidade, configuração e fatos de projetos no snapshot.                     | Entradas `src/index.ts`, [grafo](../architecture/technical-ecosystem.md) e testes.          |
-| `packages/evaluation`                                                          | Corpus, recordings, graders e execução de avaliação.                                   | [Runbook de avaliação](../operations/evaluations.md), package scripts e testes.             |
-| `packages/test-kit`                                                            | Fixtures e builders usados somente por testes.                                         | `src/index.ts` e imports em testes; não deve virar dependência de produção.                 |
-| `tooling/config-cli` e `tooling/typescript`                                    | Comandos locais de configuração e tsconfig compartilhado.                              | `package.json`, `cli.ts`, `schema.ts`, `base.json` e testes.                                |
-| `docs` e `.agents/skills`                                                      | Decisões, instruções, pesquisas e métodos de trabalho.                                 | Este índice e [catálogo de skills](../../.agents/skills/README.md).                         |
+| Local                                                                          | Responsabilidade                                                                       | Onde confirmar                                                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `apps/control-plane`                                                           | Webhook, Queue, Workflow, ledger, composição, feedback e publicação.                   | `src/index.ts`, `src/ingress/`, `src/review/`, `src/ledger/`, Wrangler e testes do app. |
+| `apps/repository-executor`                                                     | Snapshot e ferramentas de leitura sobre Sandbox isolado; política de egress e cleanup. | `src/executor-service.ts`, `src/repository-tools.ts`, Wrangler, Dockerfile e testes.    |
+| `packages/domain`                                                              | Identidades, estados e invariantes sem SDK de infraestrutura.                          | `src/index.ts` e testes puros.                                                          |
+| `packages/application`                                                         | Casos de uso, portas, agregação, evidência e políticas de publicação.                  | `src/ports.ts`, `src/execute-review.ts` e testes.                                       |
+| `packages/contracts`                                                           | Schemas runtime das fronteiras externas e payloads persistidos.                        | `src/index.ts`, schemas, exemplos e testes de rejeição.                                 |
+| `packages/github` e `packages/model`                                           | Adapters GitHub e de modelo.                                                           | `package.json`, exports, `src` e testes de contrato/comportamento.                      |
+| `packages/repository-analysis`, `repository-config` e `project-identification` | Diff, elegibilidade, configuração e fatos de projetos no snapshot.                     | Entradas `src/index.ts`, [grafo](../architecture/technical-ecosystem.md) e testes.      |
+| `packages/evaluation`                                                          | Corpus, recordings, graders e execução de avaliação.                                   | [Runbook de avaliação](../operations/evaluations.md), package scripts e testes.         |
+| `packages/test-kit`                                                            | Fixtures e builders usados somente por testes.                                         | `src/index.ts` e imports em testes; não deve virar dependência de produção.             |
+| `tooling/architecture`, `config-cli` e `typescript`                            | Gate de imports, comandos locais de configuração e tsconfig compartilhado.             | `import-boundaries.test.mjs`, CLI, `base.json` e testes.                                |
+| `docs` e `.agents/skills`                                                      | Decisões, instruções, pesquisas e métodos de trabalho.                                 | Este índice e [catálogo de skills](../../.agents/skills/README.md).                     |
 
 O [ecossistema técnico](../architecture/technical-ecosystem.md) mostra o grafo
 permitido. Os manifests de cada workspace são a fonte para dependências,

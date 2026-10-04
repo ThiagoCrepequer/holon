@@ -51,13 +51,13 @@ import type {
 import { canTransitionRun } from "@holon/domain";
 import { DurableObject } from "cloudflare:workers";
 
+import { consoleLogger, errorKind } from "../observability.js";
 import {
   CheckRunReconciliationStore,
   type DesiredCheckRun,
 } from "./check-run-reconciliation.js";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
-import { consoleLogger, errorKind } from "./observability.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
 import { ReviewGenerationBudgetStore } from "./review-generation-budget-store.js";
 import { ReviewToolBudgetStore } from "./review-tool-budget-store.js";

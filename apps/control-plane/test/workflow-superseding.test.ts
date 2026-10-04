@@ -4,7 +4,7 @@ import {
   terminateWorkflowIfActive,
   type WorkflowController,
   type WorkflowInstanceState,
-} from "../src/workflow-superseding.js";
+} from "../src/ledger/workflow-superseding.js";
 
 function controller(options: {
   readonly states: readonly WorkflowInstanceState[];

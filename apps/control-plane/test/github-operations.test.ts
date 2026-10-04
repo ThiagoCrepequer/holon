@@ -6,7 +6,7 @@ import {
   executeGitHubOperation,
   GitHubTransientError,
   githubRetryDelay,
-} from "../src/github-operations.js";
+} from "../src/github/github-operations.js";
 
 describe("GitHub operation diagnostics", () => {
   it("preserves classification when mapping to a Workflow error", async () => {

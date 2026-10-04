@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # Diagnóstico de análise parcial ou interrompida
@@ -40,6 +40,6 @@ usuário solicitar. Os logs estruturados não devem conter prompt, diff,
 argumento de ferramenta, resposta integral, stack, erro arbitrário ou
 credencial. Falhas de log não alteram admissão, veredito ou cleanup.
 
-Implementação: `apps/control-plane/src/review-agent.ts`,
-`review-generation-budget-store.ts`, `review-tool-budget-store.ts`,
-`review-analysis.ts` e `review-workflow.ts`.
+Implementação: `apps/control-plane/src/review/review-agent.ts`,
+`ledger/review-generation-budget-store.ts`, `ledger/review-tool-budget-store.ts`,
+`review/review-analysis.ts` e `review/review-workflow.ts`.

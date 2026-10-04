@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createKeyringTelemetryOptions,
   resolveControlPlaneKeyring,
-} from "../src/github-credentials.js";
+} from "../src/github/github-credentials.js";
 
 describe("github-credentials", () => {
   it("resolves keyring using resolveControlPlaneKeyring", () => {

@@ -3,9 +3,9 @@ import { expect, it, vi } from "vitest";
 import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
-} from "../src/feedback-handler-service.js";
-import { processFollowUp } from "../src/follow-up-queue.js";
-vi.mock("../src/feedback-handler-service.js", () => ({
+} from "../src/ingress/feedback-handler-service.js";
+import { processFollowUp } from "../src/ingress/follow-up-queue.js";
+vi.mock("../src/ingress/feedback-handler-service.js", () => ({
   handleFeedbackCommentWebhook: vi.fn(),
   handleThreadResolvedWebhook: vi.fn(),
 }));

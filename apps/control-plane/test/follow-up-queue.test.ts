@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { dispatchFollowUpMessages } from "../src/follow-up-queue.js";
+import { dispatchFollowUpMessages } from "../src/ingress/follow-up-queue.js";
 describe("durable follow-up dispatch", () => {
   it("acknowledges completed work and retries infrastructure failures", async () => {
     const payload = {

@@ -3,7 +3,7 @@ import { reset, evictDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { resolveRunConfiguration } from "../src/run-configuration-resolver.js";
+import { resolveRunConfiguration } from "../src/review/run-configuration-resolver.js";
 import { configurationReader } from "./configuration-fixtures.js";
 
 afterEach(() => reset());

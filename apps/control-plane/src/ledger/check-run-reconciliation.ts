@@ -12,7 +12,7 @@ import {
 } from "@holon/github";
 import { z } from "zod";
 
-import { resolveControlPlaneKeyring } from "./github-credentials.js";
+import { resolveControlPlaneKeyring } from "../github/github-credentials.js";
 
 export const desiredCheckRunSchema = z.strictObject({
   language: reviewOutputPreferencesSchema.shape.language,

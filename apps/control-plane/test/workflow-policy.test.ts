@@ -5,7 +5,7 @@ import {
   causalVersionForJob,
   durationFrom,
   eventId,
-} from "../src/workflow-policy.js";
+} from "../src/review/workflow-policy.js";
 
 const job = reviewJobSchema.parse({
   envelope: {

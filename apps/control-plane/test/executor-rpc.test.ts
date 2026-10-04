@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { describe, expect, it, vi } from "vitest";
 
-import { createReviewServices } from "../src/review-services.js";
+import { createReviewServices } from "../src/review/review-services.js";
 import { defaultScopePolicy } from "./configuration-fixtures.js";
 import { configurationReader } from "./configuration-fixtures.js";
 import { toolOperation } from "./executor-fixture.js";

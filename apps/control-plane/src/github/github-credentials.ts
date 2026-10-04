@@ -5,7 +5,7 @@ import {
   type KeyringTelemetryEvent,
 } from "@holon/github";
 
-import type { StructuredLogger } from "./observability.js";
+import type { StructuredLogger } from "../observability.js";
 
 export function resolveControlPlaneKeyring(
   env: Cloudflare.Env,

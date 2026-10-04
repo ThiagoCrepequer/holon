@@ -11,8 +11,8 @@ import {
 import { ModelProviderRequestError } from "@holon/model";
 import { describe, expect, it, vi } from "vitest";
 
-import { analyzeReview } from "../src/review-analysis.js";
-import type { ReviewServices } from "../src/review-services.js";
+import { analyzeReview } from "../src/review/review-analysis.js";
+import type { ReviewServices } from "../src/review/review-services.js";
 import {
   configurationReader,
   defaultRunConfiguration,

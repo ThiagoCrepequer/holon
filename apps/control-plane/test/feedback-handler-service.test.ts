@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
-} from "../src/feedback-handler-service.js";
+} from "../src/ingress/feedback-handler-service.js";
 import { configurationReader } from "./configuration-fixtures.js";
 
 const decision: ReviewDecisionContext = {

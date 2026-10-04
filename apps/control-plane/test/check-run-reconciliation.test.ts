@@ -3,7 +3,7 @@ import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { CheckRunReconciliationStore } from "../src/check-run-reconciliation.js";
+import { CheckRunReconciliationStore } from "../src/ledger/check-run-reconciliation.js";
 vi.mock("@holon/github", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@holon/github")>()),
   createInstallationSessionWithKeyring: vi.fn(),

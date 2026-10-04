@@ -71,31 +71,8 @@ export function createWebhookApp() {
         context.env?.AI_GATEWAY_API_TOKEN &&
         context.env?.AI_GATEWAY_ID,
       ),
-      database: Boolean(
-        context.env?.REVIEW_LEDGERS ||
-        (context.env as unknown as { REVIEW_LEDGER?: unknown })?.REVIEW_LEDGER,
-      ),
-      executor: Boolean(
-        (
-          context.env as unknown as {
-            REPOSITORY_EXECUTOR?: unknown;
-            REPOSITORY_EXECUTORS?: unknown;
-            SANDBOX?: unknown;
-          }
-        )?.SANDBOX ||
-        (
-          context.env as unknown as {
-            REPOSITORY_EXECUTOR?: unknown;
-            REPOSITORY_EXECUTORS?: unknown;
-          }
-        )?.REPOSITORY_EXECUTOR ||
-        (
-          context.env as unknown as {
-            REPOSITORY_EXECUTOR?: unknown;
-            REPOSITORY_EXECUTORS?: unknown;
-          }
-        )?.REPOSITORY_EXECUTORS,
-      ),
+      database: Boolean(context.env?.REVIEW_LEDGERS),
+      executor: Boolean(context.env?.REPOSITORY_EXECUTOR),
     };
     const allHealthy = Object.values(checks).every(Boolean);
     const report: HealthCheckReport = {

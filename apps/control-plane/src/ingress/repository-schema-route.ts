@@ -1,4 +1,4 @@
-import schema from "../../../docs/contracts/holon.schema.json";
+import schema from "../../../../docs/contracts/holon.schema.json";
 
 const body = `${JSON.stringify(schema, null, 2)}\n`;
 let etag: Promise<string> | undefined;

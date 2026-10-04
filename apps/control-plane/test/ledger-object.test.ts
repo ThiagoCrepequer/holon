@@ -987,7 +987,7 @@ it("rejects delayed finding writes from a superseded run inside the ledger trans
 
 async function authorizeFindingWriter(
   ledger: DurableObjectStub<
-    import("../src/ledger-object.js").ReviewLedgerObject
+    import("../src/ledger/ledger-object.js").ReviewLedgerObject
   >,
   fixture: ReviewRun,
 ): Promise<void> {

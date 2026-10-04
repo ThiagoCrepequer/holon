@@ -22,12 +22,12 @@ import { env } from "cloudflare:workers";
 import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CheckRunReconciliationStore } from "../src/check-run-reconciliation.js";
+import { CheckRunReconciliationStore } from "../src/ledger/check-run-reconciliation.js";
 import {
   executeReviewWorkflow,
   parseAppId,
   type ReviewRuntime,
-} from "../src/review-workflow.js";
+} from "../src/review/review-workflow.js";
 import {
   configurationReader,
   defaultScopePolicy,
@@ -2199,7 +2199,8 @@ it("schedules durable cleanup and preserves the original analysis failure", asyn
 });
 
 it("shares one repository preparation across concurrent shard requests", async () => {
-  const { createReviewServices } = await import("../src/review-services.js");
+  const { createReviewServices } =
+    await import("../src/review/review-services.js");
   const setup = runtime();
   let release!: () => void;
   const barrier = new Promise<void>((resolve) => {

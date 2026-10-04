@@ -1,4 +1,3 @@
-import { projectCompatibility } from "@holon/application";
 import { RepositoryConfigurationError } from "@holon/application";
 import {
   createReviewRun,
@@ -32,13 +31,15 @@ import {
 } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 
+import { terminateWorkflowIfActive } from "../ledger/workflow-superseding.js";
+import { consoleLogger, errorKind } from "../observability.js";
 import {
   isReviewMutationNotAuthorizedError,
   publishAuthorized,
   publishResolutionAuthorized,
   publishFailureNoticeAuthorized,
 } from "./authorized-publication.js";
-import { consoleLogger, errorKind } from "./observability.js";
+import { runProjectIdentification } from "./project-identification-phase.js";
 import { analyzeReview } from "./review-analysis.js";
 import { loadReviewWithCurrentFeedback } from "./review-feedback-refresh.js";
 import {
@@ -59,10 +60,9 @@ import {
   repositoryStep,
   stateStep,
 } from "./workflow-policy.js";
-import { terminateWorkflowIfActive } from "./workflow-superseding.js";
 
 export type { ReviewRuntime } from "./review-services.js";
-export { parseAppId } from "./credential-broker.js";
+export { parseAppId } from "../github/credential-broker.js";
 
 const repositoryConfigurationFailureMessages: Readonly<
   Record<string, import("@holon/domain").ReviewMessageCode>
@@ -520,128 +520,14 @@ export async function executeReviewWorkflow(
 
     if (services.identifyProjects && effectivePolicy) {
       phase = "identification";
-      const identificationPolicy = effectivePolicy;
-      const identificationStarted = await step.do(
-        "start-project-identification",
-        stateStep,
-        async () => Date.now(),
-      );
-      const discovered = await step.do(
-        "discover-project-metadata",
-        repositoryStep,
-        async () =>
-          services.identifyProjects!(
-            identificationPolicy,
-            undefined,
-            true,
-            identificationStarted + 120000,
-          ),
-      );
-      if (discovered) {
-        const identification = {
-          ...discovered,
-          projects: [] as typeof discovered.projects,
-          usage: { inputTokens: 0, outputTokens: 0, modelCalls: 0 },
-        };
-        for (const [index, project] of discovered.projects.entries()) {
-          const identifyProject = async () => {
-            if (Date.now() >= identificationStarted + 120000)
-              return {
-                ...discovered,
-                projects: [
-                  {
-                    ...project,
-                    status: "partial" as const,
-                    limitations: [
-                      ...project.limitations,
-                      "identification-deadline",
-                    ],
-                  },
-                ],
-                usage: { inputTokens: 0, outputTokens: 0, modelCalls: 0 },
-              };
-            return services.identifyProjects!(
-              identificationPolicy,
-              { ...discovered, projects: [project] },
-              false,
-              identificationStarted + 120000,
-            );
-          };
-          let result = await step.do(
-            `identify-project-${index}`,
-            modelStep,
-            identifyProject,
-          );
-          for (
-            let waiting = 0;
-            waiting < 3 &&
-            result?.projects.some((p) =>
-              p.limitations.includes("identification-pending"),
-            );
-            waiting++
-          ) {
-            const mayWait = await step.do(
-              `continue-project-identification-${index}-${waiting}`,
-              stateStep,
-              async () => Date.now() - identificationStarted < 90000,
-            );
-            if (!mayWait) break;
-            await step.sleep(
-              `wait-project-identification-${index}-${waiting}`,
-              "30 seconds",
-            );
-            result = await step.do(
-              `retry-project-identification-${index}-${waiting}`,
-              modelStep,
-              identifyProject,
-            );
-          }
-          identification.projects.push(
-            ...(result?.projects ?? [
-              {
-                ...project,
-                status: "partial" as const,
-                limitations: [
-                  ...project.limitations,
-                  "identification-unavailable",
-                ],
-              },
-            ]),
-          );
-          identification.usage.inputTokens += result?.usage?.inputTokens ?? 0;
-          identification.usage.outputTokens += result?.usage?.outputTokens ?? 0;
-          identification.usage.modelCalls += result?.usage?.modelCalls ?? 0;
-        }
-        if (
-          identification.projects.some(
-            (project) => project.status !== "complete",
-          )
-        ) {
-          identification.status = "partial";
-          emit("project.identification_partial", {
-            severity: "warning",
-            totalProjects: identification.projects.length,
-            partialProjects: identification.projects.filter(
-              (project) => project.status !== "complete",
-            ).length,
-          });
-        }
-        const configuredIdentification = {
-          ...identification,
-          configuredCompatibility: projectCompatibility(
-            await services.ledger.loadRunConfiguration(configurationRef),
-            identification,
-          ),
-        };
-        services.useProjectIdentification?.(configuredIdentification);
-        if (services.ledger.saveProjectIdentification)
-          await step.do("record-project-identification", stateStep, async () =>
-            services.ledger.saveProjectIdentification!(
-              job.runId,
-              configuredIdentification,
-            ),
-          );
-      }
+      await runProjectIdentification({
+        job,
+        policy: effectivePolicy,
+        configuration: configurationRef,
+        services,
+        step,
+        emit,
+      });
     }
 
     phase = "analysis";

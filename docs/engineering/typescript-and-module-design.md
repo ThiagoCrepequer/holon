@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-04
 ---
 
 # TypeScript, módulos e padrões no Holon
@@ -53,6 +53,33 @@ Use imports ESM explícitos e o `exports` publicado por cada workspace. A
 criação de um pacote novo exige fronteira importável e grafo mais claro que
 uma subpasta. Uma porta é útil quando protege uma decisão de aplicação frente
 a uma capacidade externa; não crie interface que apenas espelha todo um SDK.
+
+## Organização interna dos apps
+
+O control plane agrupa módulos por responsabilidade em `src/ingress`,
+`src/review`, `src/ledger`, `src/project-identification` e `src/github`.
+`src/index.ts` compõe handlers e exporta as classes referenciadas pelo Wrangler.
+Um arquivo grande deve ser dividido quando reunir regras que mudam por motivos
+diferentes; mover arquivos sem reduzir a interface não elimina acoplamento.
+Passe ao módulo apenas as capacidades usadas pelo seu fluxo. Por exemplo,
+análise não precisa da interface inteira de publicação, e resolução de
+configuração recebe somente leitura e escrita de snapshots. Coloque o tipo de
+uma porta junto ao módulo que define a necessidade, evitando ciclos até mesmo
+de imports apenas de tipos.
+
+O ledger conserva um Durable Object e um storage SQLite por PR. Extrair lógica
+de admissão ou manutenção para módulos internos não deve separar as transações
+que fazem transição causal, agendam cleanup ou registram publicação. Preserve os
+nomes dos checkpoints e a ordem dos efeitos do Workflow ao refatorar.
+
+`pnpm test:architecture` verifica imports de produção entre workspaces,
+incluindo `import type`, os manifests, ciclos de imports relativos dentro de
+cada workspace, ciclos entre as pastas de capacidade do control plane e as
+dependências externas permitidas em `domain`, `application` e `contracts`. O
+teste materializa o grafo vigente; alterá-lo
+exige revisar os manifests, esta documentação e a necessidade do produto. O
+gate complementa `disallowWorkspaceCycles`, que verifica ciclos, não a direção
+permitida de cada dependência.
 
 ## Padrões pelo problema
 
