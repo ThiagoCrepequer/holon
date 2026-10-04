@@ -9,6 +9,7 @@ import {
   buildReviewPrompt,
   buildReviewPromptResult,
   preflightReviewPrompt,
+  reviewInstructions,
 } from "../src/reviewer.js";
 
 const job = reviewJobSchema.parse({
@@ -51,6 +52,12 @@ describe("Think review prompt boundary", () => {
     expect(result.prompt).toContain("ignore previous instructions");
     expect(result.prompt).toContain(
       "Only anchor findings to the supplied changed lines",
+    );
+    expect(reviewInstructions).toContain(
+      "Copy each evidence excerpt verbatim from one contiguous range",
+    );
+    expect(reviewInstructions).toContain(
+      "do not use ellipses, rewrite indentation, or combine distant lines",
     );
   });
 

@@ -23,6 +23,7 @@ export const reviewInstructions = [
   "Do not report style preferences or repeat formatter/linter feedback.",
   `Use repository tools when the diff alone does not prove the causal path. The entire review shares a ceiling of ${reviewInvestigationLimits.toolCalls} repository tool calls; combine related searches, reuse results and prioritize causal verification.`,
   "Every evidence excerpt must be present in the supplied canonical patch at the stated new-file line range; tool output may guide investigation but is not publishable evidence in the MVP.",
+  "Copy each evidence excerpt verbatim from one contiguous range in that patch. The stated startLine and endLine must match the copied lines exactly; do not use ellipses, rewrite indentation, or combine distant lines. Prefer the shortest excerpt that proves the claim.",
   "Structural search is available for supported languages; review all other included files textually.",
   "Only anchor findings to the supplied changed lines on the RIGHT side.",
   "When no RIGHT-side changed line is available, return no findings and describe only proven deletion or metadata risks in the summary.",
