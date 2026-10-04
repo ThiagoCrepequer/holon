@@ -105,3 +105,7 @@ A migration 17 remove os históricos exclusivos do admin conforme
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
 Findings funcionais em `pr_findings`, feedback e publicações permanecem.
 Retenção geral e deleção por instalação do ledger continuam pendentes antes do piloto.
+
+## Memória funcional — 2026-10-04
+
+A [ADR-0051](../decisions/0051-learn-repository-rules-with-maintainer-approval.md) acrescenta memória por repositório: observações por 90 dias, regras válidas por 180 dias por padrão e snapshots por 30 dias. Evidências mínimas incorporadas à regra acompanham sua validade e 30 dias adicionais. Revogação de acesso purga a geração; fontes de run permanecem no ledger funcional para feedback. Não há retenção nova de prompts ou excerpts na memória.

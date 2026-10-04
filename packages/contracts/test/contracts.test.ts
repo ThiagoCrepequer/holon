@@ -781,7 +781,7 @@ describe("model output and publication ledger", () => {
     });
 
     expect(parseModelReviewTransport(transported)).toEqual(output);
-    expect(() =>
+    expect(
       parseModelReviewTransport({
         ...transported,
         findings: transported.findings.map((finding) => ({
@@ -792,7 +792,11 @@ describe("model output and publication ledger", () => {
           })),
         })),
       }),
-    ).toThrow(/endLine must not precede/u);
+    ).toMatchObject({
+      findings: [],
+      isDegraded: true,
+      outputLimitations: ["evidence_rejected"],
+    });
   });
 
   it("coerces and clamps imperfect LLM outputs in modelReviewTransportSchema", () => {

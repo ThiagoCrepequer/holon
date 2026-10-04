@@ -28,3 +28,4 @@ export * from "./review-execution-limits.js";
 
 export * from "./repository-execution.js";
 export * from "./model-generation-budget.js";
+export * from "./repository-memory.js";

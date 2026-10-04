@@ -19,4 +19,5 @@ export {
   formatInlineOverflow,
   formatConfiguredFindings,
 } from "./inline-publication-plan.js";
+export * from "./repository-memory.js";
 export * from "./causal-verification.js";

@@ -81,6 +81,7 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
     },
   });
   const initialAnswer = {
+    investigations: [],
     findings: [
       {
         confidence: 0.95,

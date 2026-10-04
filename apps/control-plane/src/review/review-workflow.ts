@@ -531,9 +531,21 @@ export async function executeReviewWorkflow(
       });
     }
 
+    await step.do("resolve-repository-memory", configurationStep, async () => {
+      await services.ensureContext(2, effectivePolicy);
+      const context = await services.loadContext(effectivePolicy);
+      const snapshot = await services.resolveMemory(
+        context.files.map((file) => file.path),
+      );
+      return { revision: snapshot.revision };
+    });
+    const memory = await services.ledger.loadRunMemory(run.id);
+    if (!memory)
+      throw new NonRetryableError("Repository memory snapshot unavailable");
     phase = "analysis";
     let output = await analyzeReview(job, services, emit, effectivePolicy, {
       configuration: configurationRef,
+      memory,
       runStep: async (name, stepPhase, callback) =>
         await step
           .do(

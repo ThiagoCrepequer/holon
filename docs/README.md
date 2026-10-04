@@ -77,3 +77,5 @@ e o [fluxo atual](architecture/review-runtime-flow.md).
 - [Configuração de repositório e editor](operations/repository-configuration.md) — contrato, CLI, limites e rollout da ADR-0037.
 
 - [Migração proposta da observabilidade para Grafana](planning/observability-stack-migration.md): arquitetura futura, biblioteca de instrumentação, entrega durável, métricas e validação após a retirada do admin.
+
+- [Memória incremental do repositório](architecture/repository-memory.md) e [operação](operations/repository-memory.md): observações, propostas e regras aprovadas pela ADR-0051.

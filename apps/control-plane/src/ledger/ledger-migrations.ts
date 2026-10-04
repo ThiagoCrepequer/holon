@@ -399,6 +399,14 @@ const ledgerMigrations: readonly LedgerMigration[] = [
     CREATE TABLE model_generation_plans (run_id TEXT PRIMARY KEY, shard_count INTEGER NOT NULL CHECK(shard_count BETWEEN 1 AND 64));
   `,
   },
+  {
+    version: 20,
+    statements: `
+      CREATE TABLE run_memory_snapshots(run_id TEXT PRIMARY KEY, expires_at TEXT NOT NULL, snapshot_json TEXT NOT NULL);
+      CREATE TABLE run_memory_sources(run_id TEXT PRIMARY KEY, source_json TEXT NOT NULL);
+      CREATE TABLE memory_outbox(id TEXT PRIMARY KEY, delivery_json TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL);
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {
