@@ -40,13 +40,14 @@ podem avançar quando seus próprios gates forem satisfeitos.
 **Auth:** o responsável aprovou em 2026-10-05 o linking nativo por email
 verificado no provider e no User local, substituindo a restrição anterior de Q32.
 Novo OAuth após falha de Account agora recupera em Drizzle/D1 e D1 nativo,
-preservando o User original. As 42 provas cobrem também verificação recebida/local,
+preservando o User original. As 42 provas da primeira atualização cobrem também
+verificação recebida/local,
 falhas de vínculo, concorrência e estabilidade do User com Account já existente.
 Não há hook de recuperação, patch ou mudança de persistência. INSERTs continuam
 separados e email alterado durante a falha pode conservar User incompleto sem
 Account/Session; onboarding não pode provisionar autoridade a partir de User
-isolado. A condição independente de consumo concorrente de state continua
-falhando: duas trocas no token endpoint, uma sessão pelo código único do provider.
+isolado. A condição independente de não reutilização concorrente de code continua
+falhando: duas token requests, uma sessão pelo código único/PKCE do provider fake.
 Não inferir takeover desse número nem relaxar o gate pela aprovação de linking.
 
 **Leitura:** a feature deve ser dona da intenção, HTTP e cancelamento. Query
@@ -80,7 +81,7 @@ pnpm verify
 ```
 
 O comando `test:viability` **termina com exit 1 neste candidato**: duas provas
-de recuperação passam, duas de state concorrente falham nos dois adapters.
+de recuperação passam, duas de não reutilização concorrente de code falham nos dois adapters.
 Deve ser executado separadamente; não se encadeiam os demais comandos atrás
 dele como se seu exit fosse sucesso. Não há `it.fails`, patch do core ou teste
 produtivo excluído da cobertura para tornar a integração viável.
@@ -148,6 +149,23 @@ corrigida para comparar o conjunto de subjects e o gate foi executado novamente.
 O sucesso do gate geral não inclui `test:viability` e não demonstra CI, OAuth real
 ou operação produtiva do novo código.
 
+## Revisão normativa de OAuth e PKCE em 2026-10-05
+
+A [avaliação do requisito](2026-10-05-dashboard-oauth-security-requirements.md)
+confirma que PKCE pode proteger contra CSRF sem impor state atômico como mecanismo
+único. O cliente ainda precisa não reutilizar code. A prova agora valida S256,
+verifier, injeção de outro fluxo e downgrade na simulação externa; são **59 casos
+diagnósticos verdes**, mantendo cobertura e os **dois casos concorrentes falhos**
+no gate separado. Não se dispensou a obrigação normativa nem se demonstrou falha
+de PKCE no GitHub real. A submissão repetida do mesmo code pelo cliente continua
+bloqueando #129/M0; o comentário do requisito explica a diferença.
+
+`pnpm verify` passou após essa revisão: auth executou os 59 testes com cobertura
+e browser executou os 60 cenários nos três engines. Tarefas inalteradas usaram
+cache Turbo válido (22/24 de cobertura; 12/12 de build/dry-run). O gate separado
+`test:viability` foi reexecutado e terminou exit 1, com duas falhas por duas token
+requests em vez de uma. Não houve validação OAuth remota ou deploy.
+
 ## Escopo da instalação e limites da evidência
 
 As novas versões ficam nos manifests das bancadas. O catálogo, as versões
@@ -174,8 +192,8 @@ entregas posteriores e a smokes explicitamente autorizados.
 ## Próximo gate
 
 Manter #129 e suas dependências bloqueadas. Para avançar auth, decidir/provar
-consumo concorrente de state por caminho oficialmente suportado e cumprir as
-regressões de identidade/state. Recuperação por linking com o mesmo email
+não reutilização concorrente de code por caminho oficialmente suportado e cumprir
+as regressões de identidade/state/PKCE. Recuperação por linking com o mesmo email
 verificado já passou; essa aprovação não dispensa a condição independente.
 Se outra persistência for necessária, ela exige revisar
 ADR/grafo, operação/restore e manter identidade, tenancy, convites e outbox na

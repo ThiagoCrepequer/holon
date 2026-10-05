@@ -31,8 +31,9 @@ ainda não implementado.** Os [resultados datados](../research/2026-10-05-dashbo
 ligam cada gate à bancada e sua evidência. Com a
 [política de linking aprovada em 2026-10-05](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
 Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth
-com o mesmo email verificado. O gate independente de consumo concorrente de
-state ainda falha nos dois adapters. A issue #129 e seus dependentes permanecem
+com o mesmo email verificado. A [avaliação normativa de OAuth](../research/2026-10-05-dashboard-oauth-security-requirements.md)
+permite outro mecanismo de CSRF com PKCE válido, mas o gate independente de
+não reutilização concorrente de code ainda falha nos dois adapters. A issue #129 e seus dependentes permanecem
 bloqueados; não concluir o milestone pelo sucesso da recuperação ou das outras
 provas. User/Account continuam não atômicos; mudança de email durante a falha
 pode deixar User incompleto, sem Account/Session e sem autoridade Holon.

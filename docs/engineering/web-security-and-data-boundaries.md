@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -104,6 +104,14 @@ headers de autorização ou resposta de provider. CI usa credenciais sintéticas
   recente do mesmo User/intent na integração definida. Renovação móvel e refresh
   GitHub não são reauth. Não prometer senha/MFA por parâmetro não suportado.
   Ações e janela de reauth devem estar explícitas e testadas antes de expô-las.
+
+A [avaliação OAuth de 2026-10-05](../research/2026-10-05-dashboard-oauth-security-requirements.md)
+separa CSRF de não reutilização de code: PKCE válido permite não exigir consumo
+atômico de state como mecanismo único, preservando vínculo e integridade do
+contexto. Callbacks concorrentes não podem fazer o cliente submeter o mesmo
+code duas vezes. Essa condição ainda falha no candidato 1.7.7; não considerar
+uma única sessão no fake como dispensa. As premissas externas e a ausência de
+prova remota estão no relatório.
 
 ## Convites sem credencial de ingresso na URL
 

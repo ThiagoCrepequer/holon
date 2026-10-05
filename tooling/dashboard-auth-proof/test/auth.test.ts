@@ -107,7 +107,7 @@ describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)",
     const auth = await setupAuth();
     const github = fakeGitHub();
     const flow = await beginOAuth(auth);
-    github.authorize("shared-code", person);
+    github.authorize("shared-code", person, flow.authorizationURL);
     const results = await Promise.all([
       completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
       completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
@@ -193,8 +193,8 @@ describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)",
     const github = fakeGitHub();
     const left = await beginOAuth(auth);
     const right = await beginOAuth(auth);
-    github.authorize("left", person);
-    github.authorize("right", person);
+    github.authorize("left", person, left.authorizationURL);
+    github.authorize("right", person, right.authorizationURL);
     await Promise.all([
       completeOAuth(auth, left, "left"),
       completeOAuth(auth, right, "right"),

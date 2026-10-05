@@ -10,17 +10,19 @@ verificação. Recuperação usa novo OAuth, nunca replay do callback anterior.
 Drizzle com `transaction: false` e D1 nativo oficial recuperam Account interrompida
 preservando o User original quando o email verificado é o mesmo.
 
-`pnpm --filter @holon/dashboard-auth-proof test` executa **42 cenários** de
+`pnpm --filter @holon/dashboard-auth-proof test` executa **59 cenários** de
 recuperação, linking permitido/negado, corridas, state/cookie inválido ou expirado,
 code consumido, sessão, criptografia e fronteira HTTP. `test:coverage` instrumenta
 somente `src/**/*.ts` deste harness: 100% linhas/funções/statements e 96,42%
 branches; não mede cobertura interna das bibliotecas. `typecheck` verifica os tipos.
 
 `test:viability` é um gate **separado** com quatro asserts comuns: as duas provas
-de recuperação passam e as duas de consumo concorrente de state falham.
-Replay sequencial com cookie ORIGINAL é negado. O concorrente chega duas vezes
-ao provider; o GitHub sintético aplica código único e só cria uma sessão. Isso
-não demonstra takeover, mas não comprova consumo único antes do token endpoint.
+de recuperação passam e as duas de não reutilização concorrente de code falham.
+Replay sequencial com cookie ORIGINAL é negado. O concorrente envia o mesmo código
+duas vezes ao provider; o GitHub sintético valida S256 e uso único e só cria uma
+sessão. Isso não demonstra takeover, mas não satisfaz a obrigação do cliente
+na RFC 6749 §4.1.2. Atomicidade de state é um mecanismo possível, não a garantia
+universal exigida pela RFC 9700 quando PKCE vincula corretamente o fluxo.
 O comando termina **exit 1**; não há `it.fails`, skip ou inversão da expectativa.
 
 Os INSERTs User/Account continuam separados; os testes observam queries e ausência
@@ -35,5 +37,11 @@ credenciais, rate-limit desligado e handler mínimo são fixtures, não configur
 produtiva. O relatório distingue a política anterior, a atualização aprovada,
 a prova local e a integração GitHub/Cloudflare remota ainda não exercitada.
 
+Os 17 casos adicionais observam challenge/verifier nativos, injeção de outro
+fluxo, downgrade e replay com PKCE. Um caso adversarial desliga deliberadamente
+a defesa de downgrade no provider sintético: demonstra a dependência dessa
+premissa, sem provar comportamento ou vulnerabilidade do GitHub real.
+
 Fontes, comandos e limites:
-[relatório da prova](../../docs/research/2026-10-05-dashboard-auth-proof.md).
+[relatório da prova](../../docs/research/2026-10-05-dashboard-auth-proof.md) e
+[avaliação do requisito OAuth](../../docs/research/2026-10-05-dashboard-oauth-security-requirements.md).

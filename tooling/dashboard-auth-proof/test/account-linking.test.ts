@@ -28,7 +28,7 @@ describe.each(["drizzle", "native-d1"] as const)(
       const auth = await setupAuth(persistence);
       const github = fakeGitHub();
       const flow = await beginOAuth(auth);
-      github.authorize("separate-writes", person);
+      github.authorize("separate-writes", person, flow.authorizationURL);
       const prepare = vi.spyOn(env.AUTH_DB, "prepare");
       const batch = vi.spyOn(env.AUTH_DB, "batch");
       const response = await completeOAuth(auth, flow, "separate-writes");
@@ -87,7 +87,7 @@ describe.each(["drizzle", "native-d1"] as const)(
         const auth = await setupAuth(persistence);
         const github = fakeGitHub();
         const flow = await beginOAuth(auth);
-        github.authorize("invalid-state", person);
+        github.authorize("invalid-state", person, flow.authorizationURL);
         let headers = flow.initialHeaders;
         let state = flow.state;
         if (scenario === "missing-cookie") headers = new Headers();
@@ -278,8 +278,8 @@ describe.each(["drizzle", "native-d1"] as const)(
       const left = await beginOAuth(auth);
       const right = await beginOAuth(auth);
       const incoming = { ...person, id: 9002 };
-      github.authorize("left-link", incoming);
-      github.authorize("right-link", incoming);
+      github.authorize("left-link", incoming, left.authorizationURL);
+      github.authorize("right-link", incoming, right.authorizationURL);
       await Promise.all([
         completeOAuth(auth, left, "left-link"),
         completeOAuth(auth, right, "right-link"),

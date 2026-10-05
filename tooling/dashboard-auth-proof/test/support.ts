@@ -36,8 +36,19 @@ export interface GitHubIdentity {
   verified?: boolean;
 }
 
-export function fakeGitHub() {
-  const codes = new Map<string, GitHubIdentity>();
+export function fakeGitHub(options: { enforcePkceDowngrade?: boolean } = {}) {
+  const codes = new Map<
+    string,
+    { identity: GitHubIdentity; authorizationURL: URL }
+  >();
+  const tokenRequests: {
+    code: string;
+    verifier: string | null;
+    clientId: string | null;
+    redirectURI: string | null;
+  }[] = [];
+  let acceptedExchanges = 0;
+  let rejectedPkce = 0;
   const identities = new Map<string, GitHubIdentity>();
   const consumed = new Set<string>();
   let exchanges = 0;
@@ -52,10 +63,63 @@ export function fakeGitHub() {
       const body = await request.formData();
       const submittedCode = body.get("code");
       const code = typeof submittedCode === "string" ? submittedCode : "";
-      const identity = codes.get(code);
-      if (!identity || consumed.has(code))
+      const grant = codes.get(code);
+      const verifier = body.get("code_verifier");
+      const clientId = body.get("client_id");
+      const redirectURI = body.get("redirect_uri");
+      tokenRequests.push({
+        code,
+        verifier: typeof verifier === "string" ? verifier : null,
+        clientId: typeof clientId === "string" ? clientId : null,
+        redirectURI: typeof redirectURI === "string" ? redirectURI : null,
+      });
+      if (!grant || consumed.has(code))
+        return Response.json({ error: "bad_verification_code" });
+      const params = grant.authorizationURL.searchParams;
+      if (
+        body.get("client_id") !== params.get("client_id") ||
+        body.get("client_secret") !== "synthetic-client-secret" ||
+        body.get("redirect_uri") !== params.get("redirect_uri")
+      )
+        return Response.json({ error: "bad_verification_code" });
+      const expectedChallenge = params.get("code_challenge");
+      if (expectedChallenge) {
+        const validFormat =
+          typeof verifier === "string" &&
+          /^[A-Za-z0-9._~-]{43,128}$/.test(verifier);
+        const hash = validFormat
+          ? new Uint8Array(
+              await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(verifier),
+              ),
+            )
+          : null;
+        const derived = hash
+          ? btoa(String.fromCharCode(...hash))
+              .replaceAll("+", "-")
+              .replaceAll("/", "_")
+              .replace(/=+$/, "")
+          : null;
+        if (
+          params.get("code_challenge_method") !== "S256" ||
+          derived !== expectedChallenge
+        ) {
+          rejectedPkce += 1;
+          return Response.json({ error: "bad_verification_code" });
+        }
+      } else if (verifier !== null && options.enforcePkceDowngrade !== false) {
+        // RFC 9700 section 4.8.2 server obligation, not an observed remote GitHub result.
+        rejectedPkce += 1;
+        return Response.json({ error: "bad_verification_code" });
+      }
+      // Model a server's atomic single-use claim AFTER async cryptographic validation.
+      // No await may separate this check and add; this is only the external provider fixture.
+      if (consumed.has(code))
         return Response.json({ error: "bad_verification_code" });
       consumed.add(code);
+      acceptedExchanges += 1;
+      const identity = grant.identity;
       const access = `synthetic-access-${code}`;
       identities.set(access, identity);
       return Response.json({
@@ -98,8 +162,20 @@ export function fakeGitHub() {
     );
   });
   return {
-    authorize(code: string, identity: GitHubIdentity) {
-      codes.set(code, identity);
+    authorize(code: string, identity: GitHubIdentity, authorizationURL: URL) {
+      codes.set(code, {
+        identity,
+        authorizationURL: new URL(authorizationURL),
+      });
+    },
+    get tokenRequests() {
+      return tokenRequests;
+    },
+    get acceptedExchanges() {
+      return acceptedExchanges;
+    },
+    get rejectedPkce() {
+      return rejectedPkce;
     },
     get exchanges() {
       return exchanges;
@@ -154,9 +230,10 @@ export async function beginOAuth(auth: ProofAuth, jar = new CookieJar()) {
     );
   jar.capture(response);
   const payload = (await response.json()) as { url: string };
-  const state = new URL(payload.url).searchParams.get("state");
+  const authorizationURL = new URL(payload.url);
+  const state = authorizationURL.searchParams.get("state");
   if (!state) throw new Error("Native OAuth did not issue state");
-  return { jar, state, initialHeaders: jar.headers() };
+  return { jar, state, authorizationURL, initialHeaders: jar.headers() };
 }
 
 export async function completeOAuth(
@@ -179,8 +256,8 @@ export async function signIn(
   code: string,
   identity: GitHubIdentity,
 ) {
-  github.authorize(code, identity);
   const flow = await beginOAuth(auth);
+  github.authorize(code, identity, flow.authorizationURL);
   const response = await completeOAuth(auth, flow, code);
   return { response, flow };
 }

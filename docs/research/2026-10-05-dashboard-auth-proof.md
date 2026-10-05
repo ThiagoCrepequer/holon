@@ -16,8 +16,8 @@ related:
 ## Resultado da política aprovada em 2026-10-05
 
 **Recuperação por email verificado comprovada localmente; gate completo ainda
-NO-GO pelo state concorrente.** O responsável aprovou usar a vinculação implícita
-padrão do Better Auth após o debate sobre verificação e reutilização de emails.
+NO-GO pela reutilização concorrente de code.** O responsável aprovou usar a
+vinculação implícita padrão do Better Auth após o debate sobre verificação e reutilização de emails.
 A restrição anterior de Q32 foi substituída explicitamente na
 [referência de identidade](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05).
 Isso resolve o bloqueio `account_not_linked` do cenário com mesmo email
@@ -38,21 +38,21 @@ D1/cookies/redirects são reais; os exemplos de identidades são exclusivamente
 sintéticos. Outro subject com mesmo email é um ensaio controlado da política,
 não evidência de dois usuários GitHub reais com o mesmo email simultaneamente.
 
-| Cenário                                                         | Resultado local                                                                                           |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Falha no INSERT User, Account ou Session; novo OAuth            | Recupera com mesmo email verificado; um User/Account/Session e User preservado quando já existia          |
-| Outro subject com mesmo email verificado recebido e local       | Vincula Account ao User existente; não cria outro User                                                    |
-| Email recebido não verificado                                   | Nega linking, sem nova Account/Session nem alteração das linhas anteriores                                |
-| Email local não verificado, recebido verificado                 | Nega linking; signup nativo não verificado não serve de prova de ownership                                |
-| Subject já vinculado muda email para o de outro User            | Conserva a Account/User original, sem transferir a identidade                                             |
-| Falha ao vincular outra Account e novo OAuth                    | Recupera, conserva User e sessão anterior                                                                 |
-| Linking concorrente do mesmo subject                            | Constraints convergem para um subject/User; nova tentativa funciona                                       |
-| State alterado, cookie ausente/de outro fluxo ou state expirado | Nega antes do token endpoint, sem User/Account/Session                                                    |
-| Code consumido com novo state válido                            | Provider sintético nega; nenhuma sessão adicional                                                         |
-| Replay sequencial com cookie original                           | Nega antes da segunda troca de token                                                                      |
-| Replay concorrente do mesmo state/cookie/code                   | Duas trocas no provider; só um sucesso por código único. Gate de consumo único de state continua falhando |
-| Escritas User/Account no callback                               | INSERTs separados, sem D1.batch; recuperação por linking não é rollback                                   |
-| Email muda entre a falha de Account e o retry, mesmo subject    | Novo User com Account/Session; User inicial permanece sem Account/Session                                 |
+| Cenário                                                         | Resultado local                                                                                             |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Falha no INSERT User, Account ou Session; novo OAuth            | Recupera com mesmo email verificado; um User/Account/Session e User preservado quando já existia            |
+| Outro subject com mesmo email verificado recebido e local       | Vincula Account ao User existente; não cria outro User                                                      |
+| Email recebido não verificado                                   | Nega linking, sem nova Account/Session nem alteração das linhas anteriores                                  |
+| Email local não verificado, recebido verificado                 | Nega linking; signup nativo não verificado não serve de prova de ownership                                  |
+| Subject já vinculado muda email para o de outro User            | Conserva a Account/User original, sem transferir a identidade                                               |
+| Falha ao vincular outra Account e novo OAuth                    | Recupera, conserva User e sessão anterior                                                                   |
+| Linking concorrente do mesmo subject                            | Constraints convergem para um subject/User; nova tentativa funciona                                         |
+| State alterado, cookie ausente/de outro fluxo ou state expirado | Nega antes do token endpoint, sem User/Account/Session                                                      |
+| Code consumido com novo state válido                            | Provider sintético nega; nenhuma sessão adicional                                                           |
+| Replay sequencial com cookie original                           | Nega antes da segunda troca de token                                                                        |
+| Replay concorrente do mesmo state/cookie/code                   | Duas token requests do mesmo code; um sucesso por uso único/PKCE no fake. Gate do cliente continua falhando |
+| Escritas User/Account no callback                               | INSERTs separados, sem D1.batch; recuperação por linking não é rollback                                     |
+| Email muda entre a falha de Account e o retry, mesmo subject    | Novo User com Account/Session; User inicial permanece sem Account/Session                                   |
 
 A regra de linking não exige verificação para **todo signup**: o teste de
 User local não verificado começa por um OAuth nativo que o cria e autentica.
@@ -66,21 +66,26 @@ de User local não verificado, refresh distribuído ou reauth.
 
 Os testes novos foram executados primeiro com linking desativado: **10 falhas
 em 16 testes**, sendo oito nas expectativas da nova política/recuperação e duas
-no gate concorrente já existente. Após habilitar o linking nativo aprovado:
+no gate concorrente já existente. Após habilitar o linking nativo aprovado,
+42 cenários passaram. A revisão posterior acrescentou 17 casos de PKCE e
+fortaleceu o fake do provider; resultados atuais:
 
-- `pnpm --filter @holon/dashboard-auth-proof test`: **42 testes passaram**.
+- `pnpm --filter @holon/dashboard-auth-proof test`: **59 testes passaram**;
+  cenários novos de PKCE na [avaliação OAuth](2026-10-05-dashboard-oauth-security-requirements.md).
 - `pnpm --filter @holon/dashboard-auth-proof typecheck`: passou.
-- `pnpm --filter @holon/dashboard-auth-proof test:coverage`: **42 passaram**;
+- `pnpm --filter @holon/dashboard-auth-proof test:coverage`: **59 passaram**;
   100% linhas/funções/statements e 96,42% branches de `src/**/*.ts` do harness,
   preservando os thresholds 90/90/90/85. Não instrumenta o core de terceiros.
 - `pnpm --filter @holon/dashboard-auth-proof test:viability`: **duas passaram,
-  duas falharam; exit 1**. Recuperação passa nos dois adapters; consumo concorrente
-  antes do token endpoint ainda observa duas trocas em vez de uma.
+  duas falharam; exit 1**. Recuperação passa nos dois adapters; o cliente ainda
+  submete o mesmo code duas vezes nos callbacks concorrentes.
 
 Node **24.19.0**, pnpm **11.24.0**, Workerd local e data de compatibilidade
 **2026-08-29**, `nodejs_compat`. A prova concorrente usa requests no mesmo isolate;
-não prova coordenação regional. O provider falso usa códigos únicos e não prova
-PKCE, permissões ou configuração de uma GitHub App real. Sem recursos, secrets,
+não prova coordenação regional. A atualização observa PKCE nativo do cliente
+e fortalece o fake com S256,
+uso único e rejeição de downgrade; não prova enforcement PKCE, permissões ou
+configuração de uma GitHub App real. Sem recursos, secrets,
 OAuth real, banco remoto, deploy ou email. Integração geral/CI têm seus resultados
 separados no [relatório do milestone](2026-10-05-dashboard-milestone-zero-results.md).
 
@@ -100,11 +105,14 @@ A biblioteca possui outra primitiva de consumo, mas esse parser não a chama;
 adicionar `getAndDelete` a secondary storage não substitui o caminho OAuth atual.
 Não se alterou o core ou adicionou wrapper para disfarçar o resultado. A repetição
 concorrente não é, por si só, prova de takeover: o código único negou segundo login.
-A aprovação de linking não autoriza relaxar o requisito mais forte de state.
+A [revisão normativa](2026-10-05-dashboard-oauth-security-requirements.md) distingue
+a imposição de state atômico da obrigação independente de não repetir code pelo
+cliente. PKCE não justifica dispensar a segunda; uma sessão não prova conformidade.
 
-**#129 e dependentes continuam bloqueados.** O próximo gate é obter consumo
-concorrente de state por composição oficialmente suportada e repetir as regressões;
-qualquer mudança do requisito precisa de decisão explícita, não de ajuste do teste.
+**#129 e dependentes continuam bloqueados.** O próximo gate é impedir a submissão
+concorrente do mesmo code por composição oficialmente suportada e repetir as
+regressões. O requisito agora nomeia a garantia observável, sem impor state
+atômico como mecanismo único; a expectativa de uma token request permanece.
 O User incompleto quando email muda permanece documentado; sua limpeza e ausência
 de autoridade no onboarding precisam de política/prova na integração de produto.
 

@@ -62,7 +62,7 @@ consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-ro
 Ele liga as escolhas Q1–Q37 à sequência e aos gates bloqueantes, incluindo a
 viabilidade auth/D1. A [prova atual](research/2026-10-05-dashboard-auth-proof.md)
 recupera cadastro por linking nativo de email verificado, aprovado em 2026-10-05;
-o gate de state concorrente continua bloqueante. [Segurança web](engineering/web-security-and-data-boundaries.md)
+o gate de não reutilização concorrente de code continua bloqueante, conforme a [avaliação OAuth](research/2026-10-05-dashboard-oauth-security-requirements.md). [Segurança web](engineering/web-security-and-data-boundaries.md)
 e [ambientes/recuperação](operations/dashboard-environments-and-recovery.md)
 completam as referências propostas; a skill [dashboard-engineering](../.agents/skills/dashboard-engineering/SKILL.md)
 direciona agentes às fontes afetadas. Nenhum desses documentos descreve um

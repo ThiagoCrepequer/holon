@@ -34,15 +34,23 @@ it.each(["drizzle", "native-d1"] as const)(
 );
 
 it.each(["drizzle", "native-d1"] as const)(
-  "VIABILITY %s: concurrent replay consumes the OAuth state only once before token exchange",
+  // RFC 9700 permits browser-bound PKCE as callback CSRF protection, so atomic
+  // state deletion is one mechanism rather than a universal requirement.
+  // RFC 6749 section 4.1.2 still forbids the client from reusing the same code.
+  // Keep this observable gate: a second native token request is not waived by PKCE.
+  "VIABILITY %s: concurrent callbacks never submit the same authorization code twice",
   async (persistence) => {
     const auth = await setupAuth(persistence);
     const github = fakeGitHub();
     const flow = await beginOAuth(auth);
-    github.authorize("replayed-code", {
-      id: 9001,
-      email: "person@example.invalid",
-    });
+    github.authorize(
+      "replayed-code",
+      {
+        id: 9001,
+        email: "person@example.invalid",
+      },
+      flow.authorizationURL,
+    );
     await Promise.all([
       completeOAuth(auth, flow, "replayed-code", flow.initialHeaders),
       completeOAuth(auth, flow, "replayed-code", flow.initialHeaders),

@@ -115,6 +115,15 @@ autorização entram depois do debate de autenticação.
 A referência WCAG foi conferida em 2026-10-04. Não foram implementadas configs,
 suites, autenticação ou deploy nesta etapa documental.
 
+A [prova OAuth ampliada em 2026-10-05](../research/2026-10-05-dashboard-oauth-security-requirements.md)
+exige observar challenge S256 distinto e verifier correspondente no request
+nativo, negar injeção de code de outro fluxo com state/cookie válidos e explicitar
+a premissa de rejeição de downgrade do provider. Contar token requests por code
+nos callbacks concorrentes: uma sessão final não prova que o cliente não repetiu
+a troca. O fake valida o limite externo; não comprova comportamento remoto.
+Manter diagnósticos e gate de viabilidade distintos, sem inverter a expectativa
+normativa quando o candidato falha.
+
 ## Dashboard: direção de teste após Q8/Q10/Q11
 
 Em 2026-10-04 foram confirmados DOM + browser e a cadência. A engenharia
