@@ -81,6 +81,25 @@ exige revisar os manifests, esta documentação e a necessidade do produto. O
 gate complementa `disallowWorkspaceCycles`, que verifica ciclos, não a direção
 permitida de cada dependência.
 
+## Aplicações web e interfaces
+
+A [referência de organização frontend](frontend-application-structure.md) aplica
+estes princípios à composição futura React Router/Hono. Arquivos exclusivos de
+uma rota permanecem próximos dela; capacidades reutilizadas têm interface de
+feature; padrões genéricos da marca pertencem à UI compartilhada. Proximidade
+não autoriza imports de internals entre rotas ou ciclos entre features.
+
+Concentrar SDKs em packages com comportamento útil e limites de ambiente. Uma
+reexportação não elimina o contrato externo do consumidor. Exceções core têm
+dono e justificativa; não criar abstrações para esconder React ou o router.
+
+O [plano do dashboard](../planning/dashboard-implementation-plan.md) liga essa
+organização às garantias e provas de implementação. O módulo dono do comando
+concentra autoridade, transição e recuperação; hooks/rotas não devem repetir
+guards ou coordenar commits do protocolo. [Segurança web](web-security-and-data-boundaries.md)
+complementa tipos/imports com regras de sessão, HTTP e dados hostis. São
+referências propostas para essa evolução, sem mudar o grafo do runtime atual.
+
 ## Padrões pelo problema
 
 Nomeie primeiro a regra, o dado e quem precisa conhecê-los. A skill

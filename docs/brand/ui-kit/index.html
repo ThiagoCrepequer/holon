@@ -36,6 +36,7 @@
           ><a href="#color"><span>03</span>Cor</a
           ><a href="#typography"><span>04</span>Tipografia</a
           ><a href="#rhythm"><span>05</span>Ritmo e forma</a
+          ><a href="#motion"><span>↳</span>Movimento</a
           ><a href="#components"><span>06</span>Componentes</a
           ><a href="#states"><span>07</span>Estados</a
           ><a href="#applications"><span>08</span>Aplicações</a
@@ -480,9 +481,94 @@
               <p class="note">
                 Respeitar movimento reduzido. Progresso pertence à execução; a
                 logo não funciona como loader.
+                <a href="../motion.md">Ver receitas e tokens de movimento</a>.
               </p>
             </div>
           </div>
+        </section>
+
+        <section id="motion">
+          <div class="eyebrow">05 / Movimento · continuidade</div>
+          <h2>A mudança acontece no seu contexto.</h2>
+          <p class="intro">
+            Expansão local, resposta discreta e dados no mesmo lugar. Os
+            exemplos abaixo usam dados fictícios e respeitam movimento reduzido.
+          </p>
+          <div class="grid two">
+            <div class="panel">
+              <h3>Expandir a evidência</h3>
+              <p class="note">280 ms · geometria suave, texto sem distorção.</p>
+              <button
+                class="button secondary motion-disclosure"
+                id="motion-expand"
+                aria-expanded="false"
+                aria-controls="motion-evidence"
+              >
+                <span>Contexto do achado</span
+                ><span class="motion-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div
+                class="motion-expansion"
+                id="motion-evidence"
+                aria-hidden="true"
+                inert
+              >
+                <div class="motion-expansion-inner">
+                  <div class="motion-evidence">
+                    <span class="badge warning">Exemplo fictício · P2</span>
+                    <p>
+                      Uma alteração no tratamento de erro pode interromper a
+                      tentativa seguinte. Leia a condição antes de decidir.
+                    </p>
+                    <code>src/retry.ts · linha 42</code>
+                  </div>
+                </div>
+              </div>
+              <p class="note">
+                A segunda interação redireciona a expansão em andamento.
+              </p>
+            </div>
+            <div class="panel">
+              <h3>Atualizar sem reiniciar</h3>
+              <p class="note">320 ms · valor confirmado, espaço preservado.</p>
+              <div class="motion-metric">
+                <span class="caption">Achados desta demonstração</span>
+                <strong class="motion-value" id="motion-value">24</strong>
+                <div class="motion-status">
+                  <span
+                    class="motion-dots"
+                    id="motion-dots"
+                    hidden
+                    aria-hidden="true"
+                  >
+                    <i style="--dot-index: 0"></i><i style="--dot-index: 1"></i
+                    ><i style="--dot-index: 2"></i>
+                    <i style="--dot-index: 3"></i><i style="--dot-index: 4"></i
+                    ><i style="--dot-index: 5"></i>
+                    <i style="--dot-index: 6"></i><i style="--dot-index: 7"></i
+                    ><i style="--dot-index: 8"></i>
+                  </span>
+                  <span id="motion-status" role="status"
+                    >Dados fictícios prontos.</span
+                  >
+                </div>
+              </div>
+              <button class="button secondary" id="motion-refresh">
+                Simular atualização
+              </button>
+              <p class="note">
+                Indicador de pontos apenas durante a espera simulada; o valor
+                anterior permanece legível.
+              </p>
+            </div>
+          </div>
+          <p class="note">
+            <a href="../motion.md">Guia completo de movimento</a> ·
+            <a
+              href="../../research/2026-10-04-dashboard-ui-motion-references.md"
+              >Análise das referências</a
+            >
+          </p>
         </section>
 
         <section id="components">
@@ -692,9 +778,12 @@
           <div class="eyebrow">Sistema auxiliar / Ícones</div>
           <h2>Um traço, uma função.</h2>
           <p class="intro">
-            Grade de 24 px, traço de 1,75 px e terminações arredondadas. Ícones
-            funcionais usam currentColor e acompanham rótulos ou nomes
-            acessíveis.
+            Lucide é preferencial para novas interfaces. Grade de 24 px, traço
+            Holon de 1,75 px e terminações arredondadas. As amostras abaixo são
+            autorais anteriores à escolha; não são SVGs Lucide.
+            <a href="../foundations.md#ícones-e-camadas"
+              >Ler a política de ícones</a
+            >.
           </p>
           <div class="icon-grid">
             <span class="icon-sample"

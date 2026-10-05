@@ -35,15 +35,16 @@ controles interativos apenas demonstram o kit com dados fictícios.
 
 ## Caminhos de leitura
 
-| Preciso…                           | Referência                                               |
-| ---------------------------------- | -------------------------------------------------------- |
-| Entender personalidade e escrita   | [Essência e voz](brand-and-voice.md)                     |
-| Aplicar ou exportar a logo         | [Sistema de assinatura](logo.md)                         |
-| Escolher cores e tipografia        | [Fundamentos](foundations.md)                            |
-| Compor uma LP, site ou painel      | [Layout, movimento e aplicações](layout-and-patterns.md) |
-| Implementar controles e estados    | [Componentes e acessibilidade](components.md)            |
-| Consumir e atualizar tokens        | [Integração e manutenção](implementation.md)             |
-| Reutilizar uma exploração anterior | [Arquivo de explorações](explorations/README.md)         |
+| Preciso…                           | Referência                                       |
+| ---------------------------------- | ------------------------------------------------ |
+| Entender personalidade e escrita   | [Essência e voz](brand-and-voice.md)             |
+| Aplicar ou exportar a logo         | [Sistema de assinatura](logo.md)                 |
+| Escolher cores e tipografia        | [Fundamentos](foundations.md)                    |
+| Compor uma LP, site ou painel      | [Layout e aplicações](layout-and-patterns.md)    |
+| Definir animações e continuidade   | [Movimento e continuidade](motion.md)            |
+| Implementar controles e estados    | [Componentes e acessibilidade](components.md)    |
+| Consumir e atualizar tokens        | [Integração e manutenção](implementation.md)     |
+| Reutilizar uma exploração anterior | [Arquivo de explorações](explorations/README.md) |
 
 ## Fonte de verdade
 

@@ -109,6 +109,42 @@ ou servico externo.
 **Memory rule**
 : Orientação com escopo, evidências, digest, validade e estado; apenas aprovação atual de mantenedor concede uso em novas runs. Não altera políticas do host.
 
+## Identidade no Holon
+
+**Holon user**
+: Pessoa com identidade própria para usar o Holon, individualmente e/ou
+como membro de equipes. Não se confunde com uma instalação da GitHub App.
+
+**Holon workspace**
+: Espaço de trabalho do Holon que reúne recursos e participação de usuários,
+para uso pessoal ou de equipe. Organização e workspace designam o mesmo
+conceito no Holon. É distinto da identidade de login e da instalação da GitHub App.
+
+**Membership**
+: Participação de um Holon user em um Holon workspace, com papel e permissões
+internas naquele espaço. Não concede acesso GitHub por si.
+
+**Personal workspace**
+: Workspace exclusivo de um usuário para uso individual, sem convite de
+outros membros ou conversão silenciosa para equipe.
+
+**Team workspace**
+: Workspace compartilhado por uma equipe, com participação e papéis explícitos
+por usuário. Uma pessoa pode participar de várias equipes.
+
+**Holon organization**
+: Outro nome para Holon workspace, sem representar um nível adicional de
+agrupamento. Não se confunde com uma organização GitHub.
+
+**Workspace owner**
+: Membro com papel de governar participantes e conexões de um workspace.
+Uma equipe pode ter vários owners; o papel não concede acesso GitHub adicional.
+
+**Workspace invitation**
+: Convite explícito dirigido a um destinatário para ingressar em um workspace
+como membro. Sua aceitação comprova a identidade do destinatário, sem conceder
+acesso a repositórios por si.
+
 ## Termos de documentacao
 
 **Fato confirmado**

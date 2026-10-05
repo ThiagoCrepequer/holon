@@ -40,6 +40,9 @@ mesma operação e usa `aria-busy`. Não fazer o botão mudar de largura. Disabl
 usa o atributo nativo quando aplicável; explique pré-requisitos próximos,
 sem depender de hover sobre um botão desabilitado.
 
+Feedback usa a receita de hover/seleção e troca de estado do
+[guia de movimento](motion.md#receitas-de-interação), sem atrasar a ação.
+
 ## Campos e seleção
 
 Input padrão tem altura mínima de 44 px, padding horizontal de 12 px, raio de
@@ -72,6 +75,9 @@ Tabela usa cabeçalhos semânticos, alinhamento numérico consistente e ação d
 linha previsível. Não tornar toda a linha clicável quando já houver vários
 controles nela. Em mobile, priorize colunas essenciais e ofereça contexto por
 expansão ou rolagem regional, sem truncar informação decisiva.
+
+Expansão e reordenação seguem [receitas de continuidade](motion.md#receitas-de-interação).
+Manter IDs estáveis e seleção; não animar entrada a cada remontagem por scroll.
 
 ## Estados de uma revisão
 
@@ -107,9 +113,16 @@ Empty state explica o que aparecerá ali e o próximo passo disponível. Skeleto
 preserva a geometria aproximada do conteúdo e respeita movimento reduzido.
 Um estado de erro não deve parecer vazio, nem ser substituído por dados falsos.
 
+Popovers, drawers, indicadores e transições de status seguem o
+[guia de movimento](motion.md). Foco e interação não esperam a animação de saída.
+
 ## Critérios para uma interface pronta
 
 Confirme teclado, foco visível, ordem de leitura, nomes acessíveis, contraste,
 zoom a 200%, largura de 320 px, conteúdo longo, idiomas e movimento reduzido.
 Teste os estados que realmente ocorrem naquela integração. Cálculo de contraste
 e uma captura de tela não demonstram sozinhos conformidade de acessibilidade.
+
+Para o dashboard, WCAG 2.2 AA e a matriz de suporte foram acordados em
+2026-10-04; consulte os [critérios de prova frontend](../engineering/testing-and-evidence.md#dashboard-critérios-acordados-para-implementação-futura).
+A conformidade precisa ser avaliada na interface implementada.

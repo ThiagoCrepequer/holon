@@ -6,7 +6,7 @@ tarefa em vez de carregar todo o catálogo. As cópias preservam o conteúdo
 upstream, exceto adaptações documentadas abaixo; confirme dependências e
 instruções específicas do host antes de executar fluxos externos. As origens
 anteriores foram verificadas em 2026-09-28; as skills de engenharia foram
-revisadas em 2026-10-03.
+revisadas em 2026-10-03; a skill própria de dashboard foi adicionada em 2026-10-04.
 
 ## Qual skill usar
 
@@ -16,6 +16,7 @@ revisadas em 2026-10-03.
 | --- | --- | --- |
 | Desenhar ou revisar a interface de um módulo | `codebase-design` | Use o vocabulário de módulo, interface e seam; confirme o grafo e os ADRs do Holon antes de criar uma porta. |
 | Construir comportamento novo ou corrigir bug com TDD | `tdd` | Um teste comportamental que falha por vez, seguido da menor correção. A skill depende de `codebase-design` e remete a arquivos `tests.md` e `mocking.md` incluídos. |
+| Planejar, implementar ou revisar o dashboard dos usuários | [`dashboard-engineering`](dashboard-engineering/SKILL.md) | Localize decisões e fontes donas; verifique segurança, recuperação e testes sem assumir runtime existente ou reabrir Q1–Q37. |
 
 Para princípios recorrentes de TypeScript, padrões e anti-padrões, consulte
 [`docs/engineering/typescript-and-module-design.md`](../../docs/engineering/typescript-and-module-design.md).
@@ -81,6 +82,7 @@ as demais apenas quando cobrirem outra dimensão.
 
 | Skills | Origem | Licença / notas |
 | --- | --- | --- |
+| `dashboard-engineering` | Autoria do projeto Holon | Guia curto de contexto; sem conteúdo upstream copiado ou dependências externas. Aponta para os documentos canônicos da evolução proposta. |
 | `ip-as-logo` | [s1dashu/ip-as-logo-skill](https://github.com/s1dashu/ip-as-logo-skill) | MIT; licença incluída na pasta da skill. |
 | `review`, `qa`, `cso`, `plan-eng-review` | [garrytan/gstack](https://github.com/garrytan/gstack) | MIT; aviso em `LICENSES/gstack-MIT.txt`. Algumas rotinas dependem de setup, scripts, browser ou outros hosts que não são instalados junto com a cópia. |
 | `layout-grid`, `responsive-design`, `visual-hierarchy`, `design-token`, `accessibility-audit`, `critique-visual-hierarchy` | [Owl-Listener/designer-skills](https://github.com/Owl-Listener/designer-skills) | MIT; aviso em `LICENSES/designer-skills-MIT.txt`. Skills individuais autocontidas selecionadas da coleção. |

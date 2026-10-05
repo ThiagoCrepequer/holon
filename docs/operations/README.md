@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-04
 ---
 
 # Operação
@@ -18,6 +18,7 @@ last-reviewed: 2026-09-10
 - [Diagnóstico de análise parcial ou interrompida](review-analysis-diagnostics.md)
 - [Provisionamento e deploy](deployment.md)
 - [Deploy manual opcional com guarda e evidência](guarded-deployment.md)
+- [Ambientes e recuperação do dashboard](dashboard-environments-and-recovery.md) — roteiro proposto para preview, migrations, efeitos duráveis e restore; não descreve recursos já implantados.
 
 Estes documentos distinguem comandos de validação local de efeitos remotos. Um
 dry-run não prova credenciais, bindings, cotas nem comportamento de produção.

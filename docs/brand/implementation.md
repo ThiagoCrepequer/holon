@@ -38,6 +38,42 @@ O JSON é um formato simples do projeto: `primitives` contém valores agrupados,
 intercâmbio DTCG nem um plugin de Figma. Importe valores e SVGs na ferramenta
 de design e mantenha os nomes semânticos para facilitar a implementação.
 
+## Fronteira de componentes em uma aplicação
+
+A futura `packages/ui` concentra bibliotecas visuais e entrega componentes do
+Holon: tokens, acessibilidade, ícones Lucide preferenciais e receitas de motion.
+O app compõe páginas e UI de produto; não depende diretamente de cada motor
+visual. Esta referência estática não é esse package e não o cria.
+
+A [organização de aplicações web](../engineering/frontend-application-structure.md)
+define critérios de extração, interfaces, subpaths e exceções core. Um componente
+genérico não importa auth, banco, router do app ou DTO específico de review.
+Preserve o contrato útil da marca, evitando wrappers que reproduzem todo o SDK.
+
+## Integrar movimento
+
+Consulte as [receitas de movimento](motion.md) antes de escolher um efeito.
+CSS consome as variáveis geradas diretamente. Por exemplo, um disclosure pode
+interpolar altura/layout por `--holon-motion-slow` com
+`--holon-motion-ease-in-out`; hover usa `--holon-motion-fast`.
+
+Uma futura integração Motion deve ler a mesma fonte de tokens e converter
+as durações de milissegundos para segundos. `280ms` corresponde a `0.28`;
+a curva CSS padrão corresponde à tupla `[0.2, 0, 0, 1]`. Não passar a variável
+CSS de duração como se fosse o número esperado pelo motor nem replicar uma
+segunda escala de números nos componentes. O kit nativo não implementa esse
+adapter React; ele será parte da prova de integração.
+
+Defina um responsável por propriedade: CSS para cor/hover, Motion para
+layout/presença quando necessário, gráfico para sua geometria ou NumberFlow
+para dígitos. Evite transições CSS concorrentes sobre transforms controlados
+por Motion. Primitivas continuam responsáveis por foco, portal e posição.
+
+CSS respeita `prefers-reduced-motion`; JavaScript usa a preferência equivalente
+(`MotionConfig`/`useReducedMotion` na integração candidata), inclusive ao
+interromper animações em andamento. Remover loops e stagger também: apenas
+configurar Motion não muda animações CSS ou de uma biblioteca de gráficos.
+
 ## Atualizar tokens
 
 Na raiz do repositório:

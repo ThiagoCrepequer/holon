@@ -1,0 +1,78 @@
+{
+  "sqlite_version": "3.53.1",
+  "synthetic_rows": 20000,
+  "normalization_policy": "NFD + Unicode lower + remove Unicode categories M; candidate, not full Unicode case-folding",
+  "queries": {
+    "list": {
+      "sql": "SELECT pr_no FROM reviews WHERE repo_id=? ORDER BY activity DESC,pr_no DESC LIMIT 50",
+      "parameters": [1]
+    },
+    "state": {
+      "sql": "SELECT pr_no FROM reviews WHERE repo_id=? AND state=? ORDER BY activity DESC,pr_no DESC LIMIT 50",
+      "parameters": [1, "completed"]
+    },
+    "number": {
+      "sql": "SELECT pr_no FROM reviews WHERE repo_id=? AND pr_no=?",
+      "parameters": [1, 777]
+    },
+    "contains": {
+      "sql": "SELECT pr_no FROM reviews WHERE repo_id=? AND instr(title_search,?)>0 ORDER BY activity DESC,pr_no DESC LIMIT 50",
+      "parameters": [1, "fe"]
+    }
+  },
+  "plans": {
+    "list": [
+      [
+        4,
+        0,
+        53,
+        "SEARCH reviews USING COVERING INDEX review_activity (repo_id=?)"
+      ]
+    ],
+    "state": [
+      [
+        4,
+        0,
+        54,
+        "SEARCH reviews USING COVERING INDEX review_state_activity (repo_id=? AND state=?)"
+      ]
+    ],
+    "number": [
+      [
+        2,
+        0,
+        39,
+        "SEARCH reviews USING COVERING INDEX sqlite_autoindex_reviews_1 (repo_id=? AND pr_no=?)"
+      ]
+    ],
+    "contains": [
+      [5, 0, 61, "SEARCH reviews USING INDEX review_activity (repo_id=?)"]
+    ]
+  },
+  "first_results": {
+    "list": [[10000], [9999], [9998], [9997], [9996]],
+    "state": [[9999], [9997], [9995], [9993], [9991]],
+    "number": [[777]],
+    "contains": [[9007], [777], [7]]
+  },
+  "literal_percent_underscore": [[9999]],
+  "long_term_80_characters": [[9999]],
+  "sqlite_builtin_case_behavior": [0, 0, "cafÉ"],
+  "normalization_examples": {
+    "CAFÉ": "cafe",
+    "café": "cafe",
+    "Café": "cafe",
+    "AUTENTICAÇÃO": "autenticacao",
+    "autenticacao": "autenticacao",
+    "100%_": "100%_",
+    "ẞ": "ß",
+    "SS": "ss",
+    "ß": "ß",
+    "İ": "i",
+    "i": "i",
+    "ı": "ı"
+  },
+  "warning": "No remote D1 query; no D1 latency, rows_read, workload, crash recovery, or complete Unicode semantics proven.",
+  "monotonic_upsert_sql": "INSERT INTO reviews VALUES(?,?,?,?,?,?,?)\nON CONFLICT(repo_id,pr_no) DO UPDATE SET state=excluded.state,activity=excluded.activity,\ntitle=excluded.title,title_search=excluded.title_search,snapshot_revision=excluded.snapshot_revision\nWHERE excluded.snapshot_revision>reviews.snapshot_revision",
+  "monotonic_upsert_result": ["fresh", 6]
+}

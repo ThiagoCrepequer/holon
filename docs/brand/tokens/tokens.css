@@ -109,6 +109,17 @@
   --holon-motion-base: 180ms;
   --holon-motion-slow: 280ms;
   --holon-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --holon-motion-exit: 160ms;
+  --holon-motion-enter: 240ms;
+  --holon-motion-data: 320ms;
+  --holon-motion-stagger: 32ms;
+  --holon-motion-stagger-limit: 160ms;
+  --holon-motion-indicator-cycle: 1200ms;
+  --holon-motion-distance-micro: 4px;
+  --holon-motion-distance-small: 8px;
+  --holon-motion-scale-surface: 0.98;
+  --holon-motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --holon-motion-linear: linear;
   --holon-layer-base: 0;
   --holon-layer-sticky: 10;
   --holon-layer-dropdown: 20;
