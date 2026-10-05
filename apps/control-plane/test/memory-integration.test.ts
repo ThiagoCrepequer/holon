@@ -143,6 +143,9 @@ function event(body: string, commentId = 202): ReviewCommentWebhookEvent {
 function session(permission = "write") {
   return {
     api: {} as never,
+    discussionReader: () => {
+      throw new Error("Discussion reader unused in this test");
+    },
     expectedAuthorLogin: "holon[bot]",
     expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     token: "test-installation-token",

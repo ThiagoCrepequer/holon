@@ -13,6 +13,7 @@ export const modelGenerationReservationSchema = z
     phase: z.enum([
       "investigation",
       "causal_verification",
+      "finding_clarification",
       "finalization",
       "recovery",
       "synthesis",

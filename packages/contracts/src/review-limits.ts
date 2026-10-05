@@ -28,6 +28,7 @@ export const reviewOutputLimitationCodes = [
   "reason_truncated",
   "suggestion_truncated",
   "summary_truncated",
+  "summary_missing",
   "findings_omitted",
   "evidence_omitted",
   "input_context_omitted",

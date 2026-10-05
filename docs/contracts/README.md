@@ -117,6 +117,17 @@ envelope continua obrigatório e limitado: formatos inválidos de `findings`,
 resumo ausente, metadados inválidos e mais de oito resoluções continuam causando
 erro. Os schemas do domínio continuam exigindo evidência não vazia.
 
+## Recuperação de resumo — 2026-10-04
+
+Resumo vazio continua sendo permitido no draft como saída degradada, com
+`summary_missing` explícito e sem perder candidatos. `reviewSummaryRecoverySchema`
+aceita somente `summary` não vazio de até 10.000 unidades UTF-16, `isDegraded`
+booleano e `outputLimitations` com os códigos atuais. Campos adicionais são
+rejeitados: a recuperação não pode substituir findings, resoluções ou
+observações. O host combina somente essa narrativa e suas limitações com o
+draft validado; nunca apaga outras causas de parcialidade. Os limites de uma
+inferência, 1.024 tokens e até 60 segundos compartilham orçamento e prazo da run.
+
 ## Configuração compilada — 2026-09-09
 
 `repository-config/input.ts` é a entrada estrutural única; `snapshot.ts` separa
@@ -132,3 +143,7 @@ independentes dos manifests temporários e do limite de publicação inline.
 ## Contratos do core de review (2026-09-27)
 
 A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/feedback. `savePrFindings` exige a run escritora; `SavedCiEvidence` exige workflow run, tentativa e destino de publicação. `review.documentation` integra o snapshot compilado e seu digest; instruções e compatibilidade seguem o contrato único de configuração. Os schemas executáveis ficam em `packages/contracts/src`. A transição de persistência e os limites estão na [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md).
+
+## Perguntas em findings
+
+`finding-clarification.ts` valida admissão, identidade do Agent, registro persistido, leituras e resposta. A resposta limita explicação a 5.000 caracteres, cenário a 2.000 e até seis referências, com linhas positivas e trecho de até 2.000 caracteres. O host exige correspondência às leituras efetivas, não apenas um schema válido. A fase `finding_clarification` usa reservas separadas por pergunta. A [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md) define autoridade e efeitos.

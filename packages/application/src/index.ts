@@ -21,3 +21,4 @@ export {
 } from "./inline-publication-plan.js";
 export * from "./repository-memory.js";
 export * from "./causal-verification.js";
+export * from "./finding-clarification.js";

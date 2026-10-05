@@ -72,10 +72,14 @@ converter ausência de achados verificados em aprovação. Alterações sem arqu
 elegíveis têm estado próprio. Atualizações por feedback humano e aprovações
 posteriores sem novos achados mantêm a mesma identificação visual.
 
-Se o modelo devolver `summary` vazio, o host marca o shard como degradado e
-continua a validar cada candidato a finding contra a evidência canônica. O
-resumo narrativo ausente não descarta sozinho esses candidatos, mas também não
-autoriza aprovação. Achados publicados ainda precisam satisfazer todos os
+Se o modelo devolver `summary` vazio, o host conserva os candidatos e registra
+`summary_missing`. O Workflow tenta recuperar apenas a narrativa uma vez, sem
+tools de repositório, dentro do mesmo orçamento e deadline. Uma recuperação
+válida remove somente essa limitação; degradação declarada pelo modelo e outras
+limitações continuam bloqueando aprovação. Se a recuperação falhar, o shard
+permanece degradado com motivo explícito na publicação. Cobertura completa com
+saída degradada é apresentada como análise incompleta, preservando a contagem
+de partes executadas. Achados publicados ainda precisam satisfazer todos os
 critérios de evidência e ancoragem acima.
 
 Se todos os arquivos forem binários, lockfiles, gerados, vendorizados,
@@ -156,3 +160,7 @@ O conjunto de avaliação deve crescer com:
 - PRs contendo somente arquivos excluídos e PRs mistos;
 - diffs grandes, truncados e com force-push;
 - reentrega do mesmo webhook.
+
+## Esclarecimento e contestação de findings
+
+O autor pode perguntar na discussão inline por menção ou `/holon ask`. A investigação posterior, definida pela [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md), deve responder com cenário e evidências verificadas, buscando também guards e contratos que refutem o diagnóstico. Confirmação, delimitação, refutação e insuficiência de evidência são resultados distintos. Uma refutação validada retira o finding e recalcula o Check Run preservando cobertura/degradação originais; não cria aprovação de uma review parcial nem remove a discussão. O caso local com provider simulado comprova composição e políticas, não precisão em perguntas reais.

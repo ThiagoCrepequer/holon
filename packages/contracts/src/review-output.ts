@@ -285,7 +285,18 @@ export const modelReviewPromptSchema = z.object({
       }),
     }),
   ),
-  summary: z.string(),
+  summary: z
+    .string()
+    .describe(
+      "Return a non-empty, concise summary of the analyzed scope and any remaining limitations, including when no defects were verified.",
+    ),
+});
+
+/** Narrative recovery cannot add, replace or remove review candidates. */
+export const reviewSummaryRecoverySchema = z.strictObject({
+  summary: z.string().trim().min(1).max(reviewTextLimits.summary),
+  isDegraded: z.boolean(),
+  outputLimitations: reviewOutputLimitationsSchema,
 });
 
 export const modelReviewTransportSchema = z.preprocess((value) => {
@@ -351,6 +362,8 @@ export function modelReviewOutputFromTransport(
   raw: z.output<typeof modelReviewTransportSchema>,
 ): ModelReviewOutput {
   const transport = reviewTransportFields.parse(raw);
+  const limitations = new Set(transport.outputLimitations ?? []);
+  if (transport.summary.length === 0) limitations.add("summary_missing");
   return modelReviewOutputSchema.parse({
     ...(transport.investigations
       ? { investigations: transport.investigations }
@@ -390,12 +403,8 @@ export function modelReviewOutputFromTransport(
       ? { isDegraded: transport.isDegraded }
       : {}),
     summary: transport.summary,
-    ...(transport.summary.length === 0 || transport.outputLimitations?.length
-      ? { isDegraded: true }
-      : {}),
-    ...(transport.outputLimitations?.length
-      ? { outputLimitations: transport.outputLimitations }
-      : {}),
+    ...(limitations.size ? { isDegraded: true } : {}),
+    ...(limitations.size ? { outputLimitations: [...limitations] } : {}),
   });
 }
 

@@ -43,6 +43,8 @@ import {
 import type {
   ReconciledReviewOutput,
   ReviewAnalysisCheckpoint,
+  ClarificationAdmission,
+  ClarificationRead,
 } from "@holon/contracts";
 import type {
   FindingFingerprint,
@@ -61,6 +63,7 @@ import {
   CheckRunReconciliationStore,
   type DesiredCheckRun,
 } from "./check-run-reconciliation.js";
+import { FindingClarificationStore } from "./finding-clarification-store.js";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
@@ -165,11 +168,13 @@ export class ReviewLedgerObject
   implements ReviewLedger, FeedbackLedger
 {
   private readonly findingStore: FindingLedgerStore;
+  private readonly clarificationStore: FindingClarificationStore;
 
   public constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     applyLedgerMigrations(this.ctx.storage);
     this.findingStore = new FindingLedgerStore(this.ctx.storage);
+    this.clarificationStore = new FindingClarificationStore(this.ctx.storage);
     void this.ctx.blockConcurrencyWhile(async () => {
       await this.ensureMaintenanceAlarm();
     });
@@ -617,6 +622,7 @@ export class ReviewLedgerObject
     return revision;
   }
   public override async alarm(): Promise<void> {
+    this.clarificationStore.expire();
     const startedAt = new Date();
     this.ctx.storage.sql.exec(
       "DELETE FROM run_memory_snapshots WHERE expires_at<=?",
@@ -887,6 +893,7 @@ export class ReviewLedgerObject
     }
 
     const candidates = [
+      this.clarificationStore.nextExpiration(),
       row.next_attempt_at === null
         ? undefined
         : Date.parse(row.next_attempt_at),
@@ -1091,6 +1098,51 @@ export class ReviewLedgerObject
 
   public loadPrFindings(prKey: PrKey): Promise<readonly TrackedFinding[]> {
     return Promise.resolve(this.findingStore.loadPrFindings(prKey));
+  }
+
+  public async admitClarification(input: ClarificationAdmission) {
+    const record = this.clarificationStore.admit(input);
+    await this.ensureMaintenanceAlarm();
+    return record;
+  }
+  public async loadClarification(id: number) {
+    return this.clarificationStore.load(id);
+  }
+  public async clarificationHistory(id: number) {
+    return this.clarificationStore.history(id);
+  }
+  public async isClarificationAuthorized(id: number) {
+    return this.clarificationStore.authorized(id);
+  }
+  public async reserveClarificationRead(id: number) {
+    return this.clarificationStore.reserveRead(id);
+  }
+  public async recordClarificationRead(id: number, read: ClarificationRead) {
+    return this.clarificationStore.recordRead(id, read);
+  }
+  public async reserveClarificationGeneration(
+    id: number,
+    request: Omit<ModelGenerationReservation, "shardIndex" | "shardCount">,
+  ) {
+    return this.clarificationStore.reserveGeneration(id, request);
+  }
+  public async settleClarificationGeneration(
+    id: number,
+    reservationId: number,
+    outputTokens: number,
+  ) {
+    this.clarificationStore.settleGeneration(id, reservationId, outputTokens);
+  }
+  public async answerClarification(id: number, answer: unknown) {
+    const result = this.clarificationStore.answer(id, answer);
+    await this.ensureMaintenanceAlarm();
+    return result;
+  }
+  public async canPublishClarification(id: number) {
+    return this.clarificationStore.canPublish(id);
+  }
+  public async completeClarification(id: number, replyCommentId?: number) {
+    this.clarificationStore.complete(id, replyCommentId);
   }
 
   public savePrFindings(

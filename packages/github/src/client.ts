@@ -18,6 +18,10 @@ import {
   GitHubDiffTooLargeError,
   GitHubConfigurationError,
 } from "./errors.js";
+import {
+  createFindingDiscussionReader,
+  type FindingDiscussionReader,
+} from "./finding-discussion.js";
 import type {
   GitHubApi,
   GitHubCheckRun,
@@ -31,10 +35,16 @@ const InstallationOctokit = Octokit.plugin(paginateRest, retry, throttling);
 export type { GitHubAppCredentials } from "./authentication.js";
 
 export interface GitHubInstallationSession {
+  discussionReader(owner: string, repo: string): FindingDiscussionReader;
   configurationReader(
     owner: string,
     repo: string,
     baseSha: string,
+    limits?: {
+      readonly maximumRequests: number;
+      readonly maximumTreeBytes: number;
+      readonly deadlineAt: number;
+    },
   ): ConfigurationSnapshotReader;
   readonly api: GitHubApi;
   currentHeadSha(
@@ -246,6 +256,29 @@ export async function createInstallationSession(
   });
   return {
     api: new OctokitApi(octokit),
+    discussionReader(owner, repo) {
+      return createFindingDiscussionReader(
+        {
+          request: async (route, parameters, maximumBytes) => {
+            return await executeGitHubRequest(async () => {
+              const response = await octokit.request(route, {
+                ...parameters,
+                request: {
+                  parseSuccessResponseBody: false,
+                  retries: 0,
+                  signal: AbortSignal.timeout(30_000),
+                },
+              });
+              return {
+                data: await readConfigurationJson(response.data, maximumBytes),
+              };
+            });
+          },
+        },
+        owner,
+        repo,
+      );
+    },
     async currentHeadSha(owner, repo, pullNumber) {
       return await executeGitHubRequest(async () => {
         const response = await octokit.request(
@@ -275,20 +308,40 @@ export async function createInstallationSession(
         };
       }, "pull_request_refs");
     },
-    configurationReader(owner, repo, baseSha) {
+    configurationReader(owner, repo, baseSha, limits) {
+      let requests = 0;
       return createConfigurationSnapshotReader(
         {
           request: async (route, parameters, maximumBytes) => {
+            requests++;
+            if (
+              limits &&
+              (requests > limits.maximumRequests ||
+                Date.now() >= limits.deadlineAt)
+            )
+              throw new TypeError("Snapshot read budget exhausted");
             const response = await octokit.request(route, {
               ...parameters,
               request: {
                 parseSuccessResponseBody: false,
                 retries: 0,
-                signal: AbortSignal.timeout(30_000),
+                signal: AbortSignal.timeout(
+                  limits
+                    ? Math.max(
+                        1,
+                        Math.min(30_000, limits.deadlineAt - Date.now()),
+                      )
+                    : 30_000,
+                ),
               },
             });
             return {
-              data: await readConfigurationJson(response.data, maximumBytes),
+              data: await readConfigurationJson(
+                response.data,
+                limits && route.includes("/git/trees/")
+                  ? Math.min(maximumBytes, limits.maximumTreeBytes)
+                  : maximumBytes,
+              ),
             };
           },
         },

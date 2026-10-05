@@ -28,6 +28,10 @@
         "name": "REVIEW_AGENTS",
         "class_name": "ReviewAgent",
       },
+      {
+        "name": "FINDING_CLARIFICATION_AGENTS",
+        "class_name": "FindingClarificationAgent",
+      },
     ],
   },
   "migrations": [
@@ -49,6 +53,10 @@
     {
       "tag": "repository-memory",
       "new_sqlite_classes": ["RepositoryMemoryObject"],
+    },
+    {
+      "tag": "finding-clarification-agent",
+      "new_sqlite_classes": ["FindingClarificationAgent"],
     },
   ],
   "queues": {
@@ -78,6 +86,11 @@
       "name": "holon-review-shard-workflow",
       "binding": "REVIEW_SHARD_WORKFLOW",
       "class_name": "ReviewShardWorkflow",
+    },
+    {
+      "name": "holon-finding-clarification-workflow",
+      "binding": "FINDING_CLARIFICATION_WORKFLOW",
+      "class_name": "FindingClarificationWorkflow",
     },
   ],
   "services": [

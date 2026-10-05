@@ -1,5 +1,6 @@
 import { followUpMessageSchema, type FollowUpMessage } from "@holon/contracts";
 
+import { handleFindingQuestionWebhook } from "../clarification/finding-question-handler.js";
 import {
   handleFeedbackCommentWebhook,
   handleThreadResolvedWebhook,
@@ -11,6 +12,7 @@ export async function processFollowUp(
 ): Promise<void> {
   switch (message.event) {
     case "feedback_comment":
+      if (await handleFindingQuestionWebhook(env, message.payload)) return;
       await handleFeedbackCommentWebhook(env, message.payload);
       return;
     case "feedback_thread":

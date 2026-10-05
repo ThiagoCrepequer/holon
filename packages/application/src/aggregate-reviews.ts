@@ -283,10 +283,16 @@ export function aggregateShardReviews(
       shardsAnalyzed += 1;
       for (const code of result.outputLimitations ?? []) {
         omissionReasons.push(
-          reviewMessage(options.language ?? "en", "shardLimitation", {
-            index: result.shardIndex + 1,
-            code,
-          }),
+          reviewMessage(
+            options.language ?? "en",
+            code === "summary_missing"
+              ? "shardSummaryMissing"
+              : "shardLimitation",
+            {
+              index: result.shardIndex + 1,
+              code,
+            },
+          ),
         );
         if (
           code === "input_context_omitted" &&

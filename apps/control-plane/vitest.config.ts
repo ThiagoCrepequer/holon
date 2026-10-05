@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       miniflare: {
+        bindings: { GITHUB_APP_SLUG: "holon-reviewer" },
         serviceBindings: {
           REPOSITORY_EXECUTOR: "repository-executor-current",
         },

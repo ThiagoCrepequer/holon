@@ -55,6 +55,12 @@ sequenceDiagram
         end
       end
       AG-->>AW: resposta estruturada
+      opt Resumo vazio
+        AW->>AG: recuperar narrativa em um step.prompt durável
+        AG->>LE: reservar uma inferência no mesmo orçamento
+        AG->>GW: um passo, somente final answer
+        AG-->>AW: resumo e limitações, sem alterar candidatos
+      end
       AW-->>WF: candidatos do shard
       WF->>WF: validar evidência no diff canônico
       opt Há candidatos válidos
@@ -111,6 +117,22 @@ ledger e o deadline. `getTools` registra somente `read_file`, `search_text` e
 `search_structure`. MCP, bash e edição não são expostos. O executor revalida
 path, escopo, política de egress, tamanho, deadline e autoridade no limite de
 confiança próprio. Código e resultado de busca são dados não confiáveis.
+
+Quando o resultado estruturado tem resumo vazio, o Workflow conserva o draft
+validado e registra `summary_missing`. Uma única chamada a `step.prompt` com
+nome `recover-summary` pede apenas narrativa, degradação e limitações; seu
+schema estrito não aceita findings, resoluções ou observações. O Agent persiste
+o modo de recuperação no estado durável e restringe o turno a um passo e
+`think_final_answer`, com no máximo 1.024 tokens de saída. O middleware existente
+reserva essa inferência no orçamento agregado da fase `investigation`. O wait
+é limitado ao menor valor entre 60 segundos e o deadline restante.
+
+Uma narrativa válida remove somente `summary_missing`; outras limitações e
+degradação declarada no draft ou na recuperação permanecem. Falha de schema,
+provider, orçamento ou timeout conserva o draft e o motivo explícito. Run
+obsoleta ou expirada continua abortando antes de devolver um resultado. O
+step idempotente do Think mantém a mesma identidade em retomadas do Workflow;
+não há loop próprio de modelo nem síntese agregada adicional.
 
 O verificador tenta refutar cada candidato, lendo guardas, chamadores e contratos
 fora do patch quando necessários. Sua saída estrita não contém findings novos:
@@ -184,3 +206,7 @@ rota e o modelo reais ainda é necessário para provar streaming, tool calling e
 ## Memória incremental — 2026-10-04
 
 Pela [ADR-0051](../decisions/0051-learn-repository-rules-with-maintainer-approval.md), antes da análise a run sela memória relevante aos paths preparados. Shards recebem regras aprovadas e pistas históricas com origem. Análise e feedback criam outbox transacional para memória por repositório, entregue pelo alarm do ledger. A memória orienta investigação e não altera a validação causal, a evidência ou o veredito. Consulte [o fluxo de memória](repository-memory.md).
+
+## Perguntas posteriores à publicação
+
+Após uma review concluída, uma resposta explícita ao finding segue webhook HMAC → Queue → validação autenticada da discussão e autorização → admissão no ledger → `FindingClarificationAgent`/`FindingClarificationWorkflow`. O Agent lê arquivos regulares do snapshot GitHub no head SHA fixado, aplica exclusões recompiladas no base SHA e reservas próprias. O Workflow valida trechos contra leituras, registra a conclusão e reconcilia a resposta no comentário raiz. Uma refutação retira o finding e recalcula o Check Run canônico; não publica nova review nem apaga o diagnóstico original. Novo head/base ou perda de autoridade impedem a mutação/publicação. Veja a [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md).

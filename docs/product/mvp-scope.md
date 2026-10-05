@@ -4,7 +4,7 @@ kind: product
 status: accepted
 owners:
   - core-team
-last-reviewed: 2026-08-30
+last-reviewed: 2026-10-04
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0013-use-tiered-structural-and-textual-review.md
@@ -34,6 +34,7 @@ de introduzir memoria conversacional, RAG de repositorio ou multiagentes.
 - Loop de analise com numero limitado de passos e ferramentas permitidas.
 - Findings estruturados com evidencia, severidade e coordenadas do diff.
 - Comentarios inline e um resumo por run.
+- Perguntas e contestações explícitas na discussão de findings, com investigação limitada e evidência verificável (ADR-0052).
 - Protecao contra redelivery e duplicacao de efeitos externos.
 - Logs e metricas minimos de tempo, falhas, tokens e findings publicados.
 

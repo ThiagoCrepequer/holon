@@ -165,3 +165,7 @@ os resultados integrais da run independentemente do cap inline.
 ## Endurecimento do core (2026-09-27)
 
 A [ADR-0038](../decisions/0038-harden-parallel-review-and-publication.md) definiu a execução concorrente dos shards no mesmo Sandbox, autoridade transacional de achados e reconciliação durável dos checks. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md) retirou a ingestão de CI e substituiu o motor de review por Agent Think. Consulte também a [configuração de contexto](../operations/review-context-configuration.md).
+
+## Estado de perguntas em findings
+
+`finding_clarifications` usa o comment ID da pergunta como chave no ledger do PR. Guarda a decisão, o finding, head/base, prazo e estado `pending/answered/published/obsolete`. Admissão, reserva e correção são transacionais; uma pergunta não promove run nem obtém autoridade da review encerrada. `clarification_generations` conserva reservas incertas e settlements únicos; `clarification_reads` contém evidência temporária de até 64 KiB, removida ao responder, invalidar ou expirar pelo alarm. A resposta reconciliada usa `<!-- holon;clarification=<comment-id> -->`, sempre conferindo autoria do bot. Supersession de review revoga novas leituras e publicações de perguntas anteriores.

@@ -67,6 +67,9 @@ function session(permission = "write") {
   const repositoryPermission = vi.fn().mockResolvedValue(permission);
   const value: GitHubInstallationSession = {
     api: {} as never,
+    discussionReader: () => {
+      throw new Error("Discussion reader unused in this test");
+    },
     configurationReader: () => configurationReader(),
     currentHeadSha: vi.fn(),
     currentPullRequestRefs: vi.fn(),

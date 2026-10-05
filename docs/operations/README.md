@@ -25,3 +25,5 @@ dry-run não prova credenciais, bindings, cotas nem comportamento de produção.
 - [Configuração de repositório e editores](repository-configuration.md)
 
 - [Memória do repositório](repository-memory.md): comandos de proposta, aprovação, inspeção e revogação.
+
+- [Perguntas sobre findings](finding-clarification.md): invocação na discussão, autorização, limites e ativação dos bindings.

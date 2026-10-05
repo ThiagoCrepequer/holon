@@ -407,6 +407,16 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       CREATE TABLE memory_outbox(id TEXT PRIMARY KEY, delivery_json TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL);
     `,
   },
+  {
+    version: 21,
+    statements: `
+      CREATE TABLE finding_clarifications (id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, payload TEXT NOT NULL, tool_calls INTEGER NOT NULL, read_bytes INTEGER NOT NULL);
+      CREATE INDEX finding_clarifications_run ON finding_clarifications(run_id);
+      CREATE TABLE clarification_reads (question_id INTEGER NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE clarification_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, input_bytes INTEGER NOT NULL, output_tokens INTEGER NOT NULL, settled INTEGER NOT NULL);
+      CREATE INDEX clarification_generations_question ON clarification_generations(question_id);
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

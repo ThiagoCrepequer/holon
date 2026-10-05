@@ -17,3 +17,9 @@ export const reviewInvestigationLimits = {
   toolCalls: 96,
   outputTokens: 12_000,
 } as const;
+
+/** One finalization-only turn, charged to the existing investigation budget. */
+export const reviewSummaryRecoveryLimits = {
+  outputTokens: 1_024,
+  timeoutMs: 60_000,
+} as const;
