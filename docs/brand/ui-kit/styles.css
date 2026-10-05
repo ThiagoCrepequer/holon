@@ -889,6 +889,82 @@ dialog::backdrop {
     padding: 14px;
   }
 }
+.motion-disclosure {
+  inline-size: 100%;
+  justify-content: space-between;
+}
+.motion-chevron {
+  transition: transform var(--holon-motion-base) var(--holon-motion-ease);
+}
+.motion-disclosure[aria-expanded="true"] .motion-chevron {
+  transform: rotate(180deg);
+}
+.motion-expansion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--holon-motion-slow)
+    var(--holon-motion-ease-in-out);
+}
+.motion-expansion[aria-hidden="false"] {
+  grid-template-rows: 1fr;
+}
+.motion-expansion-inner {
+  min-block-size: 0;
+  overflow: hidden;
+}
+.motion-evidence {
+  padding-block: var(--holon-space-5);
+}
+.motion-evidence code {
+  overflow-wrap: anywhere;
+}
+.motion-metric {
+  margin-block: var(--holon-space-5);
+}
+.motion-value {
+  display: block;
+  inline-size: 4ch;
+  font-size: var(--holon-type-display-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--holon-leading-title);
+}
+.motion-status {
+  display: flex;
+  align-items: center;
+  gap: var(--holon-space-3);
+  min-block-size: var(--holon-size-control-md);
+  font-size: var(--holon-type-small);
+  color: var(--holon-text-secondary);
+}
+.motion-dots {
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  gap: 3px;
+  flex-shrink: 0;
+}
+.motion-dots[hidden] {
+  display: none;
+}
+.motion-dots i {
+  inline-size: 4px;
+  block-size: 4px;
+  border-radius: var(--holon-radius-pill);
+  background: currentColor;
+  animation: holon-pending var(--holon-motion-indicator-cycle)
+    var(--holon-motion-linear) infinite;
+  animation-delay: calc(
+    var(--holon-motion-indicator-cycle) / -9 * var(--dot-index)
+  );
+}
+@keyframes holon-pending {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

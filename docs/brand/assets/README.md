@@ -6,7 +6,8 @@ Consulte [logo.md](../logo.md) para tamanho mínimo, proteção e variantes.
 
 - `logo/`: assinaturas, símbolo, avatar e favicon, mais exportações PNG.
 - `patterns/seed-field.svg`: composição decorativa de sementes.
-- `icons/`: conjunto funcional próprio, grade de 24 px e traço de 1,75 px.
+- `icons/`: amostras autorais anteriores à preferência por Lucide, grade de 24 px
+  e traço de 1,75 px; novas interfaces seguem a [política de ícones](../foundations.md#ícones-e-camadas).
 - `previews/brand-overview.png`: apresentação resumida do sistema.
 - `fonts/`: Manrope, Instrument Serif e IBM Plex Mono em TTF e WOFF.
 

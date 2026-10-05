@@ -109,3 +109,54 @@ function renderState() {
 }
 stateSelect.addEventListener("change", renderState);
 renderState();
+
+const expansionButton = document.querySelector("#motion-expand");
+const expansion = document.querySelector("#motion-evidence");
+expansionButton.addEventListener("click", () => {
+  const expanded = expansionButton.getAttribute("aria-expanded") !== "true";
+  expansionButton.setAttribute("aria-expanded", String(expanded));
+  expansion.setAttribute("aria-hidden", String(!expanded));
+  expansion.inert = !expanded;
+});
+
+const refreshButton = document.querySelector("#motion-refresh");
+const metricValue = document.querySelector("#motion-value");
+const metricStatus = document.querySelector("#motion-status");
+const pendingDots = document.querySelector("#motion-dots");
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+reducedMotion.addEventListener("change", () => {
+  if (reducedMotion.matches) {
+    for (const animation of metricValue.getAnimations()) animation.cancel();
+  }
+});
+refreshButton.addEventListener("click", () => {
+  refreshButton.disabled = true;
+  refreshButton.setAttribute("aria-busy", "true");
+  pendingDots.hidden = false;
+  metricStatus.textContent = "Atualização simulada…";
+  setTimeout(() => {
+    metricValue.textContent = metricValue.textContent === "24" ? "28" : "24";
+    metricStatus.textContent = `Demonstração atualizada: ${metricValue.textContent} achados fictícios.`;
+    pendingDots.hidden = true;
+    refreshButton.disabled = false;
+    refreshButton.removeAttribute("aria-busy");
+    if (!reducedMotion.matches) {
+      const tokens = getComputedStyle(root);
+      metricValue.animate(
+        [
+          {
+            opacity: 0.4,
+            transform: `translateY(${tokens.getPropertyValue("--holon-motion-distance-micro").trim()})`,
+          },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        {
+          duration: Number.parseFloat(
+            tokens.getPropertyValue("--holon-motion-data"),
+          ),
+          easing: tokens.getPropertyValue("--holon-motion-ease").trim(),
+        },
+      );
+    }
+  }, 700);
+});

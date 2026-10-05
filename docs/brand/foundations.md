@@ -107,17 +107,35 @@ Não usar sombra para separar cada linha de conteúdo.
 
 ## Ícones e camadas
 
-Ícones funcionais usam grade de 24 × 24 px, traço de 1,75 px, pontas e junções
-arredondadas. Tamanhos usuais são 16, 20 e 24 px. O conjunto inicial próprio
-está em `assets/icons/`: busca, cópia, setas, link externo, confirmação,
-fechamento, informação, atenção e pull request. Insira o SVG inline para
-herdar `currentColor`; ícones decorativos usam `aria-hidden="true"`.
-Controles sem texto precisam de nome acessível que descreva a ação.
+**Lucide é o conjunto preferencial de ícones funcionais.** Escolher primeiro
+um SVG existente que represente a ação; não redesenhar busca, cópia, setas,
+fechamento ou PR quando o conjunto já atende. Em uma aplicação React, a
+integração fica em `packages/ui`, com imports individuais e defaults Holon,
+sem catálogo dinâmico de todos os ícones no bundle.
 
-Preserve o mesmo peso óptico ao ampliar o conjunto. Não misture emoji, ícones
-tridimensionais e conjuntos com espessuras distintas dentro da mesma navegação.
-Em plataformas externas como GitHub, símbolos de texto podem complementar
-rótulos porque os recursos gráficos são controlados pela plataforma.
+A grade é 24 × 24, com pontas/junções arredondadas e `currentColor`.
+Manter a configuração Holon de traço `1.75` na grade-base para o conjunto
+inteiro, em tamanhos usuais 16/20/24 px; não variar peso por tela. Lucide tem
+traço padrão 2 e permite configurá-lo. O valor 1.75 é uma escolha Holon, não
+o default upstream. Conferir peso óptico nos três tamanhos, com o mesmo
+comportamento de escala para Lucide e autorais.
+
+Criar ícone autoral somente para um conceito não atendido, seguindo a
+linguagem e especificação Lucide: grade, geometria, densidade, curvas,
+terminações e margens ópticas. Comparar lado a lado com os ícones usados
+antes de adicionar ao conjunto. A Semente é assinatura de marca e conserva
+sua geometria própria; não é um substituto de ícone funcional ou loader.
+
+Os arquivos atuais de `assets/icons/` e suas amostras no kit são autorais
+anteriores à escolha de Lucide. Não são um catálogo obrigatório para novas
+interfaces nem cópias atribuídas a Lucide. Preferir o SVG Lucide equivalente
+na implementação e revisar estilo de qualquer autoral que permaneça.
+
+Ícones decorativos usam `aria-hidden="true"`. Controles sem texto precisam de
+nome acessível que descreva a ação. Preservar licenças/atribuição ao incorporar
+SVGs externos. Não misturar emoji, ícones tridimensionais ou conjuntos com pesos
+distintos na mesma navegação. Em plataformas externas como GitHub, símbolos
+de texto podem complementar rótulos porque os gráficos pertencem à plataforma.
 
 | Camada   | Token `layer` | Finalidade                  |
 | -------- | ------------- | --------------------------- |
@@ -144,3 +162,9 @@ locais dos TTFs, com os mesmos desenhos e metadados.
 - [W3C — contraste de texto](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
 - [W3C — contraste não textual](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html).
 - [W3C — tamanho mínimo de alvo](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+
+Fontes de ícones verificadas em **2026-10-04**:
+
+- [Lucide React](https://lucide.dev/guide/react): SVGs e imports individuais.
+- [Stroke width](https://lucide.dev/guide/react/basics/stroke-width): default e configuração.
+- [Desenho de ícones](https://lucide.dev/contribute/icons/): linguagem e especificação do conjunto.

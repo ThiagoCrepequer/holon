@@ -54,7 +54,11 @@ Serif. O campo de sementes pode ocupar a lateral ou o fundo de uma seção,
 com contraste baixo e sem atravessar conteúdo. Não cobrir toda a página com
 formas ou distribuir o mesmo cartão em todas as seções.
 
-## Painel operacional
+## Dashboard dos usuários
+
+O dashboard é uma interface do produto para os usuários do Holon. Não é o
+console administrativo retirado pela ADR-0040. Os padrões abaixo orientam
+a composição visual; não significam que esses fluxos já estejam implantados.
 
 Navegação lateral de referência: 240 px em desktop. Em tablet, pode virar uma
 barra superior; em mobile, um menu acessível com rótulo. O conteúdo principal
@@ -85,21 +89,14 @@ não podem existir apenas numa imagem anexada.
 
 ## Movimento
 
-| Token         | Duração | Uso                                 |
-| ------------- | ------- | ----------------------------------- |
-| `motion-fast` | 120 ms  | Cor e feedback de hover             |
-| `motion-base` | 180 ms  | Abertura pequena e troca de estado  |
-| `motion-slow` | 280 ms  | Entrada de painel ou contexto maior |
+O guia [Movimento e continuidade](motion.md) define os tokens e receitas
+canônicos. Use seleção suave, expansão local e atualização no mesmo lugar;
+preserve leitura, foco e identidade. Entrada e saída de superfícies têm
+ritmos próprios; sequências iniciais têm atraso limitado.
 
-Curva padrão: `cubic-bezier(0.2, 0, 0, 1)`. Prefira opacidade e deslocamentos
-curtos, sem empurrar conteúdo durante leitura. Movimento deve indicar causa,
-continuidade ou resultado. Não girar a semente como um loader; use indicador
-de progresso independente, com texto e estado real.
-
-Respeite `prefers-reduced-motion`: remova deslocamentos e animações contínuas,
-mantendo feedback textual. Nunca invente porcentagem para uma execução sem
-progresso mensurável. Uma transição não deve atrasar confirmação ou bloquear
-teclado.
+CSS atende interações simples; um motor de layout/presença atende relações
+mais complexas. Não aplicar dois motores à mesma propriedade. Respeite
+movimento reduzido e não use a Semente como loader ou invente progresso.
 
 ## Aplicações de marca
 
