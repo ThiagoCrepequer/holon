@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --config vitest.config.ts --exclude \"**/*.viability.test.ts\"",
+    "test": "vitest run --config vitest.config.ts",
     "test:viability": "vitest run --config vitest.config.ts test/auth.viability.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:coverage": "vitest run --config vitest.config.ts --exclude \"**/*.viability.test.ts\" --coverage"
+    "test:coverage": "vitest run --config vitest.config.ts --coverage"
   },
   "devDependencies": {
     "@better-auth/core": "1.7.7",

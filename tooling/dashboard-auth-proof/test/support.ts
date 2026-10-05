@@ -7,9 +7,14 @@ import {
   type ProofAuth,
   type ProofPersistence,
 } from "../src/auth.js";
-import { handlePublicAuth } from "../src/public-handler.js";
+import {
+  handlePublicAuth,
+  type PublicProofAuth,
+} from "../src/public-handler.js";
 
 const definitions = [
+  `CREATE TABLE github_code_redemption (fingerprint TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)`,
+  `CREATE INDEX github_code_redemption_expiry ON github_code_redemption(expires_at, fingerprint)`,
   `CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
    emailVerified INTEGER NOT NULL, image TEXT, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)`,
   `CREATE TABLE session (id TEXT PRIMARY KEY, expiresAt INTEGER NOT NULL, token TEXT NOT NULL UNIQUE,
@@ -36,10 +41,12 @@ export interface GitHubIdentity {
   verified?: boolean;
 }
 
-export function fakeGitHub(options: { enforcePkceDowngrade?: boolean } = {}) {
+export function fakeGitHub(
+  options: { enforcePkceDowngrade?: boolean; now?: () => number } = {},
+) {
   const codes = new Map<
     string,
-    { identity: GitHubIdentity; authorizationURL: URL }
+    { identity: GitHubIdentity; authorizationURL: URL; expiresAt: number }
   >();
   const tokenRequests: {
     code: string;
@@ -73,7 +80,11 @@ export function fakeGitHub(options: { enforcePkceDowngrade?: boolean } = {}) {
         clientId: typeof clientId === "string" ? clientId : null,
         redirectURI: typeof redirectURI === "string" ? redirectURI : null,
       });
-      if (!grant || consumed.has(code))
+      if (
+        !grant ||
+        (options.now?.() ?? Date.now()) >= grant.expiresAt ||
+        consumed.has(code)
+      )
         return Response.json({ error: "bad_verification_code" });
       const params = grant.authorizationURL.searchParams;
       if (
@@ -166,6 +177,7 @@ export function fakeGitHub(options: { enforcePkceDowngrade?: boolean } = {}) {
       codes.set(code, {
         identity,
         authorizationURL: new URL(authorizationURL),
+        expiresAt: (options.now?.() ?? Date.now()) + 600000,
       });
     },
     get tokenRequests() {
@@ -208,7 +220,7 @@ export class CookieJar {
   }
 }
 
-export async function beginOAuth(auth: ProofAuth, jar = new CookieJar()) {
+export async function beginOAuth(auth: PublicProofAuth, jar = new CookieJar()) {
   const headers = jar.headers();
   headers.set("Content-Type", "application/json");
   headers.set("Origin", origin);
@@ -237,7 +249,7 @@ export async function beginOAuth(auth: ProofAuth, jar = new CookieJar()) {
 }
 
 export async function completeOAuth(
-  auth: ProofAuth,
+  auth: PublicProofAuth,
   flow: Awaited<ReturnType<typeof beginOAuth>>,
   code: string,
   headers = flow.jar.headers(),
@@ -251,7 +263,7 @@ export async function completeOAuth(
 }
 
 export async function signIn(
-  auth: ProofAuth,
+  auth: PublicProofAuth,
   github: ReturnType<typeof fakeGitHub>,
   code: string,
   identity: GitHubIdentity,

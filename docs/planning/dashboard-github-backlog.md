@@ -33,9 +33,11 @@ com o merge e a CI do PR documental. As funcionalidades do dashboard
 não foram implementadas por essa publicação. A execução local do milestone 0
 está nos [resultados das provas](../research/2026-10-05-dashboard-milestone-zero-results.md):
 DASH-02 agora comprova recuperação por linking nativo com email verificado
-aprovado em 2026-10-05, mas o consumo concorrente de state mantém NO-GO e continua
-bloqueante. O GitHub conserva o estado de merge/encerramento; não fechar #129
-pela existência do harness ou pelas duas provas de recuperação aprovadas.
+aprovado em 2026-10-05 e não reutilização concorrente de code com o
+[plugin público aprovado](../research/2026-10-05-dashboard-code-redemption-plugin.md).
+DASH-02 tem GO local nos dois adapters; as quatro provas de viabilidade
+integram o gate geral. O GitHub conserva o estado de revisão/merge e
+encerramento; não confundir prova M0 com auth produtiva.
 
 Nenhum prazo ou responsável individual foi inventado. Não foram criados
 recursos, secrets, DNS, migrations remotas nem deploys. ADRs aceitos continuam

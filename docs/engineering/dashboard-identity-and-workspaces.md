@@ -184,7 +184,10 @@ signup não verificado e impede outro subject de reivindicar esse User. Não usa
 
 A superfície pública continua sem `link-social`/gestão arbitrária de accounts.
 A prova não implementa Google/Microsoft, recuperação de User local não verificado,
-limpeza de órfãos ou onboarding. O gate de state concorrente continua pendente.
+limpeza de órfãos ou onboarding. O [plugin aprovado em M0](../research/2026-10-05-dashboard-code-redemption-plugin.md)
+satisfaz localmente a não reutilização de code por reserva atômica D1; a entrega
+produtiva deve transportar a política, sua tabela e manutenção para
+`packages/auth`/API, sem expor outro caminho de troca de token.
 
 ## Escopo explícito e várias abas
 

@@ -80,6 +80,25 @@ capacidade para um contrato explícito e restrito. Logging nativo também precis
 de integração sanitizada: codes/IDs operacionais, sem exceção arbitrária, cookies,
 headers de autorização ou resposta de provider. CI usa credenciais sintéticas.
 
+## Reserva durável de authorization code
+
+A composição local aprovada de M0 usa um
+[plugin público Better Auth](../research/2026-10-05-dashboard-code-redemption-plugin.md)
+na validação do code GitHub nativo, depois de state/cookie/prazo e antes da troca
+por token. Uma chave D1 por GitHub.com, client ID e digest do code dá um vencedor
+entre instâncias/requests, inclusive com novo state. Persistir apenas digest e
+expiração; falha/resultado ambíguo nega egress. Nunca liberar reserva por timeout,
+resposta perdida ou falha de Account/Session: recuperar por novo OAuth.
+
+Não substituir PKCE, integridade de state, rate-limit ou superfície pública
+restrita por essa reserva. O cliente não repete credencial válida; retenção
+cobre sua validade externa qualificada, com limpeza indexada limitada e
+manutenção após ociosidade. Expiração de marcador não é lease de retry.
+Restaurar um banco sem reservas vivas exige bloquear callbacks/inutilizar os
+fluxos pendentes durante a validade externa antes de retomar. Não registrar
+code, verifier ou exceção arbitrária. A prova não cria tabela/binding/scheduler
+produtivos: integrar e retestar na entrega `packages/auth`/API.
+
 ## CSRF, origens, redirects e reautenticação
 
 - GET/HEAD não aceitam convite, saem de workspace, revogam sessão ou alteram

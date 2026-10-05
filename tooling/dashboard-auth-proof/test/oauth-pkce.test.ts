@@ -144,7 +144,7 @@ describe.each(["drizzle", "native-d1"] as const)(
       expect(context?.user.id).toBe(rows.users[0]?.id);
     });
 
-    it("keeps the non-atomic state diagnostic visible while a PKCE-bound code can produce only one session", async () => {
+    it("preserves native PKCE while the plugin submits a concurrent code once", async () => {
       const auth = await setupAuth(persistence);
       const github = fakeGitHub();
       const flow = await beginOAuth(auth);
@@ -153,7 +153,7 @@ describe.each(["drizzle", "native-d1"] as const)(
         completeOAuth(auth, flow, "concurrent-pkce", flow.initialHeaders),
         completeOAuth(auth, flow, "concurrent-pkce", flow.initialHeaders),
       ]);
-      expect(github.exchanges).toBe(2);
+      expect(github.exchanges).toBe(1);
       expect(github.acceptedExchanges).toBe(1);
       expect(
         responses.filter(

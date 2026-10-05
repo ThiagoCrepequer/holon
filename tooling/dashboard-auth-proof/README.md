@@ -1,47 +1,50 @@
 # Prova local de autenticação do dashboard
 
-Workspace privado, sem Worker implantável, rota produtiva, secrets reais ou scripts
-para deploy. Executa Better Auth/Drizzle reais em Workerd e D1 locais pelo plugin
-oficial Cloudflare. Somente a rede do GitHub é sintética e todo outro fetch é negado.
+Workspace privado, sem Worker implantável, auth produtiva, secrets reais ou
+scripts de deploy. Better Auth 1.7.7/Drizzle 0.45.3 são executados em Workerd/D1
+locais pelo plugin oficial Cloudflare; somente a rede GitHub é sintética.
 
-A política aprovada em **2026-10-05** usa linking implícito nativo, exigindo email
-verificado no provider e no User local, sem `trustedProviders` que dispensem
-verificação. Recuperação usa novo OAuth, nunca replay do callback anterior.
-Drizzle com `transaction: false` e D1 nativo oficial recuperam Account interrompida
-preservando o User original quando o email verificado é o mesmo.
+A composição aprovada em **2026-10-05** usa linking nativo com email verificado
+recebido/local (`trustedProviders: []`) e plugin Holon de reserva atômica do
+code. `init(context)` decora o provider GitHub nativo após validação de state,
+cookie e prazo. D1 persiste apenas digest e expiração antes da token request;
+conflito/falha nega egress. Resultado incerto não libera a reserva: novo OAuth
+recupera. Não há patch/copiação de core ou transação interativa D1.
 
-`pnpm --filter @holon/dashboard-auth-proof test` executa **59 cenários** de
-recuperação, linking permitido/negado, corridas, state/cookie inválido ou expirado,
-code consumido, sessão, criptografia e fronteira HTTP. `test:coverage` instrumenta
-somente `src/**/*.ts` deste harness: 100% linhas/funções/statements e 96,42%
-branches; não mede cobertura interna das bibliotecas. `typecheck` verifica os tipos.
+`pnpm --filter @holon/dashboard-auth-proof test` executa **101 cenários**,
+incluindo os quatro asserts de viabilidade. `test:viability` é o comando focado
+e agora passa; não existe exclusão desse arquivo em `test`/`test:coverage`.
+`test:coverage` instrumenta todo `src/**/*.ts`: 100% linhas/funções/statements,
+96,87% branches, mantendo thresholds 90/90/90/85. Não mede core de terceiros.
+`typecheck` verifica os tipos da composição e do ponto de extensão público.
 
-`test:viability` é um gate **separado** com quatro asserts comuns: as duas provas
-de recuperação passam e as duas de não reutilização concorrente de code falham.
-Replay sequencial com cookie ORIGINAL é negado. O concorrente envia o mesmo código
-duas vezes ao provider; o GitHub sintético valida S256 e uso único e só cria uma
-sessão. Isso não demonstra takeover, mas não satisfaz a obrigação do cliente
-na RFC 6749 §4.1.2. Atomicidade de state é um mecanismo possível, não a garantia
-universal exigida pela RFC 9700 quando PKCE vincula corretamente o fluxo.
-O comando termina **exit 1**; não há `it.fails`, skip ou inversão da expectativa.
+`createNativeProofAuth` existe apenas para conservar a reprodução nativa nos
+dois adapters: sem plugin, duas requests concorrentes chegam ao token endpoint.
+Não é um modo/fallback de auth produtiva. A composição candidata faz uma troca
+e mantém PKCE, perfil, criptografia e sessão nativos. As provas incluem falhas
+D1, resposta perdida, instâncias independentes, replay com novo state, configuração
+ambígua, limpeza limitada e recuperação. Triggers são injeção de falhas, nunca
+mecanismo de recuperação.
 
-Os INSERTs User/Account continuam separados; os testes observam queries e ausência
-de batch no callback real. Triggers temporárias abortam INSERT para injetar falha;
-não são mecanismo de recuperação. Se o email muda antes da criação de Account,
-o novo OAuth pode deixar um User sem Account/Session. Onboarding e limpeza de
-órfãos não foram implementados. Signup nativo com email não verificado é possível,
-mas não autoriza linking de outro subject nem comprova destinatário de convite.
+A reserva dura 24 h pelo relógio D1. Cada callback limpa até 100 marcadores
+expirados na mesma transação; `pruneExpiredGithubCodes` permite manutenção após
+ociosidade. A fixture não tem scheduler: sua integração/migração pertence a
+#140. Não reabrir código válido ou prometer deduplicação eterna. A garantia de
+prazo externo e a diferença de explicitude entre docs OAuth App/GitHub App estão
+registradas no relatório do plugin e devem ser qualificadas antes da promoção.
 
-Um resultado diagnóstico verde não fecha #129 nem o milestone 0. Schema,
-credenciais, rate-limit desligado e handler mínimo são fixtures, não configuração
-produtiva. O relatório distingue a política anterior, a atualização aprovada,
-a prova local e a integração GitHub/Cloudflare remota ainda não exercitada.
+User/Account continuam com INSERTs separados; linking com mesmo email verificado
+recupera conservando o User original. Email alterado antes de criar Account pode
+deixar User incompleto. Onboarding, limpeza de órfãos e tenancy não foram
+implementados. Signup não verificado não comprova destinatário de convite.
+Rate-limit desligado, schema, credenciais e handler mínimo são fixtures.
 
-Os 17 casos adicionais observam challenge/verifier nativos, injeção de outro
-fluxo, downgrade e replay com PKCE. Um caso adversarial desliga deliberadamente
-a defesa de downgrade no provider sintético: demonstra a dependência dessa
-premissa, sem provar comportamento ou vulnerabilidade do GitHub real.
+GO é local da composição M0; encerramento de #129 depende da revisão/merge.
+Não há OAuth/GitHub App real, deploy, benchmark ou prova regional. Um caso
+adversarial desliga downgrade no fake para demonstrar a premissa externa,
+sem alegar vulnerabilidade do GitHub real.
 
 Fontes, comandos e limites:
-[relatório da prova](../../docs/research/2026-10-05-dashboard-auth-proof.md) e
-[avaliação do requisito OAuth](../../docs/research/2026-10-05-dashboard-oauth-security-requirements.md).
+[relatório auth](../../docs/research/2026-10-05-dashboard-auth-proof.md),
+[política de reserva](../../docs/research/2026-10-05-dashboard-code-redemption-plugin.md) e
+[avaliação OAuth](../../docs/research/2026-10-05-dashboard-oauth-security-requirements.md).

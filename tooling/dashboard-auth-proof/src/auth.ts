@@ -1,19 +1,22 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { drizzle } from "drizzle-orm/d1";
 
+import { githubCodeRedemptionPlugin } from "./github-code-redemption-plugin.js";
 import * as schema from "./schema.js";
 
 export const origin = "https://dashboard-proof.invalid";
 
 export type ProofPersistence = "drizzle" | "native-d1";
 
-export function createProofAuth(
+function createAuth(
   database: D1Database,
-  persistence: ProofPersistence = "drizzle",
+  persistence: ProofPersistence,
+  plugins: BetterAuthPlugin[],
 ) {
   return betterAuth({
     baseURL: origin,
+    plugins,
     secret: "synthetic-proof-secret-not-valid-outside-this-test-0001",
     database:
       persistence === "native-d1"
@@ -46,6 +49,23 @@ export function createProofAuth(
     logger: { disabled: true },
     rateLimit: { enabled: false },
   });
+}
+
+export function createProofAuth(
+  database: D1Database,
+  persistence: ProofPersistence = "drizzle",
+) {
+  return createAuth(database, persistence, [
+    githubCodeRedemptionPlugin(database),
+  ]);
+}
+
+// Diagnostic baseline only: never an alternative production authentication mode.
+export function createNativeProofAuth(
+  database: D1Database,
+  persistence: ProofPersistence = "drizzle",
+) {
+  return createAuth(database, persistence, []);
 }
 
 export type ProofAuth = ReturnType<typeof createProofAuth>;

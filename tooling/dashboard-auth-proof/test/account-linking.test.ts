@@ -2,7 +2,7 @@ import { reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { origin } from "../src/auth.js";
+import { createNativeProofAuth, origin } from "../src/auth.js";
 import { handlePublicAuth } from "../src/public-handler.js";
 import {
   beginOAuth,
@@ -25,7 +25,8 @@ describe.each(["drizzle", "native-d1"] as const)(
   "%s: verified-email implicit linking policy",
   (persistence) => {
     it("does not group User and Account writes in D1.batch despite successful native recovery", async () => {
-      const auth = await setupAuth(persistence);
+      await setupAuth(persistence);
+      const auth = createNativeProofAuth(env.AUTH_DB, persistence);
       const github = fakeGitHub();
       const flow = await beginOAuth(auth);
       github.authorize("separate-writes", person, flow.authorizationURL);
@@ -127,7 +128,7 @@ describe.each(["drizzle", "native-d1"] as const)(
       },
     );
 
-    it("rejects an already exchanged code even with a fresh valid state", async () => {
+    it("blocks an already exchanged code before egress even with a fresh valid state", async () => {
       const auth = await setupAuth(persistence);
       const github = fakeGitHub();
       await signIn(auth, github, "single-use", person);
@@ -136,7 +137,7 @@ describe.each(["drizzle", "native-d1"] as const)(
       const response = await completeOAuth(auth, fresh, "single-use");
       expect(response.headers.get("Location")).not.toBe(`${origin}/signed-in`);
       expect(fresh.jar.hasSession()).toBe(false);
-      expect(github.exchanges).toBe(2);
+      expect(github.exchanges).toBe(1);
       expect(await snapshot()).toEqual(before);
     });
 

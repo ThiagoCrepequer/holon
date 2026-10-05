@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { origin } from "../src/auth.js";
+import { createNativeProofAuth, origin } from "../src/auth.js";
 import { handlePublicAuth } from "../src/public-handler.js";
 import * as schema from "../src/schema.js";
 import {
@@ -24,7 +24,7 @@ afterEach(async () => {
 
 const person = { id: 9001, email: "person@example.invalid" };
 
-describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)", () => {
+describe("real Better Auth + D1 composition and native baseline", () => {
   it("uses a fixture matching every Drizzle column and actual D1 foreign-key constraints", async () => {
     await setupAuth();
     for (const table of [
@@ -103,24 +103,28 @@ describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)",
     expect((await snapshot()).sessions).toHaveLength(1);
   });
 
-  it("records non-atomic native state handling: concurrent callbacks both reach GitHub but its single-use code prevents a second login", async () => {
-    const auth = await setupAuth();
-    const github = fakeGitHub();
-    const flow = await beginOAuth(auth);
-    github.authorize("shared-code", person, flow.authorizationURL);
-    const results = await Promise.all([
-      completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
-      completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
-    ]);
-    expect(
-      results.filter(
-        (response) =>
-          response.headers.get("Location") === `${origin}/signed-in`,
-      ),
-    ).toHaveLength(1);
-    expect(github.exchanges).toBe(2);
-    expect((await snapshot()).sessions).toHaveLength(1);
-  });
+  it.each(["drizzle", "native-d1"] as const)(
+    "%s: native baseline without the plugin submits a concurrent code twice",
+    async (persistence) => {
+      await setupAuth(persistence);
+      const auth = createNativeProofAuth(env.AUTH_DB, persistence);
+      const github = fakeGitHub();
+      const flow = await beginOAuth(auth);
+      github.authorize("shared-code", person, flow.authorizationURL);
+      const results = await Promise.all([
+        completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
+        completeOAuth(auth, flow, "shared-code", flow.initialHeaders),
+      ]);
+      expect(
+        results.filter(
+          (response) =>
+            response.headers.get("Location") === `${origin}/signed-in`,
+        ),
+      ).toHaveLength(1);
+      expect(github.exchanges).toBe(2);
+      expect((await snapshot()).sessions).toHaveLength(1);
+    },
+  );
 
   it.each(["drizzle", "native-d1"] as const)(
     "%s: recovers interrupted Account creation through native verified-email linking",

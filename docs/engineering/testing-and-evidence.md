@@ -122,7 +122,12 @@ a premissa de rejeição de downgrade do provider. Contar token requests por cod
 nos callbacks concorrentes: uma sessão final não prova que o cliente não repetiu
 a troca. O fake valida o limite externo; não comprova comportamento remoto.
 Manter diagnósticos e gate de viabilidade distintos, sem inverter a expectativa
-normativa quando o candidato falha.
+normativa quando o candidato falha. Depois de aprovar a composição, incluir
+seus asserts de viabilidade nos comandos normais de teste/cobertura e na CI.
+A [reserva de code aprovada em M0](../research/2026-10-05-dashboard-code-redemption-plugin.md)
+exige também instâncias independentes, novo state, resultado D1 ambíguo/falho,
+resposta externa perdida, retenção e manutenção limitada. Conservar a reprodução
+sem plugin como baseline explicitamente identificado, nunca como fallback.
 
 ## Dashboard: direção de teste após Q8/Q10/Q11
 

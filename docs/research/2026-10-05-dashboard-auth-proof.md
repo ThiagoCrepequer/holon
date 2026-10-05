@@ -13,7 +13,42 @@ related:
 
 # Prova local de autenticação: Better Auth e D1
 
-## Resultado da política aprovada em 2026-10-05
+## Resultado atual: plugin aprovado e gate local satisfeito
+
+**GO local para #129**, com Better Auth 1.7.7, linking nativo por email verificado
+e plugin Holon de reserva atômica do code. Drizzle 0.45.3/D1 e D1 nativo passam
+recuperação por novo OAuth e não reutilização concorrente do code. Os quatro
+asserts de viabilidade estão agora incluídos nos testes/cobertura normais,
+sem exclusões ou inversão de expectativa. A bancada conserva a reprodução
+nativa sem plugin nos dois adapters, com duas token requests.
+
+A [prova do plugin](2026-10-05-dashboard-code-redemption-plugin.md) descreve a
+API pública usada, retenção de 24 h, limpeza limitada, falhas fechadas,
+resposta perdida e manutenção. A exclusão mútua usa a chave por GitHub.com,
+client ID e code, sem persistir a credencial. Duas instâncias auth compartilham
+D1 e só uma troca chega ao provider; novo state não reabre a reserva.
+
+A composição total tem **101 testes**, com 100% linhas/funções/statements e
+96,87% branches de `src/**/*.ts`. São evidências locais Workerd/D1 com provider
+sintético; não medem o core de terceiros nem a configuração GitHub real.
+Retenção depende de prazo externo qualificado; a página de GitHub App não
+repete explicitamente os dez minutos documentados para web OAuth. O relatório
+registra essa diferença e o gate remoto antes da promoção. PKCE/downgrade e
+expiração reais permanecem evidência de integração futura, não resultado de M0.
+
+Nenhum auth/tenancy produtivo, secret, recurso remoto, migration produtiva ou
+deploy foi criado. User/Account continuam com INSERTs separados; login concluído
+e Account vinculada são pré-condições de qualquer autoridade Holon. Se email
+muda antes de criar Account, pode sobrar User incompleto. O linking aprovado
+não muda esse limite. O GitHub mantém o estado de merge/encerramento: o PR de
+M0 pode encerrar #129 após revisão/merge da composição, não pela existência do
+harness ou de um diagnóstico isolado.
+
+## Registro da política de linking aprovada, antes do plugin
+
+Este registro conserva o resultado intermediário sem reserva de code. O NO-GO
+abaixo foi superado pela composição e prova acima; o parser nativo permanece
+inalterado.
 
 **Recuperação por email verificado comprovada localmente; gate completo ainda
 NO-GO pela reutilização concorrente de code.** O responsável aprovou usar a

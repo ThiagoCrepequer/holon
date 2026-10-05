@@ -17,11 +17,12 @@ related:
 
 A afirmação sobre a RFC 9700 está correta. O requisito de #129 deve nomear a
 **garantia de segurança**, sem exigir atomicidade de state como único mecanismo.
-Isso não libera o candidato atual: Better Auth 1.7.7 envia o mesmo authorization
-code duas vezes em callbacks concorrentes, mesmo com PKCE. **NO-GO permanece**;
-não há justificativa para dispensar a não reutilização do code pelo cliente.
-Esta revisão responde à solicitação de avaliar a dispensa; não aprova auth
-produtiva, altera ADR aceito ou instala uma solução alternativa.
+Better Auth 1.7.7 nativo envia o mesmo authorization code duas vezes em
+callbacks concorrentes, mesmo com PKCE; não há justificativa para dispensar
+a não reutilização do code pelo cliente. O [plugin aprovado e provado](2026-10-05-dashboard-code-redemption-plugin.md)
+resolve essa obrigação por reserva D1 na fronteira pública do provider:
+**GO local da composição**, mantendo o parser nativo e suas validações.
+Isso não aprova auth produtiva nem altera ADR aceito.
 
 ## O que os padrões exigem
 
@@ -69,7 +70,7 @@ em validar PKCE. Trocar pelo adapter D1 nativo conserva o resultado.
 ## Provas adicionadas e limites
 
 [`test/oauth-pkce.test.ts`](../../tooling/dashboard-auth-proof/test/oauth-pkce.test.ts)
-exercita o handler/provider/adapters publicados com Workerd e D1 locais. Só a
+exercita o handler/provider/adapters publicados com Workerd e D1 locais. O plugin Holon decora o provider nativo; só a
 rede GitHub é sintética. O fake valida S256, client/redirect, downgrade e uso único;
 seu hash WebCrypto é confrontado com um oráculo Node independente e o vetor
 publicado na [RFC 7636, apêndice B](https://www.rfc-editor.org/rfc/rfc7636.html#appendix-B).
@@ -80,7 +81,7 @@ publicado na [RFC 7636, apêndice B](https://www.rfc-editor.org/rfc/rfc7636.html
 | Código de outro fluxo com state e cookie válidos da vítima           | Provider nega PKCE; nenhum User/Account/Session                                                     |
 | Código emitido sem challenge; provider rejeita downgrade             | Provider nega; nenhuma sessão                                                                       |
 | Mesmo ataque; defesa de downgrade desabilitada no fake               | Login da identidade atacante no browser da vítima; premissa de segurança explicitada                |
-| Dois callbacks simultâneos com mesmo state/cookie/code e PKCE válido | Duas token requests, uma troca aceita e uma sessão; gate de não reutilização falha                  |
+| Dois callbacks simultâneos com mesmo state/cookie/code e PKCE válido | Com plugin: uma token request/sessão; baseline nativo: duas requests e uma sessão                   |
 | Verifier ausente/incorreto/formato inválido e vetor RFC              | Fake nega negativos e aceita o vetor publicado                                                      |
 
 O ataque adversarial pressupõe que o atacante aprendeu o state da vítima e
@@ -90,13 +91,16 @@ no fake modela uma premissa externa ausente, **não demonstra falha do GitHub**.
 O fake nega code repetido, mas não simula revogação posterior dos tokens.
 Uma sessão local não prova que o token manteria validade no provider real.
 
-A suite diagnóstica passou **59 casos**; o gate separado continua com **duas
-provas verdes e duas falhas, exit 1**, uma por adapter. Os testes novos falharam
+Antes do plugin, a suite diagnóstica passou **59 casos** e o gate separado
+teve **duas provas verdes e duas falhas, exit 1**, uma por adapter. A composição
+aprovada passou **101 casos**, incluindo os quatro asserts de viabilidade no
+gate normal. Mantém a reprodução nativa, sem tratar suas duas token requests
+como aprovação da composição. Os testes novos falharam
 primeiro contra o fake permissivo: isso revelou insuficiência da simulação,
 não um defeito de PKCE da biblioteca. Após fortalecer somente esse limite
 externo, os negativos passaram. Não há patch do core, bypass produtivo, skip,
 `it.fails` ou expectativa invertida para liberar o gate. Cobertura do harness
-permanece 100% linhas/funções/statements e 96,42% branches, sem medir o core.
+passou a 100% linhas/funções/statements e 96,87% branches, sem medir o core.
 
 ## Requisito revisado e próximo gate
 
@@ -106,8 +110,11 @@ submeter o mesmo code mais de uma vez. Recuperação inicia novo OAuth. PKCE nat
 S256 e suas premissas externas devem acompanhar a evidência de CSRF.
 
 A revisão elimina a imposição de um mecanismo específico de state, mas mantém
-o teste observável de uma token request por code. O candidato falha porque faz
-duas. É necessário obter uma composição oficialmente suportada que satisfaça
-essa obrigação e repetir os testes. A avaliação do provider real deve registrar
+o teste observável de uma token request por code. O candidato nativo falha porque faz
+duas; o plugin usa o ponto de extensão público `init(context)` e agora satisfaz
+a obrigação na bancada. A reserva é responsabilidade Holon, não correção
+oficial do core. Não há lease/retry da mesma credencial; novo OAuth recupera.
+A retenção cobre a validade externa qualificada, sem prometer deduplicação
+eterna de códigos expirados. A avaliação do provider real deve registrar
 S256, rejeição de mismatch/downgrade e replay antes de alegar sua comprovação
 remota. Não foram usados secrets, GitHub App real, banco remoto ou deploy.

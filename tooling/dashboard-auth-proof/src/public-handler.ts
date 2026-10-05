@@ -1,10 +1,14 @@
 import { origin, type ProofAuth } from "./auth.js";
 
+export type PublicProofAuth = Pick<ProofAuth, "handler"> & {
+  api: Pick<ProofAuth["api"], "getSession">;
+};
+
 const privateHeaders = { "Cache-Control": "private, no-store" };
 
 // Minimal proof composition. Not an auth implementation for apps/dashboard.
 export async function handlePublicAuth(
-  auth: ProofAuth,
+  auth: PublicProofAuth,
   request: Request,
 ): Promise<Response> {
   const url = new URL(request.url);

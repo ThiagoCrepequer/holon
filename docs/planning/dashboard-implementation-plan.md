@@ -33,9 +33,11 @@ ligam cada gate à bancada e sua evidência. Com a
 Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth
 com o mesmo email verificado. A [avaliação normativa de OAuth](../research/2026-10-05-dashboard-oauth-security-requirements.md)
 permite outro mecanismo de CSRF com PKCE válido, mas o gate independente de
-não reutilização concorrente de code ainda falha nos dois adapters. A issue #129 e seus dependentes permanecem
-bloqueados; não concluir o milestone pelo sucesso da recuperação ou das outras
-provas. User/Account continuam não atômicos; mudança de email durante a falha
+não reutilização concorrente de code passa nos dois adapters com o
+[plugin público aprovado](../research/2026-10-05-dashboard-code-redemption-plugin.md).
+O resultado é GO local da composição M0; o GitHub informa revisão/merge e
+encerramento de #129 e dependentes. A existência da bancada não implementa
+as entregas seguintes. User/Account continuam não atômicos; mudança de email durante a falha
 pode deixar User incompleto, sem Account/Session e sem autoridade Holon.
 Não aceitar patch do core, bypass de verificação ou recuperação manual
 obrigatória de cadastro como dívida para depois. O MVP limita funcionalidades;
