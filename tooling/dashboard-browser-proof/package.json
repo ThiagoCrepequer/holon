@@ -1,0 +1,39 @@
+{
+  "name": "@holon/dashboard-browser-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm i18n:check && react-router build && node scripts/check-bundle.mjs",
+    "typecheck": "pnpm i18n:check && react-router typegen && tsc --noEmit",
+    "proof": "playwright test",
+    "serve:proof": "wrangler dev --config build/server/wrangler.json --local --port 8793 --ip 127.0.0.1",
+    "lint": "oxlint .",
+    "test": "pnpm build && pnpm proof",
+    "test:coverage": "pnpm build && pnpm proof",
+    "i18n:extract": "lingui extract --clean --workers 1",
+    "i18n:check": "lingui check sync && lingui check missing --mode catalog && lingui compile --strict --typescript --workers 1 && node scripts/check-i18n-gate.mjs"
+  },
+  "dependencies": {
+    "@lingui/core": "6.9.0",
+    "@lingui/react": "6.9.0",
+    "@tanstack/react-query": "5.104.1",
+    "hono": "catalog:",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.62.5",
+    "@cloudflare/workers-types": "catalog:",
+    "@lingui/cli": "6.9.0",
+    "@lingui/format-po": "6.9.0",
+    "@playwright/test": "1.63.0",
+    "@react-router/dev": "8.4.0",
+    "@types/node": "catalog:",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "catalog:",
+    "vite": "8.2.2",
+    "wrangler": "4.147.0"
+  }
+}

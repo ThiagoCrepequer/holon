@@ -500,3 +500,18 @@ Essas condições técnicas não reabrem políticas de produto acordadas. MVP re
 funcionalidades, não aceita identidade, autorização, recuperação ou teste como
 refatoração posterior. Os resultados das verificações desta revisão ficam no
 relatório; não se confundem com o método/evidência das rodadas históricas.
+
+## Ajuste explícito da política de linking — 2026-10-05
+
+Depois da investigação e do debate de segurança, o responsável aprovou testar
+vinculação implícita padrão do Better Auth por email verificado no provider e no
+User local. Isso substitui a restrição geral de Q32 sobre linking por email;
+não muda destinatário verificado, envio de convite, grants privados ou tenancy.
+A [referência dona da política](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05)
+define limites e risco de reutilização do endereço. A resposta original de Q32
+acima conserva o histórico, não deve orientar a configuração atual de auth.
+
+A [prova atual](../research/2026-10-05-dashboard-auth-proof.md#resultado-da-política-aprovada-em-2026-10-05)
+passa recuperação de Account por novo OAuth nos dois adapters D1. A condição
+independente de consumo concorrente de state continua falhando; aprovação da
+política de email não autoriza enfraquecer esse gate nem declarar #129 concluída.

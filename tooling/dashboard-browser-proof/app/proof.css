@@ -1,0 +1,7 @@
+/* Layout fixtures only: enough document height to prove scroll continuity. */
+main {
+  min-height: 200vh;
+}
+form {
+  margin-top: 40vh;
+}

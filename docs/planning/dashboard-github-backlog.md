@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - dashboard-implementation-plan.md
   - dashboard-engineering-decision-review.md
@@ -29,8 +29,15 @@ publicou as referências no commit `e57129fcbe64e36ed8f05a5d4efae051f9a0e87f`.
 Os links das issues usam esse SHA para preservar a fonte durante evoluções posteriores.
 
 A [base documental #128](https://github.com/ThiagoCrepequer/holon/issues/128) foi encerrada
-com o merge e a CI do PR documental. As provas técnicas e funcionalidades
-continuam abertas; o dashboard não foi implementado por esta publicação.
+com o merge e a CI do PR documental. As funcionalidades do dashboard
+não foram implementadas por essa publicação. A execução local do milestone 0
+está nos [resultados das provas](../research/2026-10-05-dashboard-milestone-zero-results.md):
+DASH-02 agora comprova recuperação por linking nativo com email verificado
+aprovado em 2026-10-05 e não reutilização concorrente de code com o
+[plugin público aprovado](../research/2026-10-05-dashboard-code-redemption-plugin.md).
+DASH-02 tem GO local nos dois adapters; as quatro provas de viabilidade
+integram o gate geral. O GitHub conserva o estado de revisão/merge e
+encerramento; não confundir prova M0 com auth produtiva.
 
 Nenhum prazo ou responsável individual foi inventado. Não foram criados
 recursos, secrets, DNS, migrations remotas nem deploys. ADRs aceitos continuam

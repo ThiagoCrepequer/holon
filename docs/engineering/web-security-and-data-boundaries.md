@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -80,6 +80,25 @@ capacidade para um contrato explícito e restrito. Logging nativo também precis
 de integração sanitizada: codes/IDs operacionais, sem exceção arbitrária, cookies,
 headers de autorização ou resposta de provider. CI usa credenciais sintéticas.
 
+## Reserva durável de authorization code
+
+A composição local aprovada de M0 usa um
+[plugin público Better Auth](../research/2026-10-05-dashboard-code-redemption-plugin.md)
+na validação do code GitHub nativo, depois de state/cookie/prazo e antes da troca
+por token. Uma chave D1 por GitHub.com, client ID e digest do code dá um vencedor
+entre instâncias/requests, inclusive com novo state. Persistir apenas digest e
+expiração; falha/resultado ambíguo nega egress. Nunca liberar reserva por timeout,
+resposta perdida ou falha de Account/Session: recuperar por novo OAuth.
+
+Não substituir PKCE, integridade de state, rate-limit ou superfície pública
+restrita por essa reserva. O cliente não repete credencial válida; retenção
+cobre sua validade externa qualificada, com limpeza indexada limitada e
+manutenção após ociosidade. Expiração de marcador não é lease de retry.
+Restaurar um banco sem reservas vivas exige bloquear callbacks/inutilizar os
+fluxos pendentes durante a validade externa antes de retomar. Não registrar
+code, verifier ou exceção arbitrária. A prova não cria tabela/binding/scheduler
+produtivos: integrar e retestar na entrega `packages/auth`/API.
+
 ## CSRF, origens, redirects e reautenticação
 
 - GET/HEAD não aceitam convite, saem de workspace, revogam sessão ou alteram
@@ -104,6 +123,14 @@ headers de autorização ou resposta de provider. CI usa credenciais sintéticas
   recente do mesmo User/intent na integração definida. Renovação móvel e refresh
   GitHub não são reauth. Não prometer senha/MFA por parâmetro não suportado.
   Ações e janela de reauth devem estar explícitas e testadas antes de expô-las.
+
+A [avaliação OAuth de 2026-10-05](../research/2026-10-05-dashboard-oauth-security-requirements.md)
+separa CSRF de não reutilização de code: PKCE válido permite não exigir consumo
+atômico de state como mecanismo único, preservando vínculo e integridade do
+contexto. Callbacks concorrentes não podem fazer o cliente submeter o mesmo
+code duas vezes. Essa condição ainda falha no candidato 1.7.7; não considerar
+uma única sessão no fake como dispensa. As premissas externas e a ausência de
+prova remota estão no relatório.
 
 ## Convites sem credencial de ingresso na URL
 

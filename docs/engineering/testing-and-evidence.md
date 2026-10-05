@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 ---
 
 # Testes e evidência de entrega
@@ -114,6 +114,20 @@ autorização entram depois do debate de autenticação.
 
 A referência WCAG foi conferida em 2026-10-04. Não foram implementadas configs,
 suites, autenticação ou deploy nesta etapa documental.
+
+A [prova OAuth ampliada em 2026-10-05](../research/2026-10-05-dashboard-oauth-security-requirements.md)
+exige observar challenge S256 distinto e verifier correspondente no request
+nativo, negar injeção de code de outro fluxo com state/cookie válidos e explicitar
+a premissa de rejeição de downgrade do provider. Contar token requests por code
+nos callbacks concorrentes: uma sessão final não prova que o cliente não repetiu
+a troca. O fake valida o limite externo; não comprova comportamento remoto.
+Manter diagnósticos e gate de viabilidade distintos, sem inverter a expectativa
+normativa quando o candidato falha. Depois de aprovar a composição, incluir
+seus asserts de viabilidade nos comandos normais de teste/cobertura e na CI.
+A [reserva de code aprovada em M0](../research/2026-10-05-dashboard-code-redemption-plugin.md)
+exige também instâncias independentes, novo state, resultado D1 ambíguo/falho,
+resposta externa perdida, retenção e manutenção limitada. Conservar a reprodução
+sem plugin como baseline explicitamente identificado, nunca como fallback.
 
 ## Dashboard: direção de teste após Q8/Q10/Q11
 
@@ -273,8 +287,11 @@ de D1/DO e a composição de handlers permanecem reais no runtime de teste.
 
 Para auth, distinguir repetição de operação de negócio de replay de credencial:
 state/code OAuth consumidos são rejeitados; cadastro interrompido deve recuperar
-por **novo fluxo OAuth**, sem órfão bloqueante, User duplicado ou fusão por email.
-Aceite repetido de convite não recria membership posteriormente removida.
+por **novo fluxo OAuth**, sem órfão bloqueante ou User duplicado. A
+[política de linking ajustada em 2026-10-05](dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05)
+permite o vínculo nativo por mesmo email verificado no provider e no User local;
+provar ambos os casos negativos e estabilidade do User para Account já vinculada.
+Aceite repetido de convite não funde usuários nem recria membership removida.
 Testar respostas auth reduzidas, métodos/paths não expostos, cookies/CSRF,
 conteúdo hostil em SSR/Markdown e nonce no build. As regras estão no
 [guia de segurança web](web-security-and-data-boundaries.md).

@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 ---
 
 # Mapa da documentacao
@@ -14,7 +14,10 @@ documentacao distingue deliberadamente evidencias historicas, decisoes
 normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 
 O [backlog do dashboard no GitHub](planning/dashboard-github-backlog.md)
-localiza as entregas, milestones e gates dessa evolução.
+localiza as entregas, milestones e gates dessa evolução. Os
+[resultados do milestone 0](research/2026-10-05-dashboard-milestone-zero-results.md)
+registram os gates com GO local da composição, incluindo o plugin auth; não representam
+um dashboard publicado.
 
 ## Caminhos de leitura
 
@@ -57,7 +60,11 @@ física permanece proposta, sem representar runtime já implementado.
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
 Ele liga as escolhas Q1–Q37 à sequência e aos gates bloqueantes, incluindo a
-viabilidade do cadastro OAuth/D1. [Segurança web](engineering/web-security-and-data-boundaries.md)
+viabilidade auth/D1. A [prova atual](research/2026-10-05-dashboard-auth-proof.md)
+recupera cadastro por linking nativo de email verificado, aprovado em 2026-10-05;
+o [plugin de reserva D1](research/2026-10-05-dashboard-code-redemption-plugin.md)
+satisfaz o gate de não reutilização concorrente de code na bancada, conforme a
+[avaliação OAuth](research/2026-10-05-dashboard-oauth-security-requirements.md). [Segurança web](engineering/web-security-and-data-boundaries.md)
 e [ambientes/recuperação](operations/dashboard-environments-and-recovery.md)
 completam as referências propostas; a skill [dashboard-engineering](../.agents/skills/dashboard-engineering/SKILL.md)
 direciona agentes às fontes afetadas. Nenhum desses documentos descreve um

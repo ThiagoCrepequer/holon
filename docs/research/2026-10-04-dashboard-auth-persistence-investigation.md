@@ -15,6 +15,17 @@ related:
 
 # Autenticação e persistência do dashboard: investigação da composição
 
+## Leitura atual após a política aprovada em 2026-10-05
+
+Este relatório conserva a investigação inicial sob linking implícito proibido.
+O responsável posteriormente aprovou o linking nativo por email verificado no
+provider e no User local; a [regra atual](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05)
+substitui essa restrição de Q32. A [prova Workerd/D1 atual](2026-10-05-dashboard-auth-proof.md#resultado-da-política-aprovada-em-2026-10-05)
+recupera Account interrompida em Drizzle/D1 e D1 nativo por novo OAuth com mesmo
+email verificado. Isso não faz User/Account atômicos; a limitação de state
+concorrente mantém #129 bloqueada. Os gates de tenancy, refresh e convites abaixo
+continuam válidos. Não exigir outra persistência apenas com base no NO-GO inicial.
+
 ## Pergunta e conclusão
 
 Como compor Better Auth, Drizzle e D1 preservando as políticas acordadas de
@@ -31,7 +42,7 @@ de atomicidade no adapter D1 e no cadastro OAuth do próprio core, além de prov
 necessárias de refresh concorrente e cookies SSR. Retirar o plugin não elimina
 esses riscos. Esta investigação não implementa auth, schema, migration ou recursos.
 
-**Leitura atual:** a [revisão de robustez](#revisão-de-robustez--2026-10-04)
+**Leitura ao final da pesquisa inicial:** a [revisão de robustez](#revisão-de-robustez--2026-10-04)
 acrescenta bloqueio de prontidão do cadastro OAuth, exposição nativa de token de
 sessão, protocolo de comandos e comportamento de refresh perdido. A combinação
 estável abaixo é candidata, não aprovada para bootstrap de auth sem essas provas.
@@ -268,3 +279,19 @@ zero rows sem efeitos posteriores; email alvo alterado/ausente/provider indispon
 aceite repetido pelo mesmo User e negado a outro, sem recriar membership
 posteriormente removida. São critérios bloqueantes do
 [plano](../planning/dashboard-implementation-plan.md), sem runtime implementado.
+
+## Prova executável e atualização em 2026-10-05
+
+A [prova Workerd/D1](2026-10-05-dashboard-auth-proof.md) passou a executar os
+pacotes publicados reais e OAuth GitHub com rede sintética. A falha antes de
+Account deixou User persistido; um novo OAuth com state/code novos terminou
+em `account_not_linked`. A composição D1 nativa oficial reproduziu o mesmo
+bloqueio. Esse **NO-GO** confirma o risco descrito acima e mantém DASH-02/#129
+aberta, sem auth produtiva ou hook de recuperação por email.
+
+O relatório registra também sessão JSON nativa com `session.token`, DTO servidor
+reduzido com Set-Cookie, expiração/revogação e state concorrente. Diagnósticos
+verdes conservam evidência do candidato; o gate de viabilidade usa asserts
+comuns e falha. Alternativas transacionais são propostas para decisão/prova,
+não substituição aprovada da persistência. A pesquisa anterior permanece um
+snapshot; o relatório novo distingue cada comportamento efetivamente testado.
