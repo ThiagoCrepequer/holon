@@ -13,6 +13,9 @@ Este arquivo e o ponto de entrada canonico para humanos e agentes. A
 documentacao distingue deliberadamente evidencias historicas, decisoes
 normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 
+O [backlog do dashboard no GitHub](planning/dashboard-github-backlog.md)
+localiza as entregas, milestones e gates dessa evolução.
+
 ## Caminhos de leitura
 
 | Objetivo                                     | Leia primeiro                                                                     | Continue em                                                                                                                                                                           |

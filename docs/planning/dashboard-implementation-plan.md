@@ -22,6 +22,10 @@ garantias para reduzir o escopo. Q1–Q37 estão no [registro da entrevista](das
 Este arquivo responde à sequência de implementação e seus gates, não repete
 as perguntas nem transforma pesquisa em arquitetura materializada.
 
+As entregas estão publicadas no [backlog do GitHub](dashboard-github-backlog.md),
+com milestones, sub-issues e bloqueios. O mapa registra escopo e links; o
+GitHub informa o estado atual de execução.
+
 **Estado: planejamento revisado; runtime não implementado.** Better Auth/Drizzle/D1
 é a direção escolhida, porém o candidato estável tem um gate de viabilidade de
 cadastro OAuth que impede iniciar auth de usuários como se estivesse resolvido.
