@@ -122,41 +122,26 @@ describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)",
     expect((await snapshot()).sessions).toHaveLength(1);
   });
 
-  it("records the unsupported recovery: User survives failed Account and a new OAuth cannot sign in", async () => {
-    const run = await interruptedSignupThenNewOAuth();
-    expect(run.first.response.headers.get("Location")).not.toBe(
-      `${origin}/signed-in`,
-    );
-    expect(run.interrupted.users).toHaveLength(1);
-    expect(run.interrupted.accounts).toHaveLength(0);
-    expect(run.interrupted.sessions).toHaveLength(0);
-    expect(run.first.flow.state).not.toBe(run.fresh.flow.state);
-    expect(run.github.exchanges).toBe(2);
-    expect(run.fresh.response.headers.get("Location")).not.toBe(
-      `${origin}/signed-in`,
-    );
-    expect(run.fresh.flow.jar.hasSession()).toBe(false);
-    expect(run.final.users).toHaveLength(1);
-    expect(run.final.accounts).toHaveLength(0);
-    expect(run.final.sessions).toHaveLength(0);
-  });
-
-  it("the officially supported native D1 composition signs up but has the same partial-registration recovery failure", async () => {
-    const run = await interruptedSignupThenNewOAuth("native-d1");
-    expect(run.interrupted.users).toHaveLength(1);
-    expect(run.interrupted.accounts).toHaveLength(0);
-    expect(run.fresh.response.headers.get("Location")).toContain(
-      "account_not_linked",
-    );
-    expect(run.final.accounts).toHaveLength(0);
-    expect(run.final.sessions).toHaveLength(0);
-    const normal = await signIn(run.auth, run.github, "native-normal", {
-      id: 9003,
-      email: "native@example.invalid",
-    });
-    expect(normal.response.headers.get("Location")).toBe(`${origin}/signed-in`);
-    expect(normal.flow.jar.hasSession()).toBe(true);
-  });
+  it.each(["drizzle", "native-d1"] as const)(
+    "%s: recovers interrupted Account creation through native verified-email linking",
+    async (persistence) => {
+      const run = await interruptedSignupThenNewOAuth(persistence);
+      expect(run.first.flow.jar.hasSession()).toBe(false);
+      expect(run.interrupted.users).toHaveLength(1);
+      expect(run.interrupted.accounts).toHaveLength(0);
+      expect(run.interrupted.sessions).toHaveLength(0);
+      expect(run.first.flow.state).not.toBe(run.fresh.flow.state);
+      expect(run.github.exchanges).toBe(2);
+      expect(run.fresh.response.headers.get("Location")).toBe(
+        `${origin}/signed-in`,
+      );
+      expect(run.fresh.flow.jar.hasSession()).toBe(true);
+      expect(run.final.users).toEqual(run.interrupted.users);
+      expect(run.final.accounts).toHaveLength(1);
+      expect(run.final.accounts[0]?.userId).toBe(run.interrupted.users[0]?.id);
+      expect(run.final.sessions).toHaveLength(1);
+    },
+  );
 
   it.each(["user", "session"] as const)(
     "recovers a fresh login after failure at %s insert",
@@ -196,22 +181,11 @@ describe("real Better Auth + Drizzle + D1 diagnostics (not the viability gate)",
     expect(rows.accounts).toHaveLength(1);
     expect(rows.accounts[0]?.userId).not.toBe(oldUser);
     expect(rows.accounts[0]?.accountId).toBe("9001");
-  });
-
-  it("does not silently link another GitHub identity using the same verified email", async () => {
-    const auth = await setupAuth();
-    const github = fakeGitHub();
-    await signIn(auth, github, "first-person", person);
-    const other = await signIn(auth, github, "other-person", {
-      ...person,
-      id: 9002,
-    });
-    expect(other.flow.jar.hasSession()).toBe(false);
-    const rows = await snapshot();
-    expect(rows.users).toHaveLength(1);
-    expect(rows.accounts).toHaveLength(1);
     expect(rows.sessions).toHaveLength(1);
-    expect(rows.accounts[0]?.accountId).toBe("9001");
+    expect(rows.sessions[0]?.userId).toBe(rows.accounts[0]?.userId);
+    expect(rows.sessions.some((session) => session.userId === oldUser)).toBe(
+      false,
+    );
   });
 
   it("converges concurrent callbacks for the same identity without duplicate users or account subjects", async () => {

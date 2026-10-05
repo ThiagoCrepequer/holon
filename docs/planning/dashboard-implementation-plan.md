@@ -28,13 +28,15 @@ GitHub informa o estado atual de execução.
 
 **Estado: provas isoladas do milestone 0 implementadas; runtime do dashboard
 ainda não implementado.** Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
-ligam cada gate à bancada e sua evidência. Better Auth/Drizzle/D1
-é a direção escolhida, porém o candidato estável tem um gate de viabilidade de
-cadastro OAuth reproduzido no Workerd/D1 que impede iniciar auth de usuários
-como se estivesse resolvido. O adapter D1 nativo também falhou. A issue #129
-e seus dependentes permanecem bloqueados até uma composição suportada passar
-o gate; não concluir o milestone pelo sucesso das outras provas.
-Não aceitar patch do core, identidade fundida por email ou recuperação manual
+ligam cada gate à bancada e sua evidência. Com a
+[política de linking aprovada em 2026-10-05](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
+Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth
+com o mesmo email verificado. O gate independente de consumo concorrente de
+state ainda falha nos dois adapters. A issue #129 e seus dependentes permanecem
+bloqueados; não concluir o milestone pelo sucesso da recuperação ou das outras
+provas. User/Account continuam não atômicos; mudança de email durante a falha
+pode deixar User incompleto, sem Account/Session e sem autoridade Holon.
+Não aceitar patch do core, bypass de verificação ou recuperação manual
 obrigatória de cadastro como dívida para depois. O MVP limita funcionalidades;
 segurança, durabilidade e testes dos fluxos incluídos permanecem obrigatórios.
 
@@ -84,18 +86,18 @@ Cada entrega liga invariável → interface observável → teste → comando �
 Assert do contrato tem oráculo independente; fixture/fake não replica o algoritmo
 de produção. Cobertura numérica acompanha, não substitui essa ligação.
 
-| Invariável                       | Cenários mínimos                                                                                                                                               | Fronteira principal                                    |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Identidade não muda por acidente | Falha User/Account recupera por novo OAuth; replay state/code negado; email igual de outra identidade, endpoint não permitido, segredo em sessão/SSR           | Adapter + Workerd/D1; browser para cookie/fluxo        |
-| Autorização atual                | Membership removida, repo/installation/workspace alheios, grant negativo/expirado, provider indisponível, CSRF/redirect                                        | Política pura + handlers/runtimes + browser            |
-| Owner e convite íntegros         | Dois últimos owners saem/rebaixam; guarda zero rows sem child/outbox; alvo divergente; aceite/cancelamento concorrentes; replay não recria membership removida | Persistência D1/constraints/comandos reais             |
-| Refresh não fabrica sucesso      | Dois Workers, vencedor/perdedor, resposta remota perdida, falha de gravação, reconexão de identidade diferente                                                 | Porta auth/GitHub e persistência no runtime            |
-| Entrega recuperável limitada     | Publicação/ack interrompidos, mensagem expirada, stale lease/sucesso tardio, DLQ/D1 indisponíveis, Q37 sem novo convite                                        | Publisher/consumer + state store + provider controlado |
-| Projeção correta                 | Mesma revisão/diferente conteúdo, evento antigo, outage longa/rearm, revisão nova em I/O, restore inferior com entrega antiga após reconstrução/retomada       | Ledger/RPC/D1 no runtime, restore sintético            |
-| Página e busca corretas          | DTO aprovado, empate/cursor, filtro muda, ACL pré-LIMIT, contains raro/curto/sem resultado, número+título                                                      | SQL real/normalizador Workers; não só índice sintético |
-| Continuidade privada             | Uma leitura por intenção; zero na hidratação; resposta/403 antiga; revogação atual remove cache; foco/scroll/voltar                                            | Browser com build real e respostas controladas         |
-| UI bilíngue/acessível            | Catálogos completos, SSR simultâneo, layout longo/320 px/zoom, teclado/contraste, redução durante animação                                                     | DOM + browser 3 engines; complemento humano/mobile     |
-| Ambiente recuperável             | Preview sem bindings produtivos, sender sem URL pública, schema/artefato compatíveis, sessão/job revividos por restore                                         | Config/build e ensaio sintético; smoke autorizado      |
+| Invariável                       | Cenários mínimos                                                                                                                                                                                                 | Fronteira principal                                    |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Identidade não muda por acidente | Falha User/Account recupera por novo OAuth; replay state/code negado; linking com email recebido/local não verificado negado, Account estável após troca de email, endpoint não permitido, segredo em sessão/SSR | Adapter + Workerd/D1; browser para cookie/fluxo        |
+| Autorização atual                | Membership removida, repo/installation/workspace alheios, grant negativo/expirado, provider indisponível, CSRF/redirect                                                                                          | Política pura + handlers/runtimes + browser            |
+| Owner e convite íntegros         | Dois últimos owners saem/rebaixam; guarda zero rows sem child/outbox; alvo divergente; aceite/cancelamento concorrentes; replay não recria membership removida                                                   | Persistência D1/constraints/comandos reais             |
+| Refresh não fabrica sucesso      | Dois Workers, vencedor/perdedor, resposta remota perdida, falha de gravação, reconexão de identidade diferente                                                                                                   | Porta auth/GitHub e persistência no runtime            |
+| Entrega recuperável limitada     | Publicação/ack interrompidos, mensagem expirada, stale lease/sucesso tardio, DLQ/D1 indisponíveis, Q37 sem novo convite                                                                                          | Publisher/consumer + state store + provider controlado |
+| Projeção correta                 | Mesma revisão/diferente conteúdo, evento antigo, outage longa/rearm, revisão nova em I/O, restore inferior com entrega antiga após reconstrução/retomada                                                         | Ledger/RPC/D1 no runtime, restore sintético            |
+| Página e busca corretas          | DTO aprovado, empate/cursor, filtro muda, ACL pré-LIMIT, contains raro/curto/sem resultado, número+título                                                                                                        | SQL real/normalizador Workers; não só índice sintético |
+| Continuidade privada             | Uma leitura por intenção; zero na hidratação; resposta/403 antiga; revogação atual remove cache; foco/scroll/voltar                                                                                              | Browser com build real e respostas controladas         |
+| UI bilíngue/acessível            | Catálogos completos, SSR simultâneo, layout longo/320 px/zoom, teclado/contraste, redução durante animação                                                                                                       | DOM + browser 3 engines; complemento humano/mobile     |
+| Ambiente recuperável             | Preview sem bindings produtivos, sender sem URL pública, schema/artefato compatíveis, sessão/job revividos por restore                                                                                           | Config/build e ensaio sintético; smoke autorizado      |
 
 Workers local, SQLite sintético, browser emulado e smoke remoto têm evidências
 distintas. O gate não passa por rerun de teste flaky, exclusão de produção da

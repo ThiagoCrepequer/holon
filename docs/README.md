@@ -60,7 +60,9 @@ física permanece proposta, sem representar runtime já implementado.
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
 Ele liga as escolhas Q1–Q37 à sequência e aos gates bloqueantes, incluindo a
-viabilidade do cadastro OAuth/D1. [Segurança web](engineering/web-security-and-data-boundaries.md)
+viabilidade auth/D1. A [prova atual](research/2026-10-05-dashboard-auth-proof.md)
+recupera cadastro por linking nativo de email verificado, aprovado em 2026-10-05;
+o gate de state concorrente continua bloqueante. [Segurança web](engineering/web-security-and-data-boundaries.md)
 e [ambientes/recuperação](operations/dashboard-environments-and-recovery.md)
 completam as referências propostas; a skill [dashboard-engineering](../.agents/skills/dashboard-engineering/SKILL.md)
 direciona agentes às fontes afetadas. Nenhum desses documentos descreve um

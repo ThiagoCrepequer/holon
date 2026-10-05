@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - frontend-application-structure.md
   - ../planning/dashboard-engineering-decision-review.md
@@ -148,11 +148,43 @@ capacidade posterior, com regras de vínculo/provisionamento próprias; usar
 a palavra SSO não autoriza ativar o plugin ou sincronizar grupos automaticamente.
 [SSO documentado](https://better-auth.com/docs/plugins/sso).
 
-Outros providers devem vincular identidade ao mesmo User após prova explícita,
-sem fusão silenciosa por email. Isso é direção técnica proposta para evolução,
-não implementação Google/Microsoft. Login por outro provider ainda precisa de
-vínculo GitHub verificável para satisfazer Q22 em repo privado.
-[Account linking](https://better-auth.com/docs/concepts/users-accounts#account-linking).
+### Vinculação por email verificado: ajuste aprovado em 2026-10-05
+
+O responsável aprovou o linking implícito padrão do Better Auth: quando falta
+Account correspondente, o mesmo email pode vincular o subject recebido ao User
+existente, exigindo verificação tanto no provider quanto no User local. Essa
+aprovação substitui a proibição geral de linking por email registrada em Q32;
+o aceite de convite continua sem fundir usuários. No MVP só GitHub está habilitado.
+
+Não configurar `trustedProviders` para dispensar verificação, nem desativar a
+exigência de email local verificado. Email serve como evidência para esse vínculo,
+mas o identificador Holon continua sendo `User.id`; o par `(providerId, accountId)`
+identifica a conta externa. Account já existente permanece ligada ao mesmo User
+quando o email GitHub muda, inclusive se o novo email coincide com outro User.
+Login não concede membership, instala integração nem substitui o grant GitHub.
+
+O modelo confia no controle atual do email: reutilização/transferência de endereço
+ou comprometimento do email/provider pode vincular outro subject ao User antigo.
+Verificação não prova que duas contas pertencem historicamente à mesma pessoa.
+Essa limitação foi debatida antes da aprovação. Outros providers e SSO corporativo
+exigem revisão de suas garantias, não herdam uma confiança irrestrita por nome.
+[Account linking](https://better-auth.com/docs/concepts/users-accounts#account-linking),
+[forced linking](https://better-auth.com/docs/concepts/users-accounts#forced-linking).
+
+A [prova atual](../research/2026-10-05-dashboard-auth-proof.md#resultado-da-política-aprovada-em-2026-10-05)
+confirma recuperação pelo novo OAuth com mesmo email verificado em Drizzle/D1
+e D1 nativo. Isso não torna User/Account atômicos: se o email muda antes de criar
+Account, sobra um User sem Account/Session. Provisionamento Holon deve depender
+de login concluído e identidade vinculada, nunca só de `user.create` ou de email;
+um registro incompleto não pode receber workspace, membership ou efeito externo.
+O linking nativo também não exige email verificado para todo signup: a verificação
+é requisito do vínculo implícito e do aceite de convite. A prova negativa cobre
+signup não verificado e impede outro subject de reivindicar esse User. Não usar
+`User.emailVerified` antigo como confirmação atual do destinatário do convite.
+
+A superfície pública continua sem `link-social`/gestão arbitrária de accounts.
+A prova não implementa Google/Microsoft, recuperação de User local não verificado,
+limpeza de órfãos ou onboarding. O gate de state concorrente continua pendente.
 
 ## Escopo explícito e várias abas
 
@@ -221,6 +253,7 @@ Aceite histórico não é grant atual: repetir o convite não recria membership
 removida ou reativa acesso. Recuperar cadastro interrompido usa novo fluxo OAuth;
 replay do mesmo state/code consumido é negado.
 
-Fontes externas verificadas em **2026-10-04**. Não foram executados testes de
-auth, benchmarks, criação de recursos ou operação remota; desenho proposto
-não demonstra isolamento já implementado.
+Fontes de linking revalidadas em **2026-10-05**; as demais fontes permanecem
+na conferência de **2026-10-04**. Há prova isolada auth/Workerd/D1 local, descrita
+no relatório; não há auth, tenancy ou isolamento implementados no produto.
+Não houve benchmark, criação de recursos ou operação remota.

@@ -32,8 +32,10 @@ A [base documental #128](https://github.com/ThiagoCrepequer/holon/issues/128) fo
 com o merge e a CI do PR documental. As funcionalidades do dashboard
 não foram implementadas por essa publicação. A execução local do milestone 0
 está nos [resultados das provas](../research/2026-10-05-dashboard-milestone-zero-results.md):
-DASH-02 reproduziu NO-GO e continua bloqueante; o GitHub conserva o estado
-de merge e encerramento das entregas. Não fechar #129 pela existência do harness.
+DASH-02 agora comprova recuperação por linking nativo com email verificado
+aprovado em 2026-10-05, mas o consumo concorrente de state mantém NO-GO e continua
+bloqueante. O GitHub conserva o estado de merge/encerramento; não fechar #129
+pela existência do harness ou pelas duas provas de recuperação aprovadas.
 
 Nenhum prazo ou responsável individual foi inventado. Não foram criados
 recursos, secrets, DNS, migrations remotas nem deploys. ADRs aceitos continuam

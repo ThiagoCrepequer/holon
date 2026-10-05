@@ -13,9 +13,111 @@ related:
 
 # Prova local de autenticação: Better Auth e D1
 
-## Resultado e escopo
+## Resultado da política aprovada em 2026-10-05
 
-**NO-GO para autenticação de usuários com os candidatos D1 testados.** A prova
+**Recuperação por email verificado comprovada localmente; gate completo ainda
+NO-GO pelo state concorrente.** O responsável aprovou usar a vinculação implícita
+padrão do Better Auth após o debate sobre verificação e reutilização de emails.
+A restrição anterior de Q32 foi substituída explicitamente na
+[referência de identidade](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05).
+Isso resolve o bloqueio `account_not_linked` do cenário com mesmo email
+verificado; não acrescenta atomicidade User/Account nem altera o parser OAuth.
+
+A bancada usa **Better Auth/core/adapters 1.7.7**, Drizzle **0.45.3**, plugin
+Cloudflare **1.1.2** e D1 real local. A configuração mantém `transaction: false`
+no Drizzle, linking nativo e `trustedProviders: []`; não desativa a verificação
+local padrão, não copia o core nem introduz hook de recuperação. Os providers,
+adapters e handler são os publicados; só a rede GitHub é sintética.
+As versões/dependências e compatibility date não mudaram nesta atualização.
+
+### Cenários e oráculos da atualização
+
+`test/account-linking.test.ts` parametriza Drizzle/D1 e D1 nativo. As demais
+provas conservam falhas de persistência, sessão, criptografia e superfície pública.
+D1/cookies/redirects são reais; os exemplos de identidades são exclusivamente
+sintéticos. Outro subject com mesmo email é um ensaio controlado da política,
+não evidência de dois usuários GitHub reais com o mesmo email simultaneamente.
+
+| Cenário                                                         | Resultado local                                                                                           |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Falha no INSERT User, Account ou Session; novo OAuth            | Recupera com mesmo email verificado; um User/Account/Session e User preservado quando já existia          |
+| Outro subject com mesmo email verificado recebido e local       | Vincula Account ao User existente; não cria outro User                                                    |
+| Email recebido não verificado                                   | Nega linking, sem nova Account/Session nem alteração das linhas anteriores                                |
+| Email local não verificado, recebido verificado                 | Nega linking; signup nativo não verificado não serve de prova de ownership                                |
+| Subject já vinculado muda email para o de outro User            | Conserva a Account/User original, sem transferir a identidade                                             |
+| Falha ao vincular outra Account e novo OAuth                    | Recupera, conserva User e sessão anterior                                                                 |
+| Linking concorrente do mesmo subject                            | Constraints convergem para um subject/User; nova tentativa funciona                                       |
+| State alterado, cookie ausente/de outro fluxo ou state expirado | Nega antes do token endpoint, sem User/Account/Session                                                    |
+| Code consumido com novo state válido                            | Provider sintético nega; nenhuma sessão adicional                                                         |
+| Replay sequencial com cookie original                           | Nega antes da segunda troca de token                                                                      |
+| Replay concorrente do mesmo state/cookie/code                   | Duas trocas no provider; só um sucesso por código único. Gate de consumo único de state continua falhando |
+| Escritas User/Account no callback                               | INSERTs separados, sem D1.batch; recuperação por linking não é rollback                                   |
+| Email muda entre a falha de Account e o retry, mesmo subject    | Novo User com Account/Session; User inicial permanece sem Account/Session                                 |
+
+A regra de linking não exige verificação para **todo signup**: o teste de
+User local não verificado começa por um OAuth nativo que o cria e autentica.
+Aceite de convite exige confirmação atual do email no provider; login/email
+sozinho não concede membership ou grant privado. Provisionamento Holon futuro
+não pode reagir apenas a `user.create`: precisa de login concluído e Account
+vinculada. A bancada não implementa esses efeitos, limpeza de órfãos, recuperação
+de User local não verificado, refresh distribuído ou reauth.
+
+### Execução e resultado
+
+Os testes novos foram executados primeiro com linking desativado: **10 falhas
+em 16 testes**, sendo oito nas expectativas da nova política/recuperação e duas
+no gate concorrente já existente. Após habilitar o linking nativo aprovado:
+
+- `pnpm --filter @holon/dashboard-auth-proof test`: **42 testes passaram**.
+- `pnpm --filter @holon/dashboard-auth-proof typecheck`: passou.
+- `pnpm --filter @holon/dashboard-auth-proof test:coverage`: **42 passaram**;
+  100% linhas/funções/statements e 96,42% branches de `src/**/*.ts` do harness,
+  preservando os thresholds 90/90/90/85. Não instrumenta o core de terceiros.
+- `pnpm --filter @holon/dashboard-auth-proof test:viability`: **duas passaram,
+  duas falharam; exit 1**. Recuperação passa nos dois adapters; consumo concorrente
+  antes do token endpoint ainda observa duas trocas em vez de uma.
+
+Node **24.19.0**, pnpm **11.24.0**, Workerd local e data de compatibilidade
+**2026-08-29**, `nodejs_compat`. A prova concorrente usa requests no mesmo isolate;
+não prova coordenação regional. O provider falso usa códigos únicos e não prova
+PKCE, permissões ou configuração de uma GitHub App real. Sem recursos, secrets,
+OAuth real, banco remoto, deploy ou email. Integração geral/CI têm seus resultados
+separados no [relatório do milestone](2026-10-05-dashboard-milestone-zero-results.md).
+
+### Interpretação e próximo gate
+
+A [documentação de linking](https://better-auth.com/docs/concepts/users-accounts#account-linking)
+revalidada em **2026-10-05** confirma o default e avisa que `trustedProviders`
+pode dispensar verificação. Os casos negativos exercitam os defaults da release
+fixada; não se infere segurança de todos os providers ou de futuras versões.
+Email reutilizável continua sendo um risco do modelo aprovado, não uma identidade
+imutável. A vinculação padrão suportada substitui a necessidade de trocar D1
+apenas para recuperar esse cadastro; PostgreSQL não foi adotado.
+
+A [fonte do parser 1.7.7](https://github.com/better-auth/better-auth/blob/v1.7.7/packages/better-auth/src/state.ts)
+e a distribuição instalada usam `findVerificationValue` e delete posterior.
+A biblioteca possui outra primitiva de consumo, mas esse parser não a chama;
+adicionar `getAndDelete` a secondary storage não substitui o caminho OAuth atual.
+Não se alterou o core ou adicionou wrapper para disfarçar o resultado. A repetição
+concorrente não é, por si só, prova de takeover: o código único negou segundo login.
+A aprovação de linking não autoriza relaxar o requisito mais forte de state.
+
+**#129 e dependentes continuam bloqueados.** O próximo gate é obter consumo
+concorrente de state por composição oficialmente suportada e repetir as regressões;
+qualquer mudança do requisito precisa de decisão explícita, não de ajuste do teste.
+O User incompleto quando email muda permanece documentado; sua limpeza e ausência
+de autoridade no onboarding precisam de política/prova na integração de produto.
+
+## Registro da execução inicial sob a política anterior
+
+O restante conserva a evidência inicial: a fixture desativava linking implícito
+conforme a restrição então acordada. As conclusões sobre impedir vínculos por
+email e exigir alternativa de persistência retratam essa política, substituída
+pela aprovação e prova acima; não são a configuração ou recomendação atuais.
+
+### Resultado e escopo iniciais
+
+**NO-GO na execução inicial, com linking implícito desativado.** A prova
 DASH-02, issue #129, reproduziu persistência parcial de User/Account: depois de
 falha na gravação de Account, um novo fluxo OAuth da mesma identidade termina
 em `account_not_linked`, sem sessão, e deixa User órfão. Trocar Drizzle pelo
@@ -34,7 +136,7 @@ email privado verificado. Não configura nem autoriza uma GitHub App real e não
 comprova suas permissões, grants, PKCE ou entrega de email. Rate limiting e logs
 nativos estão desligados na fixture, não validados ou aprovados para produção.
 
-## Versões e proveniência verificadas em 2026-10-05
+### Versões e proveniência verificadas em 2026-10-05
 
 | Componente                                           | Versão executada  | Fonte primária                                                            |
 | ---------------------------------------------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -60,7 +162,7 @@ com `nodejs_compat`. O binário do catálogo recusou a tentativa inicial de
 `2026-10-04`, informando máximo `2026-09-04`; essa tentativa não executou testes.
 Não trocar o catálogo nem generalizar a prova para outra data de compatibilidade.
 
-## Método e oráculos
+### Método e oráculos
 
 O fluxo inicia em POST social do handler real, obtém state/cookie, troca código
 no provider GitHub e termina no callback real. O GitHub sintético aplica código
@@ -89,7 +191,7 @@ Há duas suites com critérios distintos:
   enquanto os candidatos não cumprem os requisitos; não participa silenciosamente
   do comando de diagnósticos nem é relatado como aprovado.
 
-## Evidência observada
+### Evidência observada
 
 | Cenário                                                | Resultado local                                                                                                                           |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -118,7 +220,7 @@ foi demonstrada. O gate registra essa condição separadamente. O **NO-GO já é
 suficientemente sustentado pelo cadastro parcial**, independentemente desse
 requisito protocolar adicional.
 
-## Causas nas fontes publicadas
+### Causas nas fontes publicadas
 
 O [core OAuth](https://github.com/better-auth/better-auth/blob/db02f233918ad1233bf0753e437e1c0da353273d/packages/better-auth/src/oauth2/link-account.ts#L542)
 cria User e Account sequencialmente dentro de `runWithTransaction`.
@@ -145,7 +247,7 @@ explícito e todos os Set-Cookie; não reescreve resposta por regex/monkey patch
 Esse seam HTTP é validado como prova isolada e não restaura signup nem autoriza
 copiá-lo diretamente para um app sem suas demais políticas.
 
-## Alternativas e consequência arquitetural
+### Alternativas e consequência arquitetural
 
 | Caminho                                                            | Garantia/custo                                                                                             | Situação                                                 |
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -174,7 +276,7 @@ adapter/core, monkey patch ou `transaction:true` em D1 sem suporte. A mudança d
 email reproduzida mostra por que um workaround centrado em email não resolve
 a identidade incompleta. Tenancy própria continua necessária e não corrige isso.
 
-## Comandos e critérios de conclusão
+### Comandos e critérios de conclusão
 
 Executados com Node 24.19.0 em 2026-10-05, no worktree isolado. Para reproduzir
 após instalação centralizada do workspace:

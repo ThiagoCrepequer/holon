@@ -37,14 +37,17 @@ podem avançar quando seus próprios gates forem satisfeitos.
 
 ## Achados que alteram a implementação futura
 
-**Auth:** falha entre User e Account deixa User órfão. Remover a falha e iniciar
-OAuth com state/code novos não recupera: `account_not_linked`, sem sessão.
-O adapter D1 nativo oficial repete o resultado. Email alterado pode criar outro
-User, conservando o órfão; fundir por email ou acrescentar hook não é recuperação
-íntegra. O relatório registra alternativas suportadas e suas consequências;
-PostgreSQL transacional é proposta para decisão/prova, não troca já aprovada.
-A condição adicional de consumo concorrente de state também precisa ser
-resolvida, sem inferir takeover do simples número de trocas no provider.
+**Auth:** o responsável aprovou em 2026-10-05 o linking nativo por email
+verificado no provider e no User local, substituindo a restrição anterior de Q32.
+Novo OAuth após falha de Account agora recupera em Drizzle/D1 e D1 nativo,
+preservando o User original. As 42 provas cobrem também verificação recebida/local,
+falhas de vínculo, concorrência e estabilidade do User com Account já existente.
+Não há hook de recuperação, patch ou mudança de persistência. INSERTs continuam
+separados e email alterado durante a falha pode conservar User incompleto sem
+Account/Session; onboarding não pode provisionar autoridade a partir de User
+isolado. A condição independente de consumo concorrente de state continua
+falhando: duas trocas no token endpoint, uma sessão pelo código único do provider.
+Não inferir takeover desse número nem relaxar o gate pela aprovação de linking.
 
 **Leitura:** a feature deve ser dona da intenção, HTTP e cancelamento. Query
 mantém cache/subscription por APIs públicas. Um snapshot restaurado por
@@ -76,8 +79,8 @@ pnpm --filter @holon/dashboard-browser-proof test:coverage
 pnpm verify
 ```
 
-O comando `test:viability` **termina com exit 1 neste candidato**: quatro asserts
-comuns falham nos dois adapters (cadastro interrompido e state concorrente).
+O comando `test:viability` **termina com exit 1 neste candidato**: duas provas
+de recuperação passam, duas de state concorrente falham nos dois adapters.
 Deve ser executado separadamente; não se encadeiam os demais comandos atrás
 dele como se seu exit fosse sucesso. Não há `it.fails`, patch do core ou teste
 produtivo excluído da cobertura para tornar a integração viável.
@@ -94,7 +97,7 @@ funções/statements e 85% de branches. Browser prova comportamento no build rea
 Playwright não fabrica cobertura percentual de fontes. Cada relatório descreve
 oráculos e limitações e conserva o resultado das tentativas iniciais relevantes.
 
-## Resultado da integração local em 2026-10-05
+## Primeira integração local em 2026-10-05, antes do ajuste de linking
 
 `pnpm install --frozen-lockfile` e `pnpm verify` passaram com Node 24.19.0 e
 pnpm 11.24.0. O gate executou schema/config, formatação, lint, tipos, arquitetura,
@@ -107,8 +110,9 @@ Os workspaces existentes conservaram seus thresholds e comandos.
 | Ledger  | 14 testes verdes; 100% da fonte instrumentada, incluindo persistência após teardown durante outage |
 | Browser | 60 testes verdes: 20 cenários × Chromium/Firefox/WebKit, com compatibility date final `2026-10-01` |
 
-O gate auth separado foi executado e terminou **exit 1, quatro falhas** nas
-invariantes desejadas, sem erro de fixture usado como causa do NO-GO.
+Nessa primeira execução o gate auth separado terminou **exit 1, quatro falhas**
+nas invariantes desejadas, com linking desativado. A atualização aprovada abaixo
+substitui o resultado de recuperação, preservando o achado de state concorrente.
 A primeira tentativa do gate geral parou na identidade gerada de configuração,
 pois o lockfile entra no hash. O comando oficial `config:schema:generate`
 regenerou o artefato e o gate completo passou na execução seguinte; não se
@@ -119,6 +123,30 @@ compatibility date auth, composição Query que revertia/corrompia ownership,
 janelas de reidratação e revogação e limites dos helpers DO. Esses achados
 foram corrigidos ou delimitados e seus cenários ficaram como regressões.
 O sucesso local não afirma aprovação da CI remota, merge ou operação produtiva.
+
+## Atualização de linking aprovada em 2026-10-05
+
+Sem novas dependências ou mudança de runtime: Better Auth/Drizzle da prova usam
+linking implícito padrão e lista vazia de providers que dispensem verificação.
+Os novos testes falharam primeiro sob a política antiga e passaram após a alteração.
+
+| Comando                       | Resultado atual                                                          |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| Auth `test` / `test:coverage` | 42 passaram; 100% linhas/funções/statements e 96,42% branches do harness |
+| Auth `typecheck`              | Passou                                                                   |
+| Auth `test:viability`         | 2 passaram, 2 falharam; exit 1 por state concorrente                     |
+
+A [prova dona](2026-10-05-dashboard-auth-proof.md#resultado-da-política-aprovada-em-2026-10-05)
+registra cenários, oráculos e limites. A aprovação muda a política de email,
+não a autoridade de workspace/convite/grant. **#129 e milestone 0 permanecem
+bloqueados**. `pnpm verify` passou após esse ajuste: auth executou os 42 testes
+com cobertura e browser executou os 60 cenários nos três engines. As tarefas
+inalteradas usaram cache Turbo válido (22/24 de cobertura; 12/12 de build/dry-run).
+Não houve reconstrução inédita dos artefatos inalterados. A primeira tentativa
+desta atualização parou no lint por uma ordenação sem comparator; a asserção foi
+corrigida para comparar o conjunto de subjects e o gate foi executado novamente.
+O sucesso do gate geral não inclui `test:viability` e não demonstra CI, OAuth real
+ou operação produtiva do novo código.
 
 ## Escopo da instalação e limites da evidência
 
@@ -146,7 +174,9 @@ entregas posteriores e a smokes explicitamente autorizados.
 ## Próximo gate
 
 Manter #129 e suas dependências bloqueadas. Para avançar auth, decidir/provar
-uma composição oficialmente suportada que recupere User/Account e cumpra as
-regressões de identidade/state. Uma alternativa de persistência exige revisar
+consumo concorrente de state por caminho oficialmente suportado e cumprir as
+regressões de identidade/state. Recuperação por linking com o mesmo email
+verificado já passou; essa aprovação não dispensa a condição independente.
+Se outra persistência for necessária, ela exige revisar
 ADR/grafo, operação/restore e manter identidade, tenancy, convites e outbox na
 mesma fronteira transacional. Nenhum desses efeitos foi iniciado neste PR.

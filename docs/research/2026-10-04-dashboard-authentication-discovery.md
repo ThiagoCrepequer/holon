@@ -275,8 +275,11 @@ técnica recomendada agora é Better Auth para User/Account/Session e tenancy pr
 do Holon, sem alterar o modelo único de workspace/organização acordado.
 
 Mesmo essa composição precisa provar falha User/Account no OAuth, refresh
-concorrente, cookies SSR, guards condicionais e batches. Não habilitar linking
-implícito por email para recuperar cadastro parcial. Tokens são servidor, com
+concorrente, cookies SSR, guards condicionais e batches. Desativar linking
+implícito por email era a restrição então acordada. Ela foi substituída em
+2026-10-05 pela [política nativa de email verificado aprovada](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
+cuja [prova local](2026-10-05-dashboard-auth-proof.md) recupera Account nos dois
+adapters D1; state concorrente continua pendente. Tokens são servidor, com
 criptografia nativa e transporte HTTP restrito. Fontes GitHub corrigem a afirmação
 antiga de que OAuth Apps não teriam refresh; o fluxo humano GitHub App é recomendado
 pelo escopo granular, não por essa distinção ultrapassada.

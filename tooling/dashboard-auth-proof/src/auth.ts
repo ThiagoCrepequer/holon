@@ -33,7 +33,8 @@ export function createProofAuth(
     account: {
       encryptOAuthTokens: true,
       storeAccountCookie: false,
-      accountLinking: { enabled: false, disableImplicitLinking: true },
+      // Keep native verified-email linking; no trustedProviders verification bypass.
+      accountLinking: { trustedProviders: [] },
     },
     session: {
       expiresIn: 7 * 86400,
