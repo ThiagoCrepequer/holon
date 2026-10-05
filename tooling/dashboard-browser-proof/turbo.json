@@ -1,0 +1,16 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "outputs": ["build/**"]
+    },
+    "test": {
+      "cache": false,
+      "outputs": ["proof-results/**"]
+    },
+    "test:coverage": {
+      "cache": false,
+      "outputs": ["proof-results/**"]
+    }
+  }
+}

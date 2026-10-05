@@ -1,0 +1,24 @@
+{
+  "name": "@holon/dashboard-auth-proof",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts --exclude \"**/*.viability.test.ts\"",
+    "test:viability": "vitest run --config vitest.config.ts test/auth.viability.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:coverage": "vitest run --config vitest.config.ts --exclude \"**/*.viability.test.ts\" --coverage"
+  },
+  "devDependencies": {
+    "@better-auth/core": "1.7.7",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@cloudflare/vitest-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

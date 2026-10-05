@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - typescript-and-module-design.md
   - ../research/2026-10-04-dashboard-library-landscape.md
@@ -209,7 +209,8 @@ logout/troca de escopo cancela e descarta dados anteriores.
 ## SSR, API e isolamento de ambiente
 
 Preservar a [composição híbrida](../research/2026-10-04-dashboard-library-landscape.md#composição-híbrida-proposta--2026-10-04):
-loader prepara a página e snapshot seguro, Query usa API após hidratação,
+loader prepara a página e snapshot seguro, a feature lê a API após hidratação e
+publica o snapshot no cache Query,
 Hono valida/translada requests, e ambos chamam a mesma aplicação. Comandos de
 recursos usam `/api/*`; não criar actions paralelas com outra regra.
 Endpoints de autenticação serão definidos no debate próprio, não inferidos
@@ -219,13 +220,13 @@ como simples comandos CRUD de recursos do dashboard.
 
 A composição candidata usa uma ponte explícita entre Router e Query:
 
-| Momento                      | Dono e comportamento                                                                                                                                                    |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Documento inicial            | Loader servidor chama o caso de uso diretamente, sem HTTP para a própria API; QueryClient por request recebe somente o snapshot autorizado e seu instante de observação |
-| Hidratação                   | Cache desidratado usa o transporte seguro do framework; browser restaura o snapshot sem nova leitura                                                                    |
-| Navegação cliente            | `clientLoader` delega à operação de leitura explícita da feature, que consulta `/api/*` pelo Query; não chama também `serverLoader` para o mesmo dataset                |
-| Filtro/página/voltar/avançar | Mesma operação lê novamente sob autorização atual; a URL validada define os filtros aplicados, com cursor reiniciado quando eles mudam                                  |
-| Refresh manual               | Mesma operação, uma leitura autorizada; conteúdo/foco são preservados apenas enquanto o escopo continuar permitido                                                      |
+| Momento                      | Dono e comportamento                                                                                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Documento inicial            | Loader servidor chama o caso de uso diretamente, sem HTTP para a própria API; QueryClient por request recebe somente o snapshot autorizado e seu instante de observação            |
+| Hidratação                   | Cache desidratado usa o transporte seguro do framework; browser restaura o snapshot sem nova leitura                                                                               |
+| Navegação cliente            | `clientLoader` delega à operação de leitura explícita da feature, que consulta `/api/*` e confirma o snapshot no cache Query; não chama também `serverLoader` para o mesmo dataset |
+| Filtro/página/voltar/avançar | Mesma operação lê novamente sob autorização atual; a URL validada define os filtros aplicados, com cursor reiniciado quando eles mudam                                             |
+| Refresh manual               | Mesma operação, uma leitura autorizada; conteúdo/foco são preservados apenas enquanto o escopo continuar permitido                                                                 |
 
 O dataset tem **um cache Query**, não cópias ativas em loader data, Context e
 state. `useLoaderData` transporta bootstrap/contexto; a página observa o cache.
@@ -240,8 +241,11 @@ refresh deve chegar à API para revalidar o escopo, sem fast path que devolve
 cache por `staleTime` em vez da leitura requerida. Ao voltar a outro repo ou
 workspace, não reapresentar conteúdo privado cacheado antes da nova confirmação.
 A preservação durante refresh refere-se à apresentação atual ainda autorizada.
-Negação tardia invalida o escopo/key original quando ele ainda pertence à mesma
-geração de identidade; não fecha a página nova permitida.
+Negação tardia de recurso invalida seu escopo original na mesma geração de
+identidade. Se houve confirmação mais nova daquele escopo, remove somente a
+key antiga sem apagar a confirmação nova. Uma negação atual impede também
+respostas anteriores de outras páginas/filtros de repovoar o escopo. Sessão
+inválida atual fecha todo o cache da identidade; não equivale a 403 de recurso.
 
 Provar a ponte na versão fixada do Router/Query, incluindo transporte do loader,
 timestamps e opções de observers. A referência `latest` do Query já diferencia
@@ -256,6 +260,20 @@ ponte sem comprovar cancelamento.
 [Client data](https://reactrouter.com/how-to/client-data),
 [Query desabilitada](https://tanstack.com/query/latest/docs/framework/react/guides/disabling-queries)
 e [cancelamento](https://tanstack.com/query/latest/docs/framework/react/guides/query-cancellation).
+
+A [prova executável de 2026-10-05](../research/2026-10-05-dashboard-browser-proof.md)
+refina essa composição para as versões fixadas: o leitor da feature controla
+HTTP, AbortSignal e intenções; Query conserva o único snapshot/subscription,
+com `setQueryData` público e observer passivo. Cancelamento de uma execução
+Query pode restaurar o estado anterior por design; isso não vale como resposta
+autorizada para uma nova intenção. Não usar a deduplicação de requests pendentes
+como confirmação de retorno ao escopo. Esse seam é restrito ao dataset manual
+do MVP; não muda o papel geral da biblioteca nem cria outro cache.
+
+O bootstrap desidratado é consumido na hidratação inicial. Re-render, remount
+de observer ou negação posterior não reaplicam esse snapshot para ressuscitar
+dados expulsos. Revalidação posterior passa pelo leitor explícito e sua nova
+confirmação. A regra precisa permanecer testada ao compor a rota produtiva.
 
 Navegação para página nova define foco no conteúdo/título e anúncio curto.
 Filtro/refresh/idioma mantém o controle acionador e scroll pertinente. Se o item

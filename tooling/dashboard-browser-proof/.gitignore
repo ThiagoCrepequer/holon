@@ -1,0 +1,6 @@
+build/
+.react-router/
+.wrangler/
+proof-results/
+node_modules/
+app/locales/*/messages.ts

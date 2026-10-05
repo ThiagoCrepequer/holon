@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 ---
 
 # Mapa da documentacao
@@ -14,7 +14,10 @@ documentacao distingue deliberadamente evidencias historicas, decisoes
 normativas, arquitetura pretendida e planejamento ainda nao aprovado.
 
 O [backlog do dashboard no GitHub](planning/dashboard-github-backlog.md)
-localiza as entregas, milestones e gates dessa evolução.
+localiza as entregas, milestones e gates dessa evolução. Os
+[resultados do milestone 0](research/2026-10-05-dashboard-milestone-zero-results.md)
+registram provas locais executáveis e o bloqueio de autenticação; não representam
+um dashboard publicado.
 
 ## Caminhos de leitura
 

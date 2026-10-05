@@ -1,0 +1,25 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+#. js-lingui-explicit-id
+#: app/routes/proof.tsx
+msgid "denied"
+msgstr "Access unavailable"
+
+#. js-lingui-explicit-id
+#: app/routes/proof.tsx
+msgid "count"
+msgstr "Items: {count, plural, one {# item} other {# items}}"
+
+#. js-lingui-explicit-id
+#: app/routes/proof.tsx
+msgid "heading"
+msgstr "Read proof"
+
+#. js-lingui-explicit-id
+#: app/routes/proof.tsx
+msgid "refresh"
+msgstr "Refresh"

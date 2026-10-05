@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "holon-local-browser-proof",
+  "main": "workers/local-harness.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "LOCAL_PROOF_ONLY": "synthetic-harness-not-auth" },
+  "observability": { "enabled": false },
+}

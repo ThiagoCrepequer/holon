@@ -268,3 +268,19 @@ zero rows sem efeitos posteriores; email alvo alterado/ausente/provider indispon
 aceite repetido pelo mesmo User e negado a outro, sem recriar membership
 posteriormente removida. São critérios bloqueantes do
 [plano](../planning/dashboard-implementation-plan.md), sem runtime implementado.
+
+## Prova executável e atualização em 2026-10-05
+
+A [prova Workerd/D1](2026-10-05-dashboard-auth-proof.md) passou a executar os
+pacotes publicados reais e OAuth GitHub com rede sintética. A falha antes de
+Account deixou User persistido; um novo OAuth com state/code novos terminou
+em `account_not_linked`. A composição D1 nativa oficial reproduziu o mesmo
+bloqueio. Esse **NO-GO** confirma o risco descrito acima e mantém DASH-02/#129
+aberta, sem auth produtiva ou hook de recuperação por email.
+
+O relatório registra também sessão JSON nativa com `session.token`, DTO servidor
+reduzido com Set-Cookie, expiração/revogação e state concorrente. Diagnósticos
+verdes conservam evidência do candidato; o gate de viabilidade usa asserts
+comuns e falha. Alternativas transacionais são propostas para decisão/prova,
+não substituição aprovada da persistência. A pesquisa anterior permanece um
+snapshot; o relatório novo distingue cada comportamento efetivamente testado.

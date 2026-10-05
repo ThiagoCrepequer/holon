@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 ---
 
 # Investigacoes
@@ -42,6 +42,10 @@ Nao criam uma decisao por si so.
 - [Leitura, autorização GitHub e experimento de busca/índices](2026-10-04-dashboard-read-model-investigation.md)
 - [Entrega de emails: outbox, Queue, recuperação e limite de idempotência](2026-10-04-dashboard-email-delivery-investigation.md)
 - [Revisão de robustez do planejamento: achados, ajustes e gates](2026-10-04-dashboard-plan-robustness-review.md)
+- [Milestone 0: resultados e bloqueios das provas executáveis](2026-10-05-dashboard-milestone-zero-results.md)
+- [Prova Workerd/D1 de autenticação: NO-GO e alternativas](2026-10-05-dashboard-auth-proof.md)
+- [Prova Router/Hono/Query, i18n e CSP no build real](2026-10-05-dashboard-browser-proof.md)
+- [Prova SQLite DO de transação, obrigação e alarm](2026-10-05-dashboard-ledger-proof.md)
 
 Para implementar o dashboard, comece pelo [plano consolidado](../planning/dashboard-implementation-plan.md).
 As seções datadas das pesquisas preservam a evolução do entendimento; os

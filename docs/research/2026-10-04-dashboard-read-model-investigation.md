@@ -244,3 +244,19 @@ Fontes reconsultadas em **2026-10-04**: [limites D1](https://developers.cloudfla
 e [PITR DO](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#pitr-point-in-time-recovery-api).
 Correções são propostas do protocolo; o experimento continua limitado ao SQLite
 local e não prova esses novos cenários, DTO, autorização ou performance D1.
+
+## Prova da primitiva de storage em 2026-10-05
+
+A [bancada SQLite DO](2026-10-05-dashboard-ledger-proof.md) comprovou localmente
+SQL, revisão, obrigação e `setAlarm` na mesma `storage.transaction(async ...)`,
+inclusive rollback do agendamento. A contraprova `transactionSync` seguida de
+agendamento separado conservou tarefa sem alarm após interrupção/recriação.
+A integração futura deve usar a fronteira atômica; o core ainda não foi alterado.
+
+O teste preserva a revisão nova durante I/O e rearma antes do efeito externo,
+com sete falhas e recuperação posterior sem nova mutação de negócio. Storage
+permanece saudável, clocks/alarms são dirigidos pelo helper; teardown local
+não comprova crash físico, retries regionais ou outage do próprio storage.
+Timeout/backoff/orçamento, protocolo D1/restore e observabilidade produtivos
+continuam nas entregas posteriores. Essa prova não amplia o experimento de
+busca SQLite acima para DTO, ACL ou performance D1.

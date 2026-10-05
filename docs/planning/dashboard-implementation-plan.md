@@ -4,7 +4,7 @@ kind: planning
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-05
 related:
   - dashboard-engineering-decision-review.md
   - ../engineering/frontend-application-structure.md
@@ -26,9 +26,14 @@ As entregas estão publicadas no [backlog do GitHub](dashboard-github-backlog.md
 com milestones, sub-issues e bloqueios. O mapa registra escopo e links; o
 GitHub informa o estado atual de execução.
 
-**Estado: planejamento revisado; runtime não implementado.** Better Auth/Drizzle/D1
+**Estado: provas isoladas do milestone 0 implementadas; runtime do dashboard
+ainda não implementado.** Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
+ligam cada gate à bancada e sua evidência. Better Auth/Drizzle/D1
 é a direção escolhida, porém o candidato estável tem um gate de viabilidade de
-cadastro OAuth que impede iniciar auth de usuários como se estivesse resolvido.
+cadastro OAuth reproduzido no Workerd/D1 que impede iniciar auth de usuários
+como se estivesse resolvido. O adapter D1 nativo também falhou. A issue #129
+e seus dependentes permanecem bloqueados até uma composição suportada passar
+o gate; não concluir o milestone pelo sucesso das outras provas.
 Não aceitar patch do core, identidade fundida por email ou recuperação manual
 obrigatória de cadastro como dívida para depois. O MVP limita funcionalidades;
 segurança, durabilidade e testes dos fluxos incluídos permanecem obrigatórios.
