@@ -117,6 +117,17 @@ envelope continua obrigatório e limitado: formatos inválidos de `findings`,
 resumo ausente, metadados inválidos e mais de oito resoluções continuam causando
 erro. Os schemas do domínio continuam exigindo evidência não vazia.
 
+## Recuperação de resumo — 2026-10-04
+
+Resumo vazio continua sendo permitido no draft como saída degradada, com
+`summary_missing` explícito e sem perder candidatos. `reviewSummaryRecoverySchema`
+aceita somente `summary` não vazio de até 10.000 unidades UTF-16, `isDegraded`
+booleano e `outputLimitations` com os códigos atuais. Campos adicionais são
+rejeitados: a recuperação não pode substituir findings, resoluções ou
+observações. O host combina somente essa narrativa e suas limitações com o
+draft validado; nunca apaga outras causas de parcialidade. Os limites de uma
+inferência, 1.024 tokens e até 60 segundos compartilham orçamento e prazo da run.
+
 ## Configuração compilada — 2026-09-09
 
 `repository-config/input.ts` é a entrada estrutural única; `snapshot.ts` separa

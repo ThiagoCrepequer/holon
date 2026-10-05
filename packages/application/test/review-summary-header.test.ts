@@ -43,7 +43,9 @@ describe("review summary header", () => {
       });
       expect(formatted).toContain("## ⚠️ Holon · Revisão incompleta");
       expect(formatted).toContain(
-        "**0 achados verificados** · cobertura parcial",
+        scopeStatus === "complete"
+          ? "**0 achados verificados** · análise incompleta"
+          : "**0 achados verificados** · cobertura parcial",
       );
       expect(formatted).toContain(
         scopeStatus === "partial_by_failure"

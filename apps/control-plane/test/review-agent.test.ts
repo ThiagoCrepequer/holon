@@ -132,6 +132,7 @@ it("refuses a turn after its fixed deadline", async () => {
       totalShards: 2,
     });
     expect(await instance.isReviewAuthorized()).toBe(false);
+    await expect(instance.prepareSummaryRecovery()).rejects.toThrow("obsolete");
     await expect(
       instance.beforeTurn({} as Parameters<ReviewAgent["beforeTurn"]>[0]),
     ).rejects.toThrow("obsolete");

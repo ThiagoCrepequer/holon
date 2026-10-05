@@ -42,7 +42,15 @@ export function formatReviewSummaryHeader(input: ReviewSummaryHeader): string {
       `**${count} verified finding${count === 1 ? "" : "s"}**`,
       `**${count} achado${count === 1 ? "" : "s"} verificado${count === 1 ? "" : "s"}**`,
       `**${count} hallazgo${count === 1 ? "" : "s"} verificado${count === 1 ? "" : "s"}**`,
-    )} · ${text("partial coverage", "cobertura parcial", "cobertura parcial")}${coverage}`;
+    )} · ${
+      input.scopeStatus === "complete"
+        ? text(
+            "incomplete analysis",
+            "análise incompleta",
+            "análisis incompleto",
+          )
+        : text("partial coverage", "cobertura parcial", "cobertura parcial")
+    }${coverage}`;
   }
 
   const heading =

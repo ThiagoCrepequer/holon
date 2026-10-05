@@ -55,6 +55,32 @@ describe("aggregateShardReviews", () => {
     unsupportedFilesCount: 0,
   };
 
+  it("publishes the missing summary reason even when every shard completed", () => {
+    const aggregated = aggregateShardReviews(
+      { ...plan, shards: [shard0] },
+      [
+        {
+          findings: [],
+          shardId: "shard-0",
+          shardIndex: 0,
+          status: "success",
+          summary: "",
+          isDegraded: true,
+          outputLimitations: ["summary_missing"],
+        },
+      ],
+      { language: "pt-BR" },
+    );
+    expect(aggregated.verdict).toBe("COMMENT");
+    expect(aggregated.summary).toContain(
+      "análise incompleta (1/1 partes analisadas)",
+    );
+    expect(aggregated.summary).toContain(
+      "A parte 1 concluiu a execução, mas não forneceu um resumo válido (summary_missing).",
+    );
+    expect(aggregated.summary).not.toContain("cobertura parcial");
+  });
+
   it.each(["partial_by_policy", "partial_by_failure", "degraded"] as const)(
     "does not publish a model's global all-clear for an incomplete review: %s",
     (mode) => {

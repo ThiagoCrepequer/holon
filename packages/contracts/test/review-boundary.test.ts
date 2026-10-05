@@ -137,6 +137,7 @@ it.each(["", "   "])(
     const parsed = parseModelReviewTransport(output);
     expect(parsed.summary).toBe("");
     expect(parsed.isDegraded).toBe(true);
+    expect(parsed.outputLimitations).toContain("summary_missing");
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0]?.location).toEqual({
       line: 10,

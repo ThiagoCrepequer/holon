@@ -138,6 +138,12 @@ export const reviewMessages = {
     "pt-BR": "Parte {index}: {code}.",
     es: "Parte {index}: {code}.",
   },
+  shardSummaryMissing: {
+    en: "Shard {index} completed execution but did not provide a valid summary (summary_missing).",
+    "pt-BR":
+      "A parte {index} concluiu a execução, mas não forneceu um resumo válido (summary_missing).",
+    es: "La parte {index} completó la ejecución, pero no proporcionó un resumen válido (summary_missing).",
+  },
   exported_symbol_removed: {
     en: "Exported symbol removed",
     "pt-BR": "Símbolo exportado removido",

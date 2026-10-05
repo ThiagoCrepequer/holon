@@ -143,6 +143,7 @@ it("disables message and tool payload storage when tracing payloads are turned o
     getSystemPrompt: () => "Read-only review instructions",
     isReviewAuthorized: async () => true,
   }) as ReviewAgent;
+  Object.defineProperty(agent, "state", { value: { summaryRecovery: false } });
   const turn = await agent.beforeTurn(
     {} as Parameters<ReviewAgent["beforeTurn"]>[0],
   );

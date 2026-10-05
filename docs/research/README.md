@@ -33,6 +33,7 @@ Nao criam uma decisao por si so.
 - [Exemplos e runtime de Cloudflare Agents para o review](2026-10-03-cloudflare-agents-examples-and-runtime-audit.md)
 - [PR #121: review parcial e formato do feedback](2026-10-04-pr121-partial-review.md)
 - [PR #124: candidatos sem evidência interromperam o shard](2026-10-04-pr124-empty-evidence.md)
+- [PR #125: Workflows concluídos com resumo ausente](2026-10-04-pr125-missing-summary.md)
 
 ## Politica de manutencao
 

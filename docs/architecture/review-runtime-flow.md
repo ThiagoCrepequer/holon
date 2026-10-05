@@ -55,6 +55,12 @@ sequenceDiagram
         end
       end
       AG-->>AW: resposta estruturada
+      opt Resumo vazio
+        AW->>AG: recuperar narrativa em um step.prompt durável
+        AG->>LE: reservar uma inferência no mesmo orçamento
+        AG->>GW: um passo, somente final answer
+        AG-->>AW: resumo e limitações, sem alterar candidatos
+      end
       AW-->>WF: candidatos do shard
       WF->>WF: validar evidência no diff canônico
       opt Há candidatos válidos
@@ -111,6 +117,22 @@ ledger e o deadline. `getTools` registra somente `read_file`, `search_text` e
 `search_structure`. MCP, bash e edição não são expostos. O executor revalida
 path, escopo, política de egress, tamanho, deadline e autoridade no limite de
 confiança próprio. Código e resultado de busca são dados não confiáveis.
+
+Quando o resultado estruturado tem resumo vazio, o Workflow conserva o draft
+validado e registra `summary_missing`. Uma única chamada a `step.prompt` com
+nome `recover-summary` pede apenas narrativa, degradação e limitações; seu
+schema estrito não aceita findings, resoluções ou observações. O Agent persiste
+o modo de recuperação no estado durável e restringe o turno a um passo e
+`think_final_answer`, com no máximo 1.024 tokens de saída. O middleware existente
+reserva essa inferência no orçamento agregado da fase `investigation`. O wait
+é limitado ao menor valor entre 60 segundos e o deadline restante.
+
+Uma narrativa válida remove somente `summary_missing`; outras limitações e
+degradação declarada no draft ou na recuperação permanecem. Falha de schema,
+provider, orçamento ou timeout conserva o draft e o motivo explícito. Run
+obsoleta ou expirada continua abortando antes de devolver um resultado. O
+step idempotente do Think mantém a mesma identidade em retomadas do Workflow;
+não há loop próprio de modelo nem síntese agregada adicional.
 
 O verificador tenta refutar cada candidato, lendo guardas, chamadores e contratos
 fora do patch quando necessários. Sua saída estrita não contém findings novos:

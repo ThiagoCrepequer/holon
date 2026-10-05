@@ -47,6 +47,18 @@ step concluído. A correção descarta candidatos sem evidências válidas e con
 o shard como degradado, com `evidence_rejected`; não o transforma em análise
 limpa. Veja a [investigação do PR #124](../research/2026-10-04-pr124-empty-evidence.md).
 
+Se todos os shards concluíram e a análise permanece parcial, confira
+`degradedShards` em `review.analysis_partial` e os motivos de
+`review.shard_partial`. No PR #125, em 2026-10-04, o step do modelo concluiu com
+`summary: ""` e `isDegraded: false`; o parser marcou degradação por falta de
+narrativa, registrada na versão anterior apenas como `model_degraded`.
+A correção registra `summary_missing`, tenta uma recuperação durável chamada
+`recover-summary` e conserva a revisão parcial com explicação pública se a
+tentativa falhar. Essa chamada usa uma inferência de até 1.024 tokens no mesmo
+saldo da run, sem tools de repositório e com wait de até 60 segundos, limitado
+pelo deadline restante. Não confunda esse caso com shard em status `errored`.
+Veja a [investigação do PR #125](../research/2026-10-04-pr125-missing-summary.md).
+
 | Evento                                                                   | Interpretação                                                                                                                                                              |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `model.budget_rejected`                                                  | O ledger recusou uma inferência pelo teto **agregado da run**. `rule`, `current`, `requested` e `limit` identificam a dimensão; shard e fase ajudam a localizar a chamada. |
