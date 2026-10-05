@@ -64,6 +64,54 @@ interna resolveria.
 | Secrets, GitHub App ou deploy                      | [Operação](../operations/README.md) e [segurança](../architecture/security-and-trust-boundaries.md)                                       | Ambiente, artefato, permissões, rotação e autorização antes do efeito remoto.                       |
 | Incidente ou comportamento histórico               | [Pesquisas](../research/README.md)                                                                                                        | Código/configuração atuais e ADR que governa o estado presente.                                     |
 
+## Referência para aplicações web futuras
+
+A [organização de aplicações web e dependências](frontend-application-structure.md)
+registra a direção do dashboard dos usuários: packages com interfaces úteis,
+rotas com arquivos privados próximos, features reutilizáveis, schemas/estado
+com donos e isolamento browser/server. A topologia é **proposta**; não descreve
+workspaces existentes nem altera o grafo do core. As regras gerais de módulos
+continuam em [TypeScript e módulos](typescript-and-module-design.md).
+
+Better Auth + Drizzle/D1 é a direção escolhida para autenticação, com
+[políticas acordadas e integração a provar](../research/2026-10-04-dashboard-authentication-discovery.md).
+Cloudflare Email Sending foi escolhido para convites. A etapa continua documental;
+implementação, schema/migrations e recursos não foram iniciados.
+
+A [revisão de decisões de engenharia e qualidade](../planning/dashboard-engineering-decision-review.md)
+registra Q1–Q37 acordadas e as investigações de auth, leitura e entrega durável
+de emails. Q37 aceita retry limitado do mesmo convite quando o resultado externo
+é desconhecido, com possível email duplicado. A concordância não demonstra integração real
+nem autoriza publicação ou operação de recursos.
+
+O [modelo de identidade e workspaces](dashboard-identity-and-workspaces.md)
+registra User, login, membership N:M, pessoal/equipe na mesma entidade,
+owner/member e cardinalidade de instalações. Organização é sinônimo de workspace.
+Q31–Q34 confirmaram autoridade de vínculo, convites, múltiplos owners e onboarding
+self-service mínimo. Q35/Q36 confirmaram Worker privado e fila/retries duráveis.
+Não há implementação SaaS; resta a prova técnica da integração.
+
+A [investigação de auth/D1](../research/2026-10-04-dashboard-auth-persistence-investigation.md)
+recomenda tenancy Holon própria e delimita falhas/concorrência a provar. A
+[investigação de leitura](../research/2026-10-04-dashboard-read-model-investigation.md)
+inclui experimento SQLite reproduzível; a
+[investigação de entrega](../research/2026-10-04-dashboard-email-delivery-investigation.md)
+detalha outbox, Queue e recuperação. São propostas com evidência datada.
+
+O [plano de implementação](../planning/dashboard-implementation-plan.md) é a
+entrada atual para sequência, gates e matriz mínima de regressão; o registro
+de entrevista preserva as escolhas, sem exigir releitura de todas as rodadas.
+A [revisão de robustez](../research/2026-10-04-dashboard-plan-robustness-review.md)
+delimita os achados corrigidos e provas ausentes. O candidato auth não está
+pronto enquanto cadastro OAuth interrompido não tiver recuperação suportada.
+
+As referências propostas de [segurança web e dados](web-security-and-data-boundaries.md)
+e [ambientes/recuperação](../operations/dashboard-environments-and-recovery.md)
+definem HTTP/CSRF, sessão pública, conteúdo hostil, efeitos externos e restore.
+Use a skill [dashboard-engineering](../../.agents/skills/dashboard-engineering/SKILL.md)
+quando a tarefa afetar essa evolução. Ela direciona a leitura e a prova, sem
+substituir os guias gerais ou habilitar operação remota.
+
 ## Fluxo de trabalho
 
 1. Enuncie comportamento e identidade afetada; localize contrato e ADR.
@@ -81,3 +129,5 @@ interna resolveria.
 A documentação de engenharia contém regras reutilizáveis do projeto. Detalhes
 de uma migração ou experimento pertencem ao plano e à pesquisa específicos;
 eles só entram aqui quando virarem parte do runtime vigente ou uma regra geral.
+Referências de infraestrutura futura permanecem identificadas como propostas,
+separadas do mapa implementado.

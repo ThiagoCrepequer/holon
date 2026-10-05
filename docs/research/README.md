@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-10
+last-reviewed: 2026-10-04
 ---
 
 # Investigacoes
@@ -34,6 +34,18 @@ Nao criam uma decisao por si so.
 - [PR #121: review parcial e formato do feedback](2026-10-04-pr121-partial-review.md)
 - [PR #124: candidatos sem evidência interromperam o shard](2026-10-04-pr124-empty-evidence.md)
 - [PR #125: Workflows concluídos com resumo ausente](2026-10-04-pr125-missing-summary.md)
+
+- [Coletânea de bibliotecas para o dashboard dos usuários](2026-10-04-dashboard-library-landscape.md)
+- [Referências de UI e movimento para o dashboard](2026-10-04-dashboard-ui-motion-references.md)
+- [Autenticação do dashboard: descoberta, políticas acordadas e histórico](2026-10-04-dashboard-authentication-discovery.md)
+- [Autenticação e persistência: adapter D1, tenancy e provas restantes](2026-10-04-dashboard-auth-persistence-investigation.md)
+- [Leitura, autorização GitHub e experimento de busca/índices](2026-10-04-dashboard-read-model-investigation.md)
+- [Entrega de emails: outbox, Queue, recuperação e limite de idempotência](2026-10-04-dashboard-email-delivery-investigation.md)
+- [Revisão de robustez do planejamento: achados, ajustes e gates](2026-10-04-dashboard-plan-robustness-review.md)
+
+Para implementar o dashboard, comece pelo [plano consolidado](../planning/dashboard-implementation-plan.md).
+As seções datadas das pesquisas preservam a evolução do entendimento; os
+ajustes de robustez atuais delimitam o que está comprovado e o que ainda é gate.
 
 ## Politica de manutencao
 
