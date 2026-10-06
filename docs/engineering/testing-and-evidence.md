@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 ---
 
 # Testes e evidência de entrega
@@ -96,12 +96,12 @@ autorizado no futuro Worker `apps/dashboard`:
   não substitui prova de interação, hidratação e navegação. Não mudar a config
   Node global para acomodar UI.
 
-Esses gates são requisitos futuros. Hoje `verify` não inclui `brand:check`,
-o checker percorre fontes TSX, mas o escopo atual e a resolução de ciclos
-`.js`→`.ts` não comprovam `app/`, ciclos TSX, aliases ou subpaths novos,
-e não há suite frontend implantada. Adequar e testar os checks no bootstrap,
-sem afrouxar os do core. Q10/Q11 confirmaram runtime e
-cadência; os checks/configs ainda precisam ser implementados.
+M1 implementa marca/contraste em `verify`, scanner AST src/app/workers com
+fixtures negativas TSX/aliases/subpaths/servidor e configs Node/DOM/Workers/browser.
+A [arquitetura](../architecture/user-dashboard.md) e o
+[registro da fundação](../research/2026-10-06-dashboard-foundation-results.md)
+separam o que esses gates provam dos cenários privados ainda futuros. O wildcard
+404, idiomas, preferências e componentes mínimos exercitam o artefato real.
 
 A primeira prova deve exercitar a composição real com fixtures sintéticas
 e limites externos controlados: HTML inicial e hidratação sem duplicação
@@ -132,9 +132,9 @@ sem plugin como baseline explicitamente identificado, nunca como fallback.
 ## Dashboard: direção de teste após Q8/Q10/Q11
 
 Em 2026-10-04 foram confirmados DOM + browser e a cadência. A engenharia
-deriva esta composição, **ainda sem dependências/configs instaladas**:
+deriva esta composição, materializada na fundação M1 para os comportamentos já implementados:
 
-| Responsabilidade                                 | Composição futura                                                 | Cadência                                     |
+| Responsabilidade                                 | Composição                                                        | Cadência                                     |
 | ------------------------------------------------ | ----------------------------------------------------------------- | -------------------------------------------- |
 | Regras/apresentação/contratos puros              | Vitest Node atual                                                 | PR correspondente                            |
 | Componentes/interação/semântica                  | Vitest + React Testing Library/user-event + jsdom, config própria | PR correspondente                            |
@@ -296,11 +296,11 @@ Testar respostas auth reduzidas, métodos/paths não expostos, cookies/CSRF,
 conteúdo hostil em SSR/Markdown e nonce no build. As regras estão no
 [guia de segurança web](web-security-and-data-boundaries.md).
 
-Checker futuro deve ter fixtures negativas para imports server no cliente,
+A fundação M1 implementa fixtures negativas para imports server no cliente,
 internals de rota/feature, subpaths/aliases, `.js`→`.tsx` e ciclos, além do caminho
-permitido. Bundle cliente precisa de inspeção própria: grafo TypeScript verde
-não prova que SDK/secrets desapareceram do artefato. Nenhum desses checks novos
-é apresentado como implementado nesta revisão.
+permitido. O build inspeciona as identidades dos módulos dos chunks cliente:
+grafo TypeScript verde não prova que SDKs de servidor desapareceram do artefato.
+Cada novo export, alias ou fronteira precisa ampliar essas provas na mesma mudança.
 
 Teste local usa sender fake controlado; não enviar email para validar CI.
 Prova remota de Email Sending precisa de autorização própria, domínio configurado,
@@ -313,3 +313,32 @@ Nenhum email real foi enviado nesta etapa.
 
 - [Cloudflare: integração Vitest para Workers](https://developers.cloudflare.com/workers/testing/vitest-integration/)
 - [Cloudflare: regras de Workflows](https://developers.cloudflare.com/workflows/build/rules-of-workflows/)
+
+## Dashboard: comandos da fundação M1
+
+| Camada             | Configuração/comando dono                              | Evidência                                                                                                  |
+| ------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Contratos e portas | `pnpm --filter @holon/contracts test:coverage`         | DTOs strict, estados/IDs/páginas e erros sem segredo                                                       |
+| Node               | `apps/dashboard/vitest.config.ts`                      | negociação, Intl e headers/CSRF/limites puros                                                              |
+| DOM                | `pnpm --filter @holon/ui test:coverage`                | controles/semântica e eventos via user-event; foco nativo exige browser                                    |
+| Workerd HTTP       | `pnpm --filter @holon/dashboard test:coverage:workers` | a mesma fronteira HTTP no runtime alvo                                                                     |
+| Workerd D1         | `pnpm --filter @holon/db test:coverage`                | migrations, autoridade, constraints, concorrência/rollback e reserva OAuth                                 |
+| Workerd RPC        | `pnpm --filter @holon/email-delivery test:coverage`    | HTTP negado e capability privada no bundle construído separadamente                                        |
+| Browser            | `pnpm --filter @holon/dashboard test:browser`          | build/dry-run + pt-BR/en × Chromium/Firefox/WebKit, CSP/SSR/teclado/foco/tema/reduced-motion/axe/cache/404 |
+| Imports/marca      | `pnpm test:architecture`, `pnpm brand:check`           | regras positivas/negativas e tokens/contraste                                                              |
+
+`@holon/dashboard` mantém Node (V8) e Workers (Istanbul) com 90% de linhas,
+funções/statements e 85% de branches nos módulos de política HTTP/i18n e no
+validador de identidades de módulos cliente. UI/DB/email
+instrumentam suas fontes inteiras nos respectivos runtimes, com os mesmos limites.
+Root/rotas/entries de composição framework são cobertos pelo artefato Playwright;
+nenhum threshold do core foi reduzido ou caminho removido para esconder falha.
+A CI instala os três engines, roda `verify` e retém JUnit/trace/screenshot sintéticos
+por sete dias. Suites browser têm zero retries e cache desligado; falhas não passam
+porque uma repetição sem correção ficou verde.
+
+Axe cobre regras automatizáveis nos estados exibidos, não conformidade WCAG 2.2
+completa. A suite inclui largura 375 px; 320 px, zoom, dispositivos reais, duas
+versões estáveis e os fluxos privados completos permanecem gates da entrega UI.
+Local preference via URL não prova perfil persistido; health não prova readiness
+de auth ou banco; reserva OAuth local não comprova callback real do GitHub.

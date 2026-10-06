@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -20,9 +20,34 @@ Quais invariantes devem proteger HTTP, sessão, comandos, conteúdo externo e
 dados privados na primeira implementação do dashboard?
 
 Este guia complementa Q1–Q37 e as [fronteiras atuais](../architecture/security-and-trust-boundaries.md).
-É uma referência proposta para o dashboard, sem handlers, cookies ou bindings
-implementados. Não altera a segurança do core nem habilita funcionalidades
-novas. As garantias abaixo são condições de aceitação, não fatos de produção.
+As fundações HTTP locais estão implementadas pela
+[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md); sessão,
+permissões, convites, Markdown/email e rate limits dos respectivos fluxos ainda
+não estão integrados. As garantias futuras abaixo continuam condições de aceite,
+sem alegar validação de produção.
+
+## Base HTTP implementada em M1
+
+`apps/dashboard/app/server/http-security.server.ts` valida origem de configuração
+(HTTPS, exceto loopback local), redirect relativo sem normalização ambígua,
+POST JSON com synchronizer token ligado a uma sessão confiável, Origin exata e
+Fetch Metadata complementar. O body é limitado a 16 KiB também pelo stream;
+JSON/UTF-8 inválidos são negados. Dados ainda exigem o schema do comando dono.
+`readCommand` não autentica por string nem emite token: M2 possui sessão,
+emissão/rotação CSRF e ligação com o cookie verificado.
+
+O handler atual só aceita GET/HEAD, oferece liveness e devolve códigos/UUID para
+erros; não há comandos reais para contornar CSRF. Headers preservam Set-Cookie,
+CSP por nonce sem unsafe-inline/eval, nosniff, no-referrer e private/no-store.
+`public/_headers` permite cache imutável somente aos assets com hash. O renderer
+usa logging com code/requestId e a rota wildcard produz 404 localizado, sem
+serializar a exceção padrão do framework com o caminho solicitado.
+
+Node e Workerd exercitam corpo sem length confiável, redirects hostis, métodos,
+origens, tokens, múltiplos cookies e erros arbitrários. Browser usa o bundle real
+para provar SSR/CSP/hidratação/404 e nega GET/POST nos comandos inexistentes.
+Isso não comprova segurança dos futuros endpoints de convites, Markdown/email,
+rate limiting, sessões ou tenancy. Cada owner integra seus gates na mesma issue.
 
 ## Autoridade e isolamento
 

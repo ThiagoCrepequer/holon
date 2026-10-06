@@ -15,15 +15,16 @@ runtime; não há uma segunda cópia JSON Schema para divergir.
 
 ## Contratos implementados
 
-| Modulo                   | Contratos principais                                                           |
-| ------------------------ | ------------------------------------------------------------------------------ |
-| `webhook.ts`             | Envelope atual preserva `pull_request.updated_at`                              |
-| `executor.ts`            | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados  |
-| `repository-policy.ts`   | YAML normalizado, digests, exclusões e rigor de veredito                       |
-| `review-output.ts`       | Findings estruturados, evidências, resumo e registro de publicação             |
-| `causal-verification.ts` | Avaliações restritas a candidatos, resultado causal, confiança e justificativa |
-| `health.ts`              | Contrato do healthcheck funcional                                              |
-| `shared.ts`              | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados    |
+| Modulo                   | Contratos principais                                                                                              |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `webhook.ts`             | Envelope atual preserva `pull_request.updated_at`                                                                 |
+| `executor.ts`            | Preparação/contexto exact-SHA, política de escopo, broker, tools e resultados                                     |
+| `repository-policy.ts`   | YAML normalizado, digests, exclusões e rigor de veredito                                                          |
+| `review-output.ts`       | Findings estruturados, evidências, resumo e registro de publicação                                                |
+| `causal-verification.ts` | Avaliações restritas a candidatos, resultado causal, confiança e justificativa                                    |
+| `dashboard.ts`           | Idiomas, sessão pública, membership, wake privado, metadados paginados e erros estritos; sem segredos ou rows ORM |
+| `health.ts`              | Contrato do healthcheck funcional                                                                                 |
+| `shared.ts`              | SHA, IDs, inteiros positivos e caminhos relativos normalizados reutilizados                                       |
 
 ## Regras
 

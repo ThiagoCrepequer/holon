@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-06
 related:
   - ../planning/dashboard-implementation-plan.md
   - ../research/2026-10-04-dashboard-email-delivery-investigation.md
@@ -18,10 +18,46 @@ related:
 Como publicar e recuperar o MVP sem misturar identidade, efeitos de email,
 projeções e recursos de preview/produção?
 
-Este é um roteiro **proposto**, sem nomes de recursos, domínios, credenciais ou
-operações remotas definidos. Completar IDs e comandos contra os manifests reais
-na implementação; seguir [deploy](deployment.md) e ADRs vigentes. Uma revisão
-documental não autoriza migration, DNS, restore, envio ou publicação.
+A fundação M1 tem manifests, tipos e comandos **locais**. Preview/produção e
+recuperação remota continuam propostos, sem IDs/domínios/credenciais definidos.
+Completar esses ambientes em operação autorizada conforme [deploy](deployment.md)
+e ADRs vigentes. A fundação não autoriza migration remota, DNS, restore ou envio.
+
+## Operação local materializada
+
+Na raiz, com Node >=24.11 <25 e pnpm 11.24.0:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter @holon/db migrate:identity:local
+pnpm --filter @holon/db migrate:projection:local
+pnpm --filter @holon/dashboard dev
+pnpm --filter @holon/dashboard build
+pnpm --filter @holon/email-delivery build
+pnpm --filter @holon/dashboard exec playwright install chromium firefox webkit
+pnpm verify
+```
+
+Os scripts de migration têm `--local` fixado e apontam aos manifests reais;
+builds só fazem dry-run. Vitest usa D1/DO isolados; Playwright inicia Wrangler
+local na porta 8794 após o build. O dev usa origem exata do manifest e porta
+8794; não inferir origem confiável do Host para acomodar outro hostname.
+
+Os nomes `holon-dashboard-local`, `holon-email-delivery-local`, os dois nomes D1
+`holon-identity-local`/`holon-projection-local` e UUIDs `00000000-0000-4000-8000-000000000001/2`
+são locais/sintéticos. Ambos os D1 têm `remote: false`; URLs workers.dev e preview
+estão desligadas. Esses IDs não representam recursos Cloudflare. O estado local
+é descartável, mas não apagar migrations versionadas para resetar dados.
+
+Não há comando remoto utilizável nessa configuração. Em promoção futura,
+identificar a configuração homologada e binding reais; a aplicação remota será
+um passo explícito `wrangler d1 migrations apply <binding> --remote --config
+<configuração-homologada>`, com plano de recuperação, owner e autorização. Não
+reutilizar os UUIDs locais nem tratar `--local`/`--remote` como flags intercambiáveis.
+
+`/api/health` é liveness, sem verificar schema/auth/provider. M2/M5 compõem
+`assertReady` dos adapters e readiness apropriada; não interpretar HTTP 200 da
+fundação como produto pronto. O pipeline de deploy do core não inclui estes apps.
 
 ## Composição por ambiente
 

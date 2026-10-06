@@ -14,7 +14,7 @@
     "test": "pnpm test:architecture && pnpm test:deploy && turbo run test",
     "test:coverage": "pnpm test:architecture && pnpm test:deploy:coverage && turbo run test:coverage",
     "typecheck": "turbo run typecheck",
-    "verify": "pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
+    "verify": "pnpm brand:check && pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "config:validate": "pnpm --filter @holon/config-cli holon config validate",
     "config:explain": "pnpm --filter @holon/config-cli holon config explain",
     "config:schema:generate": "pnpm --filter @holon/config-cli schema:generate",
@@ -25,8 +25,10 @@
     "deploy:guarded": "node tooling/deploy/cli.mjs"
   },
   "devDependencies": {
+    "@babel/parser": "8.0.6",
     "@vitest/coverage-istanbul": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "jsdom": "29.1.1",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

@@ -1,10 +1,10 @@
 ---
 id: ENGINEERING-FRONTEND-STRUCTURE
 kind: reference
-status: proposed
+status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 related:
   - typescript-and-module-design.md
   - ../research/2026-10-04-dashboard-library-landscape.md
@@ -17,11 +17,12 @@ related:
 Como organizar o dashboard dos usuários mantendo proximidade dos arquivos,
 responsabilidades claras e dependências externas concentradas em packages?
 
-Esta referência registra a direção solicitada em 2026-10-04. As regras de
-organização abaixo orientam o desenho futuro. A rodada 1 da entrevista confirmou
-um Worker próprio para o dashboard; a estrutura interna ilustrada ainda é
-proposta e não está implementada. Não cria `apps/dashboard`, `packages/ui`,
-`packages/auth` ou `packages/db`, nem altera o grafo atual ou a ADR-0040.
+A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) materializa
+as fundações locais de `apps/dashboard`, `apps/email-delivery`, `packages/ui` e
+`packages/db`. A [arquitetura do dashboard](../architecture/user-dashboard.md)
+descreve arquivos/interfaces concretos. Exemplos de review/auth/queries abaixo
+continuam desenhos para M2–M6, sem pastas vazias ou comportamento simulado.
+A ADR-0040 permanece vigente para o admin retirado.
 O [guia TypeScript](typescript-and-module-design.md) continua valendo para
 imports, tipos, módulos e contratos de todo o Holon.
 
@@ -68,8 +69,8 @@ não apenas reduzir o número de imports externos.
 | `packages/application` / `domain` existentes | Casos de uso, portas e invariantes adequados ao domínio                                       | Política do produto sem React, Better Auth, ORM ou HTTP                                                                  |
 | Módulo de dados no app                       | Queries/hooks/options e transporte validado por capacidade                                    | TanStack Query, hidratação, erros, cancelamento e invalidação do dataset; package cliente não exigido                    |
 
-Os nomes de packages são candidatos, não uma obrigação de criar todos no
-bootstrap. `ui` protege padrões reutilizáveis da marca mesmo com um primeiro
+`ui` e `db` têm bases locais; `auth` entra somente com a integração M2.
+Os demais nomes são candidatos, não uma obrigação de criar todos no bootstrap. `ui` protege padrões reutilizáveis da marca mesmo com um primeiro
 app consumidor. `auth` e `db` protegem políticas e infraestrutura identificáveis.
 Não criar um pacote para cada dependência ou hook.
 
@@ -91,6 +92,10 @@ não a um wrapper de aplicação. **TanStack Query fica no app**, conforme Q9
 em 2026-10-04: keys/options/hooks em módulo de dados da feature ou junto à
 rota se forem exclusivos dela. Providers/cache/hidratação são compostos no
 app; não criar package cliente só para deslocar esses arquivos.
+
+Lingui é uma exceção direta do app: catálogos, negociação por request e provider
+pertencem à superfície. Types/build incluem sync, missing sem fallback, compile
+estrito e fixture negativa no CLI real.
 
 TanStack Form continua condicional aos formulários reais. Table/Virtual podem
 ser exceções localizadas se uma necessidade concreta não couber na interface
@@ -474,3 +479,24 @@ A estratégia combina localidade, interfaces pequenas, composição e portas/
 adapters nas integrações. Não exige um framework de pastas ou camadas idênticas
 para cada feature. Fontes externas verificadas em **2026-10-04**; exemplos de
 paths e nomes são propostas do Holon, não convenções obrigatórias das bibliotecas.
+
+## Checks materializados na fundação
+
+`tooling/architecture/module-graph.mjs` interpreta AST e confere src/app/workers,
+exports/subpaths, alias `~/` com contraparte em Vite e resolução `.js`→`.tsx`.
+Fixtures negativas provam ciclos, internals de rotas/features e vazamento servidor
+transitivo. Componentes puros não alcançam runtime/SDK servidor. Módulos de rota
+mistos ficam sujeitos ao build real e à verificação do bundle cliente.
+
+O primeiro bootstrap contém `routes/welcome/route.tsx`, wildcard 404 localizado,
+`server/http-*`, `i18n/` e contexto de nonce por request. Não há pasta components
+central de páginas nem feature fictícia. `packages/ui` expõe button, dialog,
+select-field, icons, brand, CSS e utilitário de classes por subpath.
+
+Para inspecionar a configuração shadcn, `pnpm dlx shadcn@4.21.3 info` em
+`apps/dashboard` resolve o destino `packages/ui/src`. O alias exato `@holon/ui`
+serve à geração; não é um módulo runtime. O app continua importando subpaths
+exportados, sem alias wildcard para internals. Não gerar componentes de produto
+num diretório central por padrão; indicar a rota dona. `add` não foi executado
+na fundação e não autoriza sobrescrever APIs existentes ou adicionar SDKs sem
+comportamento, tokens e testes correspondentes.

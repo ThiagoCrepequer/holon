@@ -1,0 +1,19 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "outputs": ["build/**", "app/locales/*/messages.ts"]
+    },
+    "typecheck": {
+      "outputs": [".react-router/**", "app/locales/*/messages.ts"]
+    },
+    "test": {
+      "cache": false,
+      "outputs": ["proof-results/**"]
+    },
+    "test:coverage": {
+      "cache": false,
+      "outputs": ["coverage/**", "proof-results/**"]
+    }
+  }
+}

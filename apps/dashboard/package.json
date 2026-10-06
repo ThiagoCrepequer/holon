@@ -1,0 +1,50 @@
+{
+  "name": "@holon/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev --port 8794 --host 127.0.0.1",
+    "build": "pnpm i18n:check && react-router build && node scripts/check-bundle.mjs && wrangler deploy --dry-run --config build/server/wrangler.json",
+    "typecheck": "wrangler types --check && pnpm i18n:check && react-router typegen && tsc --noEmit",
+    "test": "pnpm i18n:check && vitest run --config vitest.config.ts && pnpm test:workers && pnpm test:browser",
+    "test:coverage": "pnpm i18n:check && vitest run --config vitest.config.ts --coverage && pnpm test:coverage:workers && pnpm test:browser",
+    "test:browser": "pnpm build && playwright test",
+    "serve:test": "wrangler dev --config build/server/wrangler.json --local --port 8794 --ip 127.0.0.1",
+    "i18n:extract": "lingui extract --clean --workers 1",
+    "i18n:check": "lingui check sync && lingui check missing --mode catalog && lingui compile --strict --typescript --workers 1 && node scripts/check-i18n-gate.mjs",
+    "test:workers": "vitest run --config vitest.worker.config.ts",
+    "test:coverage:workers": "vitest run --config vitest.worker.config.ts --coverage"
+  },
+  "dependencies": {
+    "@holon/contracts": "workspace:*",
+    "@holon/ui": "workspace:*",
+    "@lingui/core": "6.9.0",
+    "@lingui/react": "6.9.0",
+    "hono": "catalog:",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@cloudflare/vite-plugin": "1.62.5",
+    "@cloudflare/vitest-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@lingui/cli": "6.9.0",
+    "@lingui/format-po": "6.9.0",
+    "@playwright/test": "1.63.0",
+    "@react-router/dev": "8.4.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "catalog:",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitest/coverage-istanbul": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "tailwindcss": "4.3.3",
+    "typescript": "catalog:",
+    "vite": "8.2.2",
+    "vitest": "catalog:",
+    "wrangler": "4.147.0"
+  }
+}

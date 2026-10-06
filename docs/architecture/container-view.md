@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-06
 related:
   - ../decisions/0001-adopt-incremental-mvp-architecture.md
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
@@ -103,3 +103,13 @@ um diagnóstico e recalcular o Check Run existente.
 - R2: somente quando snapshots ou artefatos grandes tiverem retenção definida.
 - Workers AI: somente com tarefa auxiliar e benchmark explícitos.
 - Tunnel: somente para executor ou MCP privado externo.
+
+## Dashboard dos usuários: fundação local
+
+A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) complementa
+a ADR-0040 com uma superfície nova. `apps/dashboard` contém SSR React Router e
+API Hono; `apps/email-delivery` é privado. Dois D1 locais têm migrations por
+autoridade, sem estado de negócio hipotético. A [visão específica](user-dashboard.md)
+separa bases implementadas de auth/tenancy, Queue/DLQ e projeção ainda futuras.
+Os containers do core acima e seus dois deployables de produção permanecem
+inalterados; o bootstrap não publica os novos Workers nem restaura o admin.

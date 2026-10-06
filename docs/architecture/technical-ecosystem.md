@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-06
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -18,7 +18,7 @@ related:
 Este documento descreve a estrutura materializada no repositório. Consulte o
 [índice de decisões](../decisions/README.md) para distinguir ADRs aceitos de
 decisões substituídas; o mapa abaixo foi conferido contra os manifests em
-2026-10-04.
+2026-10-06.
 
 ## Estrutura atual
 
@@ -39,7 +39,11 @@ holon/
 |       |-- test/
 |       |-- Dockerfile
 |       `-- wrangler.jsonc
+|   |-- dashboard/              # app/, workers/, test/; SSR/API local
+|   `-- email-delivery/         # src/, test/; RPC privado local
 |-- packages/
+|   |-- ui/                    # React/Lucide/tokens, exports browser
+|   |-- db/                    # Drizzle/D1, subpaths servidor e migrations
 |   |-- domain/
 |   |-- application/
 |   |-- contracts/
@@ -83,6 +87,13 @@ exaustiva para dependências concretas de cada workspace.
 
 ```mermaid
 flowchart TD
+    DS[apps/dashboard]
+    EM[apps/email-delivery]
+    UI[packages/ui]
+    DB[packages/db]
+    DS --> UI
+    DS --> CT
+    EM --> CT
     CP[apps/control-plane]
     EX[apps/repository-executor]
     GH[packages/github]
@@ -170,6 +181,13 @@ retirada. Um novo teste live deve exercitar Think, Gateway, Sandbox e publicaç�
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
 subpasta interna.
 
+Dashboard/UI/DB são fundações locais da [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md).
+Nesse estágio dashboard importa `contracts` e `ui`; email importa `contracts`;
+DB não tem dependência interna. Os adapters de auth, tenancy e leitura ainda
+não estão compostos no app. A prova M0 de reserva OAuth consome o adapter DB
+canônico como dependência de teste. O [mapa do dashboard](user-dashboard.md)
+detalha interfaces, exports e futuras relações por service binding.
+
 ## Alocacao de runtime
 
 `apps/control-plane` deve exportar um unico modulo Workers com:
@@ -184,7 +202,7 @@ subpasta interna.
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
-O admin, UI e pacote de observabilidade foram removidos pela
+O admin, a UI anterior e o pacote de observabilidade foram removidos pela
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
 Logs nativos simples não mantêm projeções, custos nem dashboards.
 
@@ -254,15 +272,21 @@ pacote podem usar caminhos relativos ou subpath imports do Node. Nao usar
 Remote cache nao faz parte do bootstrap. Secrets nunca entram em outputs, logs,
 inputs globais ou artefatos de cache.
 
+`apps/dashboard` tem overrides Turbo para outputs build/catálogos/typegen e
+artefatos browser; suas suites browser não usam cache nem retries. O resto dos
+workspaces conserva os outputs e limites atuais. Catálogos são compilados pelo
+check de i18n antes de types/tests/build, inclusive após restauração de cache.
+
 ## Gates de CI implementados
 
 1. Instalar com lockfile congelado.
-2. Verificar formatacao.
+2. Verificar marca/tokens/contraste e formatação.
 3. Executar lint type-aware e falhar em disable comments nao usados.
 4. Gerar ou conferir tipos Wrangler e executar typecheck.
 5. Verificar as direções de import em `tooling/architecture` e executar testes puros.
 6. Executar testes Workers no plugin oficial.
 7. Fazer `wrangler deploy --dry-run` por deployable, sem publicar.
+8. Exercitar DOM/Workers e Playwright pt-BR/en × Chromium/Firefox/WebKit com axe, zero retries e artefatos por sete dias.
 
 Deploy real e uma pipeline separada. Um dry run nao prova bindings remotos,
 secrets, GitHub App, Queue, Workflow ou modelo em producao.
@@ -283,7 +307,7 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 | Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0049                   |
 | MCP e RAG                    | Adiados             | Fora do MVP one-shot                               |
 
-UI/admin e suas bibliotecas foram retirados pela
+A UI/admin anterior e suas bibliotecas foram retiradas pela
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md). O
 Agent Think substituiu o motor próprio conforme
 [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).

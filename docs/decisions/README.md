@@ -104,3 +104,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0051 — Aprender regras do repositório com aprovação de mantenedor](0051-learn-repository-rules-with-maintainer-approval.md): memória funcional, outbox e snapshots por run.
 
 - [ADR-0052 — Responder perguntas sobre findings](0052-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.
+
+- [ADR-0053 — Estabelecer as fundações do dashboard dos usuários](0053-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.

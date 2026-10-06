@@ -48,7 +48,9 @@ e o [fluxo atual](architecture/review-runtime-flow.md).
 
 Pesquisa para uma evolução futura: [Coletânea de bibliotecas para o dashboard](research/2026-10-04-dashboard-library-landscape.md), com fronteiras propostas de React Router SSR/API Hono e radar de bibliotecas. A [análise das referências de UI](research/2026-10-04-dashboard-ui-motion-references.md) sustenta o [guia de movimento](brand/motion.md) do design system.
 
-Referência de engenharia proposta para o dashboard: [Organização de aplicações web e dependências](engineering/frontend-application-structure.md). A [descoberta de autenticação](research/2026-10-04-dashboard-authentication-discovery.md) registra Better Auth + Drizzle/D1 e as políticas acordadas; suporte e recuperação da integração continuam a provar.
+Fundações locais do dashboard: [ADR-0053](decisions/0053-establish-user-dashboard-foundations.md) e [arquitetura](architecture/user-dashboard.md).
+
+Referência de engenharia do dashboard: [Organização de aplicações web e dependências](engineering/frontend-application-structure.md). A [descoberta de autenticação](research/2026-10-04-dashboard-authentication-discovery.md) registra Better Auth + Drizzle/D1 e as políticas acordadas; suporte e recuperação da integração continuam a provar.
 
 A [revisão de decisões do dashboard](planning/dashboard-engineering-decision-review.md) acompanha a entrevista de engenharia e qualidade, com Q1–Q37 registradas e Worker/fila de emails acordados. As investigações de [auth/D1](research/2026-10-04-dashboard-auth-persistence-investigation.md), [leitura/busca](research/2026-10-04-dashboard-read-model-investigation.md) e [entrega de emails](research/2026-10-04-dashboard-email-delivery-investigation.md) delimitam evidência e provas restantes.
 
@@ -111,3 +113,8 @@ dashboard ou auth já implementados.
 - [Memória incremental do repositório](architecture/repository-memory.md) e [operação](operations/repository-memory.md): observações, propostas e regras aprovadas pela ADR-0051.
 
 Perguntas e contestações em findings seguem a [ADR-0052](decisions/0052-answer-finding-questions-in-pr-threads.md) e o [guia de uso e operação](operations/finding-clarification.md).
+
+A [fundação M1](research/2026-10-06-dashboard-foundation-results.md) registra
+workspaces, comandos, gates locais e critérios ainda dependentes de auth,
+convites, entrega e leitura privada. Sua existência não significa deploy nem
+runtime SaaS autenticado em produção.

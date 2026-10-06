@@ -1,0 +1,174 @@
+@import "../../../docs/brand/tokens/tokens.css";
+@font-face {
+  font-family: Manrope;
+  src: url("../../../docs/brand/assets/fonts/manrope/Manrope-Variable.woff")
+    format("woff");
+  font-weight: 200 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("../../../docs/brand/assets/fonts/instrumentserif/InstrumentSerif-Regular.woff")
+    format("woff");
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("../../../docs/brand/assets/fonts/ibmplexmono/IBMPlexMono-Regular.woff")
+    format("woff");
+  font-display: swap;
+}
+body {
+  margin: 0;
+  background: var(--holon-bg-page);
+  color: var(--holon-text-primary);
+  font-family: var(--holon-font-sans);
+  line-height: var(--holon-leading-body);
+}
+.holon-button {
+  min-height: var(--holon-size-control-md);
+  padding: 0 var(--holon-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--holon-radius-control);
+  font: inherit;
+  font-weight: var(--holon-weight-semibold);
+  cursor: pointer;
+  transition:
+    color var(--holon-motion-fast) var(--holon-motion-ease),
+    background-color var(--holon-motion-fast) var(--holon-motion-ease),
+    border-color var(--holon-motion-fast) var(--holon-motion-ease);
+}
+.holon-button-primary {
+  background: var(--holon-action-bg);
+  color: var(--holon-action-fg);
+}
+.holon-button-primary:hover {
+  background: var(--holon-action-hover);
+}
+.holon-button-primary:active {
+  background: var(--holon-action-pressed);
+}
+.holon-button-secondary {
+  background: var(--holon-bg-surface);
+  color: var(--holon-text-primary);
+  border-color: var(--holon-border-control);
+}
+.holon-button-quiet {
+  background: transparent;
+  color: var(--holon-link);
+}
+.holon-button-quiet:hover,
+.holon-button-secondary:hover {
+  background: var(--holon-bg-subtle);
+}
+.holon-button-danger {
+  color: var(--holon-danger-fg);
+  background: var(--holon-danger-bg);
+}
+.holon-button:disabled {
+  background: var(--holon-disabled-bg);
+  color: var(--holon-disabled-fg);
+  cursor: default;
+}
+:where(button, select, a):focus-visible {
+  outline: 2px solid var(--holon-focus);
+  outline-offset: 3px;
+}
+.holon-brand {
+  width: 44px;
+  height: 44px;
+}
+.holon-field {
+  display: grid;
+  gap: var(--holon-space-2);
+  margin-top: var(--holon-space-6);
+}
+.holon-field label {
+  font-weight: var(--holon-weight-semibold);
+}
+.holon-field select {
+  min-height: var(--holon-size-control-md);
+  border: 1px solid var(--holon-border-control);
+  border-radius: var(--holon-radius-control);
+  padding: 0 var(--holon-space-3);
+  font: inherit;
+  color: var(--holon-text-primary);
+  background: var(--holon-bg-surface);
+}
+.holon-field select[aria-invalid="true"] {
+  border-color: var(--holon-danger-fg);
+}
+.holon-hint {
+  color: var(--holon-text-secondary);
+  font-size: var(--holon-type-small);
+}
+.holon-field-error {
+  color: var(--holon-danger-fg);
+  margin: 0;
+  font-size: var(--holon-type-small);
+}
+.holon-dialog {
+  width: min(28rem, calc(100vw - 2.5rem));
+  max-height: calc(100dvh - 2.5rem);
+  margin: auto;
+  overflow: auto;
+  padding: var(--holon-space-6);
+  border: 1px solid var(--holon-border-subtle);
+  border-radius: var(--holon-radius-panel);
+  background: var(--holon-bg-raised);
+  color: var(--holon-text-primary);
+  box-shadow: var(--holon-shadow-float);
+  opacity: 0;
+  transform: translateY(var(--holon-motion-distance-small));
+  transition:
+    opacity var(--holon-motion-base) var(--holon-motion-ease),
+    transform var(--holon-motion-base) var(--holon-motion-ease),
+    display var(--holon-motion-base) allow-discrete,
+    overlay var(--holon-motion-base) allow-discrete;
+}
+.holon-dialog[open] {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--holon-motion-slow);
+}
+.holon-dialog::backdrop {
+  background: var(--holon-overlay);
+  opacity: 0;
+  transition:
+    opacity var(--holon-motion-base) var(--holon-motion-ease),
+    display var(--holon-motion-base) allow-discrete,
+    overlay var(--holon-motion-base) allow-discrete;
+}
+.holon-dialog[open]::backdrop {
+  opacity: 1;
+  transition-duration: var(--holon-motion-slow);
+}
+.holon-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--holon-space-4);
+}
+.holon-dialog h2 {
+  font-size: var(--holon-type-title-sm);
+  margin: 0;
+}
+@starting-style {
+  .holon-dialog[open]::backdrop {
+    opacity: 0;
+  }
+  .holon-dialog[open] {
+    opacity: 0;
+    transform: translateY(var(--holon-motion-distance-small));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .holon-button,
+  .holon-dialog,
+  .holon-dialog[open],
+  .holon-dialog::backdrop,
+  .holon-dialog[open]::backdrop {
+    transition: none;
+    transform: none;
+  }
+}

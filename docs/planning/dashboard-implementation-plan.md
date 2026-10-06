@@ -4,7 +4,7 @@ kind: planning
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 related:
   - dashboard-engineering-decision-review.md
   - ../engineering/frontend-application-structure.md
@@ -26,8 +26,11 @@ As entregas estão publicadas no [backlog do GitHub](dashboard-github-backlog.md
 com milestones, sub-issues e bloqueios. O mapa registra escopo e links; o
 GitHub informa o estado atual de execução.
 
-**Estado: provas isoladas do milestone 0 implementadas; runtime do dashboard
-ainda não implementado.** Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
+**Estado: M0 qualificado; fundações locais M1 materializadas conforme
+[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md).**
+O [registro M1](../research/2026-10-06-dashboard-foundation-results.md) identifica
+comandos, primeiros resultados e limites. Auth/tenancy e dados privados ainda
+não estão compostos no runtime, e nenhum novo Worker foi publicado. Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
 ligam cada gate à bancada e sua evidência. Com a
 [política de linking aprovada em 2026-10-05](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
 Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth

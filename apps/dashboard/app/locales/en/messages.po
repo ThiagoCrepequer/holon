@@ -1,0 +1,66 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+#. js-lingui-explicit-id
+#: app/i18n/catalogs.ts
+msgid "reviews.count"
+msgstr "{count, plural, one {# review} other {# reviews}}"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "preferences.description"
+msgstr "Choose how you read Holon."
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "preferences.close"
+msgstr "Close preferences"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "theme.dark"
+msgstr "Dark"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "preferences.language"
+msgstr "Language"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "theme.light"
+msgstr "Light"
+
+#. js-lingui-explicit-id
+#: app/root.tsx
+#: app/routes/not-found.tsx
+msgid "error.page"
+msgstr "Page unavailable"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "preferences.title"
+msgstr "Preferences"
+
+#. js-lingui-explicit-id
+#: app/root.tsx
+msgid "error.service"
+msgstr "Service unavailable. Please try again."
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "preferences.theme"
+msgstr "Theme"
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "welcome.description"
+msgstr "Understand every change with clarity and the context that matters."
+
+#. js-lingui-explicit-id
+#: app/routes/welcome/route.tsx
+msgid "welcome.heading"
+msgstr "Your reviews, in context."

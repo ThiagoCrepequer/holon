@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "holon-dashboard-local",
+  "main": "workers/index.ts",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "APP_ORIGIN": "http://127.0.0.1:8794",
+  },
+  "observability": {
+    "enabled": false,
+  },
+  "d1_databases": [
+    {
+      "binding": "IDENTITY_DB",
+      "database_name": "holon-identity-local",
+      "database_id": "00000000-0000-4000-8000-000000000001",
+      "remote": false,
+      "migrations_dir": "../../packages/db/migrations/identity",
+    },
+    {
+      "binding": "PROJECTION_DB",
+      "database_name": "holon-projection-local",
+      "database_id": "00000000-0000-4000-8000-000000000002",
+      "remote": false,
+      "migrations_dir": "../../packages/db/migrations/projection",
+    },
+  ],
+}
