@@ -143,3 +143,16 @@ A revisão documental de **2026-10-04** não executou estas etapas nem aprovou
 operação remota. O [relatório da revisão](../research/2026-10-04-dashboard-plan-robustness-review.md)
 lista os achados corrigidos e as provas ainda ausentes. Usar este plano como
 entrada curta; o registro Q1–Q37 permanece histórico das escolhas.
+
+## Fronteira M1 e integração nas issues donas — 2026-10-07
+
+Por escolha explícita do responsável, #137 entrega a fronteira HTTP e as
+políticas dos consumidores atuais (auth/tenancy). As provas que exigem fluxos
+futuros acompanham sua implementação: convite/outbox e abuso em #148, scanners e
+aceite sem efeito em GET/HEAD em #149, templates/consumer em #152, filtros reais
+em #157, SSR/API privados em #158, toasts/onboarding em #159 e Markdown/tracking
+em #161. #163 integra essas provas nas jornadas completas antes da promoção.
+
+A reconciliação conserva os requisitos e elimina a dependência circular; não
+encerra M3–M6 nem declara implementação ou operação remota. A revisão final dos
+critérios M1 está em [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md).

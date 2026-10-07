@@ -31,6 +31,12 @@ Antigravity foi o autor primário do código produtivo. A revisão independente
 adicionou testes que observaram falhas antes das correções, sem substituir a
 biblioteca nativa nem reproduzir o algoritmo de autorização.
 
+A descrição acima registra a entrega do PR #174 antes de sua incorporação ao
+PR #171. Na continuação autorizada de 2026-10-07, os gates de integração de #137
+foram separados nas issues donas. A avaliação atual de M1 está na
+[revisão final M1](2026-10-07-dashboard-milestone-one-final-review.md); este registro
+conserva a evidência original do recorte M2.
+
 ## Implementação
 
 - `packages/auth` encapsula Better Auth/core/adapter 1.7.7 e Drizzle 0.45.3;

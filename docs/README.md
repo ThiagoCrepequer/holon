@@ -122,3 +122,7 @@ runtime SaaS autenticado em produção.
 O [primeiro recorte M2](research/2026-10-07-dashboard-identity-tenancy-results.md)
 registra auth/tenancy locais e o complemento de #134, em PR stacked sobre M1.
 Não representa encerramento integral de M1/M2 nem operação remota.
+
+A [revisão final de M1](research/2026-10-07-dashboard-milestone-one-final-review.md)
+rastreia #132–#138 e a separação autorizada dos gates de integração nas issues
+donas, com limites entre prova local e validação remota.

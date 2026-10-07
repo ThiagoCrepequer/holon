@@ -234,3 +234,26 @@ e [PITR SQLite DO](https://developers.cloudflare.com/durable-objects/api/sqlite-
 Confirmar retenção/plano/IDs/pontos disponíveis no ambiente operado; a capacidade
 documentada não significa que uma restauração tenha sido ensaiada ou autorizada.
 Fontes verificadas em **2026-10-04**; nenhuma operação foi executada nesta revisão.
+
+## Recuperação HTTP da fundação M1
+
+A #137 usa rate limits técnicos na autoridade D1 de identidade, com migration
+aditiva `0004_rate_limit.sql`. A migration aditiva `0005_tenancy_mutation_guard.sql`
+acrescenta o marcador transitório da admissão na batch: commit/rollback deixam a
+tabela vazia. Não é fila, lease ou recibo que deva ser retomado por operador. Eles não representam quotas comerciais nem
+autorização. Excesso de taxa responde 429 `rate_limited` com `Retry-After`;
+indisponibilidade de storage fecha o efeito com erro sanitizado. Esperar a
+janela antes de repetir; não apagar budgets ativos como mecanismo de retry.
+A política e sua evidência estão em [segurança web](../engineering/web-security-and-data-boundaries.md)
+e [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md).
+
+Em `command_unknown`, preservar a operation ID e o payload da intenção: a equipe
+pode ter sido gravada mesmo sem confirmação. O retry idempotente reconcilia a
+operação existente; não gerar outra ID para contornar o erro. `invalid_request`
+por colisão indica uma intenção diferente com o mesmo ID. `reconnect_required`
+fecha leituras privadas até novo OAuth. Nenhuma dessas condições autoriza
+reset de banco, reviver sessão, ampliar egress ou conceder permissão.
+
+Gates de integração de convites/email/conteúdo continuam em #148/#149, #152,
+#157/#158, #159, #161 e #163. Essa fundação não comprova envio, Markdown real,
+serviços externos ou ambiente remoto.

@@ -65,3 +65,5 @@ ajustes de robustez atuais delimitam o que está comprovado e o que ainda é gat
 - Promova uma conclusao para ADR quando ela resultar em escolha normativa.
 - Use prioritariamente documentacao oficial, schemas publicados e testes
   reproduziveis.
+
+- [Revisão final M1 e reconciliação dos gates de integração](2026-10-07-dashboard-milestone-one-final-review.md)

@@ -59,6 +59,8 @@ Linhas contínuas representam interfaces/bases locais; pontilhadas marcam
 integrações ainda não implementadas. Os D1 têm migrations separadas e somente
 uma sentinela de autoridade. Identidade possui a reserva OAuth aprovada, tabelas
 nativas User/Account/Session/Verification e Workspace/Membership/receipt de criação.
+A #137 acrescenta armazenamento técnico durável de rate limits na mesma autoridade,
+sem quota comercial nem nova autoridade de negócio.
 Projeção funcional ainda não contém dados de reviews.
 A composição não autoriza acesso ou cria estado de negócio por mostrar um banco
 no diagrama. A fila de email não é uma nova fila de projeção.
@@ -93,7 +95,11 @@ os idiomas no bootstrap.
 
 O runtime gera nonce e o fornece ao renderer, scripts e ScrollRestoration. CSP
 usa `script-src` por nonce/strict-dynamic, estilos/fontes da mesma origem, sem
-unsafe-inline/eval, frames ou base URL arbitrária. HTML/API são private/no-store;
+unsafe-inline/eval, frames ou base URL arbitrária. Logout e comandos tenancy exigem CSRF derivado da sessão; Fetch Metadata complementa
+a origem exata também no login anônimo. Conflito idempotente, reconexão e resultado
+desconhecido não são confundidos com sucesso de comando. Os budgets HTTP atuais
+são consumidos atomicamente em D1, sem IP/identificador cru persistido.
+HTML/API são private/no-store;
 assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 
 ## Autoridades e interfaces
@@ -148,6 +154,13 @@ instalações; grants GitHub e leitura privada continuam dependências posterior
 Os comandos usam CSRF derivado da sessão verificada e origem exata. O cookie
 de CSRF é legível pelo cliente; o cookie de sessão permanece HttpOnly.
 
+As mutações de tenancy recebem o contexto admitido do servidor e verificam a
+sessão exata/subject GitHub no relógio SQLite da batch. Um marcador transitório
+único captura a admissão uma vez para workspace, membership e receipt e é
+removido na mesma transação; rollback não deixa resíduo. Sessão de outro
+dispositivo não substitui a sessão do comando. A política de budgets e as
+provas de corrida estão no [guia de segurança web](../engineering/web-security-and-data-boundaries.md).
+
 ## Imports e bibliotecas
 
 - Dashboard importa `contracts`, `ui` e, na composição servidor, `auth`, `db`
@@ -199,3 +212,13 @@ Consulte [testes e evidência](../engineering/testing-and-evidence.md),
 [registro M1](../research/2026-10-06-dashboard-foundation-results.md) para comandos,
 evidência e pendências. Não há bindings/IDs/domínios/secrets produtivos definidos
 nesses manifests e não há deploy novo no pipeline automático da ADR-0048.
+
+## Gates de conteúdo e fluxos posteriores
+
+A reconciliação autorizada de #137 em 2026-10-07 conclui a fronteira comum nos
+consumidores atuais. Convites/scanners/abuso (#148/#149), templates de email
+(#152), consultas privadas e SSR/API (#157/#158), toasts de onboarding (#159) e
+Markdown/tracking no detalhe (#161) demonstram seus gates ao implementar os
+fluxos donos. #163 integra as jornadas antes da promoção. A fundação não é
+prova de segurança de um consumidor ainda inexistente. A [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md)
+registra critérios, regressões e limites de evidência.
