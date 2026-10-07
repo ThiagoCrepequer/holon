@@ -175,3 +175,21 @@ it("ambiguous binding replies cannot grant the reservation", async () => {
     createIdentityPersistence(failed).pruneExpiredGithubCodes(),
   ).rejects.toThrow("OAuth reservation cleanup failed");
 });
+
+it("auth-integration schema defines user, session, account, and verification matching identity tables", async () => {
+  await initialize();
+  const { getTableConfig } = await import("drizzle-orm/sqlite-core");
+  const { identityAuthSchema, user, session, account, verification } =
+    await import("../src/auth-integration.server.js");
+  expect(identityAuthSchema.user).toBe(user);
+  expect(identityAuthSchema.session).toBe(session);
+  expect(identityAuthSchema.account).toBe(account);
+  expect(identityAuthSchema.verification).toBe(verification);
+  for (const table of [user, session, account, verification]) {
+    const config = getTableConfig(table);
+    expect(config.name).toBeDefined();
+    for (const foreign of config.foreignKeys) {
+      expect(foreign.reference().foreignTable).toBe(user);
+    }
+  }
+});

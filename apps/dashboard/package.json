@@ -9,7 +9,7 @@
     "typecheck": "wrangler types --check && pnpm i18n:check && react-router typegen && tsc --noEmit",
     "test": "pnpm i18n:check && vitest run --config vitest.config.ts && pnpm test:workers && pnpm test:browser",
     "test:coverage": "pnpm i18n:check && vitest run --config vitest.config.ts --coverage && pnpm test:coverage:workers && pnpm test:browser",
-    "test:browser": "pnpm build && playwright test",
+    "test:browser": "pnpm build && playwright test && playwright test --config playwright.auth.config.ts",
     "serve:test": "wrangler dev --config build/server/wrangler.json --local --port 8794 --ip 127.0.0.1",
     "i18n:extract": "lingui extract --clean --workers 1",
     "i18n:check": "lingui check sync && lingui check missing --mode catalog && lingui compile --strict --typescript --workers 1 && node scripts/check-i18n-gate.mjs",
@@ -17,7 +17,10 @@
     "test:coverage:workers": "vitest run --config vitest.worker.config.ts --coverage"
   },
   "dependencies": {
+    "@holon/application": "workspace:*",
+    "@holon/auth": "workspace:*",
     "@holon/contracts": "workspace:*",
+    "@holon/db": "workspace:*",
     "@holon/ui": "workspace:*",
     "@lingui/core": "6.9.0",
     "@lingui/react": "6.9.0",
@@ -41,6 +44,7 @@
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-istanbul": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "miniflare": "5.20261001.0-alpha",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",
     "vite": "8.2.2",

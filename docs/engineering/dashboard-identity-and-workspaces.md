@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-07
 related:
   - frontend-application-structure.md
   - ../planning/dashboard-engineering-decision-review.md
@@ -22,8 +22,10 @@ acoplar a estrutura SaaS ao primeiro provider?
 Em 2026-10-04 o responsável propôs login via GitHub inicialmente, outros
 providers depois, e workspaces/organizações com N usuários. Essa separação
 é coerente com o produto; cardinalidade, governança e isolamento precisam
-ser explícitos. Não há Better Auth, usuário humano, sessão, membership ou
-workspace implementados nos manifests/runtime examinados. `workspace:*`
+ser explícitos. A observação original de 2026-10-04 não encontrou Better Auth, usuário humano,
+sessão, membership ou workspace nos manifests/runtime então examinados.
+O primeiro recorte M2 implementa agora identidade e tenancy locais; os fluxos
+futuros abaixo mantêm seu estado proposto. `workspace:*`
 de pnpm é dependência do monorepo, não tenancy do produto.
 
 Q25–Q34 foram confirmadas em 2026-10-04: modelo único pessoal/equipe,
@@ -32,7 +34,8 @@ equipe, owner/member, convites explícitos, cardinalidade de instalações e
 janela de revogação, autoridade de conexão, convite por email, múltiplos owners
 e onboarding self-service. Somam-se a cadastro GitHub aberto com pessoal vazio,
 pt-BR/en, sessão móvel de 7 dias/renovação após 24 h e interseção privada.
-O modelo de produto está acordado; a integração física permanece proposta.
+O modelo de produto está acordado; identidade/tenancy locais estão implementadas.
+Convites, conexões, governança e recursos privados mantêm suas provas pendentes.
 Este documento não adiciona schema, plugin, binding, endpoint ou migration.
 
 A [revisão de robustez](../research/2026-10-04-dashboard-plan-robustness-review.md)
@@ -40,6 +43,24 @@ e o [plano de implementação](../planning/dashboard-implementation-plan.md)
 delimitam gates de prontidão. O candidato auth não pode avançar com cadastro
 parcial sem recuperação suportada; superfície pública de sessão tem DTOs Holon
 sem segredo, e refresh perdido exige reconexão do account.
+
+## Implementação local em 2026-10-07
+
+`packages/auth` encapsula o Better Auth 1.7.7 e o adapter Drizzle/D1.
+`packages/db/migrations/identity/0003_auth_and_tenancy.sql` adiciona tabelas
+nativas de identidade e tenancy sem reescrever migrations anteriores.
+User incompleto sem Account/Session não provisiona workspace.
+
+O login não tem hook que conceda memberships: POST protegido de provisionamento
+pessoal exige admissão concluída e cria exatamente um espaço exclusivo.
+A criação de equipe fixa ator da sessão, owner local e operation ID/payload
+em batch atômico. Replay consulta a membership atual e nega após remoção; não restaura
+ownership histórica. Leituras usam membership atual por request.
+
+Esta entrega cobre #139/#140/#142 e o complemento de persistência #134.
+Dispositivos, logout global, governança/reauth, preferências, convites e recursos
+privados serão PRs separados. O modelo acordado abaixo inclui essas condições
+futuras; sua presença não demonstra que já estão implementadas.
 
 ## Modelo acordado e integração pendente
 
@@ -63,12 +84,13 @@ A relação acordada é **N:M**: um usuário pode participar de vários workspac
 workspace compartilhado pode ter vários usuários. Por exemplo, a mesma pessoa
 pode ser owner em A e member em B; entrar com outro provider vinculado conserva
 sua identidade e memberships. Não colocar apenas `workspaceId` em User nem
-`ownerUserId` como substituto de membership. Não são tabelas criadas.
+`ownerUserId` como substituto de membership. M2 materializa User/Account/Session e Workspace/Membership; conexões e convites
+continuam entregas posteriores.
 
 Cada usuário tem um workspace pessoal exclusivo, sem convites ou conversão
 silenciosa. Workspaces de equipe têm N membros. Ambos usam a mesma fronteira
 de recursos/leitura; organização não é entidade acima ou abaixo de workspace.
-Não há representação física implementada por esta referência.
+M2 implementa essa exclusividade com constraints e triggers no D1 de identidade.
 
 ### Governança e conexões confirmadas
 
@@ -257,6 +279,7 @@ removida ou reativa acesso. Recuperar cadastro interrompido usa novo fluxo OAuth
 replay do mesmo state/code consumido é negado.
 
 Fontes de linking revalidadas em **2026-10-05**; as demais fontes permanecem
-na conferência de **2026-10-04**. Há prova isolada auth/Workerd/D1 local, descrita
-no relatório; não há auth, tenancy ou isolamento implementados no produto.
+na conferência de **2026-10-04**. O [primeiro recorte M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
+materializa auth e tenancy no produto local, com provas nativas Workerd/D1;
+convites, conexões e isolamento de conteúdo de reviews permanecem pendentes.
 Não houve benchmark, criação de recursos ou operação remota.

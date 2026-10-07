@@ -1,9 +1,13 @@
 import type {
+  CreateTeamWorkspaceInput,
   DeliveryWake,
   DeliveryWakeResult,
+  ReviewPage,
   SessionIdentity,
   WorkspaceAccess,
-  ReviewPage,
+  WorkspaceDto,
+  WorkspaceMembershipDto,
+  WorkspaceRole,
 } from "@holon/contracts/dashboard";
 
 /** Implementations validate the session again on every request, without cookie cache. */
@@ -17,6 +21,32 @@ export interface WorkspaceAccessPort {
     workspaceId: string,
   ): Promise<WorkspaceAccess | null>;
 }
+
+export interface WorkspaceTenancyPort {
+  provisionPersonalWorkspace(userId: string): Promise<{
+    workspace: WorkspaceDto;
+    membership: WorkspaceMembershipDto;
+  }>;
+  createTeamWorkspace(
+    actorUserId: string,
+    input: CreateTeamWorkspaceInput,
+  ): Promise<{
+    workspace: WorkspaceDto;
+    membership: WorkspaceMembershipDto;
+  }>;
+  listUserWorkspaces(
+    userId: string,
+  ): Promise<Array<{ workspace: WorkspaceDto; role: WorkspaceRole }>>;
+  readWorkspace(
+    userId: string,
+    workspaceId: string,
+  ): Promise<{ workspace: WorkspaceDto; role: WorkspaceRole } | null>;
+  readMembership(
+    userId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceAccess | null>;
+}
+
 /** A wake-up is transport, not the durable invitation/delivery obligation. */
 export interface EmailDeliveryPort {
   wake(input: DeliveryWake): Promise<DeliveryWakeResult>;

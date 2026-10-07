@@ -73,7 +73,7 @@ export function errorResponse(error: unknown): Response {
   );
 }
 
-/** A synchronizer token kept in trusted session storage; M2 owns issuance/rotation. */
+/** Trusted session identity and its derived CSRF token; neither is taken from the command body. */
 export interface CommandSession {
   readonly sessionId: string;
   readonly csrfToken: string;
@@ -143,4 +143,25 @@ export async function readCommand(
   } catch {
     throw new HttpBoundaryError("invalid_request", 400);
   }
+}
+
+export async function issueSessionCsrfToken(
+  sessionId: string,
+  authSecret: string,
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(authSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`csrf:${sessionId}`),
+  );
+  return Array.from(new Uint8Array(signature), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }

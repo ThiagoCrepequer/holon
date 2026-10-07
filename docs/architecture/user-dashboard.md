@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 related:
   - ../decisions/0053-establish-user-dashboard-foundations.md
   - ../engineering/frontend-application-structure.md
@@ -19,8 +19,11 @@ related:
 A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) estabelece
 as fronteiras aprovadas. M1 materializa dois Workers **locais**, `packages/ui`,
 `packages/db`, portas/contratos e gates. Há uma página mínima bilíngue de fundação,
-preferências de apresentação e liveness em `/api/health`. Não há login, sessão,
-workspace, dataset privado, convite, Queue ou envio implementados nesses apps.
+preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
+acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
+no D1 de identidade. Não há dataset de reviews privado, convites, Queue ou envio
+implementados nesses apps. Sessões/dispositivos, governança e preferências
+persistidas continuam entregas separadas.
 Os dois Workers de produção do core permanecem inalterados.
 
 ```mermaid
@@ -30,6 +33,7 @@ flowchart TD
   U[packages/ui: controles e marca]
   C[contracts e application: DTOs e portas]
   DB[packages/db: adapters somente servidor]
+  A[packages/auth: identidade e sessão]
   I[D1 identidade]
   P[D1 projeção funcional]
   E[Email delivery: Worker privado]
@@ -38,7 +42,9 @@ flowchart TD
   B -->|documento e navegação| D
   D --> U
   D --> C
-  D -. composição M2/M5 .-> DB
+  D --> A
+  A --> DB
+  D -->|tenancy M2| DB
   DB --> I
   DB --> P
   D -. wake privado M4 .-> E
@@ -51,7 +57,9 @@ flowchart TD
 
 Linhas contínuas representam interfaces/bases locais; pontilhadas marcam
 integrações ainda não implementadas. Os D1 têm migrations separadas e somente
-uma sentinela de autoridade; identidade também possui a reserva OAuth aprovada.
+uma sentinela de autoridade. Identidade possui a reserva OAuth aprovada, tabelas
+nativas User/Account/Session/Verification e Workspace/Membership/receipt de criação.
+Projeção funcional ainda não contém dados de reviews.
 A composição não autoriza acesso ou cria estado de negócio por mostrar um banco
 no diagrama. A fila de email não é uma nova fila de projeção.
 
@@ -67,14 +75,16 @@ exceção padrão com o caminho solicitado.
   Futuramente invoca o mesmo caso de uso que a API. Não chama a própria API e
   não executa comandos ou SQL.
 - Hono: valida método, payload, sessão, CSRF, autorização e intenção de comandos
-  ou leituras explícitas. Hoje só liveness; outros caminhos retornam erro seguro.
+  ou leituras explícitas. M2 acrescenta sessão pública reduzida, login/logout,
+  provisionamento pessoal, criação idempotente de equipe e leitura dos espaços
+  da pessoa admitida. Convites e demais comandos permanecem indisponíveis.
 - App: compõe providers e transporte/cache de features. Queries ficam no app.
   O snapshot e a política manual da prova M0 serão integrados com dados reais em
   M5/M6; não instalar Query só para criar um provider sem dataset.
 
 `root.tsx` negocia idioma por request e devolve timezone UTC. Preferência `lang`
 e tema na URL são transitórios nessa fundação; preservam outros parâmetros e
-foco. M2 liga o perfil individual persistido à precedência preferência →
+foco. Uma entrega posterior de M2 liga o perfil individual persistido à precedência preferência →
 Accept-Language → en. O server nunca usa um singleton Lingui com estado de usuário. O loader importa
 somente o catálogo do idioma resolvido no servidor e hidrata suas mensagens
 compiladas serializáveis; módulos de catálogo não entram no JS cliente. Troca de
@@ -90,8 +100,8 @@ assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 
 | Capacidade                                 | Dono da implementação                                                     | Contrato/consumidor                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Sessão, cookies e OAuth                    | `packages/auth`, em M2                                                    | `DashboardIdentityPort`; DTO sem segredo de sessão/OAuth                   |
-| Membership e papel                         | aplicação + adapter de identidade, M2/M3                                  | `WorkspaceAccessPort`; não concede grant GitHub                            |
+| Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                      | `AuthService`; DTO sem segredo de sessão/OAuth                             |
+| Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                         | `WorkspaceTenancyPort`; não concede grant GitHub                           |
 | Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`               | mutação condicional por ator/estado/operação nas issues donas              |
 | Reserva de authorization code              | adapter de identidade em `packages/db`                                    | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação |
 | Lista de metadados                         | D1 projeção funcional, migrations `packages/db/migrations/projection`, M5 | `ReviewReadPort`, `ReviewPage`; scope autorizado construído no servidor    |
@@ -109,16 +119,48 @@ e páginas acima de 50 itens; não devolvem rows ORM. `ReviewPage` é metadata i
 não o contrato completo de detalhe nem uma autorização baseada em IDs. M5 evolui
 produtores/consumidores juntos ao implementar filtros e projeção reais.
 
+### Identidade e tenancy no primeiro recorte M2
+
+`packages/auth` mantém o Better Auth privado. Expõe somente `AuthService` e a
+validação de configuração; os métodos nativos, secrets e tokens não são exports.
+O handler admite GET `/api/auth/session`, POST `/api/auth/sign-in/social`
+somente GitHub, GET `/api/auth/callback/github` e POST `/api/auth/sign-out`.
+A sessão pública contém `user.id/name` e `session.id/expiresAt`, sem token.
+Uma Session sobrevivente sem Account GitHub vinculada não admite usuário.
+
+O plugin aprovado em M0 reserva o digest do code no D1 antes da troca por token,
+após a validação nativa de state/cookie/prazo. Resultado desconhecido não libera
+a reserva. Novo OAuth recupera User interrompido pelo linking nativo aprovado;
+isso não transforma as escritas nativas User/Account em uma transação D1.
+Tokens OAuth são criptografados pela biblioteca desde a primeira persistência.
+
+O login identifica a pessoa. POST `/api/workspaces/personal` provisiona seu
+espaço exclusivo idempotentemente; não existe grant de equipe por login/email.
+POST `/api/workspaces/team` cria equipe, owner e receipt no mesmo batch,
+condicionando todos os statements à admissão. Constraints protegem o espaço
+pessoal e sua ownership contra conversão e inclusão de outro membro.
+Operation ID pertence ao ator e payload: colisão divergente é negada, replay
+não recria membership removida e devolve o papel atual.
+
+GET `/api/workspaces` e `/api/workspaces/:id` consultam memberships atuais.
+Seleção no cliente não é autoridade. Essas APIs não expõem reviews nem conectam
+instalações; grants GitHub e leitura privada continuam dependências posteriores.
+Os comandos usam CSRF derivado da sessão verificada e origem exata. O cookie
+de CSRF é legível pelo cliente; o cookie de sessão permanece HttpOnly.
+
 ## Imports e bibliotecas
 
-- Dashboard importa somente `contracts` e `ui` nessa base. M2/M5 acrescentam
-  composição servidor por export restrito e atualização do grafo/manifests.
+- Dashboard importa `contracts`, `ui` e, na composição servidor, `auth`, `db`
+  e a porta de aplicação. A superfície de DB/auth não entra no browser.
 - UI tem exports por componente, ícones, marca, CSS e `cn`; React é peer core.
   Lucide/clsx/tailwind-merge ficam no package. Não há export `*` da biblioteca.
-- DB exporta apenas factories `identity/server` e `projection/server`; métodos
+- DB exporta factories `identity/server` e `projection/server`; métodos
   específicos, sem handle Drizzle, SQL livre ou `select()` devolvido ao app.
+  O subpath `auth-integration/server` expõe o schema físico exigido pelo adapter
+  nativo exclusivamente a `packages/auth`; o grafo nega outros consumidores.
 - Application define portas, contracts valida limites e domain continua puro.
-  `packages/auth`/Motion/gráficos não existem por falta de consumidor nessa etapa.
+  `packages/auth` encapsula Better Auth e seu adapter. Motion/gráficos continuam
+  sem consumidor nessa etapa.
 - Lingui é uma exceção direta do app para catálogos/provider por request;
   React/Router/Hono e ferramentas de build mantêm seus papéis de composição.
 
@@ -144,7 +186,7 @@ sem desligar `exactOptionalPropertyTypes` nem alterar arquivos da dependência.
   jsdom 29.1.1 suporta esse intervalo, ao contrário do 30.1.2 (>24.15 no Node 24).
 - Router 8.4.0, React 19.3.0, Vite 8.2.2, Cloudflare plugin 1.62.5, Lingui 6.9.0,
   Tailwind 4.3.3, Lucide 1.52.0, Drizzle 0.45.3 e Playwright 1.63.0 estão fixados.
-  Better Auth 1.7.7 permanece restrito à prova M0 até integração M2.
+  Better Auth/core/adapter 1.7.7 estão fixados na integração M2, sem patch de SDK.
 - `compatibility_date` 2026-08-29 é comum ao core, à base e aos testes. Uma data
   2026-10-01 excedia o suporte do Workerd fixado na suite: foi removida da
   configuração real, sem usar outra data apenas nos testes. Upgrade é coordenado.

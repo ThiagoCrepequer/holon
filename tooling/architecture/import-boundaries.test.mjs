@@ -12,9 +12,10 @@ import {
 
 const root = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const allowed = {
-  "apps/dashboard": ["contracts", "ui"],
+  "apps/dashboard": ["application", "auth", "contracts", "db", "ui"],
   "apps/email-delivery": ["contracts"],
-  "packages/db": [],
+  "packages/auth": ["contracts", "db"],
+  "packages/db": ["contracts"],
   "packages/ui": [],
   "apps/control-plane": [
     "application",

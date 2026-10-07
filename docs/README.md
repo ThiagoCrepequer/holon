@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-07
 ---
 
 # Mapa da documentacao
@@ -56,8 +56,8 @@ A [revisão de decisões do dashboard](planning/dashboard-engineering-decision-r
 
 O [modelo de identidade e workspaces](engineering/dashboard-identity-and-workspaces.md)
 registra o modelo de produto acordado: organização e workspace são o mesmo
-conceito, com memberships N:M e integração GitHub explícita. A integração
-física permanece proposta, sem representar runtime já implementado.
+conceito, com memberships N:M e integração GitHub explícita. O primeiro recorte M2 implementa identidade e tenancy no runtime local;
+convites, conexões e acesso privado continuam propostas/entregas futuras.
 
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
@@ -69,8 +69,8 @@ satisfaz o gate de não reutilização concorrente de code na bancada, conforme 
 [avaliação OAuth](research/2026-10-05-dashboard-oauth-security-requirements.md). [Segurança web](engineering/web-security-and-data-boundaries.md)
 e [ambientes/recuperação](operations/dashboard-environments-and-recovery.md)
 completam as referências propostas; a skill [dashboard-engineering](../.agents/skills/dashboard-engineering/SKILL.md)
-direciona agentes às fontes afetadas. Nenhum desses documentos descreve um
-dashboard ou auth já implementados.
+direciona agentes às fontes afetadas. Essas pesquisas preservam as provas datadas; o estado implementado é descrito
+na arquitetura e nos resultados M1/M2 abaixo.
 
 ## Semantica dos documentos
 
@@ -118,3 +118,7 @@ A [fundação M1](research/2026-10-06-dashboard-foundation-results.md) registra
 workspaces, comandos, gates locais e critérios ainda dependentes de auth,
 convites, entrega e leitura privada. Sua existência não significa deploy nem
 runtime SaaS autenticado em produção.
+
+O [primeiro recorte M2](research/2026-10-07-dashboard-identity-tenancy-results.md)
+registra auth/tenancy locais e o complemento de #134, em PR stacked sobre M1.
+Não representa encerramento integral de M1/M2 nem operação remota.
