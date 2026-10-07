@@ -1,5 +1,7 @@
 import {
   modelGenerationLimits,
+  modelGenerationStopReasonSchema,
+  type ModelGenerationStopReason,
   type ModelGenerationAdmission,
   modelGenerationReservationSchema,
   runIdSchema,
@@ -47,11 +49,16 @@ export class ReviewGenerationBudgetStore {
       )
       .one();
     const reject = (
-      reason: "calls" | "input_bytes" | "output_tokens",
+      reason: ModelGenerationStopReason,
       consumed: number,
       requested: number,
       ceiling: number,
     ): ModelGenerationAdmission => {
+      this.sql.exec(
+        "UPDATE model_generation_plans SET stop_reason = ? WHERE run_id = ? AND stop_reason IS NULL",
+        reason,
+        runId,
+      );
       try {
         this.logger.emit("model.budget_rejected", {
           severity: "error",
@@ -113,6 +120,20 @@ export class ReviewGenerationBudgetStore {
       )
       .one().id;
     return { accepted: true, id, outputTokens: request.outputTokens };
+  }
+  public loadStopReason(
+    rawRunId: string,
+  ): ModelGenerationStopReason | undefined {
+    const runId = runIdSchema.parse(rawRunId);
+    const row = this.sql
+      .exec<{ stop_reason: string | null }>(
+        "SELECT stop_reason FROM model_generation_plans WHERE run_id = ?",
+        runId,
+      )
+      .toArray()[0];
+    return row?.stop_reason == null
+      ? undefined
+      : modelGenerationStopReasonSchema.parse(row.stop_reason);
   }
   public settle(rawRunId: string, id: number, outputTokens: number): void {
     const runId = runIdSchema.parse(rawRunId);

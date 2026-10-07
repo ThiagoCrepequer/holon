@@ -2,6 +2,7 @@ import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
 
+import { applyLedgerMigrations } from "../src/ledger/ledger-migrations.js";
 import { ReviewGenerationBudgetStore } from "../src/ledger/review-generation-budget-store.js";
 afterEach(() => reset());
 const runId =
@@ -242,6 +243,11 @@ it("atomically refuses model and tool reservations after a newer head supersedes
     }),
   ).toBeUndefined();
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 1)).toBe(false);
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.loadModelGenerationStop(runId)).toThrow(
+      "not authorized",
+    );
+  });
   await runInDurableObject(ledger, (_object, state) => {
     expect(
       state.storage.sql
@@ -320,5 +326,120 @@ it("counts historical reservations in the current aggregate ceiling", async () =
     accepted: false,
     reason: "input_bytes",
     consumed: 4_000_000,
+  });
+});
+
+it("persists the first denial across settlement, concurrent denials and eviction", async () => {
+  const ledger = await ledgerForRun();
+  expect(await ledger.loadModelGenerationStop(runId)).toBeUndefined();
+  const request = {
+    shardIndex: 0,
+    shardCount: 1,
+    phase: "investigation" as const,
+    inputBytes: 1,
+    outputTokens: 120_000,
+  };
+  const admitted = await ledger.reserveModelGeneration(runId, request);
+  if (!admitted?.accepted) throw new Error("Expected reservation");
+  const denied = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      ledger.reserveModelGeneration(runId, { ...request, outputTokens: 1 }),
+    ),
+  );
+  expect(denied.every((result) => result?.accepted === false)).toBe(true);
+  expect(await ledger.loadModelGenerationStop(runId)).toBe("output_tokens");
+  await ledger.settleModelGeneration(runId, admitted.id, 0);
+  // Already admitted peers may continue inside the original ceilings. Settlement
+  // never reopens admission of new shard waves, even if a different dimension denies.
+  expect(
+    await ledger.reserveModelGeneration(runId, {
+      ...request,
+      inputBytes: 3_999_999,
+      outputTokens: 1,
+    }),
+  ).toMatchObject({ accepted: true });
+  expect(
+    await ledger.reserveModelGeneration(runId, { ...request, outputTokens: 1 }),
+  ).toMatchObject({ accepted: false, reason: "input_bytes" });
+  await evictDurableObject(ledger);
+  expect(await ledger.loadModelGenerationStop(runId)).toBe("output_tokens");
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT COUNT(*) AS count FROM model_generation_reservations WHERE run_id = ?",
+          runId,
+        )
+        .one().count,
+    ).toBe(2);
+  });
+});
+
+it("upgrades a historical budget plan without changing its reservations", async () => {
+  const ledger = await ledgerForRun();
+  await ledger.reserveModelGeneration(runId, {
+    shardIndex: 0,
+    shardCount: 1,
+    phase: "investigation",
+    inputBytes: 123,
+    outputTokens: 456,
+  });
+  await runInDurableObject(ledger, (_object, state) => {
+    // Reproduce exactly the pre-22 table/marker, then exercise the real migration.
+    state.storage.sql.exec(
+      "ALTER TABLE model_generation_plans DROP COLUMN stop_reason",
+    );
+    state.storage.sql.exec("DELETE FROM schema_migrations WHERE version = 22");
+    applyLedgerMigrations(state.storage);
+    applyLedgerMigrations(state.storage);
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT shard_count, stop_reason FROM model_generation_plans WHERE run_id = ?",
+          runId,
+        )
+        .one(),
+    ).toEqual({ shard_count: 1, stop_reason: null });
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT input_bytes, output_tokens, shard_index FROM model_generation_reservations WHERE run_id = ?",
+          runId,
+        )
+        .one(),
+    ).toEqual({ input_bytes: 123, output_tokens: 456, shard_index: 0 });
+    expect(() =>
+      state.storage.sql.exec(
+        "UPDATE model_generation_plans SET stop_reason = 'untrusted' WHERE run_id = ?",
+        runId,
+      ),
+    ).toThrow();
+  });
+  expect(await ledger.loadModelGenerationStop(runId)).toBeUndefined();
+});
+
+it("refuses a budget-stop query for an invalid or terminal run", async () => {
+  const ledger = await ledgerForRun();
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.loadModelGenerationStop("invalid")).toThrow();
+  });
+  await ledger.transition(
+    runId,
+    "running",
+    "failed_retryable",
+    new Date().toISOString(),
+    "budget-test:failed",
+  );
+  await ledger.transition(
+    runId,
+    "failed_retryable",
+    "failed_terminal",
+    new Date().toISOString(),
+    "budget-test:terminal",
+  );
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.loadModelGenerationStop(runId)).toThrow(
+      "not authorized",
+    );
   });
 });

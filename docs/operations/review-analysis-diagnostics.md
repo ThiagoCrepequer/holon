@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-07
 ---
 
 # Diagnóstico de análise parcial ou interrompida
@@ -59,21 +59,55 @@ saldo da run, sem tools de repositório e com wait de até 60 segundos, limitado
 pelo deadline restante. Não confunda esse caso com shard em status `errored`.
 Veja a [investigação do PR #125](../research/2026-10-04-pr125-missing-summary.md).
 
-| Evento                                                                   | Interpretação                                                                                                                                                              |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model.budget_rejected`                                                  | O ledger recusou uma inferência pelo teto **agregado da run**. `rule`, `current`, `requested` e `limit` identificam a dimensão; shard e fase ajudam a localizar a chamada. |
-| `repository.tool_budget_rejected`                                        | A run alcançou o teto agregado de 96 consultas; `totalCurrent` e `totalLimit` mostram a admissão transacional.                                                             |
-| `review.shard_failed`                                                    | O shard falhou ou expirou. `reason` distingue falha do Agent Workflow, deadline e erros classificados do provider.                                                         |
-| `review.shard_partial`                                                   | O shard devolveu limitações, contexto omitido, evidência rejeitada ou saída degradada.                                                                                     |
-| `review.analysis_partial`                                                | Escopo, partes planejadas, concluídas, falhas e degradadas da revisão.                                                                                                     |
-| `review.analysis_step_failed`, `review.analysis_failed`, `review.failed` | Etapa ou run interrompida; correlacione com estado do Workflow e cleanup.                                                                                                  |
-| `project.identification_partial`                                         | Identificação parcial de projetos; isoladamente, não determina falha de review.                                                                                            |
+| Evento                                                                   | Interpretação                                                                                                                                                                                          |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `review.analysis_context_loaded`                                         | Leitura completa, planejamento e digest do snapshot da invocação; `files`, `shards`, `patchBytes` e `durationMs` são contagens e wall time, sem payload. Reconstrução ou retomada exigem nova leitura. |
+| `review.analysis_budget_stopped`                                         | Primeira recusa durável impediu nova onda; `rule` identifica a dimensão e `unstartedShards` a cobertura não admitida. Peers já admitidos são aguardados.                                               |
+| `model.budget_rejected`                                                  | O ledger recusou uma inferência pelo teto **agregado da run**. `rule`, `current`, `requested` e `limit` identificam a dimensão; shard e fase ajudam a localizar a chamada.                             |
+| `repository.tool_budget_rejected`                                        | A run alcançou o teto agregado de 96 consultas; `totalCurrent` e `totalLimit` mostram a admissão transacional.                                                                                         |
+| `review.shard_failed`                                                    | O shard falhou ou expirou. `reason` distingue falha do Agent Workflow, deadline e erros classificados do provider.                                                                                     |
+| `review.shard_partial`                                                   | O shard devolveu limitações, contexto omitido, evidência rejeitada ou saída degradada.                                                                                                                 |
+| `review.analysis_partial`                                                | Escopo, partes planejadas, concluídas, falhas e degradadas da revisão.                                                                                                                                 |
+| `review.analysis_step_failed`, `review.analysis_failed`, `review.failed` | Etapa ou run interrompida; correlacione com estado do Workflow e cleanup.                                                                                                                              |
+| `project.identification_partial`                                         | Identificação parcial de projetos; isoladamente, não determina falha de review.                                                                                                                        |
 
 Os tetos de modelo são 64 inferências, 4.000.000 bytes de entrada serializada
 e 120.000 tokens de saída reservados ou consumidos por run, compartilhados
 entre shards. Uso desconhecido conserva a reserva máxima. A decisão de
 admissão não mede custo faturado. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md)
 substitui a divisão por shard da ADR-0046.
+
+A primeira recusa também interrompe a admissão de novas ondas, sem renovar saldo
+após settlement/retry/eviction. A review publicada informa orçamento esgotado e
+cobertura parcial; uma recusa na última onda pode não emitir
+`review.analysis_budget_stopped` porque não há shards restantes. Consulte
+`model.budget_rejected` e o resultado agregado. `agent_workflow_failed` continua
+uma falha genérica: não atribua todas as falhas de peers à recusa global.
+
+## CPU e validação após publicação do artefato
+
+No PR #171, a invocação do pai registrou `outcome=exceededCpu`,
+`cpuTimeMs=32000` e `wallTimeMs=799044`. O step que estava ativo era
+`analyze-review-1`; isso não mede a CPU exclusiva desse callback. O runtime
+usava o default de 30 segundos. A correção reduz o trabalho repetido e configura
+60 segundos de CPU no script. Veja a
+[investigação datada](../research/2026-10-07-pr171-cpu-and-budget-exhaustion.md).
+
+Após um deploy autorizado, confirme a versão do Worker efetivamente utilizada
+pelo Workflow, o limite implantado e a invocação correspondente ao `runId`.
+Compare `cpuTimeMs` por invocação e por quantidade de shards/contexto, sem
+confundir esse valor com `durationMs` do evento de leitura ou com wall time.
+Uma run pode atravessar várias invocações. Em revisões grandes, confirme também:
+
+- leitura única do snapshot por invocação sem reconstrução;
+- ausência de novos Agents/ondas após a primeira recusa, preservando os peers
+  já admitidos e a explicação pública de cobertura parcial;
+- ausência de `exceededCpu`, publicação idempotente e `cleanup_completed`.
+
+Workerd local e dry-run não comprovam o limite remoto nem latência/custo real.
+Não reinicie uma run nem faça deploy apenas como validação local. Se a margem
+continuar insuficiente, meça os trechos ativos antes de alterar outro teto; não
+atribua uma função quente somente ao nome do step interrompido.
 
 O Agent tracing fica habilitado durante o beta. Com
 `AGENT_TRACE_PAYLOADS=enabled`, mensagens e outputs de tools podem conter

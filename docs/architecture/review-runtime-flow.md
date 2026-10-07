@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-07
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -101,6 +101,15 @@ limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard
 com no máximo 64 shards e três análises simultâneas. Contexto omitido gera
 limitação explícita; não é tratado como cobertura.
 
+O coordenador mantém contexto validado, plano e digest apenas na memória da
+invocação de análise. Cada onda compartilha uma barreira de preparação: verifica
+a presença do contexto e adquire o lease antes de iniciar peers. Se o Sandbox
+precisar ser reconstruído, o snapshot é invalidado e relido; uma retomada do
+Workflow começa com memória nova. O digest precisa coincidir com o checkpoint
+do planejamento antes de qualquer shard vivo e antes da agregação. O contexto
+completo não é serializado como resultado de step. Sem reconstrução, 50 shards
+usam uma leitura completa e um cálculo do digest nessa invocação.
+
 O analisador estrutural produz pistas para investigar contratos, não findings.
 Uma declaração de `interface` ou `type` movida e reexportada como tipo no mesmo
 módulo não recebe a pista de símbolo exportado removido. Isso não substitui a
@@ -155,6 +164,29 @@ entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
 de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
 por run entre todos os shards. Esses limites não são uma estimativa exata de
 tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
+A primeira recusa de inferência persiste sua dimensão em
+`model_generation_plans.stop_reason`, na mesma transação da decisão de admissão
+(migração aditiva 22). Antes de admitir cada nova onda, um step consulta o
+ledger da run atual em execução. Havendo recusa, nenhum novo Agent é iniciado:
+os shards ainda não admitidos recebem `model_budget_exhausted`. A onda já
+admitida é aguardada integralmente; seus peers podem terminar dentro dos tetos
+originais. Settlement não apaga a parada, mesmo se liberar saída reservada.
+Isso é uma política conservadora de admissão, não uma afirmação de saldo zero.
+
+Uma recusa na última onda também é lida em checkpoint antes da agregação. A
+publicação conserva achados verificados, informa o orçamento esgotado no idioma
+configurado e permanece parcial; não produz aprovação limpa nem resolução por
+silêncio. Falhas de ledger, contexto ou preparação continuam terminais. Sem
+recusa durável, o caso em que todos os shards falham no modelo continua erro.
+
+O `holon-control-plane` configura `limits.cpu_ms=60000`. O limite pertence ao
+script e suas invocações, não é um saldo independente por callback de análise.
+A margem acompanha a redução de leituras/planejamento repetidos e mantém teto
+finito; waits de rede não são CPU. O valor não substitui medição remota. Veja
+[evidência e limites do ajuste](../research/2026-10-07-pr171-cpu-and-budget-exhaustion.md)
+e [limites oficiais de Workflows](https://developers.cloudflare.com/workflows/reference/limits/)
+(verificados em 2026-10-07).
+
 As duas fases compartilham esses tetos e o mesmo deadline. A investigação
 admite 16 passos; a verificação admite oito e um timeout de cinco minutos,
 sempre subordinado ao deadline da análise. Sem candidatos não há fase extra.
