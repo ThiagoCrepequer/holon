@@ -1,3 +1,4 @@
+import type { AdmittedUser } from "@holon/contracts/dashboard";
 import {
   applyD1Migrations,
   env,
@@ -13,8 +14,21 @@ const bindings = env as {
   IDENTITY_MIGRATIONS: D1Migration[];
 };
 
+const reviewActor: AdmittedUser = {
+  id: "review_actor",
+  name: "Synthetic actor",
+  sessionId: "review_session",
+  githubAccountId: "synthetic_subject",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+};
+
 afterEach(async () => {
   vi.restoreAllMocks();
+  expect(
+    await bindings.IDENTITY_DB.prepare(
+      "SELECT COUNT(*) AS count FROM tenancy_mutation_guard",
+    ).first("count"),
+  ).toBe(0);
   await reset();
 });
 
@@ -64,7 +78,7 @@ it("denied admission at the batch creates no personal child for an existing pare
   });
   await expect(
     createTenancyPersistence(interleaved).provisionPersonalWorkspace(
-      "review_actor",
+      reviewActor,
     ),
   ).rejects.toThrow();
   expect(
@@ -110,7 +124,7 @@ it("denied team admission cannot create children on an existing generated ID", a
     },
   });
   await expect(
-    createTenancyPersistence(interleaved).createTeamWorkspace("review_actor", {
+    createTenancyPersistence(interleaved).createTeamWorkspace(reviewActor, {
       name: "New team",
       operationId: "review_denied_team",
     }),
@@ -137,7 +151,7 @@ it("a personal membership cannot be demoted", async () => {
   const database = await admitActor();
   const result =
     await createTenancyPersistence(database).provisionPersonalWorkspace(
-      "review_actor",
+      reviewActor,
     );
   await expect(
     database
@@ -157,7 +171,7 @@ it("a personal workspace cannot be silently converted to a team", async () => {
   const database = await admitActor();
   const result =
     await createTenancyPersistence(database).provisionPersonalWorkspace(
-      "review_actor",
+      reviewActor,
     );
   await expect(
     database
@@ -203,20 +217,20 @@ it("creation replay uses the current membership and cannot recreate a removed pa
   const database = await admitActor();
   const store = createTenancyPersistence(database);
   const command = { name: "Synthetic team", operationId: "review_creation" };
-  const created = await store.createTeamWorkspace("review_actor", command);
+  const created = await store.createTeamWorkspace(reviewActor, command);
   await database
     .prepare("UPDATE membership SET role='member' WHERE workspace_id=?")
     .bind(created.workspace.id)
     .run();
   expect(
-    (await store.createTeamWorkspace("review_actor", command)).membership.role,
+    (await store.createTeamWorkspace(reviewActor, command)).membership.role,
   ).toBe("member");
   await database
     .prepare("DELETE FROM membership WHERE workspace_id=?")
     .bind(created.workspace.id)
     .run();
   await expect(
-    store.createTeamWorkspace("review_actor", command),
+    store.createTeamWorkspace(reviewActor, command),
   ).rejects.toThrow();
   expect(
     (await database.prepare("SELECT * FROM membership").all()).results,

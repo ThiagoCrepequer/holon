@@ -3,19 +3,38 @@ import {
   workspaceMembershipDtoSchema,
   createTeamWorkspaceInputSchema,
   tenancyOperationReceiptSchema,
+  type AdmittedUser,
   type WorkspaceDto,
   type WorkspaceMembershipDto,
   type WorkspaceRole,
   type CreateTeamWorkspaceInput,
 } from "@holon/contracts/dashboard";
 
+export type TenancyErrorCode =
+  | "user_not_admitted"
+  | "operation_conflict"
+  | "command_unknown"
+  | "personal_workspace_provision_failed"
+  | "team_workspace_creation_failed"
+  | "storage_corrupted";
+
+export class TenancyError extends Error {
+  readonly code: TenancyErrorCode;
+
+  constructor(code: TenancyErrorCode) {
+    super(code);
+    this.name = "TenancyError";
+    this.code = code;
+  }
+}
+
 export interface TenancyPersistence {
-  provisionPersonalWorkspace(userId: string): Promise<{
+  provisionPersonalWorkspace(actor: AdmittedUser): Promise<{
     workspace: WorkspaceDto;
     membership: WorkspaceMembershipDto;
   }>;
   createTeamWorkspace(
-    actorUserId: string,
+    actor: AdmittedUser,
     input: CreateTeamWorkspaceInput,
   ): Promise<{
     workspace: WorkspaceDto;
@@ -47,22 +66,21 @@ async function sha256Hex(data: string): Promise<string> {
 export function createTenancyPersistence(
   database: D1Database,
 ): TenancyPersistence {
-  async function assertAdmittedUser(userId: string): Promise<void> {
-    const now = Date.now();
+  async function assertAdmittedActor(actor: AdmittedUser): Promise<void> {
     const result = await database
       .prepare(
         `SELECT u.id
          FROM user u
-         JOIN account a ON a.userId = u.id
-         JOIN session s ON s.userId = u.id AND s.expiresAt > ?
+         JOIN account a ON a.userId = u.id AND a.providerId = 'github' AND a.accountId = ?
+         JOIN session s ON s.userId = u.id AND s.id = ? AND s.expiresAt > CAST(unixepoch('subsec') * 1000 AS INTEGER)
          WHERE u.id = ?
          LIMIT 1`,
       )
-      .bind(now, userId)
+      .bind(actor.githubAccountId, actor.sessionId, actor.id)
       .first<{ id: string }>();
 
     if (!result) {
-      throw new Error("user_not_admitted");
+      throw new TenancyError("user_not_admitted");
     }
   }
 
@@ -87,15 +105,15 @@ export function createTenancyPersistence(
       role: record.role,
     });
     if (!parsed.success) {
-      throw new Error("storage_corrupted");
+      throw new TenancyError("storage_corrupted");
     }
     return parsed.data;
   }
 
   async function reconcileReplay(
     operationId: string,
-    actorUserId: string,
-    payloadHash: string,
+    actor: AdmittedUser,
+    expectedPayloadHash: string,
   ): Promise<{
     workspace: WorkspaceDto;
     membership: WorkspaceMembershipDto;
@@ -113,13 +131,18 @@ export function createTenancyPersistence(
 
     const parsedOp = tenancyOperationReceiptSchema.safeParse(rawOp);
     if (!parsedOp.success) {
-      throw new Error("storage_corrupted");
+      throw new TenancyError("storage_corrupted");
     }
 
     const op = parsedOp.data;
-    if (op.actor_user_id !== actorUserId || op.payload_hash !== payloadHash) {
-      throw new Error("operation_conflict");
+    if (
+      op.actor_user_id !== actor.id ||
+      op.payload_hash !== expectedPayloadHash
+    ) {
+      throw new TenancyError("operation_conflict");
     }
+
+    await assertAdmittedActor(actor);
 
     const rawWs = await database
       .prepare("SELECT id, type, name FROM workspace WHERE id = ?")
@@ -127,7 +150,7 @@ export function createTenancyPersistence(
       .first();
 
     if (!rawWs) {
-      throw new Error("storage_corrupted");
+      throw new TenancyError("storage_corrupted");
     }
 
     const wsRecord = rawWs;
@@ -137,15 +160,12 @@ export function createTenancyPersistence(
       name: wsRecord.name,
     });
     if (!parsedWs.success) {
-      throw new Error("storage_corrupted");
+      throw new TenancyError("storage_corrupted");
     }
 
-    const membership = await readVerifiedMembership(
-      parsedWs.data.id,
-      actorUserId,
-    );
+    const membership = await readVerifiedMembership(parsedWs.data.id, actor.id);
     if (!membership) {
-      throw new Error("team_workspace_creation_failed");
+      throw new TenancyError("team_workspace_creation_failed");
     }
 
     return {
@@ -155,8 +175,8 @@ export function createTenancyPersistence(
   }
 
   return {
-    async provisionPersonalWorkspace(userId: string) {
-      await assertAdmittedUser(userId);
+    async provisionPersonalWorkspace(actor: AdmittedUser) {
+      await assertAdmittedActor(actor);
 
       const existing = await database
         .prepare(
@@ -165,7 +185,7 @@ export function createTenancyPersistence(
            JOIN membership m ON m.workspace_id = w.id AND m.user_id = ?
            WHERE w.type = 'personal' AND w.personal_user_id = ?`,
         )
-        .bind(userId, userId)
+        .bind(actor.id, actor.id)
         .first();
 
       if (existing) {
@@ -183,30 +203,42 @@ export function createTenancyPersistence(
             workspace: parsedWs.data,
             membership: {
               workspaceId: parsedWs.data.id,
-              userId,
+              userId: actor.id,
               role: parsedRole.data,
             },
           };
         }
       }
 
+      const attemptKey = `att_${crypto.randomUUID().replace(/-/gu, "")}`;
       const workspaceId = `ws_${crypto.randomUUID().replace(/-/gu, "")}`;
       const now = Date.now();
 
       await database.batch([
         database
           .prepare(
+            `INSERT INTO tenancy_mutation_guard (attempt_key, admitted)
+             VALUES (?, (
+               SELECT CASE WHEN EXISTS (
+                 SELECT 1 FROM user u
+                 JOIN account a ON a.userId = u.id AND a.providerId = 'github' AND a.accountId = ?
+                 JOIN session s ON s.userId = u.id AND s.id = ? AND s.expiresAt > CAST(unixepoch('subsec') * 1000 AS INTEGER)
+                 WHERE u.id = ?
+               ) THEN 1 ELSE 0 END
+             ))`,
+          )
+          .bind(attemptKey, actor.githubAccountId, actor.sessionId, actor.id),
+        database
+          .prepare(
             `INSERT INTO workspace (id, type, name, personal_user_id, created_at, updated_at)
              SELECT ?, 'personal', 'Personal', ?, ?, ?
              WHERE EXISTS (
-               SELECT 1 FROM user u
-               JOIN account a ON a.userId = u.id
-               JOIN session s ON s.userId = u.id AND s.expiresAt > ?
-               WHERE u.id = ?
+               SELECT 1 FROM tenancy_mutation_guard
+               WHERE attempt_key = ? AND admitted = 1
              )
              ON CONFLICT(personal_user_id) DO NOTHING`,
           )
-          .bind(workspaceId, userId, now, now, now, userId),
+          .bind(workspaceId, actor.id, now, now, attemptKey),
         database
           .prepare(
             `INSERT INTO membership (workspace_id, user_id, role, created_at, updated_at)
@@ -214,14 +246,15 @@ export function createTenancyPersistence(
              FROM workspace w
              WHERE w.personal_user_id = ? AND w.type = 'personal'
              AND EXISTS (
-               SELECT 1 FROM user u
-               JOIN account a ON a.userId = u.id
-               JOIN session s ON s.userId = u.id AND s.expiresAt > ?
-               WHERE u.id = ?
+               SELECT 1 FROM tenancy_mutation_guard
+               WHERE attempt_key = ? AND admitted = 1
              )
              ON CONFLICT(workspace_id, user_id) DO NOTHING`,
           )
-          .bind(userId, now, now, userId, now, userId),
+          .bind(actor.id, now, now, actor.id, attemptKey),
+        database
+          .prepare(`DELETE FROM tenancy_mutation_guard WHERE attempt_key = ?`)
+          .bind(attemptKey),
       ]);
 
       const created = await database
@@ -231,11 +264,11 @@ export function createTenancyPersistence(
            JOIN membership m ON m.workspace_id = w.id AND m.user_id = ?
            WHERE w.type = 'personal' AND w.personal_user_id = ?`,
         )
-        .bind(userId, userId)
+        .bind(actor.id, actor.id)
         .first();
 
       if (!created) {
-        throw new Error("personal_workspace_provision_failed");
+        throw new TenancyError("user_not_admitted");
       }
 
       const record = created;
@@ -248,30 +281,30 @@ export function createTenancyPersistence(
         record.role,
       );
       if (!parsedWs.success || !parsedRole.success) {
-        throw new Error("personal_workspace_provision_failed");
+        throw new TenancyError("personal_workspace_provision_failed");
       }
 
       return {
         workspace: parsedWs.data,
         membership: {
           workspaceId: parsedWs.data.id,
-          userId,
+          userId: actor.id,
           role: parsedRole.data,
         },
       };
     },
 
     async createTeamWorkspace(
-      actorUserId: string,
+      actor: AdmittedUser,
       input: CreateTeamWorkspaceInput,
     ) {
       const validatedInput = createTeamWorkspaceInputSchema.parse(input);
-      await assertAdmittedUser(actorUserId);
+      await assertAdmittedActor(actor);
 
       const payloadHash = await sha256Hex(
         JSON.stringify([
           "create_team",
-          actorUserId,
+          actor.id,
           validatedInput.name,
           validatedInput.operationId,
         ]),
@@ -279,13 +312,14 @@ export function createTenancyPersistence(
 
       const existing = await reconcileReplay(
         validatedInput.operationId,
-        actorUserId,
+        actor,
         payloadHash,
       );
       if (existing) {
         return existing;
       }
 
+      const attemptKey = `att_${crypto.randomUUID().replace(/-/gu, "")}`;
       const workspaceId = `ws_${crypto.randomUUID().replace(/-/gu, "")}`;
       const now = Date.now();
 
@@ -293,16 +327,27 @@ export function createTenancyPersistence(
         await database.batch([
           database
             .prepare(
+              `INSERT INTO tenancy_mutation_guard (attempt_key, admitted)
+               VALUES (?, (
+                 SELECT CASE WHEN EXISTS (
+                   SELECT 1 FROM user u
+                   JOIN account a ON a.userId = u.id AND a.providerId = 'github' AND a.accountId = ?
+                   JOIN session s ON s.userId = u.id AND s.id = ? AND s.expiresAt > CAST(unixepoch('subsec') * 1000 AS INTEGER)
+                   WHERE u.id = ?
+                 ) THEN 1 ELSE 0 END
+               ))`,
+            )
+            .bind(attemptKey, actor.githubAccountId, actor.sessionId, actor.id),
+          database
+            .prepare(
               `INSERT INTO workspace (id, type, name, personal_user_id, created_at, updated_at)
                SELECT ?, 'team', ?, NULL, ?, ?
                WHERE EXISTS (
-                 SELECT 1 FROM user u
-                 JOIN account a ON a.userId = u.id
-                 JOIN session s ON s.userId = u.id AND s.expiresAt > ?
-                 WHERE u.id = ?
+                 SELECT 1 FROM tenancy_mutation_guard
+                 WHERE attempt_key = ? AND admitted = 1
                )`,
             )
-            .bind(workspaceId, validatedInput.name, now, now, now, actorUserId),
+            .bind(workspaceId, validatedInput.name, now, now, attemptKey),
           database
             .prepare(
               `INSERT INTO membership (workspace_id, user_id, role, created_at, updated_at)
@@ -311,21 +356,11 @@ export function createTenancyPersistence(
                  SELECT 1 FROM workspace WHERE id = ? AND type = 'team'
                )
                AND EXISTS (
-                 SELECT 1 FROM user u
-                 JOIN account a ON a.userId = u.id
-                 JOIN session s ON s.userId = u.id AND s.expiresAt > ?
-                 WHERE u.id = ?
+                 SELECT 1 FROM tenancy_mutation_guard
+                 WHERE attempt_key = ? AND admitted = 1
                )`,
             )
-            .bind(
-              workspaceId,
-              actorUserId,
-              now,
-              now,
-              workspaceId,
-              now,
-              actorUserId,
-            ),
+            .bind(workspaceId, actor.id, now, now, workspaceId, attemptKey),
           database
             .prepare(
               `INSERT INTO tenancy_operation (operation_id, actor_user_id, action, payload_hash, target_workspace_id, created_at)
@@ -337,79 +372,102 @@ export function createTenancyPersistence(
                  SELECT 1 FROM membership WHERE workspace_id = ? AND user_id = ?
                )
                AND EXISTS (
-                 SELECT 1 FROM user u
-                 JOIN account a ON a.userId = u.id
-                 JOIN session s ON s.userId = u.id AND s.expiresAt > ?
-                 WHERE u.id = ?
+                 SELECT 1 FROM tenancy_mutation_guard
+                 WHERE attempt_key = ? AND admitted = 1
                )`,
             )
             .bind(
               validatedInput.operationId,
-              actorUserId,
+              actor.id,
               payloadHash,
               workspaceId,
               now,
               workspaceId,
               workspaceId,
-              actorUserId,
-              now,
-              actorUserId,
+              actor.id,
+              attemptKey,
             ),
+          database
+            .prepare(`DELETE FROM tenancy_mutation_guard WHERE attempt_key = ?`)
+            .bind(attemptKey),
         ]);
-      } catch (error) {
-        const replayed = await reconcileReplay(
-          validatedInput.operationId,
-          actorUserId,
-          payloadHash,
+
+        const opRecord = await database
+          .prepare(
+            "SELECT target_workspace_id FROM tenancy_operation WHERE operation_id = ?",
+          )
+          .bind(validatedInput.operationId)
+          .first<{ target_workspace_id: string }>();
+
+        if (!opRecord) {
+          await assertAdmittedActor(actor);
+          throw new TenancyError("user_not_admitted");
+        }
+
+        const createdWs = await database
+          .prepare("SELECT id, type, name FROM workspace WHERE id = ?")
+          .bind(workspaceId)
+          .first();
+
+        if (!createdWs) {
+          throw new TenancyError("team_workspace_creation_failed");
+        }
+
+        const wsRecord = createdWs;
+        const parsedWs = workspaceDtoSchema.safeParse({
+          id: wsRecord.id,
+          type: wsRecord.type,
+          name: wsRecord.name,
+        });
+        if (!parsedWs.success) {
+          throw new TenancyError("team_workspace_creation_failed");
+        }
+
+        const createdMembership = await readVerifiedMembership(
+          parsedWs.data.id,
+          actor.id,
         );
+        if (!createdMembership) {
+          throw new TenancyError("team_workspace_creation_failed");
+        }
+
+        return {
+          workspace: parsedWs.data,
+          membership: createdMembership,
+        };
+      } catch (error) {
+        if (
+          error instanceof TenancyError &&
+          (error.code === "user_not_admitted" ||
+            error.code === "operation_conflict")
+        ) {
+          throw error;
+        }
+
+        let replayed = null;
+        try {
+          replayed = await reconcileReplay(
+            validatedInput.operationId,
+            actor,
+            payloadHash,
+          );
+        } catch (replayError) {
+          if (
+            replayError instanceof TenancyError &&
+            (replayError.code === "operation_conflict" ||
+              replayError.code === "user_not_admitted")
+          ) {
+            throw replayError;
+          }
+          throw new TenancyError("command_unknown");
+        }
+
         if (replayed) {
           return replayed;
         }
-        throw error;
+
+        throw new TenancyError("team_workspace_creation_failed");
       }
-
-      const opRecord = await database
-        .prepare(
-          "SELECT target_workspace_id FROM tenancy_operation WHERE operation_id = ?",
-        )
-        .bind(validatedInput.operationId)
-        .first<{ target_workspace_id: string }>();
-
-      if (!opRecord) {
-        throw new Error("user_not_admitted");
-      }
-
-      const createdWs = await database
-        .prepare("SELECT id, type, name FROM workspace WHERE id = ?")
-        .bind(workspaceId)
-        .first();
-
-      if (!createdWs) {
-        throw new Error("team_workspace_creation_failed");
-      }
-
-      const wsRecord = createdWs;
-      const parsedWs = workspaceDtoSchema.safeParse({
-        id: wsRecord.id,
-        type: wsRecord.type,
-        name: wsRecord.name,
-      });
-      if (!parsedWs.success) {
-        throw new Error("team_workspace_creation_failed");
-      }
-
-      const createdMembership = await readVerifiedMembership(
-        parsedWs.data.id,
-        actorUserId,
-      );
-      if (!createdMembership) {
-        throw new Error("team_workspace_creation_failed");
-      }
-
-      return {
-        workspace: parsedWs.data,
-        membership: createdMembership,
-      };
     },
 
     async listUserWorkspaces(userId: string) {
@@ -436,7 +494,7 @@ export function createTenancyPersistence(
           record.role,
         );
         if (!parsedWs.success || !parsedRole.success) {
-          throw new Error("storage_corrupted");
+          throw new TenancyError("storage_corrupted");
         }
         items.push({
           workspace: parsedWs.data,
@@ -468,7 +526,7 @@ export function createTenancyPersistence(
         record.role,
       );
       if (!parsedWs.success || !parsedRole.success) {
-        throw new Error("storage_corrupted");
+        throw new TenancyError("storage_corrupted");
       }
       return {
         workspace: parsedWs.data,

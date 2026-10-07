@@ -1,3 +1,4 @@
+import type { AdmittedUser } from "@holon/contracts/dashboard";
 import {
   applyD1Migrations,
   env,
@@ -14,12 +15,26 @@ interface Bindings {
 }
 
 const bindings = env as Bindings;
+const fixtureSessions = new Map<string, { id: string; expiresAt: number }>();
+const fixtureAccounts = new Map<string, string>();
+function fixtureActor(id: string): AdmittedUser {
+  const session = fixtureSessions.get(id);
+  return {
+    id,
+    name: "Synthetic fixture actor",
+    sessionId: session?.id ?? "absent_session",
+    githubAccountId: fixtureAccounts.get(id) ?? "absent_account",
+    expiresAt: new Date(session?.expiresAt ?? 0).toISOString(),
+  };
+}
 
 async function setupDatabase() {
   await applyD1Migrations(bindings.IDENTITY_DB, bindings.IDENTITY_MIGRATIONS);
 }
 
 afterEach(async () => {
+  fixtureSessions.clear();
+  fixtureAccounts.clear();
   await reset();
 });
 
@@ -63,6 +78,7 @@ async function seedAccount(
       now,
     )
     .run();
+  fixtureAccounts.set(account.userId, account.accountId);
 }
 
 // Helper to seed active session
@@ -85,6 +101,10 @@ async function seedSession(
       session.userId,
     )
     .run();
+  fixtureSessions.set(session.userId, {
+    id: session.id,
+    expiresAt: session.expiresAt,
+  });
 }
 
 it("migration applies cleanly from empty D1 and preserves pre-existing authority and code redemption data", async () => {
@@ -143,7 +163,7 @@ it("isolated user without linked account or without active session cannot provis
   });
 
   await expect(
-    tenancy.provisionPersonalWorkspace("user-isolated-1"),
+    tenancy.provisionPersonalWorkspace(fixtureActor("user-isolated-1")),
   ).rejects.toThrow("user_not_admitted");
 
   // User 2: Has account but session creation failed (incomplete login)
@@ -161,7 +181,7 @@ it("isolated user without linked account or without active session cannot provis
   });
 
   await expect(
-    tenancy.provisionPersonalWorkspace("user-no-session-2"),
+    tenancy.provisionPersonalWorkspace(fixtureActor("user-no-session-2")),
   ).rejects.toThrow("user_not_admitted");
 
   // Independent oracle: zero rows in workspace and membership
@@ -201,9 +221,9 @@ it("admitted user gets personal workspace and owner membership idempotently unde
 
   // Concurrent provisioning calls
   const [res1, res2, res3] = await Promise.all([
-    tenancy.provisionPersonalWorkspace("user-admitted-1"),
-    tenancy.provisionPersonalWorkspace("user-admitted-1"),
-    tenancy.provisionPersonalWorkspace("user-admitted-1"),
+    tenancy.provisionPersonalWorkspace(fixtureActor("user-admitted-1")),
+    tenancy.provisionPersonalWorkspace(fixtureActor("user-admitted-1")),
+    tenancy.provisionPersonalWorkspace(fixtureActor("user-admitted-1")),
   ]);
 
   expect(res1.workspace.id).toBe(res2.workspace.id);
@@ -270,7 +290,9 @@ it("personal workspace rejects non-owner access and schema trigger blocks adding
     expiresAt: Date.now() + 86400000,
   });
 
-  const { workspace } = await tenancy.provisionPersonalWorkspace("user-a");
+  const { workspace } = await tenancy.provisionPersonalWorkspace(
+    fixtureActor("user-a"),
+  );
 
   // User B cannot read or access personal workspace of User A
   const access = await tenancy.readWorkspace("user-b", workspace.id);
@@ -331,10 +353,13 @@ it("creates team workspace with owner membership atomically; zero-rows guard pre
   });
 
   // Valid creation
-  const created = await tenancy.createTeamWorkspace("user-owner", {
-    name: "Synthetic Team Alpha",
-    operationId: "op-create-team-1",
-  });
+  const created = await tenancy.createTeamWorkspace(
+    fixtureActor("user-owner"),
+    {
+      name: "Synthetic Team Alpha",
+      operationId: "op-create-team-1",
+    },
+  );
 
   expect(created.workspace.type).toBe("team");
   expect(created.workspace.name).toBe("Synthetic Team Alpha");
@@ -350,7 +375,7 @@ it("creates team workspace with owner membership atomically; zero-rows guard pre
   });
 
   await expect(
-    tenancy.createTeamWorkspace("user-unadmitted", {
+    tenancy.createTeamWorkspace(fixtureActor("user-unadmitted"), {
       name: "Synthetic Ghost Corp",
       operationId: "op-unadmitted-1",
     }),
@@ -402,7 +427,7 @@ it("SQL failure on membership insert triggers full rollback of workspace and ten
   );
 
   await expect(
-    tenancy.createTeamWorkspace("user-fail-test", {
+    tenancy.createTeamWorkspace(fixtureActor("user-fail-test"), {
       name: "Doomed Team",
       operationId: "op-doomed-1",
     }),
@@ -426,6 +451,11 @@ it("SQL failure on membership insert triggers full rollback of workspace and ten
     "SELECT * FROM membership WHERE user_id = 'user-fail-test'",
   ).all();
   expect(doomedMembers.results).toHaveLength(0);
+  expect(
+    await bindings.IDENTITY_DB.prepare(
+      "SELECT COUNT(*) AS count FROM tenancy_mutation_guard",
+    ).first("count"),
+  ).toBe(0);
 });
 
 it("team creation replay is idempotent; concurrent and conflicting key collisions are rejected", async () => {
@@ -471,13 +501,13 @@ it("team creation replay is idempotent; concurrent and conflicting key collision
   });
 
   // First call succeeds
-  const initial = await tenancy.createTeamWorkspace("user-1", {
+  const initial = await tenancy.createTeamWorkspace(fixtureActor("user-1"), {
     name: "Engineering",
     operationId: "op-shared-100",
   });
 
   // Replay by same user with same payload returns identical workspace idempotently
-  const replay = await tenancy.createTeamWorkspace("user-1", {
+  const replay = await tenancy.createTeamWorkspace(fixtureActor("user-1"), {
     name: "Engineering",
     operationId: "op-shared-100",
   });
@@ -485,7 +515,7 @@ it("team creation replay is idempotent; concurrent and conflicting key collision
 
   // Collision with different actor using same operationId is rejected
   await expect(
-    tenancy.createTeamWorkspace("user-2", {
+    tenancy.createTeamWorkspace(fixtureActor("user-2"), {
       name: "Engineering",
       operationId: "op-shared-100",
     }),
@@ -493,7 +523,7 @@ it("team creation replay is idempotent; concurrent and conflicting key collision
 
   // Collision by same actor with different payload using same operationId is rejected
   await expect(
-    tenancy.createTeamWorkspace("user-1", {
+    tenancy.createTeamWorkspace(fixtureActor("user-1"), {
       name: "Different Name",
       operationId: "op-shared-100",
     }),
@@ -501,11 +531,11 @@ it("team creation replay is idempotent; concurrent and conflicting key collision
 
   // Concurrent creation with exact same key by user-1 converges without error
   const [c1, c2] = await Promise.all([
-    tenancy.createTeamWorkspace("user-1", {
+    tenancy.createTeamWorkspace(fixtureActor("user-1"), {
       name: "Design Team",
       operationId: "op-concurrent-key-1",
     }),
-    tenancy.createTeamWorkspace("user-1", {
+    tenancy.createTeamWorkspace(fixtureActor("user-1"), {
       name: "Design Team",
       operationId: "op-concurrent-key-1",
     }),
@@ -588,18 +618,24 @@ it("maintains N:M memberships with local permissions per workspace and isolates 
     expiresAt: Date.now() + 86400000,
   });
 
-  const teamAlpha = await tenancy.createTeamWorkspace("user-alice", {
-    name: "Team Alpha",
-    operationId: "op-alpha",
-  });
-  const teamBeta = await tenancy.createTeamWorkspace("user-bob", {
+  const teamAlpha = await tenancy.createTeamWorkspace(
+    fixtureActor("user-alice"),
+    {
+      name: "Team Alpha",
+      operationId: "op-alpha",
+    },
+  );
+  const teamBeta = await tenancy.createTeamWorkspace(fixtureActor("user-bob"), {
     name: "Team Beta",
     operationId: "op-beta",
   });
-  const teamGamma = await tenancy.createTeamWorkspace("user-charlie", {
-    name: "Team Gamma",
-    operationId: "op-gamma",
-  });
+  const teamGamma = await tenancy.createTeamWorkspace(
+    fixtureActor("user-charlie"),
+    {
+      name: "Team Gamma",
+      operationId: "op-gamma",
+    },
+  );
 
   // Add Alice to Team Beta as member via direct SQL fixture
   const now = Date.now();
@@ -729,7 +765,9 @@ it("schema trigger blocks UPDATE on personal workspace membership", async () => 
     emailVerified: true,
   });
 
-  const { workspace } = await tenancy.provisionPersonalWorkspace("user-up-1");
+  const { workspace } = await tenancy.provisionPersonalWorkspace(
+    fixtureActor("user-up-1"),
+  );
 
   // Attempting to UPDATE the membership to point to user-up-2 fails due to the UPDATE trigger
   await expect(
@@ -766,7 +804,7 @@ it("validates team workspace input and operation ID", async () => {
 
   // Empty or whitespace name
   await expect(
-    tenancy.createTeamWorkspace("user-val", {
+    tenancy.createTeamWorkspace(fixtureActor("user-val"), {
       name: "   ",
       operationId: "op-valid",
     }),
@@ -774,7 +812,7 @@ it("validates team workspace input and operation ID", async () => {
 
   // Name exceeding 128 chars
   await expect(
-    tenancy.createTeamWorkspace("user-val", {
+    tenancy.createTeamWorkspace(fixtureActor("user-val"), {
       name: "x".repeat(129),
       operationId: "op-valid",
     }),
@@ -782,7 +820,7 @@ it("validates team workspace input and operation ID", async () => {
 
   // Invalid operation ID with special characters
   await expect(
-    tenancy.createTeamWorkspace("user-val", {
+    tenancy.createTeamWorkspace(fixtureActor("user-val"), {
       name: "Valid Team",
       operationId: "invalid op!",
     }),
@@ -812,10 +850,13 @@ it("readMembership returns active membership and null when not found", async () 
     expiresAt: Date.now() + 86400000,
   });
 
-  const { workspace } = await tenancy.createTeamWorkspace("user-mem", {
-    name: "Member Test Team",
-    operationId: "op-mem-1",
-  });
+  const { workspace } = await tenancy.createTeamWorkspace(
+    fixtureActor("user-mem"),
+    {
+      name: "Member Test Team",
+      operationId: "op-mem-1",
+    },
+  );
 
   const member = await tenancy.readMembership("user-mem", workspace.id);
   expect(member).toEqual({ workspaceId: workspace.id, role: "owner" });
@@ -847,8 +888,12 @@ it("sequential provisioning returns existing personal workspace via existing che
     expiresAt: Date.now() + 86400000,
   });
 
-  const first = await tenancy.provisionPersonalWorkspace("user-seq");
-  const second = await tenancy.provisionPersonalWorkspace("user-seq");
+  const first = await tenancy.provisionPersonalWorkspace(
+    fixtureActor("user-seq"),
+  );
+  const second = await tenancy.provisionPersonalWorkspace(
+    fixtureActor("user-seq"),
+  );
   expect(second.workspace.id).toBe(first.workspace.id);
 });
 
@@ -895,11 +940,11 @@ it("simultaneous concurrent collision with different actors triggers conflict in
   });
 
   const results = await Promise.allSettled([
-    tenancy.createTeamWorkspace("user-race-1", {
+    tenancy.createTeamWorkspace(fixtureActor("user-race-1"), {
       name: "Race Team",
       operationId: "op-race-conflict-1",
     }),
-    tenancy.createTeamWorkspace("user-race-2", {
+    tenancy.createTeamWorkspace(fixtureActor("user-race-2"), {
       name: "Race Team",
       operationId: "op-race-conflict-1",
     }),

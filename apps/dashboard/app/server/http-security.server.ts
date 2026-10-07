@@ -4,6 +4,7 @@ export class HttpBoundaryError extends Error {
   constructor(
     readonly code: DashboardErrorCode,
     readonly status: number,
+    readonly retryAfter?: number,
   ) {
     super(code);
   }
@@ -62,6 +63,10 @@ export function secureResponse(
 }
 export function errorResponse(error: unknown): Response {
   const known = error instanceof HttpBoundaryError;
+  const headers = new Headers();
+  if (known && error.retryAfter !== undefined) {
+    headers.set("Retry-After", error.retryAfter.toString());
+  }
   return Response.json(
     {
       error: {
@@ -69,7 +74,7 @@ export function errorResponse(error: unknown): Response {
         requestId: crypto.randomUUID(),
       },
     },
-    { status: known ? error.status : 503 },
+    { status: known ? error.status : 503, headers },
   );
 }
 

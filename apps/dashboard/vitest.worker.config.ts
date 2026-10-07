@@ -5,7 +5,10 @@ export default defineConfig({
   test: {
     reporters: ["default", "junit"],
     outputFile: { junit: "junit.workers.xml" },
-    include: ["test/http-security.test.ts"],
+    include: [
+      "test/http-security.test.ts",
+      "test/http-composition-review.test.ts",
+    ],
     fileParallelism: false,
     coverage: {
       provider: "istanbul",

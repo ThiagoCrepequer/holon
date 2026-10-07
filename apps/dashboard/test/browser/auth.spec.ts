@@ -222,14 +222,42 @@ for (const locale of ["en", "pt-BR"] as const) {
       expect(failure.body.error.requestId).toMatch(/^[0-9a-f-]{36}$/u);
       expect(failure.cache).toBe("private, no-store");
     }
-    const logout = await page.evaluate(async () => {
+    const deniedLogout = await page.evaluate(async () => {
+      const statuses: number[] = [];
+      for (const method of ["GET", "HEAD"])
+        statuses.push((await fetch("/api/auth/sign-out", { method })).status);
+      for (const token of [undefined, "synthetic_wrong_csrf"]) {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (token !== undefined) headers["X-CSRF-Token"] = token;
+        statuses.push(
+          (
+            await fetch("/api/auth/sign-out", {
+              method: "POST",
+              headers,
+              body: "{}",
+            })
+          ).status,
+        );
+      }
+      return {
+        statuses,
+        session: await (
+          await fetch("/api/auth/session")
+        ).json<{ session: { id: string } }>(),
+      };
+    });
+    expect(deniedLogout.statuses).toEqual([405, 405, 403, 403]);
+    expect(deniedLogout.session.session.id).toBe(session.body.session.id);
+    const logout = await page.evaluate(async (csrf) => {
       const response = await fetch("/api/auth/sign-out", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
         body: "{}",
       });
       return response.status;
-    });
+    }, session.csrf!);
     expect(logout).toBe(200);
     expect(
       await page.evaluate(async () =>

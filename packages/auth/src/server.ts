@@ -8,7 +8,11 @@ import {
   type AuthEnvironment,
 } from "@holon/contracts/dashboard";
 import { identityAuthSchema } from "@holon/db/auth-integration/server";
-import { createIdentityPersistence } from "@holon/db/identity/server";
+import {
+  createD1RateLimitStorage,
+  createIdentityPersistence,
+  type RateLimitStorage,
+} from "@holon/db/identity/server";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/d1";
 
@@ -20,6 +24,8 @@ import {
 
 export { validateGitHubAuthConfig, type GitHubAppAuthConfig };
 
+export type AdmittedUserStatus = "admitted" | "disconnected" | "anonymous";
+
 export interface AuthServiceOptions {
   readonly database: D1Database;
   readonly appOrigin: string;
@@ -29,10 +35,11 @@ export interface AuthServiceOptions {
   readonly environment?: AuthEnvironment;
   readonly homologatedOrigins?: ReadonlyMap<AuthEnvironment, readonly string[]>;
 }
-export type { AdmittedUser };
+export type { AdmittedUser, RateLimitStorage };
 
 export interface AuthService {
   readonly appOrigin: string;
+  readonly rateLimitStorage: RateLimitStorage;
   handleAuthRequest(request: Request): Promise<Response>;
   getSession(request: Request): Promise<{
     session: SessionOutputDto | null;
@@ -40,6 +47,7 @@ export interface AuthService {
   }>;
   getAdmittedUser(request: Request): Promise<{
     user: AdmittedUser | null;
+    status: AdmittedUserStatus;
     headers: Headers;
   }>;
   pruneExpiredCodes(): Promise<void>;
@@ -106,6 +114,8 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       : {}),
   });
 
+  const rateLimitStorage = createD1RateLimitStorage(options.database);
+
   const auth = betterAuth({
     baseURL: config.appOrigin,
     secret: options.authSecret,
@@ -135,15 +145,30 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       updateAge: 86400,
       cookieCache: { enabled: false },
     },
-    advanced: { useSecureCookies: true },
+    advanced: {
+      useSecureCookies: true,
+      ipAddress: {
+        ipAddressHeaders: ["cf-connecting-ip"],
+      },
+    },
     trustedOrigins: [config.appOrigin],
     logger: { disabled: true },
-    rateLimit: { enabled: false },
+    rateLimit: {
+      enabled: true,
+      window: 10,
+      max: 100,
+      customStorage: rateLimitStorage,
+      customRules: {
+        "/sign-in/social": { window: 60, max: 10 },
+        "/sign-out": { window: 60, max: 30 },
+      },
+    },
   });
 
   async function resolveSessionWithAccount(request: Request): Promise<{
     session: SessionOutputDto | null;
     admittedUser: AdmittedUser | null;
+    status: AdmittedUserStatus;
     headers: Headers;
   }> {
     const { response: context, headers } = await auth.api.getSession({
@@ -152,7 +177,12 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     });
 
     if (!context) {
-      return { session: null, admittedUser: null, headers };
+      return {
+        session: null,
+        admittedUser: null,
+        status: "anonymous",
+        headers,
+      };
     }
 
     // Require valid linked GitHub account; an orphaned User/Session is NOT admitted
@@ -164,7 +194,12 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       .first<{ accountId: string }>();
 
     if (!row || !row.accountId) {
-      return { session: null, admittedUser: null, headers };
+      return {
+        session: null,
+        admittedUser: null,
+        status: "disconnected",
+        headers,
+      };
     }
 
     const output: SessionOutputDto = {
@@ -185,11 +220,47 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     };
     admittedUserSchema.parse(admitted);
 
-    return { session: output, admittedUser: admitted, headers };
+    return {
+      session: output,
+      admittedUser: admitted,
+      status: "admitted",
+      headers,
+    };
+  }
+
+  function formatAuthResponse(response: Response): Response {
+    if (response.status === 429) {
+      const retryAfter =
+        response.headers.get("Retry-After") ??
+        response.headers.get("X-Retry-After") ??
+        "60";
+      const headers = new Headers(response.headers);
+      for (const [key, value] of Object.entries(privateHeaders)) {
+        headers.set(key, value);
+      }
+      headers.set("Content-Type", "application/json");
+      headers.set("Retry-After", retryAfter);
+      headers.set("X-Retry-After", retryAfter);
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "rate_limited",
+            requestId: crypto.randomUUID(),
+          },
+        }),
+        {
+          status: 429,
+          headers,
+        },
+      );
+    }
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   }
 
   return {
     appOrigin: config.appOrigin,
+    rateLimitStorage,
 
     async handleAuthRequest(request: Request): Promise<Response> {
       const url = new URL(request.url);
@@ -211,6 +282,11 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         url.pathname === "/api/auth/sign-in/social"
       ) {
         if (request.headers.get("Origin") !== config.appOrigin) {
+          return new Response(null, { status: 403, headers: privateHeaders });
+        }
+
+        const secFetchSite = request.headers.get("Sec-Fetch-Site");
+        if (secFetchSite === "cross-site" || secFetchSite === "same-site") {
           return new Response(null, { status: 403, headers: privateHeaders });
         }
 
@@ -246,8 +322,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         });
 
         const response = await auth.handler(freshRequest);
-        response.headers.set("Cache-Control", "private, no-store");
-        return response;
+        return formatAuthResponse(response);
       }
 
       if (
@@ -255,8 +330,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         url.pathname === "/api/auth/callback/github"
       ) {
         const response = await auth.handler(request);
-        response.headers.set("Cache-Control", "private, no-store");
-        return response;
+        return formatAuthResponse(response);
       }
 
       if (request.method === "POST" && url.pathname === "/api/auth/sign-out") {
@@ -264,9 +338,13 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
           return new Response(null, { status: 403, headers: privateHeaders });
         }
 
+        const secFetchSite = request.headers.get("Sec-Fetch-Site");
+        if (secFetchSite === "cross-site" || secFetchSite === "same-site") {
+          return new Response(null, { status: 403, headers: privateHeaders });
+        }
+
         const response = await auth.handler(request);
-        response.headers.set("Cache-Control", "private, no-store");
-        return response;
+        return formatAuthResponse(response);
       }
 
       return new Response(null, { status: 404, headers: privateHeaders });
@@ -278,9 +356,9 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     },
 
     async getAdmittedUser(request: Request) {
-      const { admittedUser, headers } =
+      const { admittedUser, status, headers } =
         await resolveSessionWithAccount(request);
-      return { user: admittedUser, headers };
+      return { user: admittedUser, status, headers };
     },
 
     async pruneExpiredCodes(): Promise<void> {

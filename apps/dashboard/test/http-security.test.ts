@@ -1,6 +1,7 @@
 import type { AuthService } from "@holon/auth/server";
 import {
   dashboardErrorSchema,
+  type AdmittedUser,
   type WorkspaceDto,
   type WorkspaceMembershipDto,
 } from "@holon/contracts/dashboard";
@@ -215,6 +216,9 @@ function createFakeAuthService(
 
   const authService: AuthService = {
     appOrigin: origin,
+    rateLimitStorage: {
+      consume: async () => ({ allowed: true, retryAfter: null }),
+    },
     async handleAuthRequest(request: Request): Promise<Response> {
       const url = new URL(request.url);
       if (url.pathname === "/api/auth/session") {
@@ -260,11 +264,12 @@ function createFakeAuthService(
     },
     async getAdmittedUser() {
       if (!admitted) {
-        return { user: null, headers: new Headers() };
+        return { user: null, status: "anonymous", headers: new Headers() };
       }
       const headers = new Headers();
       headers.append("Set-Cookie", "user_touch=1");
       return {
+        status: "admitted",
         user: {
           id: userId,
           name: "Alice",
@@ -289,7 +294,8 @@ function createFakeTenancyPersistence() {
   let teamCreated = 0;
 
   const tenancy: TenancyPersistence = {
-    async provisionPersonalWorkspace(userId: string) {
+    async provisionPersonalWorkspace(actor: AdmittedUser) {
+      const userId = actor.id;
       personalCreated += 1;
       const ws = {
         id: `ws-personal-${userId}`,
@@ -302,7 +308,8 @@ function createFakeTenancyPersistence() {
         membership: { workspaceId: ws.id, userId, role: "owner" as const },
       };
     },
-    async createTeamWorkspace(actorUserId: string, input) {
+    async createTeamWorkspace(actor: AdmittedUser, input) {
+      const actorUserId = actor.id;
       teamCreated += 1;
       const ws = {
         id: `ws-team-${input.operationId}`,
@@ -398,7 +405,9 @@ it("integrates auth routes: session returns CSRF token, does not provision perso
       headers: {
         Origin: origin,
         "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken!,
       },
+      body: "{}",
     }),
     origin,
   );

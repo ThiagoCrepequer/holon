@@ -1,4 +1,5 @@
 import type {
+  AdmittedUser,
   CreateTeamWorkspaceInput,
   DeliveryWake,
   DeliveryWakeResult,
@@ -23,12 +24,12 @@ export interface WorkspaceAccessPort {
 }
 
 export interface WorkspaceTenancyPort {
-  provisionPersonalWorkspace(userId: string): Promise<{
+  provisionPersonalWorkspace(actor: AdmittedUser): Promise<{
     workspace: WorkspaceDto;
     membership: WorkspaceMembershipDto;
   }>;
   createTeamWorkspace(
-    actorUserId: string,
+    actor: AdmittedUser,
     input: CreateTeamWorkspaceInput,
   ): Promise<{
     workspace: WorkspaceDto;
