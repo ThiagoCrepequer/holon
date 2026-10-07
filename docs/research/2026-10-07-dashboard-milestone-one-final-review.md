@@ -123,8 +123,9 @@ Os resultados finais são registrados após o gate do artefato final. Os testes
 anteriores à correção permanecem como regressões; cobertura, retries e
 fronteiras produtivas não foram enfraquecidos.
 
-Artefato de código: `8faaf1841fce75febf01d2782b60a14352762d43`; o commit de documentação seguinte
-registra esta evidência sem alterar runtime/testes.
+Implementação produtiva: `8faaf1841fce75febf01d2782b60a14352762d43`; as correções do arranjo de teste de CI abaixo
+conservam esse runtime. O gate local completo foi executado novamente com
+esse arranjo e passou, com os mesmos cenários e thresholds.
 
 Ambiente: Node 24.11.0 e pnpm 11.24.0. `pnpm verify` concluiu com sucesso:
 21 tarefas de types, 32 de cobertura e 17 de build, com cache válido onde
@@ -151,6 +152,15 @@ passou com 341 testes do core; o mesmo caso levou 4,997 s. O código/teste do
 webhook corresponde a `main` e não foi alterado; timeout, retries e thresholds
 permaneceram intactos. A falha inicial não foi reclassificada como sucesso.
 Não foi determinada uma causa conclusiva para a variação de duração.
+
+A primeira CI do head `3c24c2d` (run `37702702577`) falhou no teste novo de
+budget de leitura de workspaces: as 120 chamadas HTTP sequenciais de preparação
+excederam 5 s no runner. A correção prepara o contador persistido em 119 após
+uma primeira leitura real, e prova por HTTP/D1 o último ingresso (contador 120),
+a negação seguinte (121), o bucket compartilhado com IDs distintos e a negação
+após recriar serviços. Não altera política, timeout, retries ou runtime e não
+usa fake do limiter. A execução inicial permanece falha; o novo artefato recebe
+outra CI, em vez de reclassificar/repetir a execução antiga.
 
 A revisão final de #132–#138 não deixa achados de implementação pendentes
 no escopo M1 reconciliado. O PR #171 inclui as dependências #139/#140/#142 do

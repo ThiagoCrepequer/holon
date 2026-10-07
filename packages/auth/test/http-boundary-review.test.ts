@@ -419,22 +419,53 @@ it.each(["/api/auth/session", "/api/workspaces"])(
     const test = await fixture();
     const headers = test.jar.headers();
     headers.set("CF-Connecting-IP", "192.0.2.65");
-    let permitted = 0;
-    let blocked: Response | undefined;
-    for (let i = 0; i < 125; i += 1) {
-      const response = await test.handle(
-        new Request(`${origin}${path}`, { headers }),
-        origin,
-      );
-      if (response.status === 429) {
-        blocked = response;
-        break;
-      }
-      expect(response.status).toBe(200);
-      permitted += 1;
-    }
-    expect(permitted).toBeGreaterThanOrEqual(119);
-    expect(permitted).toBeLessThanOrEqual(120);
+    const existingKeys = new Set(
+      (
+        await bindings.AUTH_DB.prepare("SELECT key FROM rate_limit").all<{
+          key: string;
+        }>()
+      ).results.map((row) => row.key),
+    );
+    const first = await test.handle(
+      new Request(`${origin}${path}`, { headers }),
+      origin,
+    );
+    expect(first.status).toBe(200);
+    const added = (
+      await bindings.AUTH_DB.prepare("SELECT key, count FROM rate_limit").all<{
+        key: string;
+        count: number;
+      }>()
+    ).results.filter((row) => !existingKeys.has(row.key));
+    expect(added).toHaveLength(1);
+    expect(added[0]!.count).toBe(1);
+    const key = added[0]!.key;
+    // Arrange a durable budget at the boundary; HTTP/D1 remain real and the
+    // assertions below prove the configured ceiling without 120 setup requests.
+    await bindings.AUTH_DB.prepare(
+      "UPDATE rate_limit SET count=119 WHERE key=?",
+    )
+      .bind(key)
+      .run();
+    const lastPermitted = await test.handle(
+      new Request(`${origin}${path}`, { headers }),
+      origin,
+    );
+    expect(lastPermitted.status).toBe(200);
+    expect(
+      await bindings.AUTH_DB.prepare("SELECT count FROM rate_limit WHERE key=?")
+        .bind(key)
+        .first("count"),
+    ).toBe(120);
+    const blocked = await test.handle(
+      new Request(`${origin}${path}`, { headers }),
+      origin,
+    );
+    expect(
+      await bindings.AUTH_DB.prepare("SELECT count FROM rate_limit WHERE key=?")
+        .bind(key)
+        .first("count"),
+    ).toBe(121);
     if (path === "/api/workspaces") {
       for (const id of ["synthetic_missing_one", "synthetic_missing_two"]) {
         expect(
@@ -447,12 +478,12 @@ it.each(["/api/auth/session", "/api/workspaces"])(
         ).toBe(429);
       }
     }
-    expect(blocked?.status).toBe(429);
-    expect(Number(blocked!.headers.get("Retry-After"))).toBeGreaterThanOrEqual(
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThanOrEqual(
       1,
     );
-    expect(Number(blocked!.headers.get("Retry-After"))).toBeLessThanOrEqual(60);
-    expect(await blocked!.json<{ error: { code: string } }>()).toMatchObject({
+    expect(Number(blocked.headers.get("Retry-After"))).toBeLessThanOrEqual(60);
+    expect(await blocked.json<{ error: { code: string } }>()).toMatchObject({
       error: { code: "rate_limited" },
     });
     expect(
