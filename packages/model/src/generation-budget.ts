@@ -17,7 +17,11 @@ export class ModelReviewBudgetExceededError extends Error {
       { accepted: false }
     >,
   ) {
-    super("Aggregate review generation budget exhausted");
+    super(
+      admission.reason.startsWith("shard_")
+        ? "Shard review generation budget exhausted"
+        : "Aggregate review generation budget exhausted",
+    );
     this.name = "ModelReviewBudgetExceededError";
   }
 }

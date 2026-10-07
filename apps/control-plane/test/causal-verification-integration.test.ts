@@ -216,7 +216,7 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
     const turn = await instance.beforeTurn(
       {} as Parameters<ReviewAgent["beforeTurn"]>[0],
     );
-    expect(turn.maxSteps).toBe(8);
+    expect(turn.maxSteps).toBe(2);
     await expect(instance.prepareSummaryRecovery()).rejects.toThrow(
       "limited to investigation",
     );

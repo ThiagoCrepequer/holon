@@ -15,13 +15,13 @@ afterEach(async () => {
 });
 
 const prKey = "github:42:pr:7";
-const runId =
+const baseRunId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as RunId;
 const run: ReviewRun = {
   attempt: 0,
   causalVersion: "2026-10-04T12:00:00.000Z",
   createdAt: "2026-10-04T12:00:00.000Z",
-  id: runId,
+  id: baseRunId,
   prKey,
   state: "queued",
 };
@@ -57,8 +57,11 @@ const scenarios = [
 it.each(scenarios)(
   "recovers only the narrative within the durable run budget: %s",
   async (scenario) => {
+    // Workflows keep deterministic IDs across DO resets; use a distinct run per scenario.
+    const runId =
+      `github:42:pr:7:head:${(scenarios.indexOf(scenario) + 1).toString(16).padStart(40, "a")}:base:${"b".repeat(40)}` as RunId;
     const ledger = env.REVIEW_LEDGERS.getByName(prKey);
-    await ledger.claimRun(run, "summary-recovery-test");
+    await ledger.claimRun({ ...run, id: runId }, "summary-recovery-test");
     await ledger.transition(
       runId,
       "queued",
@@ -66,7 +69,7 @@ it.each(scenarios)(
       new Date().toISOString(),
       "summary-recovery-test:start",
     );
-    const shardIndex = 10 + scenarios.indexOf(scenario);
+    const shardIndex = 0;
     const initial = {
       findings:
         scenario === "recovered" || scenario === "budget_denied"
@@ -107,7 +110,7 @@ it.each(scenarios)(
               inputBytes: 1,
               outputTokens: 1,
               shardIndex,
-              shardCount: 64,
+              shardCount: 1,
             });
             expect(admission?.accepted).toBe(true);
           }
@@ -181,7 +184,7 @@ it.each(scenarios)(
       prompt: "Review the authorization guard in src/a.ts.",
       runId,
       shardIndex,
-      totalShards: 64,
+      totalShards: 1,
     };
     const workflowId = await runInDurableObject(
       agent,
@@ -191,7 +194,7 @@ it.each(scenarios)(
             reserve: (request) =>
               env.REVIEW_LEDGERS.getByName(prKey).reserveModelGeneration(
                 runId,
-                { ...request, shardIndex, shardCount: 64 },
+                { ...request, shardIndex, shardCount: 1 },
               ),
             settle: (id, outputTokens) =>
               env.REVIEW_LEDGERS.getByName(prKey).settleModelGeneration(

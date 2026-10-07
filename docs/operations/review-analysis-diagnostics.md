@@ -119,3 +119,32 @@ credencial. Falhas de log não alteram admissão, veredito ou cleanup.
 Implementação: `apps/control-plane/src/review/review-agent.ts`,
 `ledger/review-generation-budget-store.ts`, `ledger/review-tool-budget-store.ts`,
 `review/review-analysis.ts` e `review/review-workflow.ts`.
+
+## Admissão de geração e causas do Think
+
+A [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
+admite até nove shards antes do despacho, dentro dos tetos agregados. O plano
+estrutural pode ter mais partes; `model_budget` registra a quantidade original e
+a admitida. `executor_budget` continua uma limitação independente de contexto,
+incluindo o teto de 32.000 entradas de linhas alteradas.
+
+Cada shard conserva `floor(teto / totalShards)` de chamadas, entrada cumulativa e
+saída. Em `model.budget_rejected`, `rule=shard_calls`, `shard_input_bytes` ou
+`shard_output_tokens` indica a parcela local; `current/requested/limit` são dessa
+parcela. Os campos `callsCurrent/inputBytesCurrent/outputTokensCurrent` continuam
+os totais globais. Recusa local não grava `stop_reason` global e não impede a
+análise de outras partes. Somente recusa de teto agregado para novas ondas.
+
+Uma falha conhecida fica no estado durável do Agent e chega ao adapter por RPC.
+Os códigos são `model_budget_exhausted`, `model_shard_budget_exhausted`,
+`model_output_missing`, `model_schema_invalid` e `agent_deadline_exceeded`.
+Não inferir a causa de peers usando apenas a parada global. Não usar mensagens
+arbitrárias do provider como códigos. O status do Workflow pode apresentar
+somente `WorkflowFatalError`, mesmo quando o erro interno é específico.
+
+O Think 0.20.0 já força `think_final_answer` no último passo. Se o modelo terminar
+antes sem essa chamada, o código é `model_output_missing`; o host não aceita
+texto livre nem inventa uma resposta. A causa histórica no modelo exige evidência
+adicional. Verifique a rota real com dados sintéticos e streaming; sucesso de
+uma amostra não prova confiabilidade dos turnos de review. Fonte oficial,
+consultada em 2026-10-07: [Think Workflows](https://developers.cloudflare.com/agents/harnesses/think/workflows/).

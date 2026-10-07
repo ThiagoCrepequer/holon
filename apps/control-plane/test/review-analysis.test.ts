@@ -1165,7 +1165,7 @@ it("admits investigation discoveries only with canonical changed-line evidence",
   ]);
 });
 
-it("reviews fifty shards within one full-context transfer budget", async () => {
+it("admits only budgeted shards from a fifty-part plan without repeating context transfers", async () => {
   const services = createMockServices(
     {
       changedLines: [],
@@ -1186,9 +1186,13 @@ it("reviews fifty shards within one full-context transfer budget", async () => {
     return original(...args);
   };
   const result = await analyzeReview(job, services, vi.fn());
-  expect(result.totalShards).toBe(50);
-  expect(result.shardsAnalyzed).toBe(50);
-  expect(result.verdict).toBe("APPROVE");
+  expect(result.totalShards).toBe(9);
+  expect(result.shardsAnalyzed).toBe(9);
+  expect(result.scopeStatus).toBe("partial_by_policy");
+  expect(result.verdict).toBe("COMMENT");
+  expect(result.omissionReasons).toContain(
+    "Generation budget admitted 9 of 50 priority shards; the remaining shards were not investigated.",
+  );
   expect(transfers).toBe(1);
 });
 

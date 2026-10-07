@@ -103,3 +103,61 @@ smoke remoto do ajuste nesta investigação.
 - Código afetado: `review/review-analysis.ts`, `review/review-services.ts`,
   `ledger/review-generation-budget-store.ts`, `ledger/ledger-object.ts`,
   `ledger/ledger-migrations.ts` e `packages/application/src/aggregate-reviews.ts`.
+
+## Segunda execução e ajuste de admissão
+
+Consulta read-only em 2026-10-07, com o arquivo de ambiente carregado apenas no
+processo, confirmou que
+`review-e3e71586a28275a6ac916f05f906db262786e9acda067399124e9a5fc217beeb`
+concluiu e chegou a `complete-run-and-schedule-cleanup-1`. Essa consulta não
+reproduziu a análise nem expôs outputs dos passos.
+
+O diagnóstico fornecido para essa execução registra 14 partes concluídas, a
+parte 10 sem ferramenta final, as partes 16–18 recusadas por entrada e 32 partes
+não iniciadas. Relata 58/64 inferências e 3.989.338/4.000.000 bytes consumidos;
+os próximos requests exigiam 66.835–75.910 bytes. Esses detalhes vieram da
+investigação informada, não da consulta de status aqui descrita.
+
+A correção local implementa a [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md):
+quatro passos de investigação, dois causais, uma recuperação narrativa, até
+nove shards admitidos e quotas protegidas por parte nas três dimensões. Para
+este plano de 50 partes, 41 seriam explicitamente omitidas pelo orçamento no
+planejamento. Isso corrige a admissão inviável, sem prometer cobertura integral
+nem elevar tetos. O limite de contexto do executor permanece independente.
+
+A API do Gateway `holon` expôs a rota `pr-review` e identificadores Gemma 4 na
+configuração consultada. Duas probes sintéticas no endpoint `compat` usaram
+`dynamic/pr-review`, streaming e schema mínimo da ferramenta
+`think_final_answer`: uma com `tool_choice=required`, outra com seleção nominal
+da ferramenta. Ambas retornaram HTTP 200, `finish_reason=tool_calls`, chamada
+final e argumento válido; o modelo informado nas respostas foi
+`google/gemma-4-26b-a4b-it`. Cada probe teve limite de 1.024 tokens e 45 segundos,
+sem diff/código privado e sem captura de payload de log solicitada ao Gateway.
+
+Essas duas amostras confirmam compatibilidade básica da rota naquele momento.
+Não passam pelo Think real nem pelo schema completo de review e não explicam a
+falha histórica da parte 10. Não foi alterada a rota, realizado deploy ou
+reiniciada uma run. O ajuste persiste a causa específica no Agent porque o
+Workerd local demonstrou que o status do filho pode apresentar apenas
+`WorkflowFatalError` após um `NonRetryableError`.
+
+Fonte oficial consultada em 2026-10-07:
+[Think Workflows](https://developers.cloudflare.com/agents/harnesses/think/workflows/).
+
+A verificação final `pnpm verify` passou em 2026-10-07, com Node 24.11.0 e
+pnpm 11.24.0: schema/configuração, formatação, lint, typechecks, testes de
+arquitetura, cobertura e builds/dry-runs. O control plane passou 341 testes;
+linhas 92,89%, funções 92,38% e branches 86,09%, acima dos limites mínimos vigentes.
+Regressões foram observadas em vermelho antes da correção para admissão inviável,
+proteção de entrada, transporte da causa, migração de estado após eviction e
+pedido acima da parcela que também cruzaria o teto global. A revisão independente
+com GPT-6-Luna identificou o caso de estado anterior; a migração e os RPCs
+assíncronos foram corrigidos e revisados novamente sem pendências nesses cenários.
+
+O Workerd local emitiu avisos de cancelamento/Workflow nos cenários de falha
+simulada; o gate terminou com sucesso. Esse resultado não é deploy, smoke de
+uma review completa ou prova de detecção com o modelo real.
+
+O Antigravity também revisou o diff em modo read-only e não identificou bug
+concreto; executou os testes locais de arquitetura. Essa revisão estática e o
+gate local não substituem uma nova execução remota após a implantação.
