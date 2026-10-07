@@ -112,6 +112,38 @@ void test("routes cannot import sibling internals and features cannot reach rout
   ])
     assert(inspect(input).violations.length > 0);
 });
+void test("features cannot import or re-export app composition and route configuration", () => {
+  for (const [filename, relative, alias] of [
+    [
+      "composition.server.ts",
+      "../../composition.server.js",
+      "~/composition.server.js",
+    ],
+    ["routes.ts", "../../routes.js", "~/routes.js"],
+  ]) {
+    for (const source of [
+      `import value from "${relative}"; export default value;`,
+      `export { default } from "${alias}";`,
+    ]) {
+      const result = inspect({
+        "apps/dashboard/app/features/reviews/public.ts": source,
+        [`apps/dashboard/app/${filename}`]: "export default 1;",
+      });
+      assert.equal(result.violations.length, 1, source);
+      assert.match(result.violations[0], /feature imports app composition/u);
+    }
+  }
+  assert.deepEqual(
+    inspect({
+      "apps/dashboard/app/features/reviews/public.ts":
+        'export { default } from "./composition.server.js";',
+      "apps/dashboard/app/features/reviews/composition.server.ts":
+        "export default 1;",
+    }).violations,
+    [],
+  );
+});
+
 void test("transitive server imports and alias TSX cycles fail even through local wrappers", () => {
   const leaked = inspect({
     "apps/dashboard/app/routes/a/page.tsx": 'import x from "~/shared.js";',

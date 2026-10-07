@@ -100,7 +100,8 @@ function privateBoundary(from, target) {
   if (sourceFeature && targetRoute) return "feature imports a route";
   if (
     sourceFeature &&
-    (/\/app\/root\.[tj]sx?$/u.test(target) || /\/app\/shell\//u.test(target))
+    (/\/app\/(?:root|routes|composition\.server)\.[tj]sx?$/u.test(target) ||
+      /\/app\/shell\//u.test(target))
   )
     return "feature imports app composition";
   if (sourceRoute && targetRoute && sourceRoute !== targetRoute)

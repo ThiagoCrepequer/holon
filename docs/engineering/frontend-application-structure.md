@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 related:
   - typescript-and-module-design.md
   - ../research/2026-10-04-dashboard-library-landscape.md
@@ -487,6 +487,11 @@ exports/subpaths, alias `~/` com contraparte em Vite e resolução `.js`→`.tsx
 Fixtures negativas provam ciclos, internals de rotas/features e vazamento servidor
 transitivo. Componentes puros não alcançam runtime/SDK servidor. Módulos de rota
 mistos ficam sujeitos ao build real e à verificação do bundle cliente.
+
+Features não podem importar a composição em `root.tsx`, `routes.ts`,
+`composition.server.ts` ou `shell/*`. As fixtures também cobrem imports relativos
+e reexports pelo alias `~/` para os dois arquivos de configuração/composição,
+preservando o acesso aos módulos servidor internos da própria feature.
 
 O primeiro bootstrap contém `routes/welcome/route.tsx`, wildcard 404 localizado,
 `server/http-*`, `i18n/` e contexto de nonce por request. Não há pasta components
