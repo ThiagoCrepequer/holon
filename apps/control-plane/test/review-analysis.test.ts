@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { analyzeReview } from "../src/review/review-analysis.js";
 import type { ReviewServices } from "../src/review/review-services.js";
+import { ThinkReviewFailure } from "../src/review/think-reviewer.js";
 import {
   configurationReader,
   defaultRunConfiguration,
@@ -84,7 +85,7 @@ function createMockServices(
     },
     createMutationContext: () => Promise.reject(new Error("unused")),
     createSession: () => Promise.reject(new Error("unused")),
-    ensureContext: () => Promise.resolve(),
+    ensureContext: () => Promise.resolve(false),
     reconcileCheckRun: async () => undefined,
     executor: {
       ...unconfiguredExecutor,
@@ -96,6 +97,7 @@ function createMockServices(
     ledger: {
       loadRunConfiguration: () => defaultRunConfiguration(job),
       loadPrFindings: () => Promise.resolve([]),
+      loadModelGenerationStop: async () => undefined,
       savePrFindings: () => Promise.resolve(),
     } as unknown as ReviewServices["ledger"],
     loadContext: () =>
@@ -267,7 +269,7 @@ describe("analyzeReview", () => {
       verdictStrictness: "default" as const,
     };
     const services = createMockServices(policyContext);
-    const ensureContext = vi.fn(() => Promise.resolve());
+    const ensureContext = vi.fn(() => Promise.resolve(false));
 
     await analyzeReview(
       job,
@@ -1090,6 +1092,7 @@ it("shares wave preparation with a delayed shard instead of rebuilding while a p
   });
   const prepare = vi.fn(async () => {
     expect(active).toBe(0);
+    return false;
   });
   services.ensureContext = prepare;
   services.model.review = async () => {
@@ -1160,4 +1163,225 @@ it("admits investigation discoveries only with canonical changed-line evidence",
       summary: "This branch returns before invoking the downstream consumer.",
     },
   ]);
+});
+
+it("reviews fifty shards within one full-context transfer budget", async () => {
+  const services = createMockServices(
+    {
+      changedLines: [],
+      truncated: false,
+      files: Array.from({ length: 50 }, (_, index) => ({
+        path: `src/large-${index}.ts`,
+        mode: "structural" as const,
+        patch: `@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`,
+      })),
+    },
+    { output: { findings: [], summary: "Checked" }, promptTruncated: false },
+  );
+  const original = services.loadContext.bind(services);
+  let transfers = 0;
+  services.loadContext = async (...args) => {
+    if (++transfers > 1)
+      throw new Error("Full-context transfer budget exceeded");
+    return original(...args);
+  };
+  const result = await analyzeReview(job, services, vi.fn());
+  expect(result.totalShards).toBe(50);
+  expect(result.shardsAnalyzed).toBe(50);
+  expect(result.verdict).toBe("APPROVE");
+  expect(transfers).toBe(1);
+});
+
+it.each([false, true])(
+  "reloads a reconstructed context and rejects a changed plan: %s",
+  async (changed) => {
+    const services = createMockServices(revalidationContext());
+    const original = services.loadContext.bind(services);
+    let reads = 0;
+    services.loadContext = async (...args) => {
+      const context = await original(...args);
+      reads++;
+      return changed && reads > 1 ? { ...context, files: [] } : context;
+    };
+    let preparations = 0;
+    services.ensureContext = async () => ++preparations === 2;
+    const review = vi.spyOn(services.model, "review");
+    if (changed) {
+      await expect(analyzeReview(job, services, vi.fn())).rejects.toThrow(
+        "Review plan changed during replay",
+      );
+      expect(review).not.toHaveBeenCalled();
+    } else {
+      expect((await analyzeReview(job, services, vi.fn())).shardsAnalyzed).toBe(
+        1,
+      );
+      expect(review).toHaveBeenCalledOnce();
+    }
+    expect(reads).toBe(2);
+  },
+);
+
+it("stops new waves after durable budget denial, joins peers and preserves findings on replay", async () => {
+  const services = createMockServices({
+    ...revalidationContext(),
+    files: [
+      {
+        mode: "structural",
+        path: "src/index.ts",
+        patch: `@@ -9,0 +10,600 @@\n+return null;\n${"+// context\n".repeat(599)}`,
+      },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        mode: "structural" as const,
+        path: `src/z-budget-${i}.ts`,
+        patch: `@@ -0,0 +1,600 @@\n${"+// context\n".repeat(600)}`,
+      })),
+    ],
+  });
+  let stopped = false;
+  let active = 0;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  Object.assign(services.ledger, {
+    loadModelGenerationStop: async () => (stopped ? "input_bytes" : undefined),
+  });
+  const review = vi.fn(async (_job, context) => {
+    active++;
+    try {
+      if (context.files[0].path === "src/index.ts")
+        return {
+          output: { findings: [moderateFinding], summary: "Checked" },
+          promptTruncated: false,
+        };
+      stopped = true;
+      await barrier;
+      throw new ThinkReviewFailure("agent_workflow_failed");
+    } finally {
+      active--;
+    }
+  });
+  services.model.review = review;
+  const cache = new Map<string, unknown>();
+  let interrupted = false;
+  const execution = {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
+    async runStep<R>(
+      name: string,
+      _phase: "preparation" | "analysis",
+      fn: () => Promise<R>,
+    ): Promise<R> {
+      if (cache.has(name)) return cache.get(name) as R;
+      if (name === "analyze-review" && !interrupted) {
+        expect(active).toBe(0);
+        interrupted = true;
+        throw new Error("aggregation interrupted");
+      }
+      const value = await fn();
+      cache.set(name, value);
+      return value;
+    },
+    finish: async (output: import("@holon/contracts").ReconciledReviewOutput) =>
+      output,
+  };
+  const emit = vi.fn();
+  const pending = analyzeReview(job, services, emit, undefined, execution).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  try {
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(3));
+  } finally {
+    release();
+  }
+  expect(await pending).toMatchObject({ message: "aggregation interrupted" });
+  const result = await analyzeReview(job, services, emit, undefined, execution);
+  expect(review).toHaveBeenCalledTimes(3);
+  expect(result.totalShards).toBe(7);
+  expect(result.shardsAnalyzed).toBe(1);
+  expect(result.scopeStatus).toBe("partial_by_failure");
+  expect(result.verdict).toBe("COMMENT");
+  expect(result.activeFindings).toHaveLength(1);
+  expect(result.resolvedFindings).toEqual([]);
+  expect(emit).toHaveBeenCalledWith(
+    "review.analysis_budget_stopped",
+    { severity: "warning", rule: "input_bytes", unstartedShards: 4 },
+    undefined,
+  );
+});
+
+it("publishes zero coverage when the only wave exhausts the budget", async () => {
+  const services = createMockServices(revalidationContext());
+  let stopped = false;
+  Object.assign(services.ledger, {
+    loadModelGenerationStop: async () => (stopped ? "calls" : undefined),
+  });
+  services.model.review = vi.fn(async () => {
+    stopped = true;
+    throw new ThinkReviewFailure("agent_workflow_failed");
+  });
+  const output = await analyzeReview(job, services, vi.fn());
+  expect(output.shardsAnalyzed).toBe(0);
+  expect(output.totalShards).toBe(1);
+  expect(output.scopeStatus).toBe("partial_by_failure");
+  expect(output.verdict).toBe("COMMENT");
+  expect(output.activeFindings).toEqual([]);
+  expect(output.resolvedFindings).toEqual([]);
+  expect(output.summary).toContain(
+    "Review model budget exhausted (inference calls).",
+  );
+});
+
+it("does not publish a partial review when the budget-stop ledger query fails", async () => {
+  const services = createMockServices(revalidationContext());
+  Object.assign(services.ledger, {
+    loadModelGenerationStop: async () => {
+      throw new Error("ledger unavailable");
+    },
+  });
+  const review = vi.spyOn(services.model, "review");
+  await expect(analyzeReview(job, services, vi.fn())).rejects.toThrow(
+    "ledger unavailable",
+  );
+  expect(review).not.toHaveBeenCalled();
+});
+
+it("reloads and validates the plan after invocation replay without repeating completed shards", async () => {
+  const services = createMockServices(revalidationContext());
+  const cache = new Map<string, unknown>();
+  let changed = false;
+  const original = services.loadContext.bind(services);
+  const load = vi.fn(
+    async (...args: Parameters<typeof services.loadContext>) => {
+      const context = await original(...args);
+      return changed ? { ...context, files: [] } : context;
+    },
+  );
+  services.loadContext = load;
+  const review = vi.spyOn(services.model, "review");
+  const execution = {
+    configuration: configurationReference(await defaultRunConfiguration(job)),
+    async runStep<R>(
+      name: string,
+      _phase: "analysis" | "preparation",
+      fn: () => Promise<R>,
+    ): Promise<R> {
+      if (cache.has(name)) return cache.get(name) as R;
+      if (name === "analyze-review") changed = true;
+      const value = await fn();
+      cache.set(name, value);
+      return value;
+    },
+    finish: async (output: import("@holon/contracts").ReconciledReviewOutput) =>
+      output,
+  };
+  // First invocation has a validated snapshot, so the simulated change is only
+  // observable when a new invocation loads canonical context again.
+  await analyzeReview(job, services, vi.fn(), undefined, execution);
+  cache.delete("analyze-review");
+  await expect(
+    analyzeReview(job, services, vi.fn(), undefined, execution),
+  ).rejects.toThrow("Review plan changed during replay");
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(review).toHaveBeenCalledOnce();
 });

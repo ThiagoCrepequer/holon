@@ -26,6 +26,16 @@ export type ModelGenerationReservation = z.infer<
   typeof modelGenerationReservationSchema
 >;
 
+/** First denied dimension stops admission of subsequent shard waves. */
+export const modelGenerationStopReasonSchema = z.enum([
+  "calls",
+  "input_bytes",
+  "output_tokens",
+]);
+export type ModelGenerationStopReason = z.infer<
+  typeof modelGenerationStopReasonSchema
+>;
+
 export type ModelGenerationAdmission =
   | {
       readonly accepted: true;
@@ -34,7 +44,7 @@ export type ModelGenerationAdmission =
     }
   | {
       readonly accepted: false;
-      readonly reason: "calls" | "input_bytes" | "output_tokens";
+      readonly reason: ModelGenerationStopReason;
       readonly limit: number;
       readonly consumed: number;
       readonly requested: number;

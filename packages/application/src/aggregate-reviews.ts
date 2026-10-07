@@ -2,6 +2,7 @@ import type { ReviewOutputPreferences } from "@holon/contracts";
 import {
   aggregatedReviewResultSchema,
   type AggregatedReviewResult,
+  type ModelGenerationStopReason,
   type ReviewLanguage,
   type ReconciliationSummary,
   type ReviewFinding,
@@ -27,6 +28,7 @@ import { fitPublicationSummary } from "./publication-summary.js";
 import { formatReviewSummaryHeader } from "./review-summary-header.js";
 
 export interface AggregateShardReviewOptions {
+  readonly budgetStopReason?: ModelGenerationStopReason | undefined;
   readonly publication?:
     | {
         findings: readonly ReconciledFinding[];
@@ -263,6 +265,22 @@ export function aggregateShardReviews(
     reviewMessage(options.language ?? "en", reason.code, reason),
   );
   let scopeStatus: ReviewScopeStatus = plan.scopeStatus;
+  if (options.budgetStopReason !== undefined) {
+    const dimension =
+      options.budgetStopReason === "calls"
+        ? text("inference calls", "inferências", "inferencias")
+        : options.budgetStopReason === "input_bytes"
+          ? text("processed input", "entrada processada", "entrada procesada")
+          : text("reserved output", "saída reservada", "salida reservada");
+    omissionReasons.push(
+      text(
+        `Review model budget exhausted (${dimension}).`,
+        `Orçamento do modelo esgotado (${dimension}).`,
+        `Presupuesto del modelo agotado (${dimension}).`,
+      ),
+    );
+    scopeStatus = "partial_by_failure";
+  }
   let shardsAnalyzed = 0;
 
   const candidateFindings: ReviewFinding[] = [];

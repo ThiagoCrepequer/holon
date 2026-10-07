@@ -7,6 +7,7 @@ import type {
 import type {
   ModelGenerationAdmission,
   ModelGenerationReservation,
+  ModelGenerationStopReason,
 } from "@holon/contracts";
 import type { RepositoryToolOperation } from "@holon/contracts";
 import {
@@ -102,6 +103,9 @@ export interface WorkflowLedger
     runId: string,
     request: ModelGenerationReservation,
   ): Promise<ModelGenerationAdmission | undefined>;
+  loadModelGenerationStop(
+    runId: string,
+  ): Promise<ModelGenerationStopReason | undefined>;
   settleModelGeneration(
     runId: string,
     id: number,
@@ -201,10 +205,11 @@ export interface ReviewServices {
   reconcileCheckRun(runId: string): Promise<number | undefined>;
   createMutationContext(): Promise<GitHubMutationContext>;
   createSession(): Promise<GitHubInstallationSession>;
+  /** True when the canonical checkout/context was reconstructed. */
   ensureContext(
     maximumPreparationAttempts: number,
     effectivePolicy?: RepositoryPolicy,
-  ): Promise<void>;
+  ): Promise<boolean>;
   loadContext(effectivePolicy?: RepositoryPolicy): Promise<ReviewContext>;
   prepareRepository(
     maximumAttempts: number,
@@ -395,15 +400,16 @@ export function createReviewServices(
     throw lastError;
   };
 
-  let contextPreparation: Promise<void> | undefined;
+  let contextPreparation: Promise<boolean> | undefined;
   const ensureContext = (
     maximumAttempts: number,
     policy?: RepositoryPolicy,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     if (contextPreparation) return contextPreparation;
     const pending = (async () => {
-      if (!(await executor.hasContext(job.runId)))
-        await prepareRepository(maximumAttempts, policy);
+      if (await executor.hasContext(job.runId)) return false;
+      await prepareRepository(maximumAttempts, policy);
+      return true;
     })();
     contextPreparation = pending;
     return pending.finally(() => {

@@ -19,6 +19,7 @@ import {
   type ReviewJob,
   type RepositoryPolicy,
   type ShardReviewResult,
+  type ModelGenerationStopReason,
   type StructuralImpactReport,
 } from "@holon/contracts";
 import { matchingConfigurationRules } from "@holon/domain";
@@ -55,7 +56,7 @@ type ReviewAnalysisServices = Pick<
   readonly executor: Pick<ReviewServices["executor"], "acquireReviewLease">;
   readonly ledger: Pick<
     ReviewServices["ledger"],
-    "loadPrFindings" | "loadRunConfiguration"
+    "loadPrFindings" | "loadRunConfiguration" | "loadModelGenerationStop"
   >;
 };
 
@@ -351,7 +352,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
     fn: () => Promise<R>,
   ): Promise<R> => (execution ? execution.runStep(name, phase, fn) : fn());
   const loadUncached = async () => {
-    await services.ensureContext(2, effectivePolicy);
+    const startedAt = Date.now();
     const context = await services.loadContext(effectivePolicy);
     const plan = buildReviewPlan(
       context.files.map((file) => ({
@@ -363,26 +364,38 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       })),
       { policyExcludedFilesCount: context.waiversCount },
     );
-    return {
-      context,
-      plan: context.truncated
-        ? {
-            ...plan,
-            scopeStatus: "partial_by_policy" as const,
-            omissionReasons: [
-              ...plan.omissionReasons,
-              { code: "executor_budget" as const },
-            ],
-          }
-        : plan,
-    };
+    const effectivePlan = context.truncated
+      ? {
+          ...plan,
+          scopeStatus: "partial_by_policy" as const,
+          omissionReasons: [
+            ...plan.omissionReasons,
+            { code: "executor_budget" as const },
+          ],
+        }
+      : plan;
+    const digest = await planDigest(effectivePlan);
+    emitDiagnostic(emit, "review.analysis_context_loaded", {
+      files: context.files.length,
+      shards: effectivePlan.shards.length,
+      patchBytes: contextBytes(context),
+      durationMs: Date.now() - startedAt,
+    });
+    return { context, plan: effectivePlan, digest };
   };
-  // Coalesce simultaneous reads only; later steps still reload and validate the digest.
-  let loading: ReturnType<typeof loadUncached> | undefined;
-  const load = () =>
-    (loading ??= loadUncached().finally(() => {
-      loading = undefined;
-    }));
+  // Only this invocation owns the snapshot. Replay starts fresh; reconstruction
+  // invalidates it before any shard can use the new canonical checkout.
+  let contextSnapshot: ReturnType<typeof loadUncached> | undefined;
+  const load = async () => {
+    if (await services.ensureContext(2, effectivePolicy))
+      contextSnapshot = undefined;
+    if (!contextSnapshot)
+      contextSnapshot = loadUncached().catch((error: unknown) => {
+        contextSnapshot = undefined;
+        throw error;
+      });
+    return contextSnapshot;
+  };
   try {
     const runId = createReviewRun(job).id;
     const prKey = createPrKey({
@@ -391,7 +404,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       repositoryId: job.envelope.repository.id,
     });
     const planning = await runStep("plan-review", "preparation", async () => {
-      const { context, plan } = await load();
+      const { context, plan, digest } = await load();
       if (execution !== undefined) {
         const snapshot = await services.ledger.loadRunConfiguration(
           execution.configuration,
@@ -478,7 +491,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       });
       return {
         shardIds: plan.shards.map((shard) => shard.id),
-        planDigest: await planDigest(plan),
+        planDigest: digest,
         deadlineAt:
           Date.now() +
           Math.max(
@@ -490,6 +503,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
     });
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
+    let budgetStop: ModelGenerationStopReason | undefined;
     for (
       let offset = 0;
       offset < planning.shardIds.length;
@@ -499,12 +513,40 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         `analysis-wave-${offset / reviewExecutionLimits.concurrency + 1}`,
         "preparation",
         async () => ({
+          budgetStop: await services.ledger.loadModelGenerationStop(runId),
           deadlineAt: Math.min(
             planning.deadlineAt,
             Date.now() + reviewTimeBudget.analysisMs,
           ),
         }),
       );
+      if (wave.budgetStop !== undefined) {
+        budgetStop = wave.budgetStop;
+        const skipped = await runStep(
+          "skip-shards-budget",
+          "preparation",
+          async () => {
+            const results: ShardReviewResult[] = planning.shardIds
+              .slice(offset)
+              .map((shardId, position) => ({
+                shardId,
+                shardIndex: offset + position,
+                status: "failure",
+                findings: [],
+                summary: "",
+                errorReason: "model_budget_exhausted",
+              }));
+            emitDiagnostic(emit, "review.analysis_budget_stopped", {
+              severity: "warning",
+              rule: wave.budgetStop,
+              unstartedShards: results.length,
+            });
+            return results;
+          },
+        );
+        shardResults.push(...skipped);
+        break;
+      }
       const cancellation = new AbortController();
       // One preparation barrier per live wave. No peer can reconstruct a checkout
       // after another peer has already started using it, including on replay.
@@ -518,7 +560,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               wave.deadlineAt,
             );
           const loaded = await load();
-          if ((await planDigest(loaded.plan)) !== planning.planDigest)
+          if (loaded.digest !== planning.planDigest)
             throw new NonRetryableError("Review plan changed during replay");
           return loaded;
         })());
@@ -532,11 +574,11 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               "analysis",
               async () => {
                 cancellation.signal.throwIfAborted();
-                const { context, plan } = await prepareWave();
+                const { context, plan, digest } = await prepareWave();
                 cancellation.signal.throwIfAborted();
                 if (
                   plan.shards[index]?.id !== shardId ||
-                  (await planDigest(plan)) !== planning.planDigest
+                  digest !== planning.planDigest
                 )
                   throw new NonRetryableError(
                     "Review plan changed during replay",
@@ -602,15 +644,20 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         anyPromptTruncated ||= result.anyPromptTruncated;
       }
     }
+    // A denial in the final/only wave also yields explicit partial coverage.
+    budgetStop ??= await runStep("analysis-budget-status", "preparation", () =>
+      services.ledger.loadModelGenerationStop(runId),
+    );
     if (
+      budgetStop === undefined &&
       shardResults.length &&
       shardResults.every((result) => result.status === "failure") &&
       shardResults.some((result) => result.errorReason !== "analysis_deadline")
     )
       throw new Error("All review shards failed during model execution");
     return await runStep("analyze-review", "analysis", async () => {
-      const { context, plan } = await load();
-      if ((await planDigest(plan)) !== planning.planDigest)
+      const { context, plan, digest } = await load();
+      if (digest !== planning.planDigest)
         throw new NonRetryableError("Review plan changed during replay");
       const outputPreferences =
         execution === undefined
@@ -664,6 +711,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       }
 
       const rawAggregated = aggregateShardReviews(plan, shardResults, {
+        budgetStopReason: budgetStop,
         language: outputPreferences.language,
         verdictPolicy,
       });
@@ -753,6 +801,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         prKey,
       });
       const finalAggregated = aggregateShardReviews(plan, shardResults, {
+        budgetStopReason: budgetStop,
         language: outputPreferences.language,
         canonicalFindings: reconciled.activeFindings,
         publication: {

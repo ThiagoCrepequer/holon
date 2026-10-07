@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-29",
   "compatibility_flags": ["nodejs_compat"],
+  // Active CPU across a live invocation, including consecutive Workflow steps.
+  // Bounded headroom above the PR #171 invocation that exhausted the 30s default.
+  "limits": { "cpu_ms": 60000 },
   "vars": {
     "PROJECT_IDENTIFICATION_MODE": "observe",
     "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",

@@ -2341,6 +2341,7 @@ it("shares one repository preparation across concurrent shard requests", async (
   ];
   await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
   release();
-  await Promise.all(requests);
+  expect(await Promise.all(requests)).toEqual([true, true]);
   expect(prepare).toHaveBeenCalledOnce();
+  expect(await services.ensureContext(2, policy)).toBe(false);
 });

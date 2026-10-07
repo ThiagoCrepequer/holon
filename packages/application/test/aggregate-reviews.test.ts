@@ -212,6 +212,53 @@ describe("aggregateShardReviews", () => {
     expect(aggregated.summary).toContain("### Changes reviewed");
   });
 
+  it.each([
+    {
+      language: "en",
+      dimension: "calls",
+      expected: "Review model budget exhausted (inference calls).",
+    },
+    {
+      language: "pt-BR",
+      dimension: "input_bytes",
+      expected: "Orçamento do modelo esgotado (entrada processada).",
+    },
+    {
+      language: "es",
+      dimension: "output_tokens",
+      expected: "Presupuesto del modelo agotado (salida reservada).",
+    },
+  ] as const)(
+    "explains a durable $dimension stop in $language without granting approval",
+    ({ language, dimension, expected }) => {
+      const aggregated = aggregateShardReviews(
+        plan,
+        [
+          {
+            findings: [],
+            shardId: "shard-0",
+            shardIndex: 0,
+            status: "success",
+            summary: "Checked",
+          },
+          {
+            findings: [],
+            shardId: "shard-1",
+            shardIndex: 1,
+            status: "success",
+            summary: "Checked",
+          },
+        ],
+        { language, budgetStopReason: dimension },
+      );
+      expect(aggregated.verdict).toBe("COMMENT");
+      expect(aggregated.scopeStatus).toBe("partial_by_failure");
+      expect(aggregated.shardsAnalyzed).toBe(2);
+      expect(aggregated.omissionReasons).toContain(expected);
+      expect(aggregated.summary).toContain(expected);
+    },
+  );
+
   it("handles shard failures with partial_by_failure status", () => {
     const findingA = {
       confidence: 0.95,
