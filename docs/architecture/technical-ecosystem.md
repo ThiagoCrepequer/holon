@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -43,6 +43,7 @@ holon/
 |   `-- email-delivery/         # src/, test/; RPC privado local
 |-- packages/
 |   |-- ui/                    # React/Lucide/tokens, exports browser
+|   |-- auth/                  # Better Auth encapsulado, sessão, OAuth GitHub App
 |   |-- db/                    # Drizzle/D1, subpaths servidor e migrations
 |   |-- domain/
 |   |-- application/
@@ -90,10 +91,17 @@ flowchart TD
     DS[apps/dashboard]
     EM[apps/email-delivery]
     UI[packages/ui]
+    AU[packages/auth]
     DB[packages/db]
     DS --> UI
     DS --> CT
+    DS --> AP
+    DS --> AU
+    DS --> DB
+    AU --> CT
+    AU --> DB
     EM --> CT
+    DB --> CT
     CP[apps/control-plane]
     EX[apps/repository-executor]
     GH[packages/github]
@@ -172,6 +180,9 @@ local/Git, gera schema e verifica drift, sem acesso aos deployables.
 | `@holon/repository-analysis`    | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura         |
 | `@holon/repository-config`      | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
 | `@holon/config-cli`             | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
+| `@holon/auth`                   | Better Auth encapsulado, autenticação GitHub App, DTOs e validação de sessão                       | Better Auth, Drizzle Adapter, D1                     |
+| `@holon/db`                     | Drizzle/D1, persistência de identidade/tenancy e projeções                                         | Drizzle ORM, D1                                      |
+| `@holon/ui`                     | Componentes visuais React, tokens e ícones sem regras de servidor                                  | React, Tailwind, Lucide React                        |
 | `@holon/test-kit`               | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
 
 A avaliação offline usa recordings; a avaliação live do motor antigo foi
@@ -181,11 +192,10 @@ retirada. Um novo teste live deve exercitar Think, Gateway, Sandbox e publicaç�
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
 subpasta interna.
 
-Dashboard/UI/DB são fundações locais da [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md).
-Nesse estágio dashboard importa `contracts` e `ui`; email importa `contracts`;
-DB não tem dependência interna. Os adapters de auth, tenancy e leitura ainda
-não estão compostos no app. A prova M0 de reserva OAuth consome o adapter DB
-canônico como dependência de teste. O [mapa do dashboard](user-dashboard.md)
+Dashboard/UI/DB/Auth compõem as fundações locais e o primeiro recorte M2 do dashboard.
+O dashboard importa `contracts`, `application`, `ui`, `auth` e `db`; email importa `contracts`;
+`auth` consome `contracts` e `db` (com exceção de schema ORM restrita);
+DB consome `contracts` para validação de limites e projeção de rows. O [mapa do dashboard](user-dashboard.md)
 detalha interfaces, exports e futuras relações por service binding.
 
 ## Alocacao de runtime

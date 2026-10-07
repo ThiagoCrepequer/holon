@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -21,9 +21,9 @@ dados privados na primeira implementação do dashboard?
 
 Este guia complementa Q1–Q37 e as [fronteiras atuais](../architecture/security-and-trust-boundaries.md).
 As fundações HTTP locais estão implementadas pela
-[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md); sessão,
-permissões, convites, Markdown/email e rate limits dos respectivos fluxos ainda
-não estão integrados. As garantias futuras abaixo continuam condições de aceite,
+[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md). M2 integra
+sessão/OAuth e membership local; convites, grants de repositório, Markdown/email
+e rate limits dos respectivos fluxos ainda não estão integrados. As garantias futuras abaixo continuam condições de aceite,
 sem alegar validação de produção.
 
 ## Base HTTP implementada em M1
@@ -33,11 +33,17 @@ sem alegar validação de produção.
 POST JSON com synchronizer token ligado a uma sessão confiável, Origin exata e
 Fetch Metadata complementar. O body é limitado a 16 KiB também pelo stream;
 JSON/UTF-8 inválidos são negados. Dados ainda exigem o schema do comando dono.
-`readCommand` não autentica por string nem emite token: M2 possui sessão,
-emissão/rotação CSRF e ligação com o cookie verificado.
+`readCommand` não autentica por string nem emite token. M2 resolve a sessão
+nativa antes do comando e deriva CSRF por HMAC-SHA-256 de `csrf:sessionId` com
+o secret servidor. O cliente recebe esse valor em `X-CSRF-Token` e cookie
+`holon_csrf` Secure/SameSite=Lax; o servidor compara com o valor derivado, sem
+confiar no cookie enviado. Nova sessão/secret produz outro token.
 
-O handler atual só aceita GET/HEAD, oferece liveness e devolve códigos/UUID para
-erros; não há comandos reais para contornar CSRF. Headers preservam Set-Cookie,
+O handler oferece liveness e devolve códigos/UUID para erros. A allowlist M2
+admite POST de login/logout e criação personal/team; demais mutações são negadas.
+Login/callback/logout usam a proteção nativa restrita e origens exatas.
+Comandos Holon de tenancy exigem sessão admitida, CSRF e schemas strict.
+O body do login anônimo também é limitado a 16 KiB antes de criar state OAuth. Headers preservam Set-Cookie,
 CSP por nonce sem unsafe-inline/eval, nosniff, no-referrer e private/no-store.
 `public/_headers` permite cache imutável somente aos assets com hash. O renderer
 usa logging com code/requestId e a rota wildcard produz 404 localizado, sem
@@ -46,8 +52,10 @@ serializar a exceção padrão do framework com o caminho solicitado.
 Node e Workerd exercitam corpo sem length confiável, redirects hostis, métodos,
 origens, tokens, múltiplos cookies e erros arbitrários. Browser usa o bundle real
 para provar SSR/CSP/hidratação/404 e nega GET/POST nos comandos inexistentes.
-Isso não comprova segurança dos futuros endpoints de convites, Markdown/email,
-rate limiting, sessões ou tenancy. Cada owner integra seus gates na mesma issue.
+A [evidência M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
+acrescenta biblioteca nativa, D1 e composição HTTP de identidade/tenancy. Isso
+não comprova segurança dos futuros endpoints de convites, Markdown/email,
+rate limiting ou gestão de dispositivos. Cada owner integra seus gates na mesma issue.
 
 ## Autoridade e isolamento
 
@@ -79,7 +87,7 @@ recebe sessão humana, OAuth token, email ou acesso ao D1 de identidade.
 ## Sessão e superfície pública de auth
 
 Cookie de sessão é uma credencial opaca do navegador, **HttpOnly, Secure e
-host-only**, com `SameSite=Lax` candidato para o retorno OAuth. Não há necessidade
+host-only**, com `SameSite=Lax` configurado para o retorno OAuth. Não há necessidade
 demonstrada de cookie compartilhado entre subdomínios. Provar callback real,
 expiração/renovação, logout atual/todos e concorrência entre requests. `baseURL`,
 origens confiáveis e redirect URIs são exatos por ambiente; produção não confia
@@ -121,8 +129,10 @@ cobre sua validade externa qualificada, com limpeza indexada limitada e
 manutenção após ociosidade. Expiração de marcador não é lease de retry.
 Restaurar um banco sem reservas vivas exige bloquear callbacks/inutilizar os
 fluxos pendentes durante a validade externa antes de retomar. Não registrar
-code, verifier ou exceção arbitrária. A prova não cria tabela/binding/scheduler
-produtivos: integrar e retestar na entrega `packages/auth`/API.
+code, verifier ou exceção arbitrária. M2 integra o plugin à única superfície permitida de callback em `packages/auth`,
+com a tabela de identidade e limpeza limitada na reserva. A capacidade de
+manutenção explícita do package também limpa após ociosidade; não há scheduler
+remoto provisionado. A prova não cria recursos/bindings produtivos.
 
 ## CSRF, origens, redirects e reautenticação
 

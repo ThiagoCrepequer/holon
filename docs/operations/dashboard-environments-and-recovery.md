@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-07
 related:
   - ../planning/dashboard-implementation-plan.md
   - ../research/2026-10-04-dashboard-email-delivery-investigation.md
@@ -101,6 +101,72 @@ para fixtures, logs, bundle, documentos ou artefatos de CI.
 Este roteiro não exige ferramenta nova por iniciativa do agente. Enquadrar
 dashboard/email no fluxo de CI/deploy real em decisão própria; ADR-0048 não
 prova que novos Workers já estão cobertos. Não ressuscitar admin/read model antigo.
+
+## Login GitHub: configuração e rotação do recorte M2
+
+Responsável pela revisão de origens e permissões: `core-team`. O operador da
+GitHub App/Cloudflare deve ser identificado na mudança operacional futura;
+não há owner nominal, registro remoto ou credencial homologados nesta entrega.
+O primeiro recorte implementa login social GitHub, não SSO corporativo.
+
+| Ambiente      | Origem/baseURL                                        | Callback GitHub                                  | Estado                                                                         |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Local padrão  | `http://127.0.0.1:8794`                               | `http://127.0.0.1:8794/api/auth/callback/github` | Manifest local; autenticação requer secrets locais; não é registro real da App |
+| Teste de auth | Origem loopback HTTPS sintética definida pelo harness | Mesma origem + `/api/auth/callback/github`       | GitHub controlado, D1 isolado e nenhum OAuth real                              |
+| Preview       | Não definido                                          | Não definido                                     | Exige origem HTTPS não loopback explicitamente homologada e recursos próprios  |
+| Produção      | Não definido                                          | Não definido                                     | Exige origem HTTPS não loopback homologada, distinta de preview                |
+
+`validateGitHubAuthConfig` rejeita credenciais ausentes, URL com caminho/query/
+fragmento/credencial, desenvolvimento fora de loopback e ambientes remotos sem
+origem explicitamente homologada. As listas de preview e produção devem ser
+disjuntas. Host/forwarded headers e nome da branch não definem baseURL/callback.
+Ter uma URL HTTPS não representa homologação. O manifest local não oferece
+configuração remota utilizável.
+
+O modo é **GitHub App**. User access tokens usam permissões da App e não os
+scopes de OAuth Apps; `disableDefaultScope: true` evita os scopes padrão do
+provider. Para obter email no fluxo nativo, revisar **Account permissions → Email
+addresses: Read-only**. Login não exige permissão de escrita em repositório,
+não instala a App, não conecta instalação ao workspace e não concede acesso
+privado. Permissões de review/instalação pertencem às integrações do core.
+
+Os valores `AUTH_SECRET`, `GITHUB_APP_CLIENT_ID` e `GITHUB_APP_CLIENT_SECRET`
+são entradas da composição servidor. O client ID da App não é o App ID nem
+a chave privada usada pelo core para tokens de instalação. Secrets reais ficam
+no armazenamento de secrets do Worker/ambiente; nunca em vars versionadas,
+fixtures, linha de comando, logs, bundles ou screenshots. Em desenvolvimento,
+usar arquivo local ignorado e credenciais próprias de desenvolvimento; não
+copiar material de produção. A chave auth tem pelo menos 32 caracteres. Origem ausente, trio parcialmente
+configurado e auth habilitado sem IDENTITY_DB fecham com 503 sanitizado.
+Sem nenhum secret auth, a fundação estática M1 permanece utilizável.
+
+Procedimento a preparar na operação autorizada:
+
+1. Fixar ambiente, registro da GitHub App, owner, origem/callback exatos,
+   bindings D1 e SHA do artefato. Conferir isolamento de credenciais e dados.
+2. Gerar novo client secret no registro correspondente e inseri-lo pelo
+   mecanismo interativo/secret store do ambiente, sem imprimir seu valor.
+3. Publicar o artefato autorizado e validar login existente, login novo,
+   callback/PKCE/state, logout e recuperação por novo OAuth com usuário de teste.
+   Somente então remover a credencial anterior e registrar resultado sem tokens.
+4. Tratar `AUTH_SECRET` separadamente: ele protege cookies e a criptografia
+   nativa de tokens persistidos. Não substituí-lo cegamente. Uma mudança exige
+   plano suportado pela versão fixada, tratamento de sessões/tokens existentes
+   e prova de reconexão/recuperação antes de retomar tráfego. O recorte não
+   implementa migração de chave nem serviço de refresh/grants privados.
+
+Tokens access/refresh são criptografados desde a primeira persistência pelo
+Better Auth. Isso não demonstra refresh remoto: não há acesso privado nem
+renovação de grants implementados. Estado/code consumidos não são retries;
+resultado desconhecido exige novo OAuth. Restauração de D1 precisa preservar
+reservas vivas ou suspender callbacks pendentes conforme a política abaixo.
+
+Fontes primárias conferidas em **2026-10-07**:
+[user access tokens e callback/PKCE GitHub App](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app),
+[provider GitHub do Better Auth](https://better-auth.com/docs/authentication/github)
+e [accounts/linking/tokens](https://better-auth.com/docs/concepts/users-accounts).
+Este roteiro não executou criação de App, troca de secret, DNS, deploy, migration
+remota ou smoke com provider real.
 
 ## Estado observável e condições de intervenção
 
