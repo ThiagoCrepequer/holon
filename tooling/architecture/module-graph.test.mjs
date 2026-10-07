@@ -25,18 +25,25 @@ function inspect(input) {
     root: "/fixture",
     sources,
     allowed: {
-      "apps/dashboard": ["ui", "db", "contracts"],
+      "apps/dashboard": ["ui", "db", "contracts", "auth"],
       "packages/ui": [],
-      "packages/db": [],
+      "packages/db": ["contracts"],
       "packages/contracts": [],
+      "packages/auth": ["db", "contracts"],
     },
     manifests: new Map([
       ["packages/ui", { exports: { "./button": "./src/button.tsx" } }],
       [
         "packages/db",
-        { exports: { "./identity/server": "./src/identity.server.ts" } },
+        {
+          exports: {
+            "./identity/server": "./src/identity.server.ts",
+            "./auth-integration/server": "./src/auth-integration.server.ts",
+          },
+        },
       ],
       ["packages/contracts", { exports: { ".": "./src/index.ts" } }],
+      ["packages/auth", { exports: { "./server": "./src/server.ts" } }],
     ]),
   });
 }
@@ -206,4 +213,28 @@ void test("computed imports cannot evade an explicit package boundary", () => {
       "export const load=(module: string)=>import(module);",
   });
   assert(result.violations.some((value) => value.includes("computed import")));
+});
+
+void test("auth-integration ORM subpath is reserved for packages/auth and forbidden elsewhere", () => {
+  const forbidden = inspect({
+    "apps/dashboard/app/server/secret.server.ts":
+      'import { identityAuthSchema } from "@holon/db/auth-integration/server";',
+    "packages/db/src/auth-integration.server.ts":
+      "export const identityAuthSchema = 1;",
+  });
+  assert(
+    forbidden.violations.some((value) =>
+      value.includes(
+        "auth-integration ORM export is reserved for packages/auth",
+      ),
+    ),
+  );
+
+  const allowed = inspect({
+    "packages/auth/src/server.ts":
+      'import { identityAuthSchema } from "@holon/db/auth-integration/server";',
+    "packages/db/src/auth-integration.server.ts":
+      "export const identityAuthSchema = 1;",
+  });
+  assert.equal(allowed.violations.length, 0);
 });

@@ -149,7 +149,14 @@ export function inspectModules({ root, sources, manifests, allowed }) {
               subpath ? `.${subpath}` : "."
             ];
           if (typeof exported !== "string") reason = "unknown package export";
-          else target = path.resolve(root, targetWorkspace, exported);
+          else if (
+            targetWorkspace === "packages/db" &&
+            subpath === "/auth-integration/server" &&
+            workspace !== "packages/auth"
+          ) {
+            reason =
+              "auth-integration ORM export is reserved for packages/auth";
+          } else target = path.resolve(root, targetWorkspace, exported);
         }
       } else if (text.startsWith(".") || text.startsWith("~/")) {
         target = resolveLocal(

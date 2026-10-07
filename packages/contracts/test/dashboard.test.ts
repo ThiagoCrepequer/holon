@@ -9,6 +9,13 @@ import {
   deliveryWakeSchema,
   deliveryWakeResultSchema,
   reviewPageSchema,
+  workspaceDtoSchema,
+  workspaceMembershipDtoSchema,
+  createTeamWorkspaceInputSchema,
+  personalWorkspaceInputSchema,
+  sessionOutputDtoSchema,
+  authSocialSignInInputSchema,
+  githubAppAuthConfigSchema,
 } from "../src/dashboard.js";
 it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
   expect(dashboardIdSchema.parse("opaque_123-ABC")).toBe("opaque_123-ABC");
@@ -62,6 +69,93 @@ it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
   expect(
     dashboardErrorSchema.safeParse({
       error: { code: "denied", requestId: "secret", message: "private" },
+    }).success,
+  ).toBe(false);
+
+  // Tenancy schemas
+  const ws = { id: "ws-1", type: "team" as const, name: "Acme" };
+  expect(workspaceDtoSchema.parse(ws)).toEqual(ws);
+  expect(workspaceDtoSchema.safeParse({ ...ws, type: "org" }).success).toBe(
+    false,
+  );
+  expect(workspaceDtoSchema.safeParse({ ...ws, name: "" }).success).toBe(false);
+  expect(workspaceDtoSchema.safeParse({ ...ws, extra: true }).success).toBe(
+    false,
+  );
+
+  const membership = {
+    workspaceId: "ws-1",
+    userId: "u-1",
+    role: "owner" as const,
+  };
+  expect(workspaceMembershipDtoSchema.parse(membership)).toEqual(membership);
+  expect(
+    workspaceMembershipDtoSchema.safeParse({ ...membership, role: "admin" })
+      .success,
+  ).toBe(false);
+  expect(
+    workspaceMembershipDtoSchema.safeParse({ ...membership, extra: 1 }).success,
+  ).toBe(false);
+
+  const teamInput = { name: "Engineering", operationId: "op-123" };
+  expect(createTeamWorkspaceInputSchema.parse(teamInput)).toEqual(teamInput);
+  expect(
+    createTeamWorkspaceInputSchema.safeParse({ name: " ", operationId: "op-1" })
+      .success,
+  ).toBe(false);
+  expect(
+    createTeamWorkspaceInputSchema.safeParse({
+      ...teamInput,
+      operationId: "bad id!",
+    }).success,
+  ).toBe(false);
+
+  expect(personalWorkspaceInputSchema.safeParse({}).success).toBe(true);
+  expect(
+    personalWorkspaceInputSchema.safeParse({ userId: "forged" }).success,
+  ).toBe(false);
+  expect(personalWorkspaceInputSchema.safeParse(null).success).toBe(false);
+  expect(personalWorkspaceInputSchema.safeParse([]).success).toBe(false);
+  expect(personalWorkspaceInputSchema.safeParse("invalid").success).toBe(false);
+  expect(personalWorkspaceInputSchema.safeParse(42).success).toBe(false);
+
+  // Session schemas
+  const sessionOutput = {
+    user: { id: "u-1", name: "Alice" },
+    session: { id: "sess-1", expiresAt: "2030-01-01T00:00:00Z" },
+  };
+  expect(sessionOutputDtoSchema.parse(sessionOutput)).toEqual(sessionOutput);
+  expect(
+    sessionOutputDtoSchema.safeParse({ ...sessionOutput, token: "leak" })
+      .success,
+  ).toBe(false);
+
+  const authSignIn = { provider: "github" as const, callbackURL: "/welcome" };
+  expect(authSocialSignInInputSchema.parse(authSignIn)).toEqual(authSignIn);
+  expect(
+    authSocialSignInInputSchema.safeParse({ provider: "google" }).success,
+  ).toBe(false);
+
+  const appConfig = {
+    clientId: "app_123",
+    clientSecret: "secret_456",
+    appOrigin: "https://example.invalid",
+    environment: "production" as const,
+  };
+  expect(githubAppAuthConfigSchema.parse(appConfig)).toEqual(appConfig);
+  expect(
+    githubAppAuthConfigSchema.safeParse({
+      ...appConfig,
+      environment: "unknown",
+    }).success,
+  ).toBe(false);
+  expect(
+    githubAppAuthConfigSchema.safeParse({ ...appConfig, clientId: "" }).success,
+  ).toBe(false);
+  expect(
+    githubAppAuthConfigSchema.safeParse({
+      ...appConfig,
+      appOrigin: "not-a-url",
     }).success,
   ).toBe(false);
 });
