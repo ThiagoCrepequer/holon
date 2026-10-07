@@ -2,6 +2,7 @@ import { reviewJobSchema } from "@holon/contracts";
 import { expect, it, vi } from "vitest";
 
 import type { ReviewAgentConfig } from "../src/review/review-agent.js";
+import type { ReviewFailureReason } from "../src/review/review-failure.js";
 import {
   ThinkReviewFailure,
   ThinkReviewModelReviewer,
@@ -38,7 +39,14 @@ const context = {
   truncated: false,
 };
 
-function reviewerFor(statuses: Array<{ status: string; output?: unknown }>) {
+function reviewerFor(
+  statuses: Array<{
+    status: string;
+    output?: unknown;
+    error?: { name: string; message: string };
+  }>,
+  failure: ReviewFailureReason | null = null,
+) {
   const startReview = vi.fn(
     async (_config: ReviewAgentConfig) => "workflow-test",
   );
@@ -52,6 +60,7 @@ function reviewerFor(statuses: Array<{ status: string; output?: unknown }>) {
       __unsafe_ensureInitialized: async () => {},
       startReview,
       cancelReview,
+      getReviewFailure: async () => failure,
     })),
   };
   const workflow = { get: vi.fn(async () => ({ status, terminate })) };
@@ -307,4 +316,39 @@ it("does not start a child after its analysis deadline", async () => {
   expect(fixture.startReview).not.toHaveBeenCalled();
   expect(fixture.terminate).not.toHaveBeenCalled();
   expect(fixture.cancelReview).not.toHaveBeenCalled();
+});
+
+it.each([
+  "model_budget_exhausted",
+  "model_shard_budget_exhausted",
+  "model_output_missing",
+  "model_schema_invalid",
+] as const)("retains the safe child failure code %s", async (reason) => {
+  const fixture = reviewerFor(
+    [
+      {
+        status: "errored",
+        error: { name: "WorkflowFatalError", message: "Workflow failed" },
+      },
+    ],
+    reason,
+  );
+  await expect(fixture.reviewer.review(job, context)).rejects.toMatchObject({
+    reason,
+  });
+});
+
+it("does not propagate arbitrary workflow error messages as failure codes", async () => {
+  const fixture = reviewerFor([
+    {
+      status: "errored",
+      error: {
+        name: "Error",
+        message: "HOLON_REVIEW_FAILURE:model_budget_exhausted private payload",
+      },
+    },
+  ]);
+  await expect(fixture.reviewer.review(job, context)).rejects.toMatchObject({
+    reason: "agent_workflow_failed",
+  });
 });

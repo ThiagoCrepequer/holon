@@ -5,6 +5,7 @@ import {
 } from "@holon/application";
 import {
   aggregateShardReviews,
+  admitReviewPlan,
   createReviewRun,
   verifyFindingsWithCanonicalEvidence,
   type EvidenceRejection,
@@ -354,15 +355,17 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
   const loadUncached = async () => {
     const startedAt = Date.now();
     const context = await services.loadContext(effectivePolicy);
-    const plan = buildReviewPlan(
-      context.files.map((file) => ({
-        changeType: "modified" as const,
-        newPath: file.path,
-        oldPath: file.path,
-        patch: file.patch,
-        path: file.path,
-      })),
-      { policyExcludedFilesCount: context.waiversCount },
+    const plan = admitReviewPlan(
+      buildReviewPlan(
+        context.files.map((file) => ({
+          changeType: "modified" as const,
+          newPath: file.path,
+          oldPath: file.path,
+          patch: file.patch,
+          path: file.path,
+        })),
+        { policyExcludedFilesCount: context.waiversCount },
+      ),
     );
     const effectivePlan = context.truncated
       ? {

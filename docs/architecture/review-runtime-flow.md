@@ -11,6 +11,7 @@ related:
   - ../decisions/0039-partition-large-reviews-and-bound-concurrency.md
   - ../decisions/0049-use-cloudflare-think-for-pr-review.md
   - ../decisions/0050-verify-finding-causality-before-publication.md
+  - ../decisions/0053-align-review-admission-with-generation-budget.md
 ---
 
 # Fluxo de execução de uma review
@@ -44,7 +45,7 @@ sequenceDiagram
       AG->>LE: validar autoridade
       AG->>AW: runWorkflow com ID determinístico
       AW->>AG: step.prompt com schema
-      loop Turno Think, até 16 passos
+      loop Investigação Think, até quatro passos
         AG->>LE: reservar inferência
         AG->>GW: AI SDK via rota dinâmica
         GW-->>AG: stream/tool call
@@ -98,7 +99,12 @@ Duplicatas e ordem de entrega não dão autoridade. A configuração do reposit�
 é compilada para a run e ancorada na base; o checkout ocorre no head exato. O
 executor classifica patches como estruturais ou textuais e produz contexto
 limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard,
-com no máximo 64 shards e três análises simultâneas. Contexto omitido gera
+com no máximo 64 shards estruturais e três análises simultâneas. Antes do
+despacho, a [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
+limita a admissão a nove shards prioritários: quatro inferências de investigação,
+duas de verificação causal e uma de recuperação narrativa por ciclo máximo.
+O plano efetivo fixa `totalShards` antes do digest e conserva os totais elegíveis.
+`model_budget` explica a omissão das partes não admitidas. Contexto omitido gera
 limitação explícita; não é tratado como cobertura.
 
 O coordenador mantém contexto validado, plano e digest apenas na memória da
@@ -157,6 +163,20 @@ O provider é AI SDK por AI Gateway Dynamic Route. `AGENT_TRACE_PAYLOADS` está
 do Agent podem conter mensagens e outputs de tools. O Gateway mantém coleta
 de payload desligada.
 
+## Causas de falha no filho
+
+O Agent persiste somente códigos allowlisted, sem prompt ou mensagem arbitrária.
+Na inicialização, `onStart` adiciona duravelmente o campo `reviewFailure: null`
+quando ausente no estado já persistido, preservando os demais dados antes da
+retomada de submissions pelo Think. Os RPCs de causa são assíncronos para iniciar
+o lifecycle quando a chamada acorda um objeto frio, conforme Agents 0.26.0.
+O adapter consulta `getReviewFailure()` quando o filho falha; não depende da
+mensagem de `Workflow.status()`, que pode virar `WorkflowFatalError`. Orçamento
+agregado e da parte são distinguidos, assim como `model_output_missing`,
+`model_schema_invalid` e `agent_deadline_exceeded`. Falhas sem causa reconhecida
+continuam `agent_workflow_failed`. Ausência da ferramenta final não prova a causa
+no modelo ou na rota; não há parser de texto nem resposta limpa fabricada.
+
 ## Orçamento, falhas e idempotência
 
 O ledger reserva recursos antes da inferência, incluindo chamadas, bytes de
@@ -164,7 +184,15 @@ entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
 de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
 por run entre todos os shards. Esses limites não são uma estimativa exata de
 tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
-A primeira recusa de inferência persiste sua dimensão em
+Cada shard admitido tem uma parcela protegida `floor(teto / totalShards)` nas
+três dimensões. Investigação, causalidade e recuperação compartilham essa parcela;
+settlement não transfere recursos entre shards. A saída máxima normal por chamada
+é `min(12.000, floor((parcela de saída - 1.024) / 6))`. As recusas `shard_calls`,
+`shard_input_bytes` e `shard_output_tokens` falham somente a parte atual, sem
+bloquear pares ou ondas seguintes. Histórico crescente ainda pode ultrapassar a
+parcela de entrada; uma parte incompleta não demonstra ausência de regressões.
+
+A primeira recusa de teto agregado persiste sua dimensão em
 `model_generation_plans.stop_reason`, na mesma transação da decisão de admissão
 (migração aditiva 22). Antes de admitir cada nova onda, um step consulta o
 ledger da run atual em execução. Havendo recusa, nenhum novo Agent é iniciado:

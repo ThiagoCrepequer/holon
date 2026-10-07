@@ -1,5 +1,6 @@
 import {
   modelGenerationLimits,
+  modelGenerationShardLimits,
   modelGenerationStopReasonSchema,
   type ModelGenerationStopReason,
   type ModelGenerationAdmission,
@@ -49,16 +50,17 @@ export class ReviewGenerationBudgetStore {
       )
       .one();
     const reject = (
-      reason: ModelGenerationStopReason,
+      reason: Extract<ModelGenerationAdmission, { accepted: false }>["reason"],
       consumed: number,
       requested: number,
       ceiling: number,
     ): ModelGenerationAdmission => {
-      this.sql.exec(
-        "UPDATE model_generation_plans SET stop_reason = ? WHERE run_id = ? AND stop_reason IS NULL",
-        reason,
-        runId,
-      );
+      if (!reason.startsWith("shard_"))
+        this.sql.exec(
+          "UPDATE model_generation_plans SET stop_reason = ? WHERE run_id = ? AND stop_reason IS NULL",
+          reason,
+          runId,
+        );
       try {
         this.logger.emit("model.budget_rejected", {
           severity: "error",
@@ -91,6 +93,39 @@ export class ReviewGenerationBudgetStore {
         requested,
       };
     };
+    // A request outside its allocation cannot stop peers while the run still has
+    // capacity. Already exhausted aggregate ceilings retain global precedence.
+    if (
+      request.shardCount > 1 &&
+      totals.calls < modelGenerationLimits.calls &&
+      totals.input < modelGenerationLimits.inputBytes &&
+      totals.output < modelGenerationLimits.outputTokens
+    ) {
+      const allocation = modelGenerationShardLimits(request.shardCount);
+      const shard = this.sql
+        .exec<{ calls: number; input: number; output: number }>(
+          "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=? AND shard_index=?",
+          runId,
+          request.shardIndex,
+        )
+        .one();
+      if (shard.calls >= allocation.calls)
+        return reject("shard_calls", shard.calls, 1, allocation.calls);
+      if (shard.input + request.inputBytes > allocation.inputBytes)
+        return reject(
+          "shard_input_bytes",
+          shard.input,
+          request.inputBytes,
+          allocation.inputBytes,
+        );
+      if (shard.output + request.outputTokens > allocation.outputTokens)
+        return reject(
+          "shard_output_tokens",
+          shard.output,
+          request.outputTokens,
+          allocation.outputTokens,
+        );
+    }
     if (totals.calls >= modelGenerationLimits.calls)
       return reject("calls", totals.calls, 1, modelGenerationLimits.calls);
     if (totals.input + request.inputBytes > modelGenerationLimits.inputBytes)
