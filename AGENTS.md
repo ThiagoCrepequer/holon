@@ -197,7 +197,7 @@ código existente, os contratos e decisões do Holon.
   instaladas.
 - `layout-grid`, `responsive-design`, `visual-hierarchy`, `design-token`,
   `accessibility-audit` e `critique-visual-hierarchy` (designer-skills): apoio
-  a uma eventual tarefa de UI. `packages/ui` e `apps/dashboard` têm fundações locais conforme ADR-0053;
+  a uma eventual tarefa de UI. `packages/ui` e `apps/dashboard` têm fundações locais conforme ADR-0054;
   `apps/admin` continua retirado pela ADR-0040. Não presumir auth ou dados privados
   implementados a partir da existência desses workspaces.
 

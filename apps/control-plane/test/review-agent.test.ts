@@ -2,7 +2,7 @@ import { Think } from "@cloudflare/think";
 import type { ReviewRun, RunId } from "@holon/domain";
 import { getAgentByName } from "agents";
 import { MockLanguageModelV4 } from "ai/test";
-import { reset, runInDurableObject } from "cloudflare:test";
+import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -68,6 +68,7 @@ it("admits only the latest running review and exposes only read-only repository 
       instructions: expect.stringContaining(
         "Never edit code or execute commands",
       ),
+      maxSteps: 4,
     });
     expect(instance.storeMessages).toBe(true);
     expect(instance.storeTools).toBe(true);
@@ -176,9 +177,11 @@ it("does not start a shard workflow for an expired or obsolete run", async () =>
   });
 });
 
-it.each([false, true])(
-  "completes a Think prompt workflow with unevidenced candidates: %s",
-  async (unevidenced) => {
+it.each(["clean", "unevidenced", "missing_final"] as const)(
+  "preserves the structured Think prompt outcome: %s",
+  async (scenario) => {
+    const unevidenced = scenario === "unevidenced";
+    const missingFinal = scenario === "missing_final";
     const ledger = env.REVIEW_LEDGERS.getByName(prKey);
     await ledger.claimRun(run, "think-prompt-integration");
     await ledger.transition(
@@ -192,37 +195,40 @@ it.each([false, true])(
       doStream: async () => ({
         stream: new ReadableStream({
           start(controller) {
-            controller.enqueue({
-              type: "tool-call",
-              toolCallId: "final-answer",
-              toolName: "think_final_answer",
-              input: JSON.stringify({
-                findings: unevidenced
-                  ? Array.from({ length: 2 }, () => ({
-                      confidence: 0.9,
-                      diagnostic:
-                        "Removing this guard permits an unauthorized write.",
-                      evidence: [],
-                      location: {
-                        path: "src/a.ts",
-                        line: 10,
-                        side: "RIGHT",
-                        startLine: null,
-                      },
-                      severity: "high",
-                      suggestion: null,
-                    }))
-                  : [],
-                isDegraded: false,
-                outputLimitations: [],
-                resolutions: [],
-                investigations: [],
-                summary: "No verified regressions.",
-              }),
-            });
+            if (!missingFinal)
+              controller.enqueue({
+                type: "tool-call",
+                toolCallId: "final-answer",
+                toolName: "think_final_answer",
+                input: JSON.stringify({
+                  findings: unevidenced
+                    ? Array.from({ length: 2 }, () => ({
+                        confidence: 0.9,
+                        diagnostic:
+                          "Removing this guard permits an unauthorized write.",
+                        evidence: [],
+                        location: {
+                          path: "src/a.ts",
+                          line: 10,
+                          side: "RIGHT",
+                          startLine: null,
+                        },
+                        severity: "high",
+                        suggestion: null,
+                      }))
+                    : [],
+                  isDegraded: false,
+                  outputLimitations: [],
+                  resolutions: [],
+                  investigations: [],
+                  summary: "No verified regressions.",
+                }),
+              });
             controller.enqueue({
               type: "finish",
-              finishReason: { unified: "tool-calls", raw: "tool_calls" },
+              finishReason: missingFinal
+                ? { unified: "stop", raw: "stop" }
+                : { unified: "tool-calls", raw: "tool_calls" },
               usage: {
                 inputTokens: {
                   total: 10,
@@ -238,7 +244,7 @@ it.each([false, true])(
         }),
       }),
     });
-    const shardIndex = unevidenced ? 3 : 2;
+    const shardIndex = missingFinal ? 4 : unevidenced ? 3 : 2;
     const agent = await getAgentByName(
       env.REVIEW_AGENTS,
       `${runId}:${shardIndex}`,
@@ -254,7 +260,7 @@ it.each([false, true])(
           prompt: "Review this changed line.",
           runId,
           shardIndex,
-          totalShards: 4,
+          totalShards: 5,
         });
       },
     );
@@ -270,17 +276,100 @@ it.each([false, true])(
       await scheduler.wait(50);
       status = await workflow.status();
     }
-    expect(status).toMatchObject({
-      status: "complete",
-      output: unevidenced
+    expect(status).toMatchObject(
+      missingFinal
         ? {
-            findings: [],
-            isDegraded: true,
-            outputLimitations: ["evidence_rejected"],
+            status: "errored",
+            error: {
+              name: "WorkflowFatalError",
+            },
           }
-        : { findings: [], summary: "No verified regressions." },
-    });
+        : {
+            status: "complete",
+            output: unevidenced
+              ? {
+                  findings: [],
+                  isDegraded: true,
+                  outputLimitations: ["evidence_rejected"],
+                }
+              : { findings: [], summary: "No verified regressions." },
+          },
+    );
+    if (missingFinal) {
+      await evictDurableObject(agent);
+      expect(await agent.getReviewFailure()).toBe("model_output_missing");
+    }
     expect(model.doStreamCalls).toHaveLength(1);
   },
   15_000,
 );
+
+it("bounds all phases and reserves narrative output inside each admitted shard allocation", async () => {
+  const agent = await getAgentByName(
+    env.REVIEW_AGENTS,
+    `${runId}:phase-limits`,
+  );
+  await runInDurableObject(agent, async (instance: ReviewAgent) => {
+    vi.spyOn(instance, "isReviewAuthorized").mockResolvedValue(true);
+    const config = {
+      deadlineAt: Date.now() + 60_000,
+      phase: "investigation" as const,
+      prKey,
+      prompt: "review",
+      runId,
+      shardIndex: 0,
+      totalShards: 9,
+    };
+    instance.configure(config);
+    const investigation = await instance.beforeTurn(
+      {} as Parameters<ReviewAgent["beforeTurn"]>[0],
+    );
+    instance.configure({ ...config, phase: "causal_verification" });
+    const causal = await instance.beforeTurn(
+      {} as Parameters<ReviewAgent["beforeTurn"]>[0],
+    );
+    instance.configure(config);
+    await instance.prepareSummaryRecovery();
+    const recovery = await instance.beforeTurn(
+      {} as Parameters<ReviewAgent["beforeTurn"]>[0],
+    );
+    expect(investigation.maxSteps).toBe(4);
+    expect(causal.maxSteps).toBe(2);
+    expect(recovery).toMatchObject({
+      maxSteps: 1,
+      maxOutputTokens: 1024,
+      activeTools: ["think_final_answer"],
+    });
+    expect(
+      investigation.maxOutputTokens * 4 +
+        causal.maxOutputTokens * 2 +
+        recovery.maxOutputTokens,
+    ).toBeLessThanOrEqual(Math.floor(120_000 / 9));
+    expect(investigation).not.toHaveProperty("toolChoice");
+    expect(causal).not.toHaveProperty("toolChoice");
+  });
+});
+
+it("upgrades persisted Agent state before reading a failure after eviction", async () => {
+  const agent = await getAgentByName(
+    env.REVIEW_AGENTS,
+    `${runId}:state-upgrade`,
+  );
+  await runInDurableObject(agent, (instance: ReviewAgent) => {
+    // The deployed state before this change had only summaryRecovery.
+    instance.setState({ summaryRecovery: true } as ReviewAgent["state"]);
+  });
+  await evictDurableObject(agent);
+  expect(await agent.getReviewFailure()).toBeNull();
+  await runInDurableObject(agent, async (instance: ReviewAgent) => {
+    expect(instance.state.summaryRecovery).toBe(true);
+    expect(instance.state).toHaveProperty("reviewFailure", null);
+    await expect(
+      instance.recordReviewFailure("untrusted provider payload"),
+    ).rejects.toThrow();
+    await instance.recordReviewFailure("model_shard_budget_exhausted");
+    await instance.recordReviewFailure("model_output_missing");
+  });
+  await evictDurableObject(agent);
+  expect(await agent.getReviewFailure()).toBe("model_shard_budget_exhausted");
+});

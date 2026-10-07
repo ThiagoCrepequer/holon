@@ -106,7 +106,7 @@ um diagnóstico e recalcular o Check Run existente.
 
 ## Dashboard dos usuários: fundação local
 
-A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) complementa
+A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) complementa
 a ADR-0040 com uma superfície nova. `apps/dashboard` contém SSR React Router e
 API Hono; `apps/email-delivery` é privado. Dois D1 locais têm migrations por
 autoridade, sem estado de negócio hipotético. A [visão específica](user-dashboard.md)

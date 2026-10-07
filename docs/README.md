@@ -48,7 +48,7 @@ e o [fluxo atual](architecture/review-runtime-flow.md).
 
 Pesquisa para uma evolução futura: [Coletânea de bibliotecas para o dashboard](research/2026-10-04-dashboard-library-landscape.md), com fronteiras propostas de React Router SSR/API Hono e radar de bibliotecas. A [análise das referências de UI](research/2026-10-04-dashboard-ui-motion-references.md) sustenta o [guia de movimento](brand/motion.md) do design system.
 
-Fundações locais do dashboard: [ADR-0053](decisions/0053-establish-user-dashboard-foundations.md) e [arquitetura](architecture/user-dashboard.md).
+Fundações locais do dashboard: [ADR-0054](decisions/0054-establish-user-dashboard-foundations.md) e [arquitetura](architecture/user-dashboard.md).
 
 Referência de engenharia do dashboard: [Organização de aplicações web e dependências](engineering/frontend-application-structure.md). A [descoberta de autenticação](research/2026-10-04-dashboard-authentication-discovery.md) registra Better Auth + Drizzle/D1 e as políticas acordadas; suporte e recuperação da integração continuam a provar.
 

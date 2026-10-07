@@ -17,7 +17,7 @@ related:
 Como organizar o dashboard dos usuários mantendo proximidade dos arquivos,
 responsabilidades claras e dependências externas concentradas em packages?
 
-A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) materializa
+A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) materializa
 as fundações locais de `apps/dashboard`, `apps/email-delivery`, `packages/ui` e
 `packages/db`. A [arquitetura do dashboard](../architecture/user-dashboard.md)
 descreve arquivos/interfaces concretos. Exemplos de review/auth/queries abaixo

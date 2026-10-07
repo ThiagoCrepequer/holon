@@ -13,6 +13,7 @@ import {
 } from "@holon/contracts";
 import type {
   ModelGenerationReservation,
+  ModelGenerationStopReason,
   ModelGenerationAdmission,
 } from "@holon/contracts";
 import type {
@@ -1011,6 +1012,23 @@ export class ReviewLedgerObject
           runId,
           request,
         );
+      }),
+    );
+  }
+  public loadModelGenerationStop(
+    rawRunId: string,
+  ): Promise<ModelGenerationStopReason | undefined> {
+    const runId = runIdSchema.parse(rawRunId);
+    return Promise.resolve(
+      this.ctx.storage.transactionSync(() => {
+        if (
+          this.latestRunId() !== runId ||
+          this.runState(runId as RunId) !== "running"
+        )
+          throw new Error("Model budget run is not authorized");
+        return new ReviewGenerationBudgetStore(
+          this.ctx.storage.sql,
+        ).loadStopReason(runId);
       }),
     );
   }

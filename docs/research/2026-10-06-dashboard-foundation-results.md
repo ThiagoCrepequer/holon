@@ -7,7 +7,7 @@ verified-at: 2026-10-06
 owners:
   - core-team
 related:
-  - ../decisions/0053-establish-user-dashboard-foundations.md
+  - ../decisions/0054-establish-user-dashboard-foundations.md
   - ../architecture/user-dashboard.md
   - ../planning/dashboard-implementation-plan.md
   - 2026-10-05-dashboard-milestone-zero-results.md

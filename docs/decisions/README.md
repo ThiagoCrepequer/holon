@@ -105,4 +105,6 @@ vigentes; os textos anteriores são preservados como histórico.
 
 - [ADR-0052 — Responder perguntas sobre findings](0052-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.
 
-- [ADR-0053 — Estabelecer as fundações do dashboard dos usuários](0053-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.
+- [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — trabalho admitido, quotas por shard e causas duráveis de falha.
+
+- [ADR-0054 — Estabelecer as fundações do dashboard dos usuários](0054-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.

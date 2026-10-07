@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-07
 ---
 
 # Investigacoes
@@ -14,6 +14,8 @@ data de corte, quais afirmacoes foram corrigidas e quais duvidas permaneceram.
 Nao criam uma decisao por si so.
 
 ## Relatorios
+
+- [PR #171: CPU do coordenador e admissão após recusa de orçamento](2026-10-07-pr171-cpu-and-budget-exhaustion.md)
 
 - [Viabilidade da plataforma Cloudflare para review de PRs](2026-08-29-cloudflare-pr-review-feasibility.md)
 - [Ecossistema TypeScript e monorepo](2026-08-29-typescript-monorepo-toolchain.md)

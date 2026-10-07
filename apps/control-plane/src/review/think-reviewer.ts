@@ -16,12 +16,17 @@ import {
 } from "@holon/model";
 import { getAgentByName } from "agents";
 
+import {
+  reviewFailureReasonSchema,
+  type ReviewFailureReason,
+} from "./review-failure.js";
+
 export class ThinkReviewFailure extends Error {
   constructor(
     public readonly reason:
       | "agent_workflow_failed"
       | "agent_workflow_terminated"
-      | "agent_deadline_exceeded",
+      | ReviewFailureReason,
   ) {
     super(reason);
     this.name = "ThinkReviewFailure";
@@ -150,7 +155,10 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
           if (state.status === "errored" || state.status === "terminated")
             throw new ThinkReviewFailure(
               state.status === "errored"
-                ? "agent_workflow_failed"
+                ? (reviewFailureReasonSchema
+                    .nullable()
+                    .parse(await agent.getReviewFailure()) ??
+                    "agent_workflow_failed")
                 : "agent_workflow_terminated",
             );
           await this.wait(

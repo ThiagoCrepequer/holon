@@ -36,7 +36,7 @@ ambiente local, mas seu fluxo de relatório HTML, subagentes e entrevista não
 
 ### Design e implementação de UI, quando houver uma tarefa nessa área
 
-A ADR-0053 materializa fundações locais de `apps/dashboard` e `packages/ui`.
+A ADR-0054 materializa fundações locais de `apps/dashboard` e `packages/ui`.
 O admin permanece retirado pela ADR-0040. As skills abaixo apoiam trabalho de UI,
 sem substituir tokens, contexto do produto, ADRs ou prova de comportamento.
 

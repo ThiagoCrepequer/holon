@@ -309,6 +309,7 @@ describe("ReviewLedgerObject", () => {
         { version: 19 },
         { version: 20 },
         { version: 21 },
+        { version: 22 },
       ]);
       expect(
         state.storage.sql

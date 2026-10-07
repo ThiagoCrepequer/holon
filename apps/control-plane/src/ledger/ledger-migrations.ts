@@ -417,6 +417,12 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       CREATE INDEX clarification_generations_question ON clarification_generations(question_id);
     `,
   },
+  {
+    version: 22,
+    statements: `
+      ALTER TABLE model_generation_plans ADD COLUMN stop_reason TEXT CHECK(stop_reason IN ('calls', 'input_bytes', 'output_tokens'));
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

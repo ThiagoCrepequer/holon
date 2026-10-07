@@ -27,7 +27,7 @@ com milestones, sub-issues e bloqueios. O mapa registra escopo e links; o
 GitHub informa o estado atual de execução.
 
 **Estado: M0 qualificado; fundações locais M1 materializadas conforme
-[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md).**
+[ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md).**
 O [registro M1](../research/2026-10-06-dashboard-foundation-results.md) identifica
 comandos, primeiros resultados e limites. Auth/tenancy e dados privados ainda
 não estão compostos no runtime, e nenhum novo Worker foi publicado. Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)

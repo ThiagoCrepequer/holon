@@ -21,7 +21,7 @@ dados privados na primeira implementação do dashboard?
 
 Este guia complementa Q1–Q37 e as [fronteiras atuais](../architecture/security-and-trust-boundaries.md).
 As fundações HTTP locais estão implementadas pela
-[ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md). M2 integra
+[ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md). M2 integra
 sessão/OAuth e membership local; convites, grants de repositório, Markdown/email
 e rate limits dos respectivos fluxos ainda não estão integrados. As garantias futuras abaixo continuam condições de aceite,
 sem alegar validação de produção.

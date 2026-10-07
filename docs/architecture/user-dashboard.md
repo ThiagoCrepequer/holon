@@ -6,7 +6,7 @@ owners:
   - core-team
 last-reviewed: 2026-10-07
 related:
-  - ../decisions/0053-establish-user-dashboard-foundations.md
+  - ../decisions/0054-establish-user-dashboard-foundations.md
   - ../engineering/frontend-application-structure.md
   - ../engineering/web-security-and-data-boundaries.md
   - ../planning/dashboard-implementation-plan.md
@@ -16,7 +16,7 @@ related:
 
 ## Estado materializado
 
-A [ADR-0053](../decisions/0053-establish-user-dashboard-foundations.md) estabelece
+A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) estabelece
 as fronteiras aprovadas. M1 materializa dois Workers **locais**, `packages/ui`,
 `packages/db`, portas/contratos e gates. Há uma página mínima bilíngue de fundação,
 preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
