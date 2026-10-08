@@ -373,3 +373,138 @@ it("upgrades persisted Agent state before reading a failure after eviction", asy
   await evictDurableObject(agent);
   expect(await agent.getReviewFailure()).toBe("model_shard_budget_exhausted");
 });
+
+it("emits allowlisted step telemetry without payload content and clarifies final answer in prompt", async () => {
+  const agent = await getAgentByName(env.REVIEW_AGENTS, `${runId}:telemetry`);
+  await runInDurableObject(agent, async (instance: ReviewAgent) => {
+    const config = {
+      deadlineAt: Date.now() + 60_000,
+      phase: "investigation" as const,
+      prKey,
+      prompt: "review",
+      runId,
+      shardIndex: 0,
+      totalShards: 1,
+    };
+    instance.configure(config);
+
+    expect(instance.getSystemPrompt()).toContain(
+      "Repository tools are limited to read_file, search_text and search_structure",
+    );
+    expect(instance.getSystemPrompt()).toContain(
+      "Submit the structured final answer using think_final_answer before the step limit",
+    );
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      type StepContextType = NonNullable<
+        Parameters<ReviewAgent["onStepEnd"]>[0]
+      >;
+      const contextFixture = {
+        stepNumber: 2,
+        text: "PRIVATE SECRET CODE DO NOT LEAK",
+        reasoningText: "PRIVATE REASONING CHAIN",
+        toolCalls: [
+          {
+            type: "tool-call",
+            dynamic: true,
+            toolName: "read_file",
+            toolCallId: "c1",
+            input: { secretPath: "/etc/passwd" },
+          },
+          {
+            type: "tool-call",
+            dynamic: true,
+            toolName: "malicious_tool",
+            toolCallId: "c2",
+            input: { rm: "-rf" },
+          },
+        ],
+        finishReason: "tool-calls",
+        rawFinishReason: "raw-private-reason",
+        usage: {
+          inputTokens: 100,
+          inputTokenDetails: {
+            noCacheTokens: 100,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+          outputTokens: 25,
+          outputTokenDetails: { textTokens: 10, reasoningTokens: 15 },
+          totalTokens: 125,
+        },
+      } satisfies Pick<
+        StepContextType,
+        | "stepNumber"
+        | "text"
+        | "reasoningText"
+        | "toolCalls"
+        | "finishReason"
+        | "rawFinishReason"
+        | "usage"
+      >;
+
+      instance.onStepEnd(contextFixture as StepContextType);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const rawLog = logSpy.mock.calls[0]?.[0];
+      if (typeof rawLog !== "string")
+        throw new Error("Step telemetry is missing");
+      const logged = JSON.parse(rawLog);
+      expect(logged).toEqual({
+        event: "model.step_finished",
+        runId,
+        shardIndex: 0,
+        phase: "investigation",
+        summaryRecovery: false,
+        stepNumber: 2,
+        finishReason: "tool-calls",
+        tools: "read_file",
+        inputTokens: 100,
+        outputTokens: 25,
+        reasoningTokens: 15,
+        totalTokens: 125,
+      });
+
+      expect(rawLog).not.toContain("PRIVATE SECRET CODE");
+      expect(rawLog).not.toContain("PRIVATE REASONING CHAIN");
+      expect(rawLog).not.toContain("/etc/passwd");
+      expect(rawLog).not.toContain("malicious_tool");
+      expect(rawLog).not.toContain("raw-private-reason");
+
+      // Verify unallowlisted finishReason maps to "unknown" and invalid token counts are omitted
+      logSpy.mockClear();
+      instance.onStepEnd({
+        stepNumber: 3,
+        finishReason: "custom-unsupported-reason",
+        toolCalls: [],
+        usage: {
+          inputTokens: -1,
+          outputTokens: Number.NaN,
+        },
+      } as unknown as NonNullable<StepContextType>);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const secondLogged = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
+      expect(secondLogged).toMatchObject({
+        finishReason: "unknown",
+        tools: "",
+      });
+      expect(secondLogged).not.toHaveProperty("inputTokens");
+      expect(secondLogged).not.toHaveProperty("outputTokens");
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    const errorSpy = vi.spyOn(console, "log").mockImplementation(() => {
+      throw new Error("Telemetry transport failed");
+    });
+    try {
+      expect(() =>
+        instance.onStepEnd({} as Parameters<ReviewAgent["onStepEnd"]>[0]),
+      ).not.toThrow();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});

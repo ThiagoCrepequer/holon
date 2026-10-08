@@ -558,6 +558,9 @@ importers:
 
   packages/repository-analysis:
     dependencies:
+      '@babel/parser':
+        specifier: 8.0.6
+        version: 8.0.6
       '@holon/contracts':
         specifier: workspace:*
         version: link:../contracts

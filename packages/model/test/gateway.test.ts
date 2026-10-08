@@ -101,3 +101,69 @@ it("forwards only the three read-only repository tools with abort and deadline c
     { abortSignal: undefined, deadlineAt: undefined },
   );
 });
+
+it("enforces strict provider parameters, reasoning disabled, and stream usage in Gateway settings", () => {
+  const settings = createGatewayProviderSettings(config);
+  expect(settings.includeUsage).toBe(true);
+  expect(settings.transformRequestBody).toBeDefined();
+  const transform = settings.transformRequestBody;
+  if (!transform) throw new Error("Gateway request transform is missing");
+
+  const baseBody = {
+    messages: [{ role: "user", content: "hello" }],
+    model: "dynamic/pr-review",
+  };
+  const transformed = transform(baseBody);
+  expect(transformed).toMatchObject({
+    model: "dynamic/pr-review",
+    provider: { require_parameters: true },
+    reasoning: { enabled: false },
+  });
+
+  const customBody = {
+    ...baseBody,
+    provider: { sort: "throughput" },
+    reasoning: { effort: "high", max_tokens: 100 },
+  };
+  const transformedCustom = transform(customBody);
+  expect(transformedCustom).toMatchObject({
+    provider: { require_parameters: true, sort: "throughput" },
+    reasoning: { enabled: false },
+  });
+  expect(transformedCustom.reasoning).toEqual({ enabled: false });
+});
+
+it("serializes require_parameters, reasoning off, and include_usage into actual streaming requests", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const mockFetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    if (typeof init?.body !== "string")
+      throw new TypeError("Expected a serialized Gateway request");
+    capturedBody = JSON.parse(init.body);
+    return new Response(
+      'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      {
+        headers: { "Content-Type": "text/event-stream" },
+        status: 200,
+      },
+    );
+  });
+
+  vi.stubGlobal("fetch", mockFetch);
+  try {
+    const model = createGatewayLanguageModel(config);
+    const result = await model.doStream({
+      prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    });
+    await result.stream.cancel();
+
+    expect(capturedBody).toBeDefined();
+    expect(capturedBody).toMatchObject({
+      provider: { require_parameters: true },
+      reasoning: { enabled: false },
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

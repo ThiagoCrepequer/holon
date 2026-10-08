@@ -111,8 +111,21 @@ export function createGatewayProviderSettings(
         : { "cf-aig-metadata": JSON.stringify(config.metadata) }),
       "cf-aig-skip-cache": "true",
     },
+    includeUsage: true,
     name: "cloudflare-ai-gateway",
     supportsStructuredOutputs: true,
+    transformRequestBody: (body) => ({
+      ...body,
+      provider: {
+        ...(typeof body.provider === "object" && body.provider !== null
+          ? body.provider
+          : {}),
+        require_parameters: true,
+      },
+      reasoning: {
+        enabled: false,
+      },
+    }),
   };
 }
 

@@ -40,6 +40,10 @@ const request = executorRequestSchema.parse({
   },
 });
 const legacyInstallationToken = "installation-token-value";
+const defaultCheckoutSource = Array.from(
+  { length: 30 },
+  (_, index) => `line ${index + 1}`,
+).join("\n");
 
 function ripgrepMatch(index: number, path = "src/index.ts"): string {
   return JSON.stringify({
@@ -82,9 +86,7 @@ class FakeSandbox implements SandboxPort {
     this.readPaths.push(path);
     const stored = this.files.get(path);
     if (stored !== undefined) return Promise.resolve(stored);
-    return Promise.resolve(
-      Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n"),
-    );
+    return Promise.resolve(defaultCheckoutSource);
   }
 
   public writeFile(path: string, content: string): Promise<void> {
@@ -119,6 +121,22 @@ class FakeSandbox implements SandboxPort {
         stdout: `${"a".repeat(40)}\n`,
         truncated: false,
       });
+    if (argv[0] === "git" && argv.includes("ls-tree")) {
+      const paths = argv.slice(argv.indexOf("--") + 1);
+      return Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        truncated: false,
+        stdout: paths
+          .map((path) => {
+            const content =
+              this.files.get(`/workspace/repository/${path}`) ??
+              defaultCheckoutSource;
+            return `100644 blob ${"d".repeat(40)} ${new TextEncoder().encode(content).byteLength}\t${path}\0`;
+          })
+          .join(""),
+      });
+    }
     if (argv.includes("--name-only"))
       return Promise.resolve({
         exitCode: 0,
@@ -181,6 +199,49 @@ async function loadCurrentContext(
 }
 
 describe("RepositoryExecutorService", () => {
+  it("passes complete HEAD facade source from preparation to contract analysis", async () => {
+    const path = "packages/db/src/tenancy.server.ts";
+    const source = [
+      "export {",
+      "  type TenancyErrorCode,",
+      "  TenancyError,",
+      '} from "./tenancy-error.server.js";',
+    ].join("\n");
+    const sandbox = new FakeSandbox();
+    sandbox.files.set(`/workspace/repository/${path}`, source);
+    const service = new RepositoryExecutorService({ get: () => sandbox });
+    await service.prepareRepository({
+      ...request,
+      canonicalDiff: [
+        `diff --git a/${path} b/${path}`,
+        `--- a/${path}`,
+        `+++ b/${path}`,
+        "@@ -1,2 +1,4 @@",
+        "-export class TenancyError extends Error {}",
+        '-export type TenancyErrorCode = "NOT_FOUND";',
+        ...source.split("\n").map((line) => `+${line}`),
+      ].join("\n"),
+    });
+    const context = await loadCurrentContext(service);
+    expect(context.structuralImpact?.changedSymbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "TenancyError",
+          change: "deleted",
+          kind: "class",
+        }),
+        expect.objectContaining({
+          name: "TenancyErrorCode",
+          change: "deleted",
+          kind: "type",
+        }),
+      ]),
+    );
+    expect(context.structuralImpact?.contractBreaks).toEqual([]);
+    expect(context.structuralImpact?.repositoryScanTruncated).toBe(false);
+    expect(sandbox.readPaths).toContain(`/workspace/repository/${path}`);
+  });
+
   it("reports whether the ephemeral review context still exists", async () => {
     const sandbox = new FakeSandbox();
     const service = new RepositoryExecutorService({ get: () => sandbox });
