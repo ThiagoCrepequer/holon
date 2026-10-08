@@ -1,3 +1,4 @@
+import { dispatchDashboardAccessMessages } from "./ingress/dashboard-access-events.js";
 import {
   dispatchFollowUpMessages,
   processFollowUp,
@@ -32,10 +33,19 @@ export default {
         "event" in message.body &&
         message.body.event === "pull_request",
     );
+    const accessEvents = batch.messages.filter(
+      (message) =>
+        typeof message.body === "object" &&
+        message.body !== null &&
+        "event" in message.body &&
+        message.body.event === "github_access",
+    );
     const followUps = batch.messages.filter(
-      (message) => !reviewMessages.includes(message),
+      (message) =>
+        !reviewMessages.includes(message) && !accessEvents.includes(message),
     );
     await Promise.all([
+      dispatchDashboardAccessMessages(accessEvents, env),
       dispatchReviewMessages(reviewMessages, env.REVIEW_WORKFLOW),
       dispatchFollowUpMessages(followUps, (message) =>
         processFollowUp(env, message),

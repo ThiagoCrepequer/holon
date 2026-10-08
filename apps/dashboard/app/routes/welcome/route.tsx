@@ -6,6 +6,7 @@ import { useLingui } from "@lingui/react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
+import { WorkspaceControls } from "../../features/collaboration/public.js";
 import { PreferencesForm } from "../../features/preferences/public.js";
 import { SessionControls, SignIn } from "../../features/sessions/public.js";
 import type { loader } from "../../root.js";
@@ -70,6 +71,14 @@ export default function Welcome() {
               "Understand every change with clarity and the context that matters.",
           })}
         </p>
+        {admitted && (
+          <WorkspaceControls
+            key={`collaboration-${admitted.sessionId}`}
+            sessionId={admitted.sessionId}
+            csrf={admitted.csrf}
+            onSessionLost={onSessionLost}
+          />
+        )}
         {admitted ? (
           <SessionControls
             key={admitted.sessionId}

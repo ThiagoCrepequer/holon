@@ -2,6 +2,10 @@ import { identificationRevocationSchema } from "@holon/contracts";
 import { type HealthCheckReport, pullRequestActions } from "@holon/contracts";
 import { followUpMessageSchema } from "@holon/contracts";
 import {
+  githubAuthorizationRevocationSchema,
+  githubAccessQueueMessageSchema,
+} from "@holon/contracts/dashboard-collaboration";
+import {
   mapPullRequestWebhook,
   mapReviewCommentWebhook,
   mapReviewThreadWebhook,
@@ -9,6 +13,7 @@ import {
 } from "@holon/github";
 import { Hono } from "hono";
 
+import { forwardDashboardAccessEvent } from "./dashboard-access-events.js";
 import { repositorySchemaResponse } from "./repository-schema-route.js";
 const maximumWebhookBytes = 2_000_000;
 
@@ -109,6 +114,29 @@ export function createWebhookApp() {
     ) {
       return reject("invalid_signature", 401);
     }
+    if (event === "github_app_authorization") {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(new TextDecoder().decode(rawBytes));
+      } catch {
+        return reject("invalid_json", 400);
+      }
+      const parsed = githubAuthorizationRevocationSchema.safeParse(raw);
+      if (!parsed.success) return reject("invalid_authorization_event", 400);
+      const access = {
+        deliveryId: delivery,
+        action: "user_revoked" as const,
+        githubAccountId: String(parsed.data.sender.id),
+      };
+      await context.env.REVIEW_QUEUE.send(
+        githubAccessQueueMessageSchema.parse({
+          event: "github_access",
+          access,
+        }),
+      );
+      await forwardDashboardAccessEvent(context.env, access);
+      return context.json({ accepted: true }, 202);
+    }
     if (event === "installation" || event === "installation_repositories") {
       let eventPayload: unknown;
       try {
@@ -119,6 +147,41 @@ export function createWebhookApp() {
       const decoded = identificationRevocationSchema.safeParse(eventPayload);
       if (!decoded.success) return reject("invalid_installation_event", 400);
       const payload = decoded.data;
+      if (
+        event === "installation" &&
+        (payload.action === "deleted" || payload.action === "suspend")
+      ) {
+        const access = {
+          deliveryId: delivery,
+          installationId: payload.installation.id,
+          action:
+            payload.action === "deleted"
+              ? ("revoked" as const)
+              : ("suspended" as const),
+        };
+        await context.env.REVIEW_QUEUE.send(
+          githubAccessQueueMessageSchema.parse({
+            event: "github_access",
+            access,
+          }),
+        );
+        await forwardDashboardAccessEvent(context.env, access);
+      }
+      if (event === "installation_repositories") {
+        const access = {
+          deliveryId: delivery,
+          installationId: payload.installation.id,
+          action: "repositories_changed" as const,
+        };
+        await context.env.REVIEW_QUEUE.send(
+          githubAccessQueueMessageSchema.parse({
+            event: "github_access",
+            access,
+          }),
+        );
+        await forwardDashboardAccessEvent(context.env, access);
+      }
+
       if (
         (event === "installation" &&
           (payload.action === "deleted" || payload.action === "suspend")) ||
