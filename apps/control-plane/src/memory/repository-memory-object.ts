@@ -334,8 +334,8 @@ export class RepositoryMemoryObject extends DurableObject<Cloudflare.Env> {
       ),
       observations: this.ctx.storage.sql
         .exec<{ record: string }>(
-          `SELECT record FROM observations WHERE json_extract(record,'$.kind') <> 'feedback' ${paths.length ? `AND json_extract(record,'$.path') IN (${paths.map(() => "?").join(",")})` : ""} ORDER BY created_at DESC,id LIMIT ?`,
-          ...paths,
+          `SELECT record FROM observations WHERE json_extract(record,'$.kind') <> 'feedback' ${paths.length ? "AND json_extract(record,'$.path') IN (SELECT value FROM json_each(?))" : ""} ORDER BY created_at DESC,id LIMIT ?`,
+          ...(paths.length ? [JSON.stringify(paths)] : []),
           memoryLimits.snapshotObservations,
         )
         .toArray()
