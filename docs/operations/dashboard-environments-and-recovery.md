@@ -20,7 +20,8 @@ projeções e recursos de preview/produção?
 
 A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada em
 2026-10-08 provisionou os D1 de produção e suas migrations. O ambiente de
-bootstrap publica a fundação estática com autenticação desabilitada; a ativação
+bootstrap está configurado para publicar a fundação estática com autenticação
+desabilitada; a publicação dos Workers aguarda a permissão de criação. A ativação
 GitHub exige as credenciais e a callback descritas abaixo. Preview e recuperação
 remota continuam propostas. O pipeline automático do core não publica esses apps.
 
@@ -214,10 +215,16 @@ pnpm --filter @holon/dashboard exec wrangler secret put GITHUB_APP_CLIENT_SECRET
 ```
 
 O arquivo `.env.cloudflare` contém somente o token para operar a API; ele não é
-o armazenamento dos secrets de runtime. O token desta provisão exige **Account →
-D1 → Edit** e **Account → Workers Scripts → Edit**, restritos à conta correta.
-O operador obtém essas permissões em **Manage Account → Account API Tokens**.
-As credenciais da GitHub App não são recuperáveis por esse token.
+o armazenamento dos secrets de runtime. O token desta provisão exige **D1 →
+Edit**, restrito à conta correta, e a role **Admin** no escopo do produto
+**Workers** para criar os dois Workers. Após a criação, o acesso de publicação
+pode ser reduzido a **Editor** apenas em `holon-dashboard` e
+`holon-email-delivery`. Editor não permite criar novos Workers. O operador
+configura essas permissões em **Manage Account → Account API Tokens**.
+O nome legado `Workers Scripts → Edit` está sendo substituído pelas roles;
+consultar [Workers roles and permissions](https://developers.cloudflare.com/workers/authorization/workers/),
+conferido em **2026-10-08**. As credenciais da GitHub App não são recuperáveis
+por esse token.
 
 Procedimento a preparar na operação autorizada:
 
