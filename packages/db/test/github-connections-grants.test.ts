@@ -142,11 +142,13 @@ it("grants cache empty and positive results for at most 60s and unlink fences bo
   await link();
   expect(await grants.read(owner, "team", key)).toBeNull();
   expect(await grants.write(owner, "team", key, [], Date.now())).toBe(true);
-  expect(await grants.read(owner, "team", key)).toEqual([]);
+  expect((await grants.read(owner, "team", key))?.repositoryIds).toEqual([]);
   expect(await grants.write(owner, "team", key, [91, 92], Date.now())).toBe(
     true,
   );
-  expect(await grants.read(owner, "team", key)).toEqual([91, 92]);
+  expect((await grants.read(owner, "team", key))?.repositoryIds).toEqual([
+    91, 92,
+  ]);
   await db
     .prepare(
       "UPDATE github_grant_cache SET expires_at=CAST(unixepoch('subsec')*1000 AS INTEGER)",
@@ -165,7 +167,7 @@ it("grants cache empty and positive results for at most 60s and unlink fences bo
   );
   await expect(
     grants.assertCurrent(owner, "team", key.accountId, 1, [
-      { installationId: 77, generation: 1 },
+      { installationId: 77, generation: 1, grantExpiresAt: Date.now() + 60000 },
     ]),
   ).rejects.toMatchObject({ code: "denied" });
 });

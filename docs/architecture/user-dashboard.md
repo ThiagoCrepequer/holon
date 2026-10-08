@@ -326,7 +326,8 @@ Link/unlink exigem owner Holon e prova OAuth recente escopada à ação/instala�
 workspace/sessão. Link também exige titular da conta pessoal ou admin ativo da
 organização GitHub, instalação ativa da App correta e IDs estáveis. Instalações
 e memberships são paginadas integralmente e a instalação é reconferida antes do
-CAS D1. A PK da instalação arbitra duas equipes concorrentes. Revogação/unlink
+CAS D1; a consulta final da membership da organização confirma novamente ID,
+state ativo e role admin. A PK da instalação arbitra duas equipes concorrentes. Revogação/unlink
 conserva a alocação histórica: só o mesmo workspace pode reconectar, sem caminho
 de transferência automática. A UI mostra estados retornados pela autoridade.
 
@@ -334,11 +335,15 @@ Cache positivo **e negativo** é por User/account/instalação e gerações de
 credencial/conexão. Vence no máximo 60 s após o início da observação externa,
 sem extensão em hit; paginação incompleta, total inconsistente ou falha do
 provider fecha a leitura. Membership/sessão são conferidas no D1 em todo acesso,
-inclusive no snapshot final. Eventos assinados do core para suspensão, remoção,
+inclusive no snapshot final, que reconfere o prazo original de todos os grants
+usados e o cache ainda vigente; escrita concorrente não estende esse prazo.
+Eventos assinados do core para suspensão, remoção,
 repos adicionados/removidos e autorização humana revogada incrementam gerações
 e invalidam o cache. O core grava a referência na REVIEW_QUEUE existente antes
 do RPC privado `GitHubAccessEvents.applyEvent`; consumer repete em falha. Receipt
-por delivery protege contra dupla aplicação após reconexão. Unsuspend não
+por delivery protege contra dupla aplicação após reconexão. A transição do
+registro de identificação do core é tentada independentemente da integração do
+dashboard; ambas são aguardadas antes da resposta. Unsuspend não
 reconecta automaticamente: owner confirma novamente. Não há endpoint público
 para aplicar eventos; o `fetch` do entrypoint privado retorna 404.
 

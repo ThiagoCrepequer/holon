@@ -20,11 +20,11 @@ export function createGrantPersistence(database: D1Database) {
       actor: AdmittedUser,
       workspaceId: string,
       key: GrantIdentity,
-    ): Promise<number[] | null> {
+    ): Promise<{ repositoryIds: number[]; expiresAt: number } | null> {
       await assertWorkspaceActor(database, actor, workspaceId);
       const row = await database
         .prepare(
-          `SELECT g.repository_ids FROM github_grant_cache g JOIN github_connection l ON l.installation_id=g.installation_id AND l.generation=g.connection_generation AND l.state='active' JOIN github_credential_state c ON c.account_id=g.account_id AND c.generation=g.credential_generation AND c.state='ready' WHERE g.user_id=? AND g.account_id=? AND g.credential_generation=? AND g.installation_id=? AND g.connection_generation=? AND g.expires_at>${nowSql} AND l.workspace_id=? AND ${currentActorSql}`,
+          `SELECT g.repository_ids,g.expires_at FROM github_grant_cache g JOIN github_connection l ON l.installation_id=g.installation_id AND l.generation=g.connection_generation AND l.state='active' JOIN github_credential_state c ON c.account_id=g.account_id AND c.generation=g.credential_generation AND c.state='ready' WHERE g.user_id=? AND g.account_id=? AND g.credential_generation=? AND g.installation_id=? AND g.connection_generation=? AND g.expires_at>${nowSql} AND l.workspace_id=? AND ${currentActorSql}`,
         )
         .bind(
           actor.id,
@@ -35,12 +35,15 @@ export function createGrantPersistence(database: D1Database) {
           workspaceId,
           ...actorBindings(actor),
         )
-        .first<{ repository_ids: string }>();
+        .first<{ repository_ids: string; expires_at: number }>();
       if (!row) return null;
       try {
         const parsed: unknown = JSON.parse(row.repository_ids);
         if (!Array.isArray(parsed)) throw new Error();
-        return parsed.map((id) => installationIdSchema.parse(id));
+        return {
+          repositoryIds: parsed.map((id) => installationIdSchema.parse(id)),
+          expiresAt: row.expires_at,
+        };
       } catch {
         throw new CollaborationError("unavailable");
       }
@@ -84,12 +87,16 @@ export function createGrantPersistence(database: D1Database) {
       workspaceId: string,
       accountId: string,
       generation: number,
-      connections: readonly { installationId: number; generation: number }[],
+      connections: readonly {
+        installationId: number;
+        generation: number;
+        grantExpiresAt: number;
+      }[],
     ): Promise<void> {
       await assertWorkspaceActor(database, actor, workspaceId);
       const row = await database
         .prepare(
-          `SELECT 1 FROM github_credential_state c JOIN account a ON a.id=c.account_id WHERE c.account_id=? AND c.generation=? AND c.state='ready' AND a.userId=? AND a.accountId=? AND ${currentActorSql} AND EXISTS(SELECT 1 FROM membership WHERE workspace_id=? AND user_id=?) AND NOT EXISTS(SELECT 1 FROM json_each(?) e WHERE NOT EXISTS(SELECT 1 FROM github_connection l WHERE l.workspace_id=? AND l.installation_id=json_extract(e.value,'$.installationId') AND l.generation=json_extract(e.value,'$.generation') AND l.state='active'))`,
+          `SELECT 1 FROM github_credential_state c JOIN account a ON a.id=c.account_id WHERE c.account_id=? AND c.generation=? AND c.state='ready' AND a.userId=? AND a.accountId=? AND ${currentActorSql} AND EXISTS(SELECT 1 FROM membership WHERE workspace_id=? AND user_id=?) AND NOT EXISTS(SELECT 1 FROM json_each(?) e WHERE NOT EXISTS(SELECT 1 FROM github_connection l WHERE l.workspace_id=? AND l.installation_id=json_extract(e.value,'$.installationId') AND l.generation=json_extract(e.value,'$.generation') AND l.state='active' AND json_extract(e.value,'$.grantExpiresAt')>${nowSql} AND EXISTS(SELECT 1 FROM github_grant_cache g WHERE g.user_id=a.userId AND g.account_id=c.account_id AND g.credential_generation=c.generation AND g.installation_id=l.installation_id AND g.connection_generation=l.generation AND g.expires_at>${nowSql})))`,
         )
         .bind(
           accountId,

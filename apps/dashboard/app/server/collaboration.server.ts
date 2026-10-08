@@ -69,6 +69,11 @@ export function createWorkspaceCollaboration(
       const active = links.filter((l) => l.state === "active");
       const identity = await github.identity(actor);
       const repositoryIds = new Set<number>();
+      const authorized: {
+        installationId: number;
+        generation: number;
+        grantExpiresAt: number;
+      }[] = [];
       for (const link of active) {
         const key = {
           accountId: identity.accountId,
@@ -76,8 +81,8 @@ export function createWorkspaceCollaboration(
           installationId: link.installationId,
           connectionGeneration: link.generation,
         };
-        let ids = await grants.read(actor, workspaceId, key);
-        if (ids === null) {
+        let grant = await grants.read(actor, workspaceId, key);
+        if (grant === null) {
           const observedAt = Date.now();
           const proof = await github.repositories(actor, link.installationId);
           if (
@@ -95,16 +100,20 @@ export function createWorkspaceCollaboration(
             ))
           )
             throw new CollaborationError("denied");
-          ids = proof.repositoryIds;
+          grant = {
+            repositoryIds: proof.repositoryIds,
+            expiresAt: observedAt + 60000,
+          };
         }
-        for (const id of ids) repositoryIds.add(id);
+        authorized.push({ ...link, grantExpiresAt: grant.expiresAt });
+        for (const id of grant.repositoryIds) repositoryIds.add(id);
       }
       await grants.assertCurrent(
         actor,
         workspaceId,
         identity.accountId,
         identity.generation,
-        active,
+        authorized,
       );
       return {
         userId: actor.id,

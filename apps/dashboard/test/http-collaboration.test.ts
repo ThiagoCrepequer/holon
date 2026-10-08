@@ -95,7 +95,7 @@ function setup() {
     services,
   );
   async function request(path: string, body?: unknown, headers?: HeadersInit) {
-    const requestHeaders = new Headers(headers);
+    const requestHeaders = new Headers();
     if (body !== undefined) {
       requestHeaders.set("Origin", origin);
       requestHeaders.set("Content-Type", "application/json");
@@ -104,6 +104,8 @@ function setup() {
         await issueSessionCsrfToken(actor.sessionId, secret),
       );
     }
+    for (const [name, value] of new Headers(headers))
+      requestHeaders.set(name, value);
     return handle(
       new Request(origin + path, {
         method: body === undefined ? "GET" : "POST",
