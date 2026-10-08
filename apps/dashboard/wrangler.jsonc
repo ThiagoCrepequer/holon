@@ -28,4 +28,38 @@
       "migrations_dir": "../../packages/db/migrations/projection",
     },
   ],
+  "env": {
+    "production": {
+      "name": "holon-dashboard",
+      "workers_dev": true,
+      "preview_urls": false,
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false,
+        },
+      },
+      "vars": {
+        "APP_ORIGIN": "https://holon-dashboard.thiago-crepequer.workers.dev",
+        "AUTH_ENVIRONMENT": "production",
+        "AUTH_REGISTERED_ORIGINS": "{\"preview\":[],\"production\":[\"https://holon-dashboard.thiago-crepequer.workers.dev\"]}",
+        "AUTH_ENABLED": "false",
+      },
+      "d1_databases": [
+        {
+          "binding": "IDENTITY_DB",
+          "database_name": "holon-identity",
+          "database_id": "52a95f05-168f-4702-a064-10934931d3c8",
+          "migrations_dir": "../../packages/db/migrations/identity",
+        },
+        {
+          "binding": "PROJECTION_DB",
+          "database_name": "holon-projection",
+          "database_id": "af121530-2f99-4d01-8155-c20efc040a3b",
+          "migrations_dir": "../../packages/db/migrations/projection",
+        },
+      ],
+    },
+  },
 }
