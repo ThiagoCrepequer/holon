@@ -10,8 +10,14 @@ for (const locale of ["en", "pt-BR"] as const) {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("request", (request) => requests.push(request.url()));
     await page.addInitScript(() => {
-      globalThis.addEventListener("securitypolicyviolation", () => {
+      globalThis.addEventListener("securitypolicyviolation", (event) => {
         document.documentElement.dataset.cspViolation = "true";
+        document.documentElement.dataset.cspReport = JSON.stringify({
+          directive: event.effectiveDirective,
+          blockedURI: event.blockedURI,
+          sourceFile: event.sourceFile,
+          lineNumber: event.lineNumber,
+        });
       });
     });
     const response = await page.goto(`/?lang=${locale}&keep=preserved`);
@@ -128,6 +134,8 @@ for (const locale of ["en", "pt-BR"] as const) {
     ).toBe(true);
     expect(
       await page.locator("html").getAttribute("data-csp-violation"),
+      (await page.locator("html").getAttribute("data-csp-report")) ??
+        "No CSP violation",
     ).toBeNull();
     expect(errors).toEqual([]);
     expect(

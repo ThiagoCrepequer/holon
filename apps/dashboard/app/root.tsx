@@ -1,6 +1,7 @@
 import { I18nProvider } from "@lingui/react";
 import { useMemo } from "react";
 import {
+  data as routeData,
   Links,
   Meta,
   Outlet,
@@ -16,7 +17,8 @@ import type { Route } from "./+types/root";
 import { translator } from "./i18n/catalogs.js";
 import { resolveLocale } from "./i18n/locale.js";
 import { loadMessages } from "./i18n/messages.server.js";
-import { nonceContext } from "./request-context.js";
+import { nonceContext, viewerServicesContext } from "./request-context.js";
+import { readDashboardViewer } from "./server/viewer.server.js";
 
 import stylesheet from "./styles.css?url";
 export function links() {
@@ -27,17 +29,30 @@ export function links() {
 }
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  const { viewer, headers } = await readDashboardViewer(
+    request,
+    context.get(viewerServicesContext),
+  );
   const locale = resolveLocale(
-    url.searchParams.get("lang"),
+    viewer.status === "authenticated"
+      ? (viewer.preferences.locale ?? url.searchParams.get("lang"))
+      : url.searchParams.get("lang"),
     request.headers.get("Accept-Language"),
   );
-  return {
-    locale,
-    messages: await loadMessages(locale),
-    theme: url.searchParams.get("theme") === "dark" ? "dark" : "light",
-    timezone: "UTC",
-    nonce: context.get(nonceContext),
-  };
+  return routeData(
+    {
+      viewer,
+      locale,
+      messages: await loadMessages(locale),
+      theme: url.searchParams.get("theme") === "dark" ? "dark" : "light",
+      timezone:
+        viewer.status === "authenticated"
+          ? (viewer.preferences.timezone ?? "UTC")
+          : "UTC",
+      nonce: context.get(nonceContext),
+    },
+    { headers },
+  );
 }
 export default function Root() {
   const data = useLoaderData<typeof loader>();
@@ -54,7 +69,11 @@ export default function Root() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const data = useLoaderData<typeof loader>();
   return (
-    <html lang={data?.locale ?? "en"} data-holon-theme={data?.theme ?? "light"}>
+    <html
+      lang={data?.locale ?? "en"}
+      data-holon-theme={data?.theme ?? "light"}
+      data-holon-timezone={data?.timezone ?? "UTC"}
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

@@ -4,6 +4,12 @@ import {
   pruneExpiredGithubCodes,
 } from "./github-code-redemption.server.js";
 import {
+  createPreferencesPersistence,
+  PreferencesError,
+  type PreferencesPersistence,
+  type PreferencesErrorCode,
+} from "./preferences.server.js";
+import {
   createD1RateLimitStorage,
   deriveRateLimitKey,
   pruneExpiredRateLimits,
@@ -11,22 +17,38 @@ import {
   type RateLimitStorage,
 } from "./rate-limit.server.js";
 import {
+  createSessionPersistence,
+  parseDeviceBrowserLabel,
+  type SessionPersistence,
+  type RenewSessionResult,
+} from "./session.server.js";
+import {
   createTenancyPersistence,
   TenancyError,
   type TenancyErrorCode,
   type TenancyPersistence,
+  type PendingReauthContext,
 } from "./tenancy.server.js";
 
 export {
+  createPreferencesPersistence,
+  PreferencesError,
+  type PreferencesPersistence,
+  type PreferencesErrorCode,
   createD1RateLimitStorage,
+  createSessionPersistence,
   createTenancyPersistence,
   deriveRateLimitKey,
+  parseDeviceBrowserLabel,
   pruneExpiredRateLimits,
   RateLimitStorageError,
   TenancyError,
   type RateLimitStorage,
+  type SessionPersistence,
+  type RenewSessionResult,
   type TenancyErrorCode,
   type TenancyPersistence,
+  type PendingReauthContext,
 };
 
 export function createIdentityPersistence(database: D1Database) {
@@ -37,5 +59,6 @@ export function createIdentityPersistence(database: D1Database) {
       reserveGithubCode(database, clientId, code),
     pruneExpiredGithubCodes: () => pruneExpiredGithubCodes(database),
     tenancy,
+    preferences: createPreferencesPersistence(database),
   };
 }

@@ -52,6 +52,14 @@ function fixture() {
       status: "admitted" as const,
       headers: refreshed,
     })),
+    listSessions: vi.fn(async () => ({
+      sessions: [],
+      currentSessionId: user.sessionId,
+      nextCursor: null,
+    })),
+    revokeSession: vi.fn(async () => true),
+    revokeAllSessions: vi.fn(async () => 1),
+    clearSessionCookies: vi.fn(async () => []),
     pruneExpiredCodes: vi.fn(async () => {}),
   };
   const tenancyPersistence = {
@@ -75,6 +83,13 @@ function fixture() {
         role: "owner" as const,
       },
     })),
+    createReauthIntent: vi.fn(),
+    confirmReauthIntent: vi.fn(),
+    readPendingReauthContext: vi.fn(async () => null),
+    promoteMember: vi.fn(),
+    demoteMember: vi.fn(),
+    removeMember: vi.fn(),
+    leaveWorkspace: vi.fn(),
     listUserWorkspaces: vi.fn(async () => []),
     readWorkspace: vi.fn(async () => null),
     readMembership: vi.fn(async () => null),

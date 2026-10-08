@@ -5,9 +5,19 @@ msgstr ""
 "Language: pt-BR\n"
 
 #. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.current"
+msgstr "(este dispositivo)"
+
+#. js-lingui-explicit-id
 #: app/i18n/catalogs.ts
 msgid "reviews.count"
 msgstr "{count, plural, =0 {# revisões} one {# revisão} other {# revisões}}"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.devices"
+msgstr "Sessões ativas"
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
@@ -15,24 +25,49 @@ msgid "preferences.description"
 msgstr "Escolha como você lê o Holon."
 
 #. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.close"
+msgstr "Fechar sessões ativas"
+
+#. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
 msgid "preferences.close"
 msgstr "Fechar preferências"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "theme.dark"
 msgstr "Escuro"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "preferences.language"
 msgstr "Idioma"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "theme.light"
 msgstr "Claro"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.loading"
+msgstr "Carregando sessões…"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.nextPage"
+msgstr "Próximas sessões"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.deviceDescription"
+msgstr "Somente suas sessões são listadas. Os nomes dos navegadores são aproximados."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.other"
+msgstr "Outro navegador"
 
 #. js-lingui-explicit-id
 #: app/root.tsx
@@ -46,14 +81,74 @@ msgid "preferences.title"
 msgstr "Preferências"
 
 #. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.saved"
+msgstr "Preferências salvas."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.refresh"
+msgstr "Atualizar sessões"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.revoke"
+msgstr "Revogar sessão"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.save"
+msgstr "Salvar preferências"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.personal"
+msgstr "Salvas na sua conta para todos os dispositivos."
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.saving"
+msgstr "Salvando…"
+
+#. js-lingui-explicit-id
 #: app/root.tsx
 msgid "error.service"
 msgstr "Serviço indisponível. Tente novamente."
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/sessions/sessions.tsx
+msgid "session.signin"
+msgstr "Entrar com GitHub"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.signout"
+msgstr "Sair"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.signoutAll"
+msgstr "Sair em todos os dispositivos"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
 msgid "preferences.theme"
 msgstr "Tema"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.timezone"
+msgstr "Fuso horário"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.failed"
+msgstr "Não foi possível confirmar o salvamento. Tente novamente."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.failed"
+msgstr "Não foi possível confirmar a sessão. Tente novamente."
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
@@ -64,3 +159,8 @@ msgstr "Entenda cada mudança com clareza e o contexto que importa."
 #: app/routes/welcome/route.tsx
 msgid "welcome.heading"
 msgstr "Suas reviews, em contexto."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.expired"
+msgstr "Sua sessão está indisponível. Entre novamente para continuar."

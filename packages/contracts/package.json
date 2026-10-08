@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./dashboard": "./src/dashboard.ts"
+    "./dashboard": "./src/dashboard.ts",
+    "./dashboard-preferences": "./src/dashboard-preferences.ts"
   },
   "scripts": {
     "test": "vitest run --config ../../vitest.config.ts --root .",
