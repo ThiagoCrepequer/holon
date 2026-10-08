@@ -1,6 +1,7 @@
 import {
   reviewPlanSchema,
   reviewExecutionLimits,
+  type StructuralImpactReport,
   type ReviewContextFile,
   type ReviewFileMode,
   type ReviewPlan,
@@ -8,6 +9,7 @@ import {
 } from "@holon/contracts";
 import type { ChangedLine } from "@holon/domain";
 
+import { buildContractChecks } from "./contract-checks.js";
 import {
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -18,6 +20,7 @@ import { classifyPullRequestDiffFile } from "./policy.js";
 import { mapReviewSurface } from "./surface.js";
 
 export interface BuildReviewPlanOptions {
+  readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly additionalExcludes?: readonly string[] | undefined;
   readonly maxShardDiffBytes?: number | undefined;
   readonly maxShardFiles?: number | undefined;
@@ -218,17 +221,34 @@ export function buildReviewPlan(
 
   let oversizedFileCount = 0;
 
+  const keys = new Map(
+    prioritizedFiles.map((file) => [
+      file.file.path,
+      relatedFileKey(file.file.path),
+    ]),
+  );
+  // Union only relationship hints produced by the structural analyzer. A component
+  // can still be partitioned when the canonical patch ceilings require it.
+  for (const reference of options?.structuralImpact?.downstreamReferences ??
+    []) {
+    const caller = keys.get(reference.callerPath);
+    const target = keys.get(reference.targetPath);
+    if (caller === undefined || target === undefined || caller === target)
+      continue;
+    const representative = [caller, target].toSorted()[0]!;
+    for (const [path, key] of keys)
+      if (key === caller || key === target) keys.set(path, representative);
+  }
   const relatedGroups = new Map<string, EligibleFile[]>();
   for (const file of prioritizedFiles) {
-    const key = relatedFileKey(file.file.path);
+    const key = keys.get(file.file.path)!;
     const group = relatedGroups.get(key) ?? [];
     group.push(file);
     relatedGroups.set(key, group);
   }
-  // Balance whole groups so textual coverage cannot separate a source/test pair.
   const groups = balanceReviewModes(
     [...relatedGroups.values()].map((group) => group[0]!),
-  ).map((first) => relatedGroups.get(relatedFileKey(first.file.path))!);
+  ).map((first) => relatedGroups.get(keys.get(first.file.path)!)!);
   for (const group of groups) {
     const groupBytes = group.reduce((sum, file) => sum + file.patchBytes, 0);
     const groupLines = group.reduce(
@@ -384,6 +404,22 @@ export function buildReviewPlan(
       totalShards,
     };
   });
+
+  const cross = buildContractChecks(
+    shards,
+    eligibleFiles.map((item) => item.file),
+    options?.structuralImpact,
+    maxShards,
+    maxShardDiffBytes,
+    maxShardLines,
+    maxShardFiles,
+  );
+  shards.push(...cross.checks);
+  for (const shard of shards) shard.totalShards = shards.length;
+  if (cross.omitted) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push({ code: "contract_checks", count: cross.omitted });
+  }
 
   return reviewPlanSchema.parse({
     omissionReasons,

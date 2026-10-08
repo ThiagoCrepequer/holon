@@ -304,7 +304,7 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
   15_000,
 );
 
-it("bounds all phases and reserves narrative output inside each admitted shard allocation", async () => {
+it("bounds Think phases and preserves native finalization", async () => {
   const agent = await getAgentByName(
     env.REVIEW_AGENTS,
     `${runId}:phase-limits`,
@@ -340,11 +340,8 @@ it("bounds all phases and reserves narrative output inside each admitted shard a
       maxOutputTokens: 1024,
       activeTools: ["think_final_answer"],
     });
-    expect(
-      investigation.maxOutputTokens * 4 +
-        causal.maxOutputTokens * 2 +
-        recovery.maxOutputTokens,
-    ).toBeLessThanOrEqual(Math.floor(120_000 / 9));
+    expect(investigation.maxOutputTokens).toBe(5_000);
+    expect(causal.maxOutputTokens).toBe(2_500);
     expect(investigation).not.toHaveProperty("toolChoice");
     expect(causal).not.toHaveProperty("toolChoice");
   });

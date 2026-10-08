@@ -33,7 +33,13 @@ it("shares the 96-call durable limit across concurrent reservations and recreate
       ledger.reserveAnalysisToolCall(runId, 0, 2),
     ),
   );
-  expect(reservations.filter(Boolean)).toHaveLength(96);
+  expect(reservations.filter(Boolean)).toHaveLength(48);
+  const peers = await Promise.all(
+    Array.from({ length: 49 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 1, 2),
+    ),
+  );
+  expect(peers.filter(Boolean)).toHaveLength(48);
   const replay = env.REVIEW_LEDGERS.getByName("github:42:pr:11");
   expect(await replay.reserveAnalysisToolCall(runId, 0, 2)).toBe(false);
   expect(await replay.reserveAnalysisToolCall(runId, 1, 2)).toBe(false);
@@ -53,7 +59,7 @@ it("shares the 96-call durable limit across concurrent reservations and recreate
       runId,
       shardIndex: 0,
       rule: "run_calls",
-      shardCurrent: 96,
+      shardCurrent: 48,
       totalCurrent: 96,
       totalLimit: 96,
     }),
@@ -224,8 +230,21 @@ it("migrates consumed budgets atomically without changing core rows and is repla
         .map((row) => row.name),
     ).not.toContain("summary_json");
   });
-  for (let remaining = 0; remaining < 84; remaining++)
-    expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(true);
-  expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(false);
-  expect(await ledger.reserveAnalysisToolCall(runId, 12, 13)).toBe(false);
+  // Historical calls belong to the current profile; no migration resets them.
+  for (let peer = 0; peer < 13; peer++) {
+    const consumed = peer === 0 ? 11 : peer === 12 ? 1 : 0;
+    for (let remaining = consumed; remaining < 22; remaining++)
+      expect(await ledger.reserveAnalysisToolCall(runId, peer, 13)).toBe(true);
+    expect(await ledger.reserveAnalysisToolCall(runId, peer, 13)).toBe(false);
+  }
+  await runInDurableObject(ledger, (_object, state) => {
+    expect(
+      state.storage.sql
+        .exec(
+          "SELECT SUM(calls) AS calls FROM review_tool_budgets WHERE run_id=?",
+          runId,
+        )
+        .one().calls,
+    ).toBe(286);
+  });
 });

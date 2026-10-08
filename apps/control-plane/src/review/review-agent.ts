@@ -16,9 +16,7 @@ import {
   parseModelReviewTransport,
   repositoryExecutionLimits,
   repositoryToolOutcomeSchema,
-  reviewInvestigationLimits,
   reviewGenerationSteps,
-  modelGenerationShardLimits,
   runIdSchema,
   type RepositoryToolOperation,
   type RepositoryToolCall,
@@ -214,6 +212,12 @@ export class ReviewAgent extends Think<
         },
       }),
       {
+        outputLimits: this.state.summaryRecovery
+          ? undefined
+          : {
+              repository: 1_000,
+              final: config.phase === "causal_verification" ? 2_500 : 5_000,
+            },
         reserve: async (request) => {
           if (!(await this.isReviewAuthorized())) return undefined;
           const admission = await this.env.REVIEW_LEDGERS.getByName(
@@ -342,16 +346,9 @@ export class ReviewAgent extends Think<
           : reviewGenerationSteps.investigation,
       maxOutputTokens: summaryRecovery
         ? reviewSummaryRecoveryLimits.outputTokens
-        : Math.min(
-            reviewInvestigationLimits.outputTokens,
-            Math.floor(
-              (modelGenerationShardLimits(this.reviewConfig().totalShards)
-                .outputTokens -
-                reviewSummaryRecoveryLimits.outputTokens) /
-                (reviewGenerationSteps.investigation +
-                  reviewGenerationSteps.causalVerification),
-            ),
-          ),
+        : this.reviewConfig().phase === "causal_verification"
+          ? 2_500
+          : 5_000,
       maxRetries: 0,
       sendReasoning: false,
     };

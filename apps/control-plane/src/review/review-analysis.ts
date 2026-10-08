@@ -5,13 +5,16 @@ import {
 } from "@holon/application";
 import {
   aggregateShardReviews,
-  admitReviewPlan,
   createReviewRun,
   verifyFindingsWithCanonicalEvidence,
   type EvidenceRejection,
 } from "@holon/application";
 import type { MemorySnapshot } from "@holon/contracts";
-import { reviewExecutionLimits } from "@holon/contracts";
+import {
+  createReviewBudgetPlan,
+  reviewExecutionLimits,
+  reviewGenerationCallsPerShard,
+} from "@holon/contracts";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
   modelReviewOutputSchema,
@@ -57,7 +60,11 @@ type ReviewAnalysisServices = Pick<
   readonly executor: Pick<ReviewServices["executor"], "acquireReviewLease">;
   readonly ledger: Pick<
     ReviewServices["ledger"],
-    "loadPrFindings" | "loadRunConfiguration" | "loadModelGenerationStop"
+    | "loadPrFindings"
+    | "loadRunConfiguration"
+    | "loadModelGenerationStop"
+    | "configureReviewBudget"
+    | "completeReviewBudgetShard"
   >;
 };
 
@@ -111,9 +118,14 @@ function reviewedFiles(
       )
       .map((result) => result.shardId),
   );
-  return plan.shards
-    .filter((shard) => successfulShardIds.has(shard.id))
-    .flatMap((shard) => shard.files.map((file) => file.path));
+  const paths = new Set(
+    plan.shards.flatMap((shard) => shard.files.map((file) => file.path)),
+  );
+  return [...paths].filter((path) =>
+    plan.shards
+      .filter((shard) => shard.files.some((file) => file.path === path))
+      .every((shard) => successfulShardIds.has(shard.id)),
+  );
 }
 
 async function reviewShards(
@@ -355,17 +367,18 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
   const loadUncached = async () => {
     const startedAt = Date.now();
     const context = await services.loadContext(effectivePolicy);
-    const plan = admitReviewPlan(
-      buildReviewPlan(
-        context.files.map((file) => ({
-          changeType: "modified" as const,
-          newPath: file.path,
-          oldPath: file.path,
-          patch: file.patch,
-          path: file.path,
-        })),
-        { policyExcludedFilesCount: context.waiversCount },
-      ),
+    const plan = buildReviewPlan(
+      context.files.map((file) => ({
+        changeType: "modified" as const,
+        newPath: file.path,
+        oldPath: file.path,
+        patch: file.patch,
+        path: file.path,
+      })),
+      {
+        policyExcludedFilesCount: context.waiversCount,
+        structuralImpact: context.structuralImpact,
+      },
     );
     const effectivePlan = context.truncated
       ? {
@@ -408,6 +421,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
     });
     const planning = await runStep("plan-review", "preparation", async () => {
       const { context, plan, digest } = await load();
+      let initialPromptBytes = 0;
       if (execution !== undefined) {
         const snapshot = await services.ledger.loadRunConfiguration(
           execution.configuration,
@@ -441,7 +455,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
             bytes: new TextEncoder().encode(JSON.stringify(guidance))
               .byteLength,
           });
-          preflightReviewPrompt(job, {
+          const initialPrompt = preflightReviewPrompt(job, {
             ...buildShardReviewContext(
               shard,
               context.structuralImpact,
@@ -457,7 +471,62 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                 )
               : undefined,
           });
+          initialPromptBytes += initialPrompt.initialRequestBytes;
         }
+      }
+      if (plan.shards.length) {
+        if (!initialPromptBytes)
+          initialPromptBytes = plan.shards.reduce(
+            (sum, shard) =>
+              sum +
+              preflightReviewPrompt(
+                job,
+                buildShardReviewContext(
+                  shard,
+                  context.structuralImpact,
+                  [],
+                  services.getProjectIdentification?.(),
+                  false,
+                ),
+              ).initialRequestBytes,
+            0,
+          );
+        // Seven turns with an allowance for accumulating history; actual input is
+        // charged on every inference, so this estimate cannot bypass the ceiling.
+        const weights = plan.shards.map((shard) => {
+          const paths = new Set(shard.files.map((file) => file.path));
+          const contracts =
+            shard.id.startsWith("contract-check-") ||
+            context.structuralImpact?.contractBreaks.some((item) =>
+              paths.has(item.path),
+            );
+          const security = context.structuralImpact?.securitySurfaces.some(
+            (item) => paths.has(item.path),
+          );
+          const state = shard.files.some((file) =>
+            /(?:auth|tenan|ledger|migrat|workflow|budget|contract|persist|publication)/iu.test(
+              file.path,
+            ),
+          );
+          return Math.min(
+            4,
+            1 +
+              Number(Boolean(contracts)) +
+              Number(Boolean(security)) +
+              Number(state),
+          );
+        });
+        const budget = createReviewBudgetPlan(
+          plan.shards.length,
+          initialPromptBytes * reviewGenerationCallsPerShard * 2,
+          weights,
+        );
+        await services.ledger.configureReviewBudget(runId, budget);
+        emit("review.budget_planned", {
+          profile: budget.profile,
+          estimatedInputBytes: budget.estimatedInputBytes,
+          shards: weights.length,
+        });
       }
       emit("review.coverage_planned", {
         totalEligibleFiles: plan.totalEligibleFiles,
@@ -469,10 +538,13 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           (sum, shard) => sum + shard.byteLength,
           0,
         ),
-        selectedChangedLines: plan.shards.reduce(
-          (sum, shard) => sum + shard.changedLines.length,
-          0,
-        ),
+        selectedChangedLines: new Set(
+          plan.shards.flatMap((shard) =>
+            shard.changedLines.map(
+              (line) => `${line.path}:${line.side}:${line.line}`,
+            ),
+          ),
+        ).size,
         selectedFiles: new Set(
           plan.shards.flatMap((shard) => shard.files.map((file) => file.path)),
         ).size,
@@ -572,7 +644,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           .slice(offset, offset + reviewExecutionLimits.concurrency)
           .map(async (shardId, position) => {
             const index = offset + position;
-            return await runStep(
+            const completed = await runStep(
               `analyze-shard-${index + 1}`,
               "analysis",
               async () => {
@@ -633,6 +705,8 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
               cancellation.abort(error);
               throw error;
             });
+            await services.ledger.completeReviewBudgetShard(runId, index);
+            return completed;
           }),
       );
       // Join every in-flight shard before terminal cleanup. Infrastructure/state

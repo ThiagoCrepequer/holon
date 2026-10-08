@@ -43,21 +43,27 @@ export function evidenceWindowCount(patch: string): number {
 
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 
-/** Partition canonical hunk content without changing source bytes or coordinates. */
+/** Partition canonical source without changing bytes/coordinates. maxLines counts additions; maxContentLines also bounds context, removals and newline markers. */
 export function partitionPatch(
   patch: string,
   maxBytes: number,
   maxLines: number,
+  maxContentLines = Number.POSITIVE_INFINITY,
 ): { patches: string[]; omittedLines: number } {
   let inHunk = false,
-    addedCount = 0;
+    addedCount = 0,
+    contentCount = 0;
   for (const line of patch.split("\n")) {
     if (line.startsWith("@@ ")) inHunk = true;
-    else if (inHunk && line.startsWith("+")) addedCount++;
+    else if (inHunk && /^[ +\-\\]/u.test(line)) {
+      contentCount++;
+      if (line.startsWith("+")) addedCount++;
+    }
   }
   if (
     bytes(patch) <= maxBytes &&
     addedCount <= maxLines &&
+    contentCount <= maxContentLines &&
     evidenceWindowCount(patch) <= reviewExecutionLimits.shardEvidenceWindows
   )
     return { patches: [patch], omittedLines: 0 };
@@ -118,6 +124,7 @@ export function partitionPatch(
           ) <=
           maxBytes &&
         addedLines + addedDelta <= maxLines &&
+        chunk.length + unit.length <= maxContentLines &&
         appendEvidence(evidence, line).count <=
           reviewExecutionLimits.shardEvidenceWindows;
       if (!fits()) flush();

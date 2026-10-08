@@ -78,3 +78,16 @@ it("does not discard deletion-only and metadata-only patches", () => {
   ).toHaveLength(1);
   expect(partitionPatch("metadata".repeat(50), 10, 10).omittedLines).toBe(1);
 });
+
+it("keeps no-newline markers attached inside a bounded canonical content window", () => {
+  const patch =
+    "@@ -1,1 +1,2 @@\n-old\n\\ No newline at end of file\n+new\n+following\n";
+  const split = partitionPatch(patch, 1000, 80, 3);
+  expect(split.omittedLines).toBe(0);
+  expect(split.patches).toHaveLength(2);
+  expect(split.patches[0]).toContain(
+    "-old\n\\ No newline at end of file\n+new\n",
+  );
+  expect(split.patches[1]).toContain("+following\n");
+  expect(split.patches[1]).not.toContain("No newline");
+});
