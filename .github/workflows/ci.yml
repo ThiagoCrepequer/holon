@@ -36,6 +36,19 @@ jobs:
       - name: Install browsers for dashboard gates
         run: pnpm --filter @holon/dashboard exec playwright install --with-deps chromium firefox webkit
 
+      - name: Report verification resource budget
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { availableParallelism, totalmem } from "node:os";
+          const config = JSON.parse(readFileSync("turbo.json", "utf8"));
+          console.log(JSON.stringify({
+            logicalProcessors: availableParallelism(),
+            memoryMiB: Math.floor(totalmem() / 1024 ** 2),
+            taskConcurrency: config.concurrency,
+          }));
+          NODE
+
       - name: Verify formatting, lint, types, coverage and bundles
         run: pnpm verify
 

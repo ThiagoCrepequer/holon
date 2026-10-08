@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-08
 ---
 
 # Testes e evidência de entrega
@@ -64,6 +64,16 @@ local, mas precisa de Docker para a imagem do Sandbox. Para mudança focada,
 execute primeiro o script do workspace afetado e amplie quando a integração
 atravessar pacotes/deployables. Os exemplos e pré-requisitos estão em
 [desenvolvimento local](../operations/local-development.md).
+
+O Turbo limita a concorrência de tarefas a `100%` dos processadores lógicos
+disponíveis, conforme `turbo.json`. Esse orçamento acompanha a capacidade do
+ambiente em vez de admitir o default de dez tarefas em runners menores.
+Cada tarefa mantém sua configuração de Workers ou browsers e seus testes de
+concorrência interna. A CI registra CPU disponível, memória e configuração
+de concorrência antes do gate; uma falha continua encerrando a execução.
+Não aumente timeouts nem acrescente retries para ocultar contenção do runner.
+Fonte oficial, conferida em 2026-10-08:
+[concorrência do Turborepo](https://turborepo.dev/docs/reference/configuration#concurrency).
 
 | Evidência                         | O que demonstra                                   | Limite                                                    |
 | --------------------------------- | ------------------------------------------------- | --------------------------------------------------------- |
