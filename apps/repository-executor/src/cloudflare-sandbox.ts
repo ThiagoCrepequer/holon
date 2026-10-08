@@ -312,6 +312,10 @@ export class CloudflareSandboxProvider implements SandboxProvider {
 }
 
 export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExecutorEnv> {
+  public override fetch(): Response {
+    return new Response("Not found", { status: 404 });
+  }
+
   private service(): RepositoryExecutorService {
     return new RepositoryExecutorService(
       new CloudflareSandboxProvider(this.env),
