@@ -1,10 +1,10 @@
 ---
 id: OPERATIONS-DASHBOARD-ENVIRONMENTS-RECOVERY
 kind: reference
-status: proposed
+status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - ../planning/dashboard-implementation-plan.md
   - ../research/2026-10-04-dashboard-email-delivery-investigation.md
@@ -18,10 +18,91 @@ related:
 Como publicar e recuperar o MVP sem misturar identidade, efeitos de email,
 projeções e recursos de preview/produção?
 
-A fundação M1 tem manifests, tipos e comandos **locais**. Preview/produção e
-recuperação remota continuam propostos, sem IDs/domínios/credenciais definidos.
-Completar esses ambientes em operação autorizada conforme [deploy](deployment.md)
-e ADRs vigentes. A fundação não autoriza migration remota, DNS, restore ou envio.
+A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada em
+2026-10-08 provisionou os D1 de produção e suas migrations. O ambiente de
+bootstrap publicou a fundação estática com autenticação desabilitada. A ativação
+posterior pelo responsável cadastrou os secrets GitHub e habilitou auth; o
+manifest de produção acompanha esse estado com `AUTH_ENABLED=true`. O OAuth
+real ainda não foi validado. Preview e recuperação
+remota continuam propostas. O pipeline automático do core não publica esses apps.
+
+## Bootstrap de produção
+
+Conta Cloudflare: `4be6ae7d1bb4a3b2a395c6d30e2671a5`. Owner operacional desta
+provisão: Thiago Crepequer. Os recursos são exclusivos destes apps:
+
+| Recurso         | Nome / valor                                                | Estado                                                                                    |
+| --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Dashboard       | `holon-dashboard`                                           | Publicado; origem `https://holon-dashboard.thiago-crepequer.workers.dev`; auth habilitado |
+| Email           | `holon-email-delivery`                                      | Publicado privado; sem rota pública, URL de preview, Queue ou envio implementado          |
+| `IDENTITY_DB`   | `holon-identity` / `52a95f05-168f-4702-a064-10934931d3c8`   | Migrations `0001`–`0005` aplicadas; autoridade `identity`                                 |
+| `PROJECTION_DB` | `holon-projection` / `af121530-2f99-4d01-8155-c20efc040a3b` | Migration `0001` aplicada; autoridade `projection`                                        |
+
+A provisão usou a API Cloudflare, após conferir a conta e os recursos existentes.
+O D1 antigo `holon-admin-d1` não pertence a esta entrega. Os bancos novos estavam
+vazios; os receipts `d1_migrations`, as autoridades e `PRAGMA foreign_key_check`
+foram conferidos. A API de importação SQL preserva os corpos dos triggers; não
+dividir os arquivos por ponto e vírgula para aplicar migrations. Depois da
+primeira provisão, usar os receipts e Time Travel antes de novas mudanças de
+schema; rollback de Worker não desfaz uma migration.
+
+O manifest padrão permanece local. Para construir o artefato de produção:
+
+```sh
+CLOUDFLARE_ENV=production pnpm --filter @holon/dashboard build
+pnpm --filter @holon/email-delivery exec wrangler deploy --env production --dry-run --outdir dist
+```
+
+O deploy do dashboard precisa usar `apps/dashboard/build/server/wrangler.json`
+gerado pelo build de produção e seus assets em `build/client`. Não publicar
+diretamente o TypeScript do manifest de origem. A publicação via API envia os
+assets, os módulos compilados e os bindings do mesmo artefato revisado. Somente
+o dashboard tem workers.dev habilitado; ambos têm preview URLs desabilitadas.
+Invocation logs ficam desabilitados para não capturar URLs de callback OAuth.
+
+`AUTH_ENABLED=false` é bootstrap explícito: a fundação estática e liveness
+funcionam, mas auth e tenancy privadas permanecem indisponíveis. O secret
+`AUTH_SECRET` pode ser provisionado nessa fase sem tornar a configuração parcial
+uma falha global. Não gerar outra chave ao ativar GitHub. A chave protege cookies
+e tokens criptografados, e sua rotação exige o procedimento específico abaixo.
+
+### Evidência da publicação inicial
+
+Publicação via API em **2026-10-08**, com 100% de tráfego nas versões abaixo.
+Artefato de origem: commit `58749c416d0b4d587ee06889e5304ad3945d6138`, branch
+local `codex/dashboard-production-bootstrap`, baseada em `main` após o merge
+do PR #171. Esta operação não fez push nem alterou o pipeline automático.
+
+| Worker                 | Versão Cloudflare                      | Horário UTC            | Superfície                                     |
+| ---------------------- | -------------------------------------- | ---------------------- | ---------------------------------------------- |
+| `holon-dashboard`      | `b6df419e-9f66-4f5f-b283-aab4f336506a` | `2026-10-08T02:46:30Z` | workers.dev habilitado; previews desabilitados |
+| `holon-email-delivery` | `c4946809-d9f4-439e-a28b-a8ff02338b2b` | `2026-10-08T02:46:00Z` | workers.dev e previews desabilitados           |
+
+A API confirmou os dois bindings D1, as vars de produção, o nome do secret
+`AUTH_SECRET` (gerado sem exposição do valor) e observabilidade sem invocation
+logs. `pnpm verify`, build de produção e dry-runs passaram. Smoke HTTPS confirmou
+documento SSR 200 com CSP nonce, `nosniff`, `no-referrer` e `private, no-store`;
+asset JS 200 com cache immutable; health 200; auth 404 e workspaces 503 no
+bootstrap; POST de origem não confiável 403. Chromium validou hidratação,
+troca pt-BR/en e modal sem erro de página ou violação CSP em **2026-10-08T02:46:48Z**.
+Essas amostras não provam OAuth GitHub, tenancy autenticada, projeções ou envio
+real de email. O envio permanece um stub privado sem Queue/provider.
+
+### Alinhamento após a configuração de auth
+
+O responsável configurou os secrets GitHub e `AUTH_ENABLED=true` no Worker.
+A versão ativa passou a `86f5345f-21d5-4b68-9ee8-8dcdfa443969`, publicada pelo
+dashboard Cloudflare em **2026-10-08T02:52:07Z**. Em **2026-10-08T02:58:55Z**,
+a API confirmou `AUTH_ENABLED=true` e os nomes `AUTH_SECRET`,
+`GITHUB_APP_CLIENT_ID` e `GITHUB_APP_CLIENT_SECRET`, sem recuperar seus valores.
+A leitura anônima de `/api/auth/session` respondeu 200 com `null`.
+
+O manifest versionado e o gate de build de produção exigem agora
+`AUTH_ENABLED=true`, para que uma publicação futura não desfaça essa
+configuração. Essa alteração de código não executa um novo deploy. A leitura de
+sessão comprova a composição ativa, mas não valida as credenciais no GitHub,
+callback, login ou logout reais. Não existe página `/login` nem botão de login
+na UI atual; a experiência completa pertence à #159 e o smoke produtivo à #167.
 
 ## Operação local materializada
 
@@ -49,10 +130,10 @@ são locais/sintéticos. Ambos os D1 têm `remote: false`; URLs workers.dev e pr
 estão desligadas. Esses IDs não representam recursos Cloudflare. O estado local
 é descartável, mas não apagar migrations versionadas para resetar dados.
 
-Não há comando remoto utilizável nessa configuração. Em promoção futura,
-identificar a configuração homologada e binding reais; a aplicação remota será
-um passo explícito `wrangler d1 migrations apply <binding> --remote --config
-<configuração-homologada>`, com plano de recuperação, owner e autorização. Não
+O manifest padrão não representa um ambiente remoto. Na configuração de produção,
+uma migration remota futura requer autorização e será um passo explícito
+`wrangler d1 migrations apply <binding> --remote --env production --config
+apps/dashboard/wrangler.jsonc`, com plano de recuperação e owner. Não
 reutilizar os UUIDs locais nem tratar `--local`/`--remote` como flags intercambiáveis.
 
 `/api/health` é liveness, sem verificar schema/auth/provider. M2/M5 compõem
@@ -105,23 +186,25 @@ prova que novos Workers já estão cobertos. Não ressuscitar admin/read model a
 ## Login GitHub: configuração e rotação do recorte M2
 
 Responsável pela revisão de origens e permissões: `core-team`. O operador da
-GitHub App/Cloudflare deve ser identificado na mudança operacional futura;
-não há owner nominal, registro remoto ou credencial homologados nesta entrega.
+provisão Cloudflare é Thiago Crepequer; as credenciais e alterações no registro
+da GitHub App ainda exigem ação de seu responsável.
 O primeiro recorte implementa login social GitHub, não SSO corporativo.
 
-| Ambiente      | Origem/baseURL                                        | Callback GitHub                                  | Estado                                                                         |
-| ------------- | ----------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
-| Local padrão  | `http://127.0.0.1:8794`                               | `http://127.0.0.1:8794/api/auth/callback/github` | Manifest local; autenticação requer secrets locais; não é registro real da App |
-| Teste de auth | Origem loopback HTTPS sintética definida pelo harness | Mesma origem + `/api/auth/callback/github`       | GitHub controlado, D1 isolado e nenhum OAuth real                              |
-| Preview       | Não definido                                          | Não definido                                     | Exige origem HTTPS não loopback explicitamente homologada e recursos próprios  |
-| Produção      | Não definido                                          | Não definido                                     | Exige origem HTTPS não loopback homologada, distinta de preview                |
+| Ambiente      | Origem/baseURL                                         | Callback GitHub                                  | Estado                                                                         |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Local padrão  | `http://127.0.0.1:8794`                                | `http://127.0.0.1:8794/api/auth/callback/github` | Manifest local; autenticação requer secrets locais; não é registro real da App |
+| Teste de auth | Origem loopback HTTPS sintética definida pelo harness  | Mesma origem + `/api/auth/callback/github`       | GitHub controlado, D1 isolado e nenhum OAuth real                              |
+| Preview       | Não definido                                           | Não definido                                     | Exige origem HTTPS não loopback explicitamente homologada e recursos próprios  |
+| Produção      | `https://holon-dashboard.thiago-crepequer.workers.dev` | Mesma origem + `/api/auth/callback/github`       | Auth habilitado; secrets cadastrados; OAuth real ainda não validado            |
 
 `validateGitHubAuthConfig` rejeita credenciais ausentes, URL com caminho/query/
 fragmento/credencial, desenvolvimento fora de loopback e ambientes remotos sem
 origem explicitamente homologada. As listas de preview e produção devem ser
 disjuntas. Host/forwarded headers e nome da branch não definem baseURL/callback.
-Ter uma URL HTTPS não representa homologação. O manifest local não oferece
-configuração remota utilizável.
+Ter uma URL HTTPS não representa homologação. `AUTH_ENVIRONMENT` seleciona a
+política e `AUTH_REGISTERED_ORIGINS` fornece um JSON estrito com listas `preview`
+e `production`. O manifest de produção registra explicitamente a origem acima;
+o manifest local não oferece configuração remota utilizável.
 
 O modo é **GitHub App**. User access tokens usam permissões da App e não os
 scopes de OAuth Apps; `disableDefaultScope: true` evita os scopes padrão do
@@ -138,7 +221,53 @@ fixtures, linha de comando, logs, bundles ou screenshots. Em desenvolvimento,
 usar arquivo local ignorado e credenciais próprias de desenvolvimento; não
 copiar material de produção. A chave auth tem pelo menos 32 caracteres. Origem ausente, trio parcialmente
 configurado e auth habilitado sem IDENTITY_DB fecham com 503 sanitizado.
-Sem nenhum secret auth, a fundação estática M1 permanece utilizável.
+Sem nenhum secret auth, a fundação estática M1 permanece utilizável. Com
+`AUTH_ENABLED=true`, o trio completo e `IDENTITY_DB` são obrigatórios.
+
+### Obter e configurar credenciais por ambiente
+
+Na produção acima, o responsável já cadastrou os secrets. O procedimento abaixo
+orienta novos ambientes ou mudanças autorizadas; não recriar secrets existentes
+apenas para reproduzir o deploy.
+
+1. No GitHub, abrir **Settings → Developer settings → GitHub Apps** da conta
+   proprietária, ou **Organization settings → Developer settings → GitHub Apps**
+   se a App pertencer a uma organização. Abrir **Edit** da App Holon existente.
+2. Em **General**, copiar o **Client ID** e gerar um **Client secret**. Não usar
+   App ID, chave privada ou installation token nesses campos.
+3. Registrar a callback exata
+   `https://holon-dashboard.thiago-crepequer.workers.dev/api/auth/callback/github`.
+   Preservar as callbacks e configurações utilizadas por outros consumidores da
+   App. Em **Permissions & events → Account permissions**, conferir
+   **Email addresses: Read-only**. Não alterar webhook/instalações do core como
+   parte da ativação do login.
+4. No Cloudflare, abrir **Workers & Pages → holon-dashboard → Settings →
+   Variables and Secrets**. Adicionar como secrets `GITHUB_APP_CLIENT_ID` e
+   `GITHUB_APP_CLIENT_SECRET`. `AUTH_SECRET` é provisionado separadamente e não
+   deve ser substituído. Não enviar os valores em chat ou commit.
+5. Conferir `AUTH_ENABLED=true` no ambiente de produção versionado,
+   construir/publicar o novo artefato e executar OAuth real com usuário de teste,
+   callback, logout, novo login e isolamento de workspace. Sem esse smoke, não
+   declarar login real validado. Não habilitar auth enquanto faltar um secret.
+
+Alternativa pelo CLI, com entrada interativa dos valores (comandos separados):
+
+```sh
+pnpm --filter @holon/dashboard exec wrangler secret put GITHUB_APP_CLIENT_ID --env production
+pnpm --filter @holon/dashboard exec wrangler secret put GITHUB_APP_CLIENT_SECRET --env production
+```
+
+O arquivo `.env.cloudflare` contém somente o token para operar a API; ele não é
+o armazenamento dos secrets de runtime. O token desta provisão exige **D1 →
+Edit**, restrito à conta correta, e a role **Admin** no escopo do produto
+**Workers** para criar os dois Workers. Após a criação, o acesso de publicação
+pode ser reduzido a **Editor** apenas em `holon-dashboard` e
+`holon-email-delivery`. Editor não permite criar novos Workers. O operador
+configura essas permissões em **Manage Account → Account API Tokens**.
+O nome legado `Workers Scripts → Edit` está sendo substituído pelas roles;
+consultar [Workers roles and permissions](https://developers.cloudflare.com/workers/authorization/workers/),
+conferido em **2026-10-08**. As credenciais da GitHub App não são recuperáveis
+por esse token.
 
 Procedimento a preparar na operação autorizada:
 
@@ -165,8 +294,14 @@ Fontes primárias conferidas em **2026-10-07**:
 [user access tokens e callback/PKCE GitHub App](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app),
 [provider GitHub do Better Auth](https://better-auth.com/docs/authentication/github)
 e [accounts/linking/tokens](https://better-auth.com/docs/concepts/users-accounts).
-Este roteiro não executou criação de App, troca de secret, DNS, deploy, migration
-remota ou smoke com provider real.
+Configuração operacional conferida em **2026-10-08**:
+[ambientes do Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/),
+[upload direto de assets](https://developers.cloudflare.com/workers/static-assets/direct-upload/),
+[importação SQL D1](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/import/)
+e [Client ID/secret da GitHub App](https://docs.github.com/en/apps/creating-github-apps/writing-code-for-a-github-app/building-a-login-with-github-button-with-a-github-app).
+O bootstrap não criou nem alterou a GitHub App, DNS ou credenciais GitHub, e não
+executou smoke com provider real. A provisão dos bancos e migrations remotas é
+registrada acima, junto das versões publicadas, SHA e limites dos smokes.
 
 ## Estado observável e condições de intervenção
 

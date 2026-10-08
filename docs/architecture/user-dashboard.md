@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - ../decisions/0054-establish-user-dashboard-foundations.md
   - ../engineering/frontend-application-structure.md
@@ -17,14 +17,22 @@ related:
 ## Estado materializado
 
 A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) estabelece
-as fronteiras aprovadas. M1 materializa dois Workers **locais**, `packages/ui`,
+as fronteiras aprovadas. M1 materializa dois Workers, `packages/ui`,
 `packages/db`, portas/contratos e gates. Há uma página mínima bilíngue de fundação,
 preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
 acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
 no D1 de identidade. Não há dataset de reviews privado, convites, Queue ou envio
 implementados nesses apps. Sessões/dispositivos, governança e preferências
 persistidas continuam entregas separadas.
-Os dois Workers de produção do core permanecem inalterados.
+Os manifests mantêm o ambiente local e acrescentam produção com dois D1
+próprios e origem HTTPS explicitamente registrada. `AUTH_ENABLED=false` permite
+publicar a fundação enquanto faltam as credenciais GitHub: auth e tenancy privadas
+continuam indisponíveis. Após o responsável configurar os secrets, o manifest
+de produção usa `AUTH_ENABLED=true` e exige a composição completa; uma leitura
+anônima de sessão 200 não representa validação do OAuth real. A composição passa ambiente e origens homologadas para
+`packages/auth`; não os infere de Host ou de `APP_ORIGIN`. O email Worker é privado
+e mantém o contrato de bootstrap. Os dois Workers de produção do core permanecem
+inalterados por esta operação.
 
 ```mermaid
 flowchart TD
@@ -210,8 +218,10 @@ sem desligar `exactOptionalPropertyTypes` nem alterar arquivos da dependência.
 Consulte [testes e evidência](../engineering/testing-and-evidence.md),
 [operação](../operations/dashboard-environments-and-recovery.md) e o
 [registro M1](../research/2026-10-06-dashboard-foundation-results.md) para comandos,
-evidência e pendências. Não há bindings/IDs/domínios/secrets produtivos definidos
-nesses manifests e não há deploy novo no pipeline automático da ADR-0048.
+evidência e pendências. O runbook registra os bindings/IDs e a origem de produção,
+as migrations aplicadas e o estado de configuração de auth. A publicação inicial desses
+apps é uma operação explícita; não há deploy deles no pipeline automático da
+ADR-0048. Bootstrap e liveness não provam OAuth real, envio ou dataset privado.
 
 ## Gates de conteúdo e fluxos posteriores
 

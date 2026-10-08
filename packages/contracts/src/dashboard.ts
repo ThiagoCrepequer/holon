@@ -81,6 +81,11 @@ export const authEnvironmentSchema = z.enum([
   "preview",
   "production",
 ]);
+export const authRegisteredOriginsSchema = z.strictObject({
+  preview: z.array(z.string().url()),
+  production: z.array(z.string().url()),
+});
+export const authEnabledSchema = z.enum(["true", "false"]);
 export const githubAppAuthConfigSchema = z.strictObject({
   clientId: z.string().trim().min(1),
   clientSecret: z.string().trim().min(1),
@@ -119,6 +124,8 @@ export type SessionOutputDto = z.infer<typeof sessionOutputDtoSchema>;
 export type AdmittedUser = z.infer<typeof admittedUserSchema>;
 export type AuthSocialSignInInput = z.infer<typeof authSocialSignInInputSchema>;
 export type AuthEnvironment = z.infer<typeof authEnvironmentSchema>;
+export type AuthRegisteredOrigins = z.infer<typeof authRegisteredOriginsSchema>;
+export type AuthEnabled = z.infer<typeof authEnabledSchema>;
 export type GitHubAppAuthConfig = z.infer<typeof githubAppAuthConfigSchema>;
 export type DeliveryWake = z.infer<typeof deliveryWakeSchema>;
 export type DeliveryWakeResult = z.infer<typeof deliveryWakeResultSchema>;

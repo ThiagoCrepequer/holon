@@ -15,6 +15,9 @@ import {
   personalWorkspaceInputSchema,
   sessionOutputDtoSchema,
   authSocialSignInInputSchema,
+  authEnvironmentSchema,
+  authRegisteredOriginsSchema,
+  authEnabledSchema,
   githubAppAuthConfigSchema,
 } from "../src/dashboard.js";
 it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
@@ -158,6 +161,41 @@ it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
       appOrigin: "not-a-url",
     }).success,
   ).toBe(false);
+
+  // Environment and origins schemas
+  for (const env of ["development", "preview", "production"] as const) {
+    expect(authEnvironmentSchema.parse(env)).toBe(env);
+  }
+  expect(authEnvironmentSchema.safeParse("staging").success).toBe(false);
+
+  const origins = {
+    preview: ["https://preview.example.invalid"],
+    production: ["https://app.example.invalid"],
+  };
+  expect(authRegisteredOriginsSchema.parse(origins)).toEqual(origins);
+  expect(
+    authRegisteredOriginsSchema.safeParse({
+      ...origins,
+      preview: ["not-a-url"],
+    }).success,
+  ).toBe(false);
+  expect(
+    authRegisteredOriginsSchema.safeParse({
+      production: ["https://app.example.invalid"],
+    }).success,
+  ).toBe(false);
+  expect(
+    authRegisteredOriginsSchema.safeParse({
+      ...origins,
+      extra: [],
+    }).success,
+  ).toBe(false);
+
+  for (const enabled of ["true", "false"] as const) {
+    expect(authEnabledSchema.parse(enabled)).toBe(enabled);
+  }
+  expect(authEnabledSchema.safeParse("yes").success).toBe(false);
+  expect(authEnabledSchema.safeParse(true).success).toBe(false);
 });
 
 it("review pages contain bounded metadata without credential or ORM leakage", () => {

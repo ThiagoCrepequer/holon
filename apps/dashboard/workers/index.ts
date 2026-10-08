@@ -1,4 +1,10 @@
 import { createAuthService } from "@holon/auth/server";
+import {
+  authEnabledSchema,
+  authEnvironmentSchema,
+  authRegisteredOriginsSchema,
+  type AuthEnvironment,
+} from "@holon/contracts/dashboard";
 import { createTenancyPersistence } from "@holon/db/identity/server";
 import {
   createRequestHandler,
@@ -17,6 +23,9 @@ import {
 
 export interface DashboardWorkerBindings {
   readonly APP_ORIGIN?: string | undefined;
+  readonly AUTH_ENVIRONMENT?: string | undefined;
+  readonly AUTH_REGISTERED_ORIGINS?: string | undefined;
+  readonly AUTH_ENABLED?: string | undefined;
   readonly AUTH_SECRET?: string | undefined;
   readonly GITHUB_APP_CLIENT_ID?: string | undefined;
   readonly GITHUB_APP_CLIENT_SECRET?: string | undefined;
@@ -63,44 +72,100 @@ export default {
       }
       const appOrigin = env.APP_ORIGIN;
 
+      let authEnvironment: AuthEnvironment | undefined;
+      if (env.AUTH_ENVIRONMENT !== undefined) {
+        const parsedEnv = authEnvironmentSchema.safeParse(env.AUTH_ENVIRONMENT);
+        if (!parsedEnv.success) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+        authEnvironment = parsedEnv.data;
+      }
+
+      let homologatedOrigins:
+        | ReadonlyMap<AuthEnvironment, readonly string[]>
+        | undefined;
+      if (env.AUTH_REGISTERED_ORIGINS !== undefined) {
+        let rawJson: unknown;
+        try {
+          rawJson = JSON.parse(env.AUTH_REGISTERED_ORIGINS);
+        } catch {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+        const parsedOrigins = authRegisteredOriginsSchema.safeParse(rawJson);
+        if (!parsedOrigins.success) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+        homologatedOrigins = new Map<AuthEnvironment, readonly string[]>([
+          ["preview", parsedOrigins.data.preview],
+          ["production", parsedOrigins.data.production],
+        ]);
+      }
+
+      let authEnabled: boolean | undefined;
+      if (env.AUTH_ENABLED !== undefined) {
+        const parsedEnabled = authEnabledSchema.safeParse(env.AUTH_ENABLED);
+        if (!parsedEnabled.success) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+        authEnabled = parsedEnabled.data === "true";
+      }
+
       const authSecret = env.AUTH_SECRET;
       const githubClientId = env.GITHUB_APP_CLIENT_ID;
       const githubClientSecret = env.GITHUB_APP_CLIENT_SECRET;
 
-      const hasAnyAuthSecret = Boolean(
-        authSecret || githubClientId || githubClientSecret,
-      );
-      const hasAllAuthSecrets = Boolean(
-        authSecret && githubClientId && githubClientSecret,
-      );
+      let shouldCreateAuth = false;
+      if (authEnabled === false) {
+        shouldCreateAuth = false;
+      } else if (authEnabled === true) {
+        const hasAllAuthSecrets = Boolean(
+          authSecret && githubClientId && githubClientSecret,
+        );
+        if (!hasAllAuthSecrets || !env.IDENTITY_DB) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+        shouldCreateAuth = true;
+      } else {
+        const hasAnyAuthSecret = Boolean(
+          authSecret || githubClientId || githubClientSecret,
+        );
+        const hasAllAuthSecrets = Boolean(
+          authSecret && githubClientId && githubClientSecret,
+        );
 
-      if (hasAnyAuthSecret && !hasAllAuthSecrets) {
-        throw new HttpBoundaryError("unavailable", 503);
-      }
+        if (hasAnyAuthSecret && !hasAllAuthSecrets) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
 
-      if (hasAllAuthSecrets && !env.IDENTITY_DB) {
-        throw new HttpBoundaryError("unavailable", 503);
+        if (hasAllAuthSecrets && !env.IDENTITY_DB) {
+          throw new HttpBoundaryError("unavailable", 503);
+        }
+
+        shouldCreateAuth = hasAllAuthSecrets && Boolean(env.IDENTITY_DB);
       }
 
       const authService =
-        hasAllAuthSecrets && env.IDENTITY_DB
+        shouldCreateAuth && env.IDENTITY_DB
           ? createAuthService({
               database: env.IDENTITY_DB,
               appOrigin,
               authSecret: authSecret!,
               githubClientId: githubClientId!,
               githubClientSecret: githubClientSecret!,
+              ...(authEnvironment ? { environment: authEnvironment } : {}),
+              ...(homologatedOrigins ? { homologatedOrigins } : {}),
             })
           : undefined;
 
-      const tenancyPersistence = env.IDENTITY_DB
-        ? createTenancyPersistence(env.IDENTITY_DB)
-        : undefined;
+      const tenancyPersistence =
+        shouldCreateAuth && env.IDENTITY_DB
+          ? createTenancyPersistence(env.IDENTITY_DB)
+          : undefined;
 
       return await handle(request, appOrigin, {
         authService,
         tenancyPersistence,
-        authSecret,
+        authSecret: shouldCreateAuth ? authSecret : undefined,
       });
     } catch (error: unknown) {
       return secureResponse(errorResponse(error), requestNonce);
