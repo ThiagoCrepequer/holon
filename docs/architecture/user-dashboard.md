@@ -22,8 +22,9 @@ as fronteiras aprovadas. M1 materializa dois Workers, `packages/ui`,
 preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
 acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
 no D1 de identidade. Não há dataset de reviews privado, convites, Queue ou envio
-implementados nesses apps. Sessões/dispositivos, governança e preferências
-persistidas continuam entregas separadas.
+implementados nesses apps. O complemento M2 acrescenta sessões/dispositivos,
+revogação atual/global e preferências pessoais persistidas, consumidas pelo SSR
+e pelos controles mínimos da página de fundação.
 Os manifests mantêm o ambiente local e acrescentam produção com dois D1
 próprios e origem HTTPS explicitamente registrada. `AUTH_ENABLED=false` permite
 publicar a fundação enquanto faltam as credenciais GitHub: auth e tenancy privadas
@@ -82,8 +83,9 @@ sanitizado mantendo os loaders raiz de idioma/nonce, em vez de serializar a
 exceção padrão com o caminho solicitado.
 
 - SSR/loader: lê dados autorizados para o documento e navegação; retorna DTOs.
-  Futuramente invoca o mesmo caso de uso que a API. Não chama a própria API e
-  não executa comandos ou SQL.
+  O loader raiz recebe capabilities privadas por request e identifica a pessoa
+  pelo mesmo `AuthService` da API. Lê preferências pela porta específica, sem
+  chamar a própria API, executar comandos ou receber SQL livre.
 - Hono: valida método, payload, sessão, CSRF, autorização e intenção de comandos
   ou leituras explícitas. M2 acrescenta sessão pública reduzida, login/logout,
   provisionamento pessoal, criação idempotente de equipe e leitura dos espaços
@@ -92,10 +94,12 @@ exceção padrão com o caminho solicitado.
   O snapshot e a política manual da prova M0 serão integrados com dados reais em
   M5/M6; não instalar Query só para criar um provider sem dataset.
 
-`root.tsx` negocia idioma por request e devolve timezone UTC. Preferência `lang`
-e tema na URL são transitórios nessa fundação; preservam outros parâmetros e
-foco. Uma entrega posterior de M2 liga o perfil individual persistido à precedência preferência →
-Accept-Language → en. O server nunca usa um singleton Lingui com estado de usuário. O loader importa
+`root.tsx` negocia idioma por request: preferência pessoal persistida →
+`lang` transitório na URL → Accept-Language → en. O fuso salvo prevalece; antes
+de conhecê-lo o SSR usa UTC. A UI propõe o fuso válido do dispositivo depois da
+hidratação e só o persiste após confirmação do POST. UTC salvo explicitamente
+não é redetectado. Tema na URL continua transitório. Os controles preservam
+rota, outros parâmetros e foco. O server nunca usa um singleton Lingui com estado de usuário. O loader importa
 somente o catálogo do idioma resolvido no servidor e hidrata suas mensagens
 compiladas serializáveis; módulos de catálogo não entram no JS cliente. Troca de
 idioma carrega o catálogo correspondente pelo loader, sem downloads de todos
@@ -115,6 +119,7 @@ assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 | Capacidade                                 | Dono da implementação                                                     | Contrato/consumidor                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                      | `AuthService`; DTO sem segredo de sessão/OAuth                             |
+| Preferências pessoais                      | porta `PersonalPreferencesPort` + adapter de identidade, M2               | `dashboard-preferences`; locale/fuso validados, sem configuração de equipe |
 | Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                         | `WorkspaceTenancyPort`; não concede grant GitHub                           |
 | Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`               | mutação condicional por ator/estado/operação nas issues donas              |
 | Reserva de authorization code              | adapter de identidade em `packages/db`                                    | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação |
@@ -168,6 +173,71 @@ sessão exata/subject GitHub no relógio SQLite da batch. Um marcador transitór
 removido na mesma transação; rollback não deixa resíduo. Sessão de outro
 dispositivo não substitui a sessão do comando. A política de budgets e as
 provas de corrida estão no [guia de segurança web](../engineering/web-security-and-data-boundaries.md).
+
+## Sessões e preferências no complemento M2
+
+GET `/api/auth/sessions` lista somente os dispositivos da pessoa admitida,
+com ID público, datas, indicador da sessão atual e navegador em enum reduzido.
+O envelope `{ sessions, currentSessionId, nextCursor }` limita cada página a
+100 dispositivos. O cursor identifica uma sessão própria ainda vigente, em
+ordem `createdAt/id` decrescente; cursor removido/expirado exige refresh da
+primeira página. A sessão atual fica no envelope também quando não pertence
+à página. A UI substitui a página por interação, sem acumulação ilimitada.
+A própria consulta exige a sessão corrente ainda vigente e uma conta GitHub
+vinculada; perder autoridade entre admissão HTTP e SELECT nega a leitura.
+POST `/api/auth/sessions/:id/revoke` e POST `/api/auth/sign-out/all` exigem
+admissão, origem, CSRF e budget; a guarda D1 revalida a sessão exata na escrita.
+A limpeza de cookies usa o sign-out oficial do Better Auth e preserva todos os
+`Set-Cookie`. Revogar outra sessão não remove os cookies da sessão atual.
+
+A duração móvel é de 7 dias, com renovação depois de 24 horas. Renovação
+condicional não encurta uma expiração mais nova nem ressuscita uma sessão
+revogada. A guarda verifica também as 24 horas na row persistida: requests
+concorrentes reutilizam a primeira renovação até a próxima janela, mesmo que
+tenham lido um snapshot anterior. Uma leitura que encontrou expiração revalida
+a row antes de apagá-la.
+Os hooks e database hooks públicos da versão fixada implementam essa política;
+não há patch nem import privado do SDK.
+
+GET e POST `/api/preferences` operam no perfil do ator admitido. O corpo do
+POST contém apenas `locale` e `timezone`; ambas as respostas usam o envelope
+strict `{ preferences }`. `user_preferences` pertence ao D1 de identidade.
+A ausência de perfil é representada por locale/fuso ambos nulos; falha de
+storage ou perfil corrompido não se apresenta como preferência ausente.
+A atualização é um único UPSERT condicionado ao User/Account/Session atual;
+resposta perdida depois do commit é `command_unknown`, recuperável por leitura
+ou repetição dos mesmos valores.
+
+O documento serializa apenas identidade pública, session ID, CSRF e preferências.
+As capabilities de auth/persistência permanecem no contexto servidor por request.
+`features/preferences` e `features/sessions` oferecem o formulário pessoal,
+login/reconexão GitHub, dispositivos e logout mínimo; o onboarding completo é
+#159. Os controles cancelam requests ao perder a identidade e ignoram respostas
+antigas após uma nova sessão. A autoridade é verificada na próxima leitura/intenção explícita. A listagem
+compara a sessão atual com a geração renderizada; diferença fecha o contexto
+anterior e revalida SSR. Não há polling nem consultas por foco/visibilidade,
+renovação de aba parada ou promessa de remoção instantânea.
+
+## Governança de membership e prova de OAuth
+
+POST `/api/auth/reauth/init` cria uma intenção pendente de até 10 minutos.
+O login GitHub recebe apenas seu ID público; o servidor obtém o contexto
+admitido e usa o slot confiável de OAuth da API pública Better Auth. Após
+state/cookie/PKCE e provider reais do fluxo, somente o subject original pode
+confirmar a intenção, com User e sessão nova emitida no callback. A prova
+dura 5 minutos desde a conclusão e não autoriza outra ação/alvo/workspace.
+
+Os POST de `/api/workspaces/:id/members/promote`, `demote` e `remove`
+exigem owner local atual; `/api/workspaces/:id/leave` opera sobre a própria
+membership. Todos exigem sessão, origem, CSRF, schema strict e budget.
+Consumo da prova e efeito estão na mesma batch com admissão revalidada.
+Triggers bloqueiam remoção/rebaixamento do último owner; personal workspace
+continua exclusivo e não participa da governança de equipe.
+
+O adapter em `packages/db` possui SQL e invariantes duráveis. `packages/auth`
+encapsula hooks, emissão/cookies e o vínculo do callback OAuth. A porta de
+tenancy expõe comandos de produto; IDs de prova não são capabilities por si.
+UI completa de gestão/onboarding e entrada por convite ficam nas issues donas.
 
 ## Imports e bibliotecas
 

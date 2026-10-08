@@ -11,6 +11,7 @@ export default defineConfig({
       include: [
         "app/server/**/*.ts",
         "app/i18n/**/*.ts",
+        "app/features/**/*.ts",
         "scripts/client-boundaries.ts",
       ],
       reporter: ["text", "json-summary", "lcov"],

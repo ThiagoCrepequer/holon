@@ -1,6 +1,9 @@
 import { runStates } from "@holon/domain";
 import { z } from "zod";
 
+// Disable JIT compilation to satisfy strict CSP without 'unsafe-eval'
+z.config({ jitless: true });
+
 // IDs are opaque; parsing them never grants authority.
 export const dashboardIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u);
 export const dashboardLocaleSchema = z.enum(["en", "pt-BR"]);
@@ -64,6 +67,64 @@ export const sessionOutputDtoSchema = z.strictObject({
   user: sessionUserDtoSchema,
   session: sessionDtoSchema,
 });
+export const deviceBrowserLabelSchema = z.enum([
+  "chrome",
+  "firefox",
+  "safari",
+  "edge",
+  "other",
+]);
+export const sessionDeviceDtoSchema = z.strictObject({
+  id: dashboardIdSchema,
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  isCurrent: z.boolean(),
+  label: deviceBrowserLabelSchema,
+});
+export const sessionDeviceListDtoSchema = z.strictObject({
+  sessions: z.array(sessionDeviceDtoSchema).max(100),
+  currentSessionId: dashboardIdSchema,
+  nextCursor: dashboardIdSchema.nullable(),
+});
+export const revokeSessionInputSchema = z.strictObject({});
+export const revokeAllSessionsInputSchema = z.strictObject({});
+export const signOutOutputSchema = z.strictObject({ success: z.literal(true) });
+export const revokeSessionOutputSchema = z.strictObject({
+  revoked: z.boolean(),
+});
+export const revokeAllSessionsOutputSchema = z.strictObject({
+  revokedCount: z.number().int().nonnegative().safe(),
+});
+export const reauthActionSchema = z.enum([
+  "promote",
+  "demote",
+  "remove",
+  "leave",
+]);
+export const reauthInitInputSchema = z.strictObject({
+  workspaceId: dashboardIdSchema,
+  action: reauthActionSchema,
+  targetUserId: dashboardIdSchema,
+});
+export const reauthReceiptSchema = z.strictObject({
+  reauthIntentId: dashboardIdSchema,
+  expiresAt: z.iso.datetime(),
+});
+export const promoteMemberInputSchema = z.strictObject({
+  targetUserId: dashboardIdSchema,
+  reauthIntentId: dashboardIdSchema,
+});
+export const demoteMemberInputSchema = z.strictObject({
+  targetUserId: dashboardIdSchema,
+  reauthIntentId: dashboardIdSchema,
+});
+export const removeMemberInputSchema = z.strictObject({
+  targetUserId: dashboardIdSchema,
+  reauthIntentId: dashboardIdSchema,
+});
+export const leaveWorkspaceInputSchema = z.strictObject({
+  reauthIntentId: dashboardIdSchema,
+});
 export const admittedUserSchema = z.strictObject({
   id: dashboardIdSchema,
   name: z.string().min(1).max(256),
@@ -75,6 +136,7 @@ export const authSocialSignInInputSchema = z.strictObject({
   provider: z.literal("github"),
   callbackURL: z.string().optional(),
   disableRedirect: z.boolean().optional(),
+  reauthIntentId: dashboardIdSchema.optional(),
 });
 export const authEnvironmentSchema = z.enum([
   "development",
@@ -121,6 +183,20 @@ export type TenancyOperationReceipt = z.infer<
 export type SessionUserDto = z.infer<typeof sessionUserDtoSchema>;
 export type SessionDto = z.infer<typeof sessionDtoSchema>;
 export type SessionOutputDto = z.infer<typeof sessionOutputDtoSchema>;
+export type DeviceBrowserLabel = z.infer<typeof deviceBrowserLabelSchema>;
+export type SessionDeviceDto = z.infer<typeof sessionDeviceDtoSchema>;
+export type SessionDeviceListDto = z.infer<typeof sessionDeviceListDtoSchema>;
+export type RevokeSessionInput = z.infer<typeof revokeSessionInputSchema>;
+export type RevokeAllSessionsInput = z.infer<
+  typeof revokeAllSessionsInputSchema
+>;
+export type ReauthAction = z.infer<typeof reauthActionSchema>;
+export type ReauthInitInput = z.infer<typeof reauthInitInputSchema>;
+export type ReauthReceipt = z.infer<typeof reauthReceiptSchema>;
+export type PromoteMemberInput = z.infer<typeof promoteMemberInputSchema>;
+export type DemoteMemberInput = z.infer<typeof demoteMemberInputSchema>;
+export type RemoveMemberInput = z.infer<typeof removeMemberInputSchema>;
+export type LeaveWorkspaceInput = z.infer<typeof leaveWorkspaceInputSchema>;
 export type AdmittedUser = z.infer<typeof admittedUserSchema>;
 export type AuthSocialSignInInput = z.infer<typeof authSocialSignInInputSchema>;
 export type AuthEnvironment = z.infer<typeof authEnvironmentSchema>;
