@@ -113,6 +113,14 @@ function provider(overrides: Record<string, unknown> = {}): typeof fetch {
           installations: [installation],
         },
       );
+    if (url.pathname.startsWith("/user/memberships/orgs/"))
+      return Response.json(
+        overrides.membership ?? {
+          state: "active",
+          role: "admin",
+          organization: { id: 999 },
+        },
+      );
     if (url.pathname === "/user/memberships/orgs")
       return Response.json(overrides.memberships ?? []);
     if (url.pathname === "/user/installations/55/repositories")
@@ -459,3 +467,35 @@ it("reports reconnection before an operation when both token lifetimes are exhau
     status: "reconnect_required",
   });
 });
+
+it.each(["demoted", "pending", "different_org"] as const)(
+  "organization ownership is revalidated after pagination: %s",
+  async (kind) => {
+    await setup();
+    const organization = {
+      ...installation,
+      account: { id: 999, type: "Organization", login: "synthetic_org" },
+    };
+    const base = provider({
+      installations: { total_count: 1, installations: [organization] },
+      memberships: [
+        { state: "active", role: "admin", organization: { id: 999 } },
+      ],
+    });
+    const transport: typeof fetch = async (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : input.toString(),
+      );
+      if (url.pathname === "/user/memberships/orgs/synthetic_org")
+        return Response.json({
+          state: kind === "pending" ? "pending" : "active",
+          role: kind === "demoted" ? "member" : "admin",
+          organization: { id: kind === "different_org" ? 998 : 999 },
+        });
+      return base(input, init);
+    };
+    await expect(
+      service(transport).verifyInstallation(actor, 55),
+    ).rejects.toMatchObject({ code: "denied" });
+  },
+);

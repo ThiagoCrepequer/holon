@@ -147,66 +147,77 @@ export function createWebhookApp() {
       const decoded = identificationRevocationSchema.safeParse(eventPayload);
       if (!decoded.success) return reject("invalid_installation_event", 400);
       const payload = decoded.data;
-      if (
-        event === "installation" &&
-        (payload.action === "deleted" || payload.action === "suspend")
-      ) {
-        const access = {
-          deliveryId: delivery,
-          installationId: payload.installation.id,
-          action:
-            payload.action === "deleted"
-              ? ("revoked" as const)
-              : ("suspended" as const),
-        };
-        await context.env.REVIEW_QUEUE.send(
-          githubAccessQueueMessageSchema.parse({
-            event: "github_access",
-            access,
-          }),
-        );
-        await forwardDashboardAccessEvent(context.env, access);
-      }
-      if (event === "installation_repositories") {
-        const access = {
-          deliveryId: delivery,
-          installationId: payload.installation.id,
-          action: "repositories_changed" as const,
-        };
-        await context.env.REVIEW_QUEUE.send(
-          githubAccessQueueMessageSchema.parse({
-            event: "github_access",
-            access,
-          }),
-        );
-        await forwardDashboardAccessEvent(context.env, access);
-      }
-
-      if (
-        (event === "installation" &&
-          (payload.action === "deleted" || payload.action === "suspend")) ||
-        (event === "installation_repositories" && payload.action === "removed")
-      ) {
-        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
-          String(payload.installation.id),
-        ).revoke(
-          payload.installation.id,
-          event === "installation"
-            ? null
-            : (payload.repositories_removed ?? []).map((repo) => repo.id),
-        );
-      }
-      if (event === "installation" && payload.action === "unsuspend")
-        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
-          String(payload.installation.id),
-        ).restore(payload.installation.id, null);
-      if (event === "installation_repositories" && payload.action === "added")
-        await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
-          String(payload.installation.id),
-        ).restore(
-          payload.installation.id,
-          (payload.repositories_added ?? []).map((repo) => repo.id),
-        );
+      const effects = await Promise.allSettled([
+        (async () => {
+          if (
+            event === "installation" &&
+            (payload.action === "deleted" || payload.action === "suspend")
+          ) {
+            const access = {
+              deliveryId: delivery,
+              installationId: payload.installation.id,
+              action:
+                payload.action === "deleted"
+                  ? ("revoked" as const)
+                  : ("suspended" as const),
+            };
+            await context.env.REVIEW_QUEUE.send(
+              githubAccessQueueMessageSchema.parse({
+                event: "github_access",
+                access,
+              }),
+            );
+            await forwardDashboardAccessEvent(context.env, access);
+          }
+          if (event === "installation_repositories") {
+            const access = {
+              deliveryId: delivery,
+              installationId: payload.installation.id,
+              action: "repositories_changed" as const,
+            };
+            await context.env.REVIEW_QUEUE.send(
+              githubAccessQueueMessageSchema.parse({
+                event: "github_access",
+                access,
+              }),
+            );
+            await forwardDashboardAccessEvent(context.env, access);
+          }
+        })(),
+        (async () => {
+          if (
+            (event === "installation" &&
+              (payload.action === "deleted" || payload.action === "suspend")) ||
+            (event === "installation_repositories" &&
+              payload.action === "removed")
+          ) {
+            await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+              String(payload.installation.id),
+            ).revoke(
+              payload.installation.id,
+              event === "installation"
+                ? null
+                : (payload.repositories_removed ?? []).map((repo) => repo.id),
+            );
+          }
+          if (event === "installation" && payload.action === "unsuspend")
+            await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+              String(payload.installation.id),
+            ).restore(payload.installation.id, null);
+          if (
+            event === "installation_repositories" &&
+            payload.action === "added"
+          )
+            await context.env.PROJECT_IDENTIFICATION_REGISTRY.getByName(
+              String(payload.installation.id),
+            ).restore(
+              payload.installation.id,
+              (payload.repositories_added ?? []).map((repo) => repo.id),
+            );
+        })(),
+      ]);
+      if (effects.some((result) => result.status === "rejected"))
+        throw new Error("access_event_unavailable");
       return context.json({ accepted: true }, 202);
     }
     if (

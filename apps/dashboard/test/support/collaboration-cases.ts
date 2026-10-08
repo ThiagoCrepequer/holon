@@ -205,4 +205,26 @@ export function collaborationCases(database: () => D1Database) {
         .first(),
     ).toEqual({ n: 0 });
   });
+  it("an early cached grant expiring during another installation query cannot authorize the aggregate scope", async () => {
+    const { github, service } = fixture();
+    await service.linkInstallation(actor, "team", await confirmed("first"));
+    await service.authorizeReviews(actor, "team");
+    await database()
+      .prepare(
+        "INSERT INTO github_connection VALUES(88,'team',101,'active',1,'actor',?)",
+      )
+      .bind(Date.now())
+      .run();
+    github.repositories.mockImplementation(async () => {
+      await database()
+        .prepare(
+          "UPDATE github_grant_cache SET expires_at=0 WHERE installation_id=77",
+        )
+        .run();
+      return { accountId: "account", generation: 1, repositoryIds: [903] };
+    });
+    await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
+      { code: "denied" },
+    );
+  });
 }

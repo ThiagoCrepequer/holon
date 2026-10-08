@@ -76,7 +76,71 @@ módulo ainda ausente; não foi evidência de falha comportamental. Casos de con
 não têm registro completo red-before-fix; resultado verde final não é prova de
 TDD integral. Catálogos foram extraídos novamente após dividir os painéis UI.
 
-Execução final e revisão registradas abaixo após o gate do artefato final.
+## Revisão independente
+
+A skill `code-review` realizou duas revisões sobre a base M3 fixada, com spec
+nas cinco issues e padrões no AGENTS/engenharia/arquitetura do Holon.
+
+### Standards
+
+Um achado P1: aguardar o novo RPC antes de revoke/restore impedia a transição
+existente do core quando o dashboard falhava. Corrigido com efeitos independentes
+em `Promise.allSettled`, aguardando ambas as autoridades antes da resposta. O
+teste primeiro falhou com zero calls de revoke; após correção confirma revoke
+mesmo em erro de dashboard e preserva mensagem durável. A revisão posterior
+confirmou o encerramento do achado, sem outro problema sustentado.
+
+### Spec
+
+Dois achados P1: o primeiro grant podia expirar enquanto outra instalação era
+consultada; a última revalidação GitHub conferia instalação acessível sem
+reconfirmar admin ativo da organização. Corrigidos com snapshot do prazo original
+por instalação e guarda final conjunta de TTL/gerações/cache, mais leitura final
+da membership por organização com ID/state/role conferidos. Ambos os testes
+falharam antes da correção; o cenário de membership também cobre pending e ID
+incompatível. A revisão posterior confirmou os dois achados encerrados.
+
+Resumo: Standards 1 e Spec 2 achados iniciais; nenhum achado sustentado restante
+após correção. Validação final abaixo mantém os limites de evidência.
+
+## Comandos e resultado final
+
+A bancada usou Node **24.11.0** e pnpm **11.24.0**. `pnpm install --frozen-lockfile`
+preparou as dependências sem alterar lockfile. `pnpm format`, `pnpm lint`,
+`pnpm test:architecture`, typechecks/testes focados e dry-run do dashboard foram
+executados durante a implementação. O gate final é `pnpm verify`, preservando
+thresholds e código de produção no cálculo.
+
+Antes do gate final, o teste antigo M1 esperava 404 para
+`/api/invitations/accept`: M3 agora interpreta `accept` como qualquer ID opaco e
+retorna GET/HEAD genérico 200. O teste passou a conferir o DTO genérico exato,
+HEAD e POST inválido ainda 405, preservando a prova de ausência de efeitos.
+Outro teste antigo de gestão foi atualizado para permitir destinatário ao owner;
+negação a member e aceite sem dados privados permanecem cobertos.
+
+**`pnpm verify`: PASS (exit 0)** em 2026-10-08: marca/schema/config, formatter,
+lint, typecheck, arquitetura, cobertura de todos os workspaces e build/dry-runs,
+inclusive imagem Docker do Sandbox. Turbo concluiu 21 tarefas de tipos,
+32 de cobertura e 17 de build (parte delas com cache por hash do artefato).
+Não houve exclusão de produção, redução de threshold ou remoção de teste falho.
+
+Suites relevantes no gate: auth **118**, DB **148**, dashboard Node **144**,
+dashboard Workerd **90**, control-plane **355** testes; browser da fundação
+**12**, autenticados **33** (9 de M3) e prova M0 **60**. Todos passaram.
+Cobertura statements/branches/functions/lines:
+
+| Suite             | Statements | Branches | Functions | Lines  |
+| ----------------- | ---------- | -------- | --------- | ------ |
+| Auth              | 93.69%     | 86.88%   | 98.41%    | 94.34% |
+| DB                | 94.93%     | 86.84%   | 100%      | 95.74% |
+| Dashboard Node    | 96.31%     | 93.99%   | 95.74%    | 97%    |
+| Dashboard Workerd | 96.27%     | 91.82%   | 98.57%    | 96.8%  |
+| Control-plane     | 91.74%     | 86.41%   | 92.64%    | 93.05% |
+
+Revisão das correções confirmou ausência de achados sustentados pendentes;
+`git diff --check` e lint passaram após atualizar esta evidência documental.
+O PR mantém a dependência de #177, ainda aberto na consulta de 2026-10-08;
+a branch incorpora também o main já publicado para preservar seus gates.
 
 ## Limites e sequência seguinte
 

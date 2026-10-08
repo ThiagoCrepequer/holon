@@ -1,23 +1,9 @@
-const headers = (token: string) => ({
-  Authorization: `Bearer ${token}`,
-  Accept: "application/vnd.github+json",
-  "X-GitHub-Api-Version": "2026-03-10",
-  "User-Agent": "holon-dashboard",
-});
-async function checked<T>(read: () => Promise<T>): Promise<T> {
-  try {
-    return await read();
-  } catch (error) {
-    if (error instanceof CollaborationError) throw error;
-    throw new CollaborationError("unavailable");
-  }
-}
-
 import type { AdmittedUser } from "@holon/contracts/dashboard";
 import {
   githubEmailsSchema,
   githubInstallationsSchema,
   githubMembershipsSchema,
+  githubMembershipSchema,
   githubRepositoriesSchema,
   githubRefreshSchema,
   githubUserSchema,
@@ -37,6 +23,21 @@ import {
   symmetricEncrypt,
   type SecretConfig,
 } from "better-auth/crypto";
+
+const headers = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2026-03-10",
+  "User-Agent": "holon-dashboard",
+});
+async function checked<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof CollaborationError) throw error;
+    throw new CollaborationError("unavailable");
+  }
+}
 
 export interface GitHubUserService {
   status(
@@ -296,6 +297,22 @@ export function createGitHubUserService(options: {
           current.account.type !== installation.account.type
         )
           throw new CollaborationError("denied");
+        if (current.account.type === "Organization") {
+          const membership = githubMembershipSchema.parse(
+            await get(
+              actor,
+              record,
+              token,
+              `/user/memberships/orgs/${encodeURIComponent(current.account.login)}`,
+            ),
+          );
+          if (
+            membership.organization.id !== current.account.id ||
+            membership.state !== "active" ||
+            membership.role !== "admin"
+          )
+            throw new CollaborationError("denied");
+        }
         return {
           accountId: record.accountId,
           credentialGeneration: record.generation,

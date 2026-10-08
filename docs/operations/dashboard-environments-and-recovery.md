@@ -527,7 +527,7 @@ são 10/min por ator/equipe e 30/min por equipe, compartilhados entre instância
 Não zerar orçamento nem gerar nova operação para contornar resultado desconhecido.
 
 Cancelado/expirado/aceito bloqueia futuros envios; mensagem já em voo não é
-recolhida. Aceite fixa User e membership atomically; replay não ressuscita membro
+recolhida. Aceite fixa User e membership atomicamente; replay não ressuscita membro
 removido. M4 implementará publisher/Queue/consumer/reconciliação sem mudar essa
 intenção. Transferência de instalação e recuperação administrativa continuam
 fora do MVP; unlink preserva alocação e só permite reconectar ao mesmo workspace.

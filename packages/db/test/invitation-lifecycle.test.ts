@@ -210,9 +210,9 @@ it.each([
       .first(),
   ).toEqual({ n: 0 });
 });
-it("pending list contains no recipient addresses and cancel does not affect another workspace", async () => {
+it("owner list identifies recipients and cancel does not affect another workspace", async () => {
   const invitation = await invites.create(owner, "team", input);
-  expect(JSON.stringify(await invites.list(owner, "team"))).not.toContain(
+  expect(JSON.stringify(await invites.list(owner, "team"))).toContain(
     input.email,
   );
   await expect(invites.list(target, "team")).rejects.toMatchObject({

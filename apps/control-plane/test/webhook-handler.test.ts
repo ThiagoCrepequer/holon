@@ -1,6 +1,6 @@
 import type { HealthCheckReport } from "@holon/contracts";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createWebhookApp,
@@ -42,6 +42,7 @@ async function request(
   body: string,
   overrides: Record<string, string> = {},
   queueError?: Error,
+  environmentOverrides: Record<string, unknown> = {},
 ) {
   const sent: unknown[] = [];
   const signature = await sign("secret", body);
@@ -72,6 +73,7 @@ async function request(
           return Promise.resolve();
         },
       },
+      ...environmentOverrides,
     },
   );
   return { response, sent };
@@ -408,4 +410,27 @@ it("signed user revocation enters the durable access queue before acknowledgemen
       })
     ).response.status,
   ).toBe(401);
+});
+
+it("dashboard RPC failure does not block the existing core installation revocation", async () => {
+  const revoke = vi.fn(async () => {});
+  const restore = vi.fn(async () => {});
+  const result = await request(
+    JSON.stringify({ action: "suspend", installation: { id: 99 } }),
+    { "x-github-event": "installation" },
+    undefined,
+    {
+      DASHBOARD_ACCESS_EVENTS: {
+        applyEvent: async () => {
+          throw new Error("synthetic outage");
+        },
+      },
+      PROJECT_IDENTIFICATION_REGISTRY: {
+        getByName: () => ({ revoke, restore }),
+      },
+    },
+  );
+  expect(result.response.status).toBe(500);
+  expect(result.sent).toHaveLength(1);
+  expect(revoke).toHaveBeenCalledWith(99, null);
 });
