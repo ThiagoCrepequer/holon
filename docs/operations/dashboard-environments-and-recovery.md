@@ -20,8 +20,7 @@ projeções e recursos de preview/produção?
 
 A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada em
 2026-10-08 provisionou os D1 de produção e suas migrations. O ambiente de
-bootstrap está configurado para publicar a fundação estática com autenticação
-desabilitada; a publicação dos Workers aguarda a permissão de criação. A ativação
+bootstrap publicou a fundação estática com autenticação desabilitada. A ativação
 GitHub exige as credenciais e a callback descritas abaixo. Preview e recuperação
 remota continuam propostas. O pipeline automático do core não publica esses apps.
 
@@ -30,12 +29,12 @@ remota continuam propostas. O pipeline automático do core não publica esses ap
 Conta Cloudflare: `4be6ae7d1bb4a3b2a395c6d30e2671a5`. Owner operacional desta
 provisão: Thiago Crepequer. Os recursos são exclusivos destes apps:
 
-| Recurso         | Nome / valor                                                | Estado                                                                                       |
-| --------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Dashboard       | `holon-dashboard`                                           | Configuração `env.production`; origem `https://holon-dashboard.thiago-crepequer.workers.dev` |
-| Email           | `holon-email-delivery`                                      | Bootstrap privado; sem rota pública, URL de preview, Queue ou envio implementado             |
-| `IDENTITY_DB`   | `holon-identity` / `52a95f05-168f-4702-a064-10934931d3c8`   | Migrations `0001`–`0005` aplicadas; autoridade `identity`                                    |
-| `PROJECTION_DB` | `holon-projection` / `af121530-2f99-4d01-8155-c20efc040a3b` | Migration `0001` aplicada; autoridade `projection`                                           |
+| Recurso         | Nome / valor                                                | Estado                                                                                      |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Dashboard       | `holon-dashboard`                                           | Publicado; origem `https://holon-dashboard.thiago-crepequer.workers.dev`; auth desabilitado |
+| Email           | `holon-email-delivery`                                      | Publicado privado; sem rota pública, URL de preview, Queue ou envio implementado            |
+| `IDENTITY_DB`   | `holon-identity` / `52a95f05-168f-4702-a064-10934931d3c8`   | Migrations `0001`–`0005` aplicadas; autoridade `identity`                                   |
+| `PROJECTION_DB` | `holon-projection` / `af121530-2f99-4d01-8155-c20efc040a3b` | Migration `0001` aplicada; autoridade `projection`                                          |
 
 A provisão usou a API Cloudflare, após conferir a conta e os recursos existentes.
 O D1 antigo `holon-admin-d1` não pertence a esta entrega. Os bancos novos estavam
@@ -64,6 +63,28 @@ funcionam, mas auth e tenancy privadas permanecem indisponíveis. O secret
 `AUTH_SECRET` pode ser provisionado nessa fase sem tornar a configuração parcial
 uma falha global. Não gerar outra chave ao ativar GitHub. A chave protege cookies
 e tokens criptografados, e sua rotação exige o procedimento específico abaixo.
+
+### Evidência da publicação inicial
+
+Publicação via API em **2026-10-08**, com 100% de tráfego nas versões abaixo.
+Artefato de origem: commit `58749c416d0b4d587ee06889e5304ad3945d6138`, branch
+local `codex/dashboard-production-bootstrap`, baseada em `main` após o merge
+do PR #171. Esta operação não fez push nem alterou o pipeline automático.
+
+| Worker                 | Versão Cloudflare                      | Horário UTC            | Superfície                                     |
+| ---------------------- | -------------------------------------- | ---------------------- | ---------------------------------------------- |
+| `holon-dashboard`      | `b6df419e-9f66-4f5f-b283-aab4f336506a` | `2026-10-08T02:46:30Z` | workers.dev habilitado; previews desabilitados |
+| `holon-email-delivery` | `c4946809-d9f4-439e-a28b-a8ff02338b2b` | `2026-10-08T02:46:00Z` | workers.dev e previews desabilitados           |
+
+A API confirmou os dois bindings D1, as vars de produção, o nome do secret
+`AUTH_SECRET` (gerado sem exposição do valor) e observabilidade sem invocation
+logs. `pnpm verify`, build de produção e dry-runs passaram. Smoke HTTPS confirmou
+documento SSR 200 com CSP nonce, `nosniff`, `no-referrer` e `private, no-store`;
+asset JS 200 com cache immutable; health 200; auth 404 e workspaces 503 no
+bootstrap; POST de origem não confiável 403. Chromium validou hidratação,
+troca pt-BR/en e modal sem erro de página ou violação CSP em **2026-10-08T02:46:48Z**.
+Essas amostras não provam OAuth GitHub, tenancy autenticada, projeções ou envio
+real de email. O envio permanece um stub privado sem Queue/provider.
 
 ## Operação local materializada
 
@@ -258,7 +279,7 @@ Configuração operacional conferida em **2026-10-08**:
 e [Client ID/secret da GitHub App](https://docs.github.com/en/apps/creating-github-apps/writing-code-for-a-github-app/building-a-login-with-github-button-with-a-github-app).
 O bootstrap não criou nem alterou a GitHub App, DNS ou credenciais GitHub, e não
 executou smoke com provider real. A provisão dos bancos e migrations remotas é
-registrada acima; evidência de publicação deve identificar as versões e o SHA.
+registrada acima, junto das versões publicadas, SHA e limites dos smokes.
 
 ## Estado observável e condições de intervenção
 
