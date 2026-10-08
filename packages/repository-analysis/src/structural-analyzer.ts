@@ -34,6 +34,7 @@ export function analyzeStructuralImpact(
     input.changedFiles,
     changedSymbols,
     downstream.references,
+    input.repositoryFiles,
   );
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);
 

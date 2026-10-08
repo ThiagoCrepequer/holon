@@ -57,7 +57,8 @@ A [revisão de decisões do dashboard](planning/dashboard-engineering-decision-r
 O [modelo de identidade e workspaces](engineering/dashboard-identity-and-workspaces.md)
 registra o modelo de produto acordado: organização e workspace são o mesmo
 conceito, com memberships N:M e integração GitHub explícita. O primeiro recorte M2 implementa identidade e tenancy no runtime local;
-convites, conexões e acesso privado continuam propostas/entregas futuras.
+M3 acrescenta convites, conexões e grants locais; dataset privado e entrega
+continuam em M5/M4.
 
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
@@ -126,3 +127,7 @@ Não representa encerramento integral de M1/M2 nem operação remota.
 A [revisão final de M1](research/2026-10-07-dashboard-milestone-one-final-review.md)
 rastreia #132–#138 e a separação autorizada dos gates de integração nas issues
 donas, com limites entre prova local e validação remota.
+
+Os [resultados M3](research/2026-10-08-dashboard-milestone-three-results.md)
+rastreiam #145–#149: credenciais/refresh, dupla autoridade GitHub, grants e
+convites atômicos por alvo, com provas Workerd/D1/browser e limites remotos.

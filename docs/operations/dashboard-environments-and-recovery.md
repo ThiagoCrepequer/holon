@@ -355,12 +355,12 @@ Procedimento a preparar na operação autorizada:
 4. Tratar `AUTH_SECRET` separadamente: ele protege cookies e a criptografia
    nativa de tokens persistidos. Não substituí-lo cegamente. Uma mudança exige
    plano suportado pela versão fixada, tratamento de sessões/tokens existentes
-   e prova de reconexão/recuperação antes de retomar tráfego. O recorte não
-   implementa migração de chave nem serviço de refresh/grants privados.
+   e prova de reconexão/recuperação antes de retomar tráfego. M3 oferece ring nativo para tokens e coordenação de refresh, conforme a
+   seção abaixo; sua operação remota requer ensaio e autorização.
 
 Tokens access/refresh são criptografados desde a primeira persistência pelo
-Better Auth. Isso não demonstra refresh remoto: não há acesso privado nem
-renovação de grants implementados. Estado/code consumidos não são retries;
+Better Auth. M3 acrescenta refresh/grants locais; isso não demonstra refresh remoto nem
+leitura real do dataset privado. Estado/code consumidos não são retries;
 resultado desconhecido exige novo OAuth. Restauração de D1 precisa preservar
 reservas vivas ou suspender callbacks pendentes conforme a política abaixo.
 
@@ -466,3 +466,78 @@ reset de banco, reviver sessão, ampliar egress ou conceder permissão.
 Gates de integração de convites/email/conteúdo continuam em #148/#149, #152,
 #157/#158, #159, #161 e #163. Essa fundação não comprova envio, Markdown real,
 serviços externos ou ambiente remoto.
+
+## Operação de GitHub e convites M3
+
+**Estado em 2026-10-08:** implementação e provas locais; nenhuma migration,
+secret, evento GitHub real ou publicação M3 foi executada. A configuração M2
+já existente permanece evidência própria, sem inferir disponibilidade M3.
+
+Para uma futura promoção **explicitamente autorizada**, fixar ambiente e SHA,
+conferir backup/ordem de migrations de identidade, aplicar `0010` e `0011` sem
+editar o histórico, e configurar `GITHUB_APP_ID` do registro correto no dashboard.
+Esse ID numérico é diferente do client ID. Sem ele, as rotas de colaboração
+respondem unavailable, preservando os fluxos M2. Reutilizar secrets do ambiente;
+não criá-los por um dry-run. Conferir na App leitura de emails e memberships de
+organização e inscrição no evento `github_app_authorization`. Não ampliar
+permissões de escrita de repositório para esse fluxo.
+
+Publicar o dashboard com `GitHubAccessEvents` antes do control-plane cujo manifest
+requer `DASHBOARD_ACCESS_EVENTS` → `holon-dashboard`, entrypoint homônimo. A
+REVIEW_QUEUE existente carrega apenas IDs/ação; RPC indisponível falha fechado e
+retry recupera a invalidação. Conferir backlog/DLQ pelo runbook do core; não
+considerar binding ausente um sucesso. Receipt por delivery é durável; não apagar
+receipts para replay, pois evento repetido pode invalidar reconexão posterior.
+Cron de expiração usa até 100 registros a cada 15 min; cron atrasado não amplia
+a validade do convite. M4 deverá reconciliar jobs devidos e prazo antes de enviar.
+
+### Refresh, reconexão e rotação
+
+Tokens são sempre criptografados, inclusive primeira persistência nativa. Claim
+30 s concede um refresh; lease vencido, timeout, resposta inválida ou gravação
+incerta resultam em `reconnect_required`. Não repetir o refresh antigo, apagar
+claim, reduzir geração nem importar tokens do browser. Iniciar novo OAuth e
+confirmar **o mesmo subject GitHub**, depois recarregar conexão/grants. A sessão
+Holon pode continuar válida; grant fica fechado enquanto não houver reconexão.
+
+`AUTH_SECRET_VERSIONS`, quando configurado como secret JSON, é uma lista nativa
+Better Auth de 1–5 `{version,value}`, versões únicas e valores com pelo menos
+32 caracteres; a **primeira** entrada escreve novos envelopes. A composição
+fornece o mesmo ring ao OAuth nativo e ao serviço de refresh. `AUTH_SECRET`
+continua como chave legada para envelopes anteriores e CSRF; não removê-la
+cegamente. Não imprimir ring/tokens nem copiá-los para manifests.
+
+Ensaio com dados sintéticos precede operação: preparar uma nova versão no ring,
+preservar versões e chave legada utilizadas, validar leitura antiga, refresh
+concorrente escrevendo envelope novo, OAuth/reconexão e sessões existentes. O
+ensaio local prova o formato público 1.7.7 e OAuth gravando envelope versionado;
+não comprova recriptografia integral de registros remotos. Para aposentar chave,
+definir inventário/migração ou reconexão explícita de todas as credenciais que a
+usam e verificar sessões/CSRF separadamente. Não declarar a rotação concluída
+apenas por trocar a primeira entrada. Client secret e AUTH_SECRET têm ciclos
+separados; seguir também o procedimento M2 acima.
+
+### Intenções e recuperação
+
+Convite dura 7 dias, orçamento global 5 tentativas por ID, deadline igual ao
+prazo do convite e próxima ação persistida. Criar uma intenção não confirma
+envio. Retry da request usa a mesma operation ID/payload; colisão com outro
+alvo/workspace/locale é conflict. HTTP 429 tem Retry-After 60; budgets de criação
+são 10/min por ator/equipe e 30/min por equipe, compartilhados entre instâncias.
+Não zerar orçamento nem gerar nova operação para contornar resultado desconhecido.
+
+Cancelado/expirado/aceito bloqueia futuros envios; mensagem já em voo não é
+recolhida. Aceite fixa User e membership atomicamente; replay não ressuscita membro
+removido. M4 implementará publisher/Queue/consumer/reconciliação sem mudar essa
+intenção. Transferência de instalação e recuperação administrativa continuam
+fora do MVP; unlink preserva alocação e só permite reconectar ao mesmo workspace.
+
+Fontes primárias conferidas em **2026-10-08**:
+[refresh GitHub App](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens),
+[instalações](https://docs.github.com/en/rest/apps/installations),
+[memberships de organização](https://docs.github.com/en/rest/orgs/members),
+[evento de autorização](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)
+e [plugins públicos Better Auth](https://better-auth.com/docs/concepts/plugins).
+REST usa a revisão externa `2026-03-10`; versão externa não é versão de contrato
+Holon. Revogação no GitHub e commit D1 não formam transação distribuída; cache
+limitado/eventos reduzem a janela sem prometer atomicidade externa.

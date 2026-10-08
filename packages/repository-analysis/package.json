@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@babel/parser": "8.0.6",
     "@holon/contracts": "workspace:*",
     "@holon/domain": "workspace:*",
     "diff": "catalog:"

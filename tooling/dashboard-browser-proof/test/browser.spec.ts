@@ -387,11 +387,18 @@ test("A refresh to B then A cancels old same-key read and requires a fresh autho
   const old = await hold.arrived;
   await page.getByRole("link", { name: "B", exact: true }).click();
   await expect(page.getByTestId("dataset")).toContainText("alice:b::1");
+  const freshResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/read/a",
+  );
   await page.getByRole("link", { name: "A", exact: true }).click();
   await expect(page.getByTestId("dataset")).toContainText("alice:a::1");
   expect(count).toBe(2);
   expect((await aborted).failure()).not.toBeNull();
-  const fresh = await page.evaluate(() => window.proofHarness.data());
+  const fresh: unknown = await (await freshResponse).json();
+  expect(fresh).toMatchObject({ resource: "a", user: "alice", page: 1 });
+  await expect
+    .poll(() => page.evaluate(() => window.proofHarness.data()))
+    .toEqual(fresh);
   expect(fresh).not.toEqual(oldSnapshot);
   await old.fulfill({ status: 403, body: "obsolete" });
   await flush(page);
@@ -414,9 +421,16 @@ test("late denial of old A page cannot evict a newer confirmed A snapshot", asyn
   const old = await hold.arrived;
   await page.getByRole("link", { name: "B", exact: true }).click();
   await expect(page.getByTestId("dataset")).toContainText("alice:b::1");
+  const freshResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/read/a",
+  );
   await page.getByRole("link", { name: "A", exact: true }).click();
   await expect(page.getByTestId("dataset")).toContainText("alice:a::1");
-  const fresh = await page.evaluate(() => window.proofHarness.data());
+  const fresh: unknown = await (await freshResponse).json();
+  expect(fresh).toMatchObject({ resource: "a", user: "alice", page: 1 });
+  await expect
+    .poll(() => page.evaluate(() => window.proofHarness.data()))
+    .toEqual(fresh);
   await old.fulfill({ status: 403, body: "old denial" });
   expect(await page.evaluate(() => window.proofPending)).toBe("old denied");
   await flush(page);

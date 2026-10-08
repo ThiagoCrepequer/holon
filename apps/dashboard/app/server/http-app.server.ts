@@ -1,6 +1,6 @@
-import type { WorkspaceTenancyPort } from "@holon/application/dashboard-ports";
-import type { PersonalPreferencesPort } from "@holon/application/preferences-port";
-import type { AuthService } from "@holon/auth/server";
+import { registerCollaborationRoutes } from "./http-collaboration.server.js";
+import type { DashboardServices, ApiEnv } from "./http-context.server.js";
+export type { DashboardServices } from "./http-context.server.js";
 import {
   createTeamWorkspaceInputSchema,
   dashboardIdSchema,
@@ -24,10 +24,7 @@ import {
   updatePreferencesInputSchema,
   updatePreferencesOutputSchema,
 } from "@holon/contracts/dashboard-preferences";
-import {
-  deriveRateLimitKey,
-  type RateLimitStorage,
-} from "@holon/db/identity/server";
+import { deriveRateLimitKey } from "@holon/db/identity/server";
 import { Hono, type Context } from "hono";
 
 import {
@@ -45,20 +42,6 @@ import {
   mapBoundaryError,
 } from "./http-services.server.js";
 
-export interface DashboardServices {
-  readonly authService?: AuthService | undefined;
-  readonly tenancyPersistence?: WorkspaceTenancyPort | undefined;
-  readonly preferencesPersistence?: PersonalPreferencesPort | undefined;
-  readonly authSecret?: string | undefined;
-  readonly rateLimitStorage?: RateLimitStorage | undefined;
-}
-
-interface ApiEnv {
-  services: DashboardServices;
-  origin: string;
-  sessionCookies: string[];
-}
-
 const ALLOWED_MUTATION_PATHS = new Set([
   "/api/auth/sign-in/social",
   "/api/auth/sign-out",
@@ -71,6 +54,21 @@ const ALLOWED_MUTATION_PATHS = new Set([
 
 function isAllowedMutationPath(pathname: string): boolean {
   if (ALLOWED_MUTATION_PATHS.has(pathname)) return true;
+  if (pathname === "/api/github/reauth") return true;
+  if (
+    /^\/api\/workspaces\/[a-zA-Z0-9_-]+\/(invitations|github\/(link|unlink))$/.test(
+      pathname,
+    )
+  )
+    return true;
+  if (
+    /^\/api\/workspaces\/[a-zA-Z0-9_-]+\/invitations\/[a-zA-Z0-9_-]+\/cancel$/.test(
+      pathname,
+    )
+  )
+    return true;
+  if (/^\/api\/invitations\/[a-zA-Z0-9_-]+\/accept$/.test(pathname))
+    return true;
   if (/^\/api\/auth\/sessions\/[a-zA-Z0-9_-]+\/revoke$/.test(pathname)) {
     return true;
   }
@@ -585,6 +583,12 @@ export function createDashboardHandler(
       throw new HttpBoundaryError("denied", 404);
     }
     return respondWithCookies(result, c.env.sessionCookies);
+  });
+
+  registerCollaborationRoutes(api, {
+    requireAdmittedSession,
+    requireAdmittedMutation,
+    respondWithCookies,
   });
 
   api.notFound((c) => {

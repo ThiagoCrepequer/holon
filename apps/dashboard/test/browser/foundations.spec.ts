@@ -185,11 +185,21 @@ for (const locale of ["en", "pt-BR"] as const) {
       pt ? "Página indisponível" : "Page unavailable",
     );
     expect(await page.content()).not.toContain("No route matches");
-    for (const path of [
-      "/api/invitations/accept",
-      "/api/sessions/revoke",
-      "/api/workspaces/leave",
-    ]) {
+    // M3 treats every invitation ID alike, including the former placeholder path.
+    const invitation = await request.get("/api/invitations/accept");
+    expect(invitation.status()).toBe(200);
+    expect(await invitation.json()).toEqual({
+      status: "authentication_required",
+    });
+    expect(
+      (
+        await request.fetch("/api/invitations/accept", { method: "HEAD" })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (await request.post("/api/invitations/accept", { data: {} })).status(),
+    ).toBe(405);
+    for (const path of ["/api/sessions/revoke", "/api/workspaces/leave"]) {
       expect((await request.get(path)).status()).toBe(404);
       expect((await request.post(path, { data: {} })).status()).toBe(405);
     }

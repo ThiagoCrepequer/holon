@@ -21,8 +21,9 @@ as fronteiras aprovadas. M1 materializa dois Workers, `packages/ui`,
 `packages/db`, portas/contratos e gates. Há uma página mínima bilíngue de fundação,
 preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
 acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
-no D1 de identidade. Não há dataset de reviews privado, convites, Queue ou envio
-implementados nesses apps. O complemento M2 acrescenta sessões/dispositivos,
+no D1 de identidade. M3 acrescenta credenciais coordenadas, conexões GitHub, grants limitados e
+convites com intenção durável. Dataset privado e envio continuam em M5 e M4,
+respectivamente. O complemento M2 acrescenta sessões/dispositivos,
 revogação atual/global e preferências pessoais persistidas, consumidas pelo SSR
 e pelos controles mínimos da página de fundação.
 Os manifests mantêm o ambiente local e acrescentam produção com dois D1
@@ -32,8 +33,9 @@ continuam indisponíveis. Após o responsável configurar os secrets, o manifest
 de produção usa `AUTH_ENABLED=true` e exige a composição completa; uma leitura
 anônima de sessão 200 não representa validação do OAuth real. A composição passa ambiente e origens homologadas para
 `packages/auth`; não os infere de Host ou de `APP_ORIGIN`. O email Worker é privado
-e mantém o contrato de bootstrap. Os dois Workers de produção do core permanecem
-inalterados por esta operação.
+e mantém o contrato de bootstrap. A provisão M1/M2 não alterou os Workers do core. M3 acrescenta no manifest do
+control-plane um binding privado para invalidação de acesso; sua publicação
+continua dependente de operação autorizada.
 
 ```mermaid
 flowchart TD
@@ -89,7 +91,7 @@ exceção padrão com o caminho solicitado.
 - Hono: valida método, payload, sessão, CSRF, autorização e intenção de comandos
   ou leituras explícitas. M2 acrescenta sessão pública reduzida, login/logout,
   provisionamento pessoal, criação idempotente de equipe e leitura dos espaços
-  da pessoa admitida. Convites e demais comandos permanecem indisponíveis.
+  da pessoa admitida. M3 acrescenta os comandos de conexão e convite descritos abaixo.
 - App: compõe providers e transporte/cache de features. Queries ficam no app.
   O snapshot e a política manual da prova M0 serão integrados com dados reais em
   M5/M6; não instalar Query só para criar um provider sem dataset.
@@ -128,8 +130,8 @@ assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 | Entrega                                    | email Worker privado + Queue/DLQ, M4                                      | `EmailDeliveryPort.wake(operationId)`; bootstrap responde unavailable      |
 
 Não existe transação entre os dois D1 ou entre D1, Queue e provider. Convite e
-intenção durável serão persistidos juntos; publisher/reconciliação e consumer
-condicionais recuperam falhas. Retry de resultado ambíguo pode repetir **o mesmo
+intenção durável são persistidos juntos no recorte M3; publisher/reconciliação e consumer
+condicionais serão materializados em M4 para recuperar entregas. Retry de resultado ambíguo pode repetir **o mesmo
 convite**, como Q37 autorizou; não cria outro token ou membership. Email Worker
 usa adapter específico de intenção/claim/resultado, sem exportar ORM ou auth.
 
@@ -302,3 +304,69 @@ Markdown/tracking no detalhe (#161) demonstram seus gates ao implementar os
 fluxos donos. #163 integra as jornadas antes da promoção. A fundação não é
 prova de segurança de um consumidor ainda inexistente. A [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md)
 registra critérios, regressões e limites de evidência.
+
+## GitHub e convites: implementação M3
+
+A porta `WorkspaceCollaborationPort` é composta por `collaboration.server.ts`,
+`packages/auth` (provider humano) e adapters D1 em `packages/db`. Hono usa a
+mesma porta disponível ao SSR/M5; não existe outra política baseada em cookie,
+email ou role isolada. `authorizeReviews` retorna `AuthorizedReviewScope` após
+interseção de sessão/account/membership atuais, conexão ativa e grants humanos.
+M5 deve chamá-la **antes** de LIMIT/cursor/projeção. M3 não contém dataset privado.
+
+Refresh usa claim/lease de 30 s e CAS na mesma autoridade que os writes nativos
+OAuth, com geração causal incrementada por trigger. O par criptografado é
+persistido atomicamente antes de ser usado. Os endpoints nativos de token são
+privados e o refresh nativo do provider é desabilitado pelo wrapper público.
+Timeout, resultado desconhecido ou claim vencido exigem novo OAuth do mesmo
+subject; sessão Holon válida não substitui reconexão. Novos OAuth em sessão
+ativa vinculam o subject e a sessão original antes do write nativo.
+
+Link/unlink exigem owner Holon e prova OAuth recente escopada à ação/instalação/
+workspace/sessão. Link também exige titular da conta pessoal ou admin ativo da
+organização GitHub, instalação ativa da App correta e IDs estáveis. Instalações
+e memberships são paginadas integralmente e a instalação é reconferida antes do
+CAS D1; a consulta final da membership da organização confirma novamente ID,
+state ativo e role admin. A PK da instalação arbitra duas equipes concorrentes. Revogação/unlink
+conserva a alocação histórica: só o mesmo workspace pode reconectar, sem caminho
+de transferência automática. A UI mostra estados retornados pela autoridade.
+
+Cache positivo **e negativo** é por User/account/instalação e gerações de
+credencial/conexão. Vence no máximo 60 s após o início da observação externa,
+sem extensão em hit; paginação incompleta, total inconsistente ou falha do
+provider fecha a leitura. Membership/sessão são conferidas no D1 em todo acesso,
+inclusive no snapshot final, que reconfere o prazo original de todos os grants
+usados e o cache ainda vigente; escrita concorrente não estende esse prazo.
+Eventos assinados do core para suspensão, remoção,
+repos adicionados/removidos e autorização humana revogada incrementam gerações
+e invalidam o cache. O core grava a referência na REVIEW_QUEUE existente antes
+do RPC privado `GitHubAccessEvents.applyEvent`; consumer repete em falha. Receipt
+por delivery protege contra dupla aplicação após reconexão. A transição do
+registro de identificação do core é tentada independentemente da integração do
+dashboard; ambas são aguardadas antes da resposta. Unsuspend não
+reconecta automaticamente: owner confirma novamente. Não há endpoint público
+para aplicar eventos; o `fetch` do entrypoint privado retorna 404.
+
+Convite de equipe e `invitation_delivery_intent` entram na mesma batch guardada
+por sessão/account/owner atuais. ID opaco é referência, sem autoridade de ingresso;
+operation ID por criador conserva alvo/locale/workspace no retry. GET/HEAD são
+genéricos, inclusive para ID inexistente. Só POST com CSRF consulta email atual
+verificado do GitHub (primário ou secundário) e fixa `accepted_by` junto da
+membership member. Owner existente é preservado; replay nunca recria membership
+removida. Apenas owner admitido lista/cancela e vê o destinatário no DTO de gestão.
+Aceite não serializa email/workspace. Normalização limita-se a trim/lowercase.
+
+TTL é 7 dias; job usa o mesmo ID, deadline igual à expiração, `next_action_at`
+inicial na criação e orçamento total de 5 tentativas. M4 deve consumir esses
+campos sem reiniciar contadores. Criação usa budgets D1 de 10/min por ator/equipe
+e 30/min por equipe, além da fronteira HTTP. Terminalização cancela intenção
+pendente na mesma transação; cron a cada 15 min processa até 100 expirados por
+invocação. Aceite verifica prazo no relógio SQLite sem depender do cron; sender
+M4 também deve verificá-lo antes de cada tentativa. A gestão lista os 100 registros
+mais recentes. A UI informa que cancelar bloqueia envios futuros, sem recolher
+mensagem já em voo; M3 não envia nem afirma entrega.
+
+Migrations aditivas `0010`/`0011` preservam os dados/provas M2. A segunda recria a
+tabela de intenções com cópia integral para estender o CHECK a link/unlink;
+nenhuma migration aplicada é reescrita. [Resultados e rastreabilidade](../research/2026-10-08-dashboard-milestone-three-results.md)
+separam prova local, dry-run e pendências remotas.

@@ -35,6 +35,14 @@ prova em cópia temporária que tradução ausente falha. Catálogos compilados,
 build, dados Wrangler e resultados de teste são ignorados. JUnit e traces de
 falha ficam em `proof-results/`.
 
+Os oráculos de troca A → B → A aguardam a resposta nova de A e confirmam que
+o getter do harness expõe esse mesmo DTO no cache antes de capturar o snapshot
+que uma resposta antiga deve preservar. Texto atualizado no DOM não comprova
+que os efeitos React já publicaram o contexto novo do getter. Essa espera usa
+`expect.poll` com o timeout existente; as verificações de cancelamento, ausência
+de erros e CSP permanecem no gate. Fonte oficial, conferida em 2026-10-08:
+[assertions assíncronas do Playwright](https://playwright.dev/docs/test-assertions#expectpoll).
+
 O [relatório datado](../../docs/research/2026-10-05-dashboard-browser-proof.md)
 descreve versões, resultados, escolhas e limites. As fixtures não comprovam
 GitHub OAuth, sessões reais, autorização por workspace, D1, email ou deploy.

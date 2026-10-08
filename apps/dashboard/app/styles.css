@@ -52,3 +52,41 @@
     font-size: var(--holon-type-display-lg);
   }
 }
+
+.holon-collaboration {
+  margin-top: var(--holon-space-8);
+}
+.holon-collaboration h2 {
+  font-size: var(--holon-type-title-md);
+}
+.holon-collaboration h3 {
+  margin-top: var(--holon-space-6);
+}
+.holon-collaboration form {
+  display: grid;
+  gap: var(--holon-space-3);
+  margin-block: var(--holon-space-4);
+}
+.holon-collaboration li {
+  overflow-wrap: anywhere;
+  margin-block: var(--holon-space-3);
+}
+.holon-collaboration button {
+  margin-inline-end: var(--holon-space-2);
+}
+.holon-collaboration input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--holon-space-3);
+  border: var(--holon-border-thin) solid var(--holon-border-subtle);
+  border-radius: var(--holon-radius-control);
+  background: var(--holon-bg-surface);
+  color: var(--holon-text-primary);
+}
+.holon-collaboration input:focus-visible {
+  outline: 2px solid var(--holon-focus-ring);
+  outline-offset: 2px;
+}
+.holon-invitation {
+  padding-top: var(--holon-space-8);
+}

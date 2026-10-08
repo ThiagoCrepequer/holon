@@ -1,11 +1,18 @@
-import { createAuthService } from "@holon/auth/server";
+export { GitHubAccessEvents } from "./github-access-events.js";
+import {
+  createAuthService,
+  createGitHubUserService,
+  credentialKeyConfig,
+} from "@holon/auth/server";
 import {
   authEnabledSchema,
   authEnvironmentSchema,
   authRegisteredOriginsSchema,
   type AuthEnvironment,
 } from "@holon/contracts/dashboard";
+import { installationIdSchema } from "@holon/contracts/dashboard-collaboration";
 import {
+  createInvitationPersistence,
   createPreferencesPersistence,
   createTenancyPersistence,
 } from "@holon/db/identity/server";
@@ -16,6 +23,7 @@ import {
 } from "react-router";
 
 import { nonceContext, viewerServicesContext } from "../app/request-context.js";
+import { createWorkspaceCollaboration } from "../app/server/collaboration.server.js";
 import { createDashboardHandler } from "../app/server/http-app.server.js";
 import {
   errorResponse,
@@ -29,7 +37,9 @@ export interface DashboardWorkerBindings {
   readonly AUTH_ENVIRONMENT?: string | undefined;
   readonly AUTH_REGISTERED_ORIGINS?: string | undefined;
   readonly AUTH_ENABLED?: string | undefined;
+  readonly AUTH_SECRET_VERSIONS?: string | undefined;
   readonly AUTH_SECRET?: string | undefined;
+  readonly GITHUB_APP_ID?: string | undefined;
   readonly GITHUB_APP_CLIENT_ID?: string | undefined;
   readonly GITHUB_APP_CLIENT_SECRET?: string | undefined;
   readonly IDENTITY_DB?: D1Database | undefined;
@@ -66,6 +76,14 @@ const handle = createDashboardHandler((request, requestNonce, services) => {
 });
 
 export default {
+  async scheduled(
+    _event: ScheduledController,
+    environment: Env,
+  ): Promise<void> {
+    const env = environment as unknown as DashboardWorkerBindings;
+    if (env.IDENTITY_DB)
+      await createInvitationPersistence(env.IDENTITY_DB).expireDue();
+  },
   async fetch(request: Request, environment: Env): Promise<Response> {
     const requestNonce = nonce();
     try {
@@ -115,6 +133,10 @@ export default {
       }
 
       const authSecret = env.AUTH_SECRET;
+      const secretVersions: unknown =
+        env.AUTH_SECRET_VERSIONS === undefined
+          ? undefined
+          : JSON.parse(env.AUTH_SECRET_VERSIONS);
       const githubClientId = env.GITHUB_APP_CLIENT_ID;
       const githubClientSecret = env.GITHUB_APP_CLIENT_SECRET;
 
@@ -154,6 +176,7 @@ export default {
               database: env.IDENTITY_DB,
               appOrigin,
               authSecret: authSecret!,
+              secretVersions,
               githubClientId: githubClientId!,
               githubClientSecret: githubClientSecret!,
               ...(authEnvironment ? { environment: authEnvironment } : {}),
@@ -169,6 +192,20 @@ export default {
       return await handle(request, appOrigin, {
         authService,
         tenancyPersistence,
+        collaboration:
+          shouldCreateAuth && env.IDENTITY_DB && env.GITHUB_APP_ID
+            ? createWorkspaceCollaboration(
+                env.IDENTITY_DB,
+                createGitHubUserService({
+                  database: env.IDENTITY_DB,
+                  clientId: githubClientId!,
+                  clientSecret: githubClientSecret!,
+                  appId: installationIdSchema.parse(Number(env.GITHUB_APP_ID)),
+                  cryptoKey: credentialKeyConfig(authSecret!, secretVersions)
+                    .cryptoKey,
+                }),
+              )
+            : undefined,
         preferencesPersistence:
           shouldCreateAuth && env.IDENTITY_DB
             ? createPreferencesPersistence(env.IDENTITY_DB)
