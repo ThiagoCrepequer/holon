@@ -63,11 +63,6 @@ export const reviewPlanOmissionSchema = z.discriminatedUnion("code", [
     code: z.literal("contract_checks"),
     count: z.number().int().positive(),
   }),
-  z.strictObject({
-    code: z.literal("model_budget"),
-    maximum: z.number().int().positive(),
-    planned: z.number().int().positive(),
-  }),
 ]);
 export type ReviewPlanOmission = z.infer<typeof reviewPlanOmissionSchema>;
 export const reviewPlanSchema = z.strictObject({

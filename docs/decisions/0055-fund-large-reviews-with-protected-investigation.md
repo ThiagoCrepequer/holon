@@ -34,7 +34,7 @@ concorrência três. Não modifica o documento histórico aceito.
 | `very_large` | 25–64  | 512         | 32.000.000 bytes   | 960.000 tokens  | 768                  |
 
 1. Todas as partes do plano estrutural limitado a 64 são admitidas. A seleção
-   também considera o tamanho dos prompts iniciais: soma dos bytes UTF-8 vezes
+   também considera o tamanho dos prompts iniciais: soma dos bytes UTF-8 de instruções, prompt e guidance vezes
    sete inferências vezes dois para histórico crescente. Uma estimativa acima
    do teto de entrada promove o perfil; acima de 32 MB conserva o maior teto,
    sem promessa de que o histórico real caberá. O ledger cobra cada request

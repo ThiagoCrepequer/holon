@@ -5,7 +5,6 @@ import {
 } from "@holon/application";
 import {
   aggregateShardReviews,
-  admitReviewPlan,
   createReviewRun,
   verifyFindingsWithCanonicalEvidence,
   type EvidenceRejection,
@@ -14,6 +13,7 @@ import type { MemorySnapshot } from "@holon/contracts";
 import {
   createReviewBudgetPlan,
   reviewExecutionLimits,
+  reviewGenerationCallsPerShard,
 } from "@holon/contracts";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
@@ -367,17 +367,18 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
   const loadUncached = async () => {
     const startedAt = Date.now();
     const context = await services.loadContext(effectivePolicy);
-    const plan = admitReviewPlan(
-      buildReviewPlan(
-        context.files.map((file) => ({
-          changeType: "modified" as const,
-          newPath: file.path,
-          oldPath: file.path,
-          patch: file.patch,
-          path: file.path,
-        })),
-        { policyExcludedFilesCount: context.waiversCount },
-      ),
+    const plan = buildReviewPlan(
+      context.files.map((file) => ({
+        changeType: "modified" as const,
+        newPath: file.path,
+        oldPath: file.path,
+        patch: file.patch,
+        path: file.path,
+      })),
+      {
+        policyExcludedFilesCount: context.waiversCount,
+        structuralImpact: context.structuralImpact,
+      },
     );
     const effectivePlan = context.truncated
       ? {
@@ -470,9 +471,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                 )
               : undefined,
           });
-          initialPromptBytes += new TextEncoder().encode(
-            initialPrompt.prompt,
-          ).byteLength;
+          initialPromptBytes += initialPrompt.initialRequestBytes;
         }
       }
       if (plan.shards.length) {
@@ -480,27 +479,27 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           initialPromptBytes = plan.shards.reduce(
             (sum, shard) =>
               sum +
-              new TextEncoder().encode(
-                preflightReviewPrompt(
-                  job,
-                  buildShardReviewContext(
-                    shard,
-                    context.structuralImpact,
-                    [],
-                    services.getProjectIdentification?.(),
-                    false,
-                  ),
-                ).prompt,
-              ).byteLength,
+              preflightReviewPrompt(
+                job,
+                buildShardReviewContext(
+                  shard,
+                  context.structuralImpact,
+                  [],
+                  services.getProjectIdentification?.(),
+                  false,
+                ),
+              ).initialRequestBytes,
             0,
           );
         // Seven turns with an allowance for accumulating history; actual input is
         // charged on every inference, so this estimate cannot bypass the ceiling.
         const weights = plan.shards.map((shard) => {
           const paths = new Set(shard.files.map((file) => file.path));
-          const contracts = context.structuralImpact?.contractBreaks.some(
-            (item) => paths.has(item.path),
-          );
+          const contracts =
+            shard.id.startsWith("contract-check-") ||
+            context.structuralImpact?.contractBreaks.some((item) =>
+              paths.has(item.path),
+            );
           const security = context.structuralImpact?.securitySurfaces.some(
             (item) => paths.has(item.path),
           );

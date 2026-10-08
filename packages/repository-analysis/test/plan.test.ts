@@ -328,3 +328,20 @@ it("reports contract relationships left unchecked by part or canonical-window li
     }).omissionReasons,
   ).toContainEqual({ code: "contract_checks", count: 1 });
 });
+
+it.each([19, 24, 50, 64])(
+  "retains every eligible part of a %s-part canonical plan",
+  (count) => {
+    const files = splitPullRequestDiff(
+      Array.from({ length: count }, (_, index) => {
+        const path = `src/file-${index}.ts`;
+        return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`;
+      }).join(""),
+    );
+    const plan = buildReviewPlan(files);
+    expect(plan.shards).toHaveLength(count);
+    expect(plan.totalEligibleLines).toBe(count * 600);
+    expect(plan.scopeStatus).toBe("complete");
+    expect(plan.omissionReasons).toEqual([]);
+  },
+);

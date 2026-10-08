@@ -122,12 +122,6 @@ export const reviewMessages = {
       "A revisão foi limitada às primeiras {maximum} partes prioritárias de {planned} partes planejadas pela política.",
     es: "La política limitó la revisión a las primeras {maximum} partes prioritarias de {planned} partes planificadas.",
   },
-  model_budget: {
-    en: "Generation budget admitted {maximum} of {planned} priority shards; the remaining shards were not investigated.",
-    "pt-BR":
-      "O orçamento de geração admitiu {maximum} de {planned} partes prioritárias; as demais partes não foram investigadas.",
-    es: "El presupuesto de generación admitió {maximum} de {planned} partes prioritarias; las demás partes no se investigaron.",
-  },
   contract_checks: {
     en: "{count} cross-shard contract check(s) could not fit the canonical windows or review limits; these relationships remain unverified.",
     "pt-BR":

@@ -1453,3 +1453,55 @@ it("preserves a prior finding when another fragment of the same file failed desp
   expect(result.scopeStatus).toBe("partial_by_failure");
   expect(result.verdict).toBe("COMMENT");
 });
+
+it("passes structural relationships through the coordinator and budgets additional contract checks", async () => {
+  const paths = ["packages/core/src/api.ts", "apps/web/src/client.ts"];
+  const services = createMockServices(
+    {
+      truncated: false,
+      changedLines: [],
+      files: paths.map((path) => ({
+        path,
+        mode: "structural" as const,
+        patch: `@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`,
+      })),
+      structuralImpact: {
+        changedSymbols: [
+          {
+            path: paths[0]!,
+            line: 1,
+            name: "send",
+            change: "modified",
+            kind: "function",
+            isExported: true,
+          },
+        ],
+        contractBreaks: [],
+        securitySurfaces: [],
+        downstreamReferences: [
+          {
+            targetPath: paths[0]!,
+            callerPath: paths[1]!,
+            callerLine: 1,
+            symbolName: "send",
+            excerpt: "send()",
+          },
+        ],
+      },
+    },
+    { promptTruncated: false, output: { findings: [], summary: "Checked" } },
+  );
+  const configure = vi.fn(async () => {});
+  const complete = vi.fn(async () => {});
+  services.ledger.configureReviewBudget = configure;
+  services.ledger.completeReviewBudgetShard = complete;
+  const result = await analyzeReview(job, services, vi.fn());
+  expect(result.totalShards).toBe(3);
+  expect(result.shardsAnalyzed).toBe(3);
+  expect(result.scopeStatus).toBe("complete");
+  expect(configure).toHaveBeenCalledWith(
+    job.runId,
+    expect.objectContaining({ shardWeights: [1, 1, 2] }),
+  );
+  expect(complete).toHaveBeenCalledTimes(3);
+});
