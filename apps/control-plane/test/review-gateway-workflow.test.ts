@@ -124,6 +124,7 @@ it.each(["complete", "missing_final", "missing_usage"] as const)(
         model: "dynamic/pr-review",
       }),
       {
+        outputLimits: { repository: 1_000, final: 5_000 },
         reserve: (request) =>
           env.REVIEW_LEDGERS.getByName(prKey).reserveModelGeneration(runId, {
             ...request,
@@ -190,8 +191,12 @@ it.each(["complete", "missing_final", "missing_usage"] as const)(
         stream_options: { include_usage: true },
         provider: { require_parameters: true },
         reasoning: { enabled: false },
-        max_tokens: 12_000,
       });
+    expect(requests).toEqual(
+      [1000, 1000, 1000, 5000].map((max_tokens) =>
+        expect.objectContaining({ max_tokens }),
+      ),
+    );
     expect(requests[3]).toMatchObject({
       tool_choice: {
         type: "function",
@@ -208,11 +213,11 @@ it.each(["complete", "missing_final", "missing_usage"] as const)(
       expect(await agent.getReviewFailure()).toBe("model_output_missing");
     }
     // Four known completions cost 40 tokens including reasoning; unknown usage
-    // retains all four 12,000-token reservations. Admit exactly the remainder.
+    // retains three1,000-token tool reservations and one5,000-token final reservation. Admit exactly the remainder.
     const reservation = {
       phase: "finalization" as const,
       inputBytes: 1,
-      outputTokens: missingUsage ? 72_000 : 119_960,
+      outputTokens: missingUsage ? 112_000 : 119_960,
       shardIndex: 0,
       shardCount: 1,
     };

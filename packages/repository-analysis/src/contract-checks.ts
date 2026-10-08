@@ -9,13 +9,18 @@ import { collectChangedLines } from "./diff.js";
 import { evidenceWindowCount, partitionPatch } from "./patch-partition.js";
 import { mapReviewSurface } from "./surface.js";
 
-function containsLine(patch: string, line: number): boolean {
-  return [...patch.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gmu)].some(
-    (match) => {
-      const start = Number(match[1]);
-      return line >= start && line < start + Number(match[2] ?? 1);
-    },
-  );
+function containsLine(
+  patch: string,
+  line: number,
+  side: "LEFT" | "RIGHT" = "RIGHT",
+): boolean {
+  return [
+    ...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gmu),
+  ].some((match) => {
+    const start = Number(match[side === "LEFT" ? 1 : 3]);
+    const count = Number(match[side === "LEFT" ? 2 : 4] ?? 1);
+    return line >= start && line < start + count;
+  });
 }
 /** Bounded canonical windows investigate relationships that partitioning separated. */
 export function buildContractChecks(
@@ -48,7 +53,11 @@ export function buildContractChecks(
           shard.files.some(
             (file) =>
               file.path === target.path &&
-              containsLine(file.patch, symbol.line),
+              containsLine(
+                file.patch,
+                symbol.line,
+                symbol.change === "deleted" ? "LEFT" : "RIGHT",
+              ),
           ) &&
           shard.files.some(
             (file) =>
@@ -72,9 +81,16 @@ export function buildContractChecks(
         file.patch,
         Math.floor(maxBytes / 2),
         Math.min(80, Math.floor(maxLines / 2)),
+        80,
       );
       const line = index === 0 ? symbol.line : reference.callerLine;
-      const patch = pieces.patches.find((piece) => containsLine(piece, line));
+      const patch = pieces.patches.find((piece) =>
+        containsLine(
+          piece,
+          line,
+          index === 0 && symbol.change === "deleted" ? "LEFT" : "RIGHT",
+        ),
+      );
       return patch ? { ...file, patch } : undefined;
     });
     if (windows.some((file) => file === undefined)) {

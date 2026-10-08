@@ -54,6 +54,19 @@ export class ReviewBudgetPlanStore {
       throw new Error("Model budget plan changed");
     return plan;
   }
+  public isComplete(runId: string, index: number): boolean {
+    if (!Number.isSafeInteger(index) || index < 0 || index > 63)
+      throw new TypeError("Invalid completed review shard");
+    return (
+      this.sql
+        .exec(
+          "SELECT 1 FROM review_budget_completions WHERE run_id=? AND shard_index=?",
+          runId,
+          index,
+        )
+        .toArray().length > 0
+    );
+  }
   public complete(rawRunId: string, index: number): void {
     const runId = runIdSchema.parse(rawRunId);
     const row = this.sql

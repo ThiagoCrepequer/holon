@@ -642,3 +642,29 @@ it("requires replanning a pre-migration budget without resetting its debt", asyn
     ).toThrow("replanning");
   });
 });
+
+it("replays a persisted completion after publication without reopening its budget", async () => {
+  const ledger = await ledgerForRun();
+  await ledger.configureReviewBudget(runId, createReviewBudgetPlan(1));
+  await ledger.completeReviewBudgetShard(runId, 0);
+  await ledger.transition(
+    runId,
+    "running",
+    "publishing",
+    new Date().toISOString(),
+    "publish-budget",
+  );
+  await evictDurableObject(ledger);
+  await expect(
+    ledger.completeReviewBudgetShard(runId, 0),
+  ).resolves.toBeUndefined();
+  await expect(
+    ledger.reserveModelGeneration(runId, {
+      shardCount: 1,
+      shardIndex: 0,
+      phase: "investigation",
+      inputBytes: 1,
+      outputTokens: 1,
+    }),
+  ).resolves.toBeUndefined();
+});

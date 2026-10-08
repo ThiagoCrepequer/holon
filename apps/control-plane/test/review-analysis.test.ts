@@ -1408,7 +1408,7 @@ it("preserves a prior finding when another fragment of the same file failed desp
       evidenceFingerprint: await computeEvidenceFingerprint("src/index.ts", [
         { ...moderateFinding.evidence[0]!, excerpt: "return user.name;" },
       ]),
-      diagnostic: "Null dereference",
+      diagnostic: "The null user property dereference throws before returning",
       filePath: "src/index.ts",
       line: 10,
       confidence: 0.95,

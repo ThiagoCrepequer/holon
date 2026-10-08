@@ -345,3 +345,64 @@ it.each([19, 24, 50, 64])(
     expect(plan.omissionReasons).toEqual([]);
   },
 );
+
+it("limits complete canonical contract windows including unchanged context", () => {
+  const paths = ["apps/web/src/client.ts", "packages/core/src/api.ts"];
+  const files = splitPullRequestDiff(
+    paths
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,100 +1,1000 @@\n${" existing\n".repeat(100)}${"+changed\n".repeat(900)}`,
+      )
+      .join(""),
+  );
+  const impact = connectedImpact();
+  // Different base parts are required here; their canonical content is sufficient
+  // for the cross-check despite a strict global part count.
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardDiffBytes: 96_000,
+  });
+  const check = plan.shards.find((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(check).toBeDefined();
+  for (const file of check!.files) {
+    const body = file.patch
+      .split("\n")
+      .filter(
+        (line) =>
+          /^[ +-]/u.test(line) &&
+          !line.startsWith("---") &&
+          !line.startsWith("+++"),
+      );
+    expect(body.length).toBeLessThanOrEqual(80);
+  }
+});
+it("uses original coordinates for a deleted symbol displaced by preceding removals", () => {
+  const source = "packages/core/src/api.ts";
+  const caller = "apps/web/src/client.ts";
+  const diff = `diff --git a/${source} b/${source}\n--- a/${source}\n+++ b/${source}\n@@ -1,200 +0,0 @@\n${"-old context\n".repeat(200)}@@ -500,1 +299,0 @@\n-export const gone = 1;\n@@ -701,1 +500,1 @@\n-marker old\n+marker new\ndiff --git a/${caller} b/${caller}\n--- a/${caller}\n+++ b/${caller}\n@@ -0,0 +1,600 @@\n${"+gone();\n".repeat(600)}`;
+  const impact = connectedImpact();
+  impact.changedSymbols[0] = {
+    ...impact.changedSymbols[0]!,
+    name: "gone",
+    line: 500,
+    change: "deleted",
+  };
+  impact.downstreamReferences[0] = {
+    ...impact.downstreamReferences[0]!,
+    symbolName: "gone",
+  };
+  const plan = buildReviewPlan(splitPullRequestDiff(diff), {
+    structuralImpact: impact,
+    maxShardLines: 400,
+  });
+  const check = plan.shards.find((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(check).toBeDefined();
+  const patch = check!.files.find((file) => file.path === source)!.patch;
+  expect(patch).toContain("-export const gone = 1;");
+  expect(patch).not.toContain("marker new");
+});

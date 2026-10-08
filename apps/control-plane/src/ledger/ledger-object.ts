@@ -1020,12 +1020,15 @@ export class ReviewLedgerObject
   ): Promise<void> {
     const runId = runIdSchema.parse(rawRunId);
     this.ctx.storage.transactionSync(() => {
+      const budget = new ReviewBudgetPlanStore(this.ctx.storage.sql);
+      // A replay of a persisted completion has no effect even after publishing.
+      if (budget.isComplete(runId, index)) return;
       if (
         this.latestRunId() !== runId ||
         this.runState(runId as RunId) !== "running"
       )
         throw new Error("Review budget run is not authorized");
-      new ReviewBudgetPlanStore(this.ctx.storage.sql).complete(runId, index);
+      budget.complete(runId, index);
     });
     return Promise.resolve();
   }
