@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-07
 ---
 
 # Mapa da documentacao
@@ -48,14 +48,16 @@ e o [fluxo atual](architecture/review-runtime-flow.md).
 
 Pesquisa para uma evolução futura: [Coletânea de bibliotecas para o dashboard](research/2026-10-04-dashboard-library-landscape.md), com fronteiras propostas de React Router SSR/API Hono e radar de bibliotecas. A [análise das referências de UI](research/2026-10-04-dashboard-ui-motion-references.md) sustenta o [guia de movimento](brand/motion.md) do design system.
 
-Referência de engenharia proposta para o dashboard: [Organização de aplicações web e dependências](engineering/frontend-application-structure.md). A [descoberta de autenticação](research/2026-10-04-dashboard-authentication-discovery.md) registra Better Auth + Drizzle/D1 e as políticas acordadas; suporte e recuperação da integração continuam a provar.
+Fundações locais do dashboard: [ADR-0054](decisions/0054-establish-user-dashboard-foundations.md) e [arquitetura](architecture/user-dashboard.md).
+
+Referência de engenharia do dashboard: [Organização de aplicações web e dependências](engineering/frontend-application-structure.md). A [descoberta de autenticação](research/2026-10-04-dashboard-authentication-discovery.md) registra Better Auth + Drizzle/D1 e as políticas acordadas; suporte e recuperação da integração continuam a provar.
 
 A [revisão de decisões do dashboard](planning/dashboard-engineering-decision-review.md) acompanha a entrevista de engenharia e qualidade, com Q1–Q37 registradas e Worker/fila de emails acordados. As investigações de [auth/D1](research/2026-10-04-dashboard-auth-persistence-investigation.md), [leitura/busca](research/2026-10-04-dashboard-read-model-investigation.md) e [entrega de emails](research/2026-10-04-dashboard-email-delivery-investigation.md) delimitam evidência e provas restantes.
 
 O [modelo de identidade e workspaces](engineering/dashboard-identity-and-workspaces.md)
 registra o modelo de produto acordado: organização e workspace são o mesmo
-conceito, com memberships N:M e integração GitHub explícita. A integração
-física permanece proposta, sem representar runtime já implementado.
+conceito, com memberships N:M e integração GitHub explícita. O primeiro recorte M2 implementa identidade e tenancy no runtime local;
+convites, conexões e acesso privado continuam propostas/entregas futuras.
 
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
@@ -67,8 +69,8 @@ satisfaz o gate de não reutilização concorrente de code na bancada, conforme 
 [avaliação OAuth](research/2026-10-05-dashboard-oauth-security-requirements.md). [Segurança web](engineering/web-security-and-data-boundaries.md)
 e [ambientes/recuperação](operations/dashboard-environments-and-recovery.md)
 completam as referências propostas; a skill [dashboard-engineering](../.agents/skills/dashboard-engineering/SKILL.md)
-direciona agentes às fontes afetadas. Nenhum desses documentos descreve um
-dashboard ou auth já implementados.
+direciona agentes às fontes afetadas. Essas pesquisas preservam as provas datadas; o estado implementado é descrito
+na arquitetura e nos resultados M1/M2 abaixo.
 
 ## Semantica dos documentos
 
@@ -111,3 +113,16 @@ dashboard ou auth já implementados.
 - [Memória incremental do repositório](architecture/repository-memory.md) e [operação](operations/repository-memory.md): observações, propostas e regras aprovadas pela ADR-0051.
 
 Perguntas e contestações em findings seguem a [ADR-0052](decisions/0052-answer-finding-questions-in-pr-threads.md) e o [guia de uso e operação](operations/finding-clarification.md).
+
+A [fundação M1](research/2026-10-06-dashboard-foundation-results.md) registra
+workspaces, comandos, gates locais e critérios ainda dependentes de auth,
+convites, entrega e leitura privada. Sua existência não significa deploy nem
+runtime SaaS autenticado em produção.
+
+O [primeiro recorte M2](research/2026-10-07-dashboard-identity-tenancy-results.md)
+registra auth/tenancy locais e o complemento de #134, em PR stacked sobre M1.
+Não representa encerramento integral de M1/M2 nem operação remota.
+
+A [revisão final de M1](research/2026-10-07-dashboard-milestone-one-final-review.md)
+rastreia #132–#138 e a separação autorizada dos gates de integração nas issues
+donas, com limites entre prova local e validação remota.

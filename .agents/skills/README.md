@@ -36,9 +36,9 @@ ambiente local, mas seu fluxo de relatório HTML, subagentes e entrevista não
 
 ### Design e implementação de UI, quando houver uma tarefa nessa área
 
-O runtime atual não inclui UI/admin ou `packages/ui` (ADR-0040). As skills
-abaixo continuam disponíveis como métodos opcionais para trabalho futuro;
-elas não descrevem módulos vigentes do Holon.
+A ADR-0054 materializa fundações locais de `apps/dashboard` e `packages/ui`.
+O admin permanece retirado pela ADR-0040. As skills abaixo apoiam trabalho de UI,
+sem substituir tokens, contexto do produto, ADRs ou prova de comportamento.
 
 | Cenário | Skills recomendadas | Como usar |
 | --- | --- | --- |

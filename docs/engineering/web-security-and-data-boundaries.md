@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-07
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -20,9 +20,108 @@ Quais invariantes devem proteger HTTP, sessão, comandos, conteúdo externo e
 dados privados na primeira implementação do dashboard?
 
 Este guia complementa Q1–Q37 e as [fronteiras atuais](../architecture/security-and-trust-boundaries.md).
-É uma referência proposta para o dashboard, sem handlers, cookies ou bindings
-implementados. Não altera a segurança do core nem habilita funcionalidades
-novas. As garantias abaixo são condições de aceitação, não fatos de produção.
+As fundações HTTP locais estão implementadas pela
+[ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md). M2 integra
+sessão/OAuth e membership local. A conclusão da #137 acrescenta budgets técnicos
+duráveis dos consumidores HTTP atuais; convites, grants de repositório e
+Markdown/email ainda não estão integrados. Os budgets desses fluxos acompanham
+as issues donas. As garantias futuras abaixo continuam condições de aceite,
+sem alegar validação de produção.
+
+## Base HTTP implementada em M1
+
+`apps/dashboard/app/server/http-security.server.ts` valida origem de configuração
+(HTTPS, exceto loopback local), redirect relativo sem normalização ambígua,
+POST JSON com synchronizer token ligado a uma sessão confiável, Origin exata e
+Fetch Metadata complementar. O body é limitado a 16 KiB também pelo stream;
+JSON/UTF-8 inválidos são negados. Dados ainda exigem o schema do comando dono.
+`readCommand` não autentica por string nem emite token. M2 resolve a sessão
+nativa antes do comando e deriva CSRF por HMAC-SHA-256 de `csrf:sessionId` com
+o secret servidor. O cliente recebe esse valor em `X-CSRF-Token` e cookie
+`holon_csrf` Secure/SameSite=Lax; o servidor compara com o valor derivado, sem
+confiar no cookie enviado. Nova sessão/secret produz outro token.
+
+O handler oferece liveness e devolve códigos/UUID para erros. A allowlist M2
+admite POST de login/logout e criação personal/team; demais mutações são negadas.
+Login/callback/logout usam a superfície nativa restrita e origens exatas.
+Login também nega Fetch Metadata contraditória; logout exige JSON estrito e
+CSRF derivado da sessão antes de chamar a revogação nativa.
+Comandos Holon de tenancy exigem sessão admitida, CSRF e schemas strict.
+O body do login anônimo também é limitado a 16 KiB antes de criar state OAuth. Headers preservam Set-Cookie,
+CSP por nonce sem unsafe-inline/eval, nosniff, no-referrer e private/no-store.
+`public/_headers` permite cache imutável somente aos assets com hash. O renderer
+usa logging com code/requestId e a rota wildcard produz 404 localizado, sem
+serializar a exceção padrão do framework com o caminho solicitado.
+
+Node e Workerd exercitam corpo sem length confiável, redirects hostis, métodos,
+origens, tokens, múltiplos cookies e erros arbitrários. Browser usa o bundle real
+para provar SSR/CSP/hidratação/404 e nega GET/POST nos comandos inexistentes.
+A [evidência M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
+acrescenta biblioteca nativa, D1 e composição HTTP de identidade/tenancy. Isso
+não comprova segurança dos futuros endpoints de convites, Markdown/email
+ou gestão de dispositivos. Cada owner integra seus gates na mesma issue.
+A [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md)
+rastreia a separação autorizada: #148/#149, #152, #157/#158, #159 e #161; #163
+integra as jornadas antes da promoção.
+
+## Budgets técnicos dos consumidores atuais
+
+| Consumidor                      | Chave confiável                                       | Janela / máximo |
+| ------------------------------- | ----------------------------------------------------- | --------------- |
+| Login GitHub nativo             | IP fornecido por Cloudflare                           | 60 s / 10       |
+| Logout nativo                   | IP fornecido por Cloudflare                           | 60 s / 30       |
+| Demais paths nativos admitidos  | IP fornecido por Cloudflare                           | 10 s / 100      |
+| Leitura de sessão ou workspaces | IP fornecido por Cloudflare, por superfície           | 60 s / 120      |
+| Mutação de tenancy              | Ator da sessão admitida, compartilhado entre comandos | 60 s / 30       |
+
+O IP usa somente `cf-connecting-ip`, que o ingress Cloudflare controla; X-Forwarded-For
+não é autoridade. Sem esse header, consumidores anônimos compartilham um bucket.
+Namespaces, atores e ações são convertidos em chaves SHA-256, sem IP/identidade
+em claro. O contador usa uma única operação SQL condicional com `RETURNING`;
+recriar services/isolate não reinicia budget. Cada consumo expurga no máximo
+10 chaves vencidas há pelo menos uma hora e duas janelas; o helper operacional
+expurga no máximo 100 por chamada. Nenhum expurgo remove budget ativo.
+
+A mutação consome budget depois de validar sessão, origem, CSRF e schema. Falha
+ou resposta ambígua do storage fecha a operação. Esses valores são proteção
+técnica local, não quotas comerciais nem budgets dos futuros convites/conteúdo.
+O caminho público de sessão recebe limite explícito porque `auth.api.getSession`
+não passa pelo rate limiter HTTP do SDK. As regras nativas usam os paths sem
+`/api/auth`, conforme a normalização da versão 1.7.7 fixada.
+
+## Admissão atômica da sessão exata
+
+Mutações D1 recebem `AdmittedUser` resolvido no servidor, incluindo session ID e
+subject GitHub; strings ou campos enviados pelo browser não substituem esse
+contexto. O primeiro statement da batch registra um marcador único com a
+decisão sobre **essa sessão** e Account, usando o relógio SQLite na execução.
+Os inserts de workspace, membership e receipt usam a mesma decisão; o último
+statement remove o marcador. Rollback também remove o marcador. Uma sessão
+válida de outro dispositivo não autoriza o comando da sessão revogada/expirada.
+
+`unixepoch('subsec')` fornece milissegundos para comparar com `expiresAt`. O
+valor de `now` é estável dentro de um `sqlite3_step`, não pressuposto para toda
+uma batch: por isso a decisão é capturada uma vez no marcador transacional.
+Fontes verificadas em 2026-10-07: [SQLite — funções de data](https://www.sqlite.org/lang_datefunc.html),
+[D1 — batch transacional](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
+e [Better Auth — rate limit](https://better-auth.com/docs/concepts/rate-limit).
+
+## Taxonomia HTTP e recuperação dos consumidores atuais
+
+| Condição                                                    | Resposta                           | Recuperação                                                                            |
+| ----------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Falha de autorização/CSRF/origem                            | `denied`                           | Corrigir intenção/autoridade; não executar efeito                                      |
+| Sessão nativa sem identidade GitHub vinculada               | 401 `reconnect_required`           | Novo OAuth, sem admitir sessão órfã                                                    |
+| Mesma operation ID, ator ou payload incompatível            | 409 `invalid_request`              | Não reutilizar ID para outra intenção                                                  |
+| Storage/configuração indisponível antes de confirmar efeito | 503 `unavailable`                  | Repetir depois da recuperação, com intenção preservada                                 |
+| Comando iniciado sem confirmação recuperável                | 503 `command_unknown`              | Consultar/repetir a mesma operation ID; nunca afirmar sucesso nem criar outra intenção |
+| Budget técnico esgotado                                     | 429 `rate_limited` + `Retry-After` | Esperar a janela limitada; autorização e CSRF continuam obrigatórios                   |
+
+Erros carregam código previsto e UUID operacional; não mensagem arbitrária de
+persistência/provider. Cabeçalhos de segurança e todos os cookies de renovação
+acompanham também negações. A colisão idempotente não é indisponibilidade; uma
+falha na confirmação após commit não é prova de rollback. Tenancy reconcilia a
+mesma intenção durável e verifica a autorização atual antes de devolvê-la.
 
 ## Autoridade e isolamento
 
@@ -54,7 +153,7 @@ recebe sessão humana, OAuth token, email ou acesso ao D1 de identidade.
 ## Sessão e superfície pública de auth
 
 Cookie de sessão é uma credencial opaca do navegador, **HttpOnly, Secure e
-host-only**, com `SameSite=Lax` candidato para o retorno OAuth. Não há necessidade
+host-only**, com `SameSite=Lax` configurado para o retorno OAuth. Não há necessidade
 demonstrada de cookie compartilhado entre subdomínios. Provar callback real,
 expiração/renovação, logout atual/todos e concorrência entre requests. `baseURL`,
 origens confiáveis e redirect URIs são exatos por ambiente; produção não confia
@@ -96,8 +195,10 @@ cobre sua validade externa qualificada, com limpeza indexada limitada e
 manutenção após ociosidade. Expiração de marcador não é lease de retry.
 Restaurar um banco sem reservas vivas exige bloquear callbacks/inutilizar os
 fluxos pendentes durante a validade externa antes de retomar. Não registrar
-code, verifier ou exceção arbitrária. A prova não cria tabela/binding/scheduler
-produtivos: integrar e retestar na entrega `packages/auth`/API.
+code, verifier ou exceção arbitrária. M2 integra o plugin à única superfície permitida de callback em `packages/auth`,
+com a tabela de identidade e limpeza limitada na reserva. A capacidade de
+manutenção explícita do package também limpa após ociosidade; não há scheduler
+remoto provisionado. A prova não cria recursos/bindings produtivos.
 
 ## CSRF, origens, redirects e reautenticação
 

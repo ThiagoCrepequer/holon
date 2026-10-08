@@ -4,7 +4,7 @@ kind: planning
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-06
 related:
   - dashboard-engineering-decision-review.md
   - ../engineering/frontend-application-structure.md
@@ -26,8 +26,11 @@ As entregas estão publicadas no [backlog do GitHub](dashboard-github-backlog.md
 com milestones, sub-issues e bloqueios. O mapa registra escopo e links; o
 GitHub informa o estado atual de execução.
 
-**Estado: provas isoladas do milestone 0 implementadas; runtime do dashboard
-ainda não implementado.** Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
+**Estado: M0 qualificado; fundações locais M1 materializadas conforme
+[ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md).**
+O [registro M1](../research/2026-10-06-dashboard-foundation-results.md) identifica
+comandos, primeiros resultados e limites. Auth/tenancy e dados privados ainda
+não estão compostos no runtime, e nenhum novo Worker foi publicado. Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
 ligam cada gate à bancada e sua evidência. Com a
 [política de linking aprovada em 2026-10-05](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
 Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth
@@ -140,3 +143,16 @@ A revisão documental de **2026-10-04** não executou estas etapas nem aprovou
 operação remota. O [relatório da revisão](../research/2026-10-04-dashboard-plan-robustness-review.md)
 lista os achados corrigidos e as provas ainda ausentes. Usar este plano como
 entrada curta; o registro Q1–Q37 permanece histórico das escolhas.
+
+## Fronteira M1 e integração nas issues donas — 2026-10-07
+
+Por escolha explícita do responsável, #137 entrega a fronteira HTTP e as
+políticas dos consumidores atuais (auth/tenancy). As provas que exigem fluxos
+futuros acompanham sua implementação: convite/outbox e abuso em #148, scanners e
+aceite sem efeito em GET/HEAD em #149, templates/consumer em #152, filtros reais
+em #157, SSR/API privados em #158, toasts/onboarding em #159 e Markdown/tracking
+em #161. #163 integra essas provas nas jornadas completas antes da promoção.
+
+A reconciliação conserva os requisitos e elimina a dependência circular; não
+encerra M3–M6 nem declara implementação ou operação remota. A revisão final dos
+critérios M1 está em [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md).

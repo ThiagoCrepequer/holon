@@ -33,8 +33,8 @@ jobs:
       - name: Install exact dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install browsers for dashboard viability proof
-        run: pnpm --filter @holon/dashboard-browser-proof exec playwright install --with-deps chromium firefox webkit
+      - name: Install browsers for dashboard gates
+        run: pnpm --filter @holon/dashboard exec playwright install --with-deps chromium firefox webkit
 
       - name: Verify formatting, lint, types, coverage and bundles
         run: pnpm verify
@@ -45,7 +45,7 @@ jobs:
         with:
           name: test-and-coverage-results
           path: |
-            **/coverage/lcov.info
-            **/junit.xml
-            tooling/dashboard-browser-proof/proof-results/
+            **/coverage/**/lcov.info
+            **/junit*.xml
+            **/proof-results/
           retention-days: 7

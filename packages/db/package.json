@@ -1,0 +1,30 @@
+{
+  "name": "@holon/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./identity/server": "./src/identity.server.ts",
+    "./auth-integration/server": "./src/auth-integration.server.ts",
+    "./projection/server": "./src/projection.server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "migrate:identity:local": "wrangler d1 migrations apply IDENTITY_DB --local --config ../../apps/dashboard/wrangler.jsonc",
+    "migrate:projection:local": "wrangler d1 migrations apply PROJECTION_DB --local --config ../../apps/dashboard/wrangler.jsonc"
+  },
+  "dependencies": {
+    "@holon/contracts": "workspace:*",
+    "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

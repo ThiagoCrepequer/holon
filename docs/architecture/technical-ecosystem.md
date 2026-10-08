@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-07
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -18,7 +18,7 @@ related:
 Este documento descreve a estrutura materializada no repositório. Consulte o
 [índice de decisões](../decisions/README.md) para distinguir ADRs aceitos de
 decisões substituídas; o mapa abaixo foi conferido contra os manifests em
-2026-10-04.
+2026-10-06.
 
 ## Estrutura atual
 
@@ -39,7 +39,12 @@ holon/
 |       |-- test/
 |       |-- Dockerfile
 |       `-- wrangler.jsonc
+|   |-- dashboard/              # app/, workers/, test/; SSR/API local
+|   `-- email-delivery/         # src/, test/; RPC privado local
 |-- packages/
+|   |-- ui/                    # React/Lucide/tokens, exports browser
+|   |-- auth/                  # Better Auth encapsulado, sessão, OAuth GitHub App
+|   |-- db/                    # Drizzle/D1, subpaths servidor e migrations
 |   |-- domain/
 |   |-- application/
 |   |-- contracts/
@@ -83,6 +88,20 @@ exaustiva para dependências concretas de cada workspace.
 
 ```mermaid
 flowchart TD
+    DS[apps/dashboard]
+    EM[apps/email-delivery]
+    UI[packages/ui]
+    AU[packages/auth]
+    DB[packages/db]
+    DS --> UI
+    DS --> CT
+    DS --> AP
+    DS --> AU
+    DS --> DB
+    AU --> CT
+    AU --> DB
+    EM --> CT
+    DB --> CT
     CP[apps/control-plane]
     EX[apps/repository-executor]
     GH[packages/github]
@@ -161,6 +180,9 @@ local/Git, gera schema e verifica drift, sem acesso aos deployables.
 | `@holon/repository-analysis`    | Parser de diff, classificação de review, surface mapping e policies puras do executor              | Biblioteca `diff`; sem SDK de infraestrutura         |
 | `@holon/repository-config`      | Parser YAML restrito compartilhado entre runtime e CLI                                             | YAML, contratos e erro tipado da aplicação           |
 | `@holon/config-cli`             | Validação e explicação locais, geração de schema e identidade do compilador                        | Node; Ajv e YAML Language Server somente para testes |
+| `@holon/auth`                   | Better Auth encapsulado, autenticação GitHub App, DTOs e validação de sessão                       | Better Auth, Drizzle Adapter, D1                     |
+| `@holon/db`                     | Drizzle/D1, persistência de identidade/tenancy e projeções                                         | Drizzle ORM, D1                                      |
+| `@holon/ui`                     | Componentes visuais React, tokens e ícones sem regras de servidor                                  | React, Tailwind, Lucide React                        |
 | `@holon/test-kit`               | Fixtures, builders e fakes reutilizaveis                                                           | Dependencias somente de teste                        |
 
 A avaliação offline usa recordings; a avaliação live do motor antigo foi
@@ -169,6 +191,12 @@ retirada. Um novo teste live deve exercitar Think, Gateway, Sandbox e publicaç�
 `ReviewEngine` comeca em `application`. Um pacote separado so deve surgir quando
 existir uma fronteira publica ou um grafo de dependencias mais claro do que uma
 subpasta interna.
+
+Dashboard/UI/DB/Auth compõem as fundações locais e o primeiro recorte M2 do dashboard.
+O dashboard importa `contracts`, `application`, `ui`, `auth` e `db`; email importa `contracts`;
+`auth` consome `contracts` e `db` (com exceção de schema ORM restrita);
+DB consome `contracts` para validação de limites e projeção de rows. O [mapa do dashboard](user-dashboard.md)
+detalha interfaces, exports e futuras relações por service binding.
 
 ## Alocacao de runtime
 
@@ -184,7 +212,7 @@ subpasta interna.
 O handler HTTP termina depois que a Queue confirma a escrita. Clone, LLM,
 analise e publicacao nao pertencem ao caminho sincrono do webhook.
 
-O admin, UI e pacote de observabilidade foram removidos pela
+O admin, a UI anterior e o pacote de observabilidade foram removidos pela
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md).
 Logs nativos simples não mantêm projeções, custos nem dashboards.
 
@@ -254,15 +282,21 @@ pacote podem usar caminhos relativos ou subpath imports do Node. Nao usar
 Remote cache nao faz parte do bootstrap. Secrets nunca entram em outputs, logs,
 inputs globais ou artefatos de cache.
 
+`apps/dashboard` tem overrides Turbo para outputs build/catálogos/typegen e
+artefatos browser; suas suites browser não usam cache nem retries. O resto dos
+workspaces conserva os outputs e limites atuais. Catálogos são compilados pelo
+check de i18n antes de types/tests/build, inclusive após restauração de cache.
+
 ## Gates de CI implementados
 
 1. Instalar com lockfile congelado.
-2. Verificar formatacao.
+2. Verificar marca/tokens/contraste e formatação.
 3. Executar lint type-aware e falhar em disable comments nao usados.
 4. Gerar ou conferir tipos Wrangler e executar typecheck.
 5. Verificar as direções de import em `tooling/architecture` e executar testes puros.
 6. Executar testes Workers no plugin oficial.
 7. Fazer `wrangler deploy --dry-run` por deployable, sem publicar.
+8. Exercitar DOM/Workers e Playwright pt-BR/en × Chromium/Firefox/WebKit com axe, zero retries e artefatos por sete dias.
 
 Deploy real e uma pipeline separada. Um dry run nao prova bindings remotos,
 secrets, GitHub App, Queue, Workflow ou modelo em producao.
@@ -283,7 +317,7 @@ secrets, GitHub App, Queue, Workflow ou modelo em producao.
 | Agents SDK e Think           | Selecionados        | Review Agent por shard; ADR-0049                   |
 | MCP e RAG                    | Adiados             | Fora do MVP one-shot                               |
 
-UI/admin e suas bibliotecas foram retirados pela
+A UI/admin anterior e suas bibliotecas foram retiradas pela
 [ADR-0040](../decisions/0040-retire-admin-and-analytical-storage.md). O
 Agent Think substituiu o motor próprio conforme
 [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md).

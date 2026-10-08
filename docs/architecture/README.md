@@ -29,6 +29,8 @@ continuam explícitas nos documentos de operação e planejamento.
 - [Ingestão de evidências de CI](ci-evidence-ingestion.md): descrição histórica
   da funcionalidade retirada pela ADR-0049.
 
+- [Dashboard dos usuários](user-dashboard.md): fundações locais SSR/API, UI, D1 e entrega privada; integrações futuras explicitadas.
+
 ## Regra de precedência
 
 Se um desenho contradizer um ADR aceito, o ADR prevalece e o documento de

@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-07
 ---
 
 # Guia de engenharia do Holon
@@ -64,19 +64,21 @@ interna resolveria.
 | Secrets, GitHub App ou deploy                      | [Operação](../operations/README.md) e [segurança](../architecture/security-and-trust-boundaries.md)                                       | Ambiente, artefato, permissões, rotação e autorização antes do efeito remoto.                       |
 | Incidente ou comportamento histórico               | [Pesquisas](../research/README.md)                                                                                                        | Código/configuração atuais e ADR que governa o estado presente.                                     |
 
-## Referência para aplicações web futuras
+## Referência para o dashboard dos usuários
 
 A [organização de aplicações web e dependências](frontend-application-structure.md)
 registra a direção do dashboard dos usuários: packages com interfaces úteis,
 rotas com arquivos privados próximos, features reutilizáveis, schemas/estado
-com donos e isolamento browser/server. A topologia é **proposta**; não descreve
-workspaces existentes nem altera o grafo do core. As regras gerais de módulos
+com donos e isolamento browser/server. A fundação local implementada está em [arquitetura do dashboard](../architecture/user-dashboard.md),
+com as fronteiras aceitas na ADR-0054. Fluxos posteriores continuam propostos;
+o grafo do core mantém suas regras. As regras gerais de módulos
 continuam em [TypeScript e módulos](typescript-and-module-design.md).
 
 Better Auth + Drizzle/D1 é a direção escolhida para autenticação, com
 [políticas acordadas e integração a provar](../research/2026-10-04-dashboard-authentication-discovery.md).
-Cloudflare Email Sending foi escolhido para convites. A etapa continua documental;
-implementação, schema/migrations e recursos não foram iniciados.
+Cloudflare Email Sending foi escolhido para convites. Auth/tenancy têm composição
+local e migrations próprias; envio de convites e recursos remotos continuam
+dependentes das issues donas e de operação autorizada.
 
 A [revisão de decisões de engenharia e qualidade](../planning/dashboard-engineering-decision-review.md)
 registra Q1–Q37 acordadas e as investigações de auth, leitura e entrega durável
@@ -89,7 +91,8 @@ registra User, login, membership N:M, pessoal/equipe na mesma entidade,
 owner/member e cardinalidade de instalações. Organização é sinônimo de workspace.
 Q31–Q34 confirmaram autoridade de vínculo, convites, múltiplos owners e onboarding
 self-service mínimo. Q35/Q36 confirmaram Worker privado e fila/retries duráveis.
-Não há implementação SaaS; resta a prova técnica da integração.
+Login GitHub e pessoal/equipe têm implementação local no recorte M2 incorporado
+à fundação M1. As demais jornadas e a prova com serviços reais permanecem futuras.
 
 A [investigação de auth/D1](../research/2026-10-04-dashboard-auth-persistence-investigation.md)
 recomenda tenancy Holon própria e delimita falhas/concorrência a provar. A

@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@import "@holon/ui/styles.css";
+@source "../../../packages/ui/src";
+@theme inline {
+  --font-sans: var(--holon-font-sans);
+  --color-background: var(--holon-bg-page);
+  --color-foreground: var(--holon-text-primary);
+  --color-primary: var(--holon-action-bg);
+  --color-primary-foreground: var(--holon-action-fg);
+  --color-border: var(--holon-border-subtle);
+  --radius-md: var(--holon-radius-control);
+}
+.holon-welcome {
+  max-width: var(--holon-layout-content);
+  margin: 0 auto;
+  padding: var(--holon-space-6) var(--holon-layout-gutter-mobile);
+}
+.holon-welcome header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--holon-space-4);
+}
+.holon-wordmark {
+  display: flex;
+  align-items: center;
+  gap: var(--holon-space-3);
+  font-size: var(--holon-type-title-md);
+  font-weight: var(--holon-weight-semibold);
+  letter-spacing: -0.04em;
+}
+.holon-welcome main {
+  max-width: var(--holon-layout-reading);
+  padding-top: clamp(5rem, 15vh, 10rem);
+}
+.holon-welcome h1 {
+  font: var(--holon-type-display-sm)/var(--holon-leading-title)
+    var(--holon-font-editorial);
+  font-weight: 400;
+  margin: 0 0 var(--holon-space-6);
+}
+.holon-welcome main p {
+  color: var(--holon-text-secondary);
+  font-size: var(--holon-type-lead);
+  max-width: 32rem;
+}
+@media (min-width: 48rem) {
+  .holon-welcome {
+    padding: var(--holon-space-8) var(--holon-layout-gutter-desktop);
+  }
+  .holon-welcome h1 {
+    font-size: var(--holon-type-display-lg);
+  }
+}

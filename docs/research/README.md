@@ -51,6 +51,9 @@ Nao criam uma decisao por si so.
 - [Prova Router/Hono/Query, i18n e CSP no build real](2026-10-05-dashboard-browser-proof.md)
 - [Prova SQLite DO de transação, obrigação e alarm](2026-10-05-dashboard-ledger-proof.md)
 
+- [Fundação M1: workspaces, gates locais e limites das provas](2026-10-06-dashboard-foundation-results.md)
+- [Primeiro recorte M2: identidade e tenancy locais](2026-10-07-dashboard-identity-tenancy-results.md)
+
 Para implementar o dashboard, comece pelo [plano consolidado](../planning/dashboard-implementation-plan.md).
 As seções datadas das pesquisas preservam a evolução do entendimento; os
 ajustes de robustez atuais delimitam o que está comprovado e o que ainda é gate.
@@ -62,3 +65,5 @@ ajustes de robustez atuais delimitam o que está comprovado e o que ainda é gat
 - Promova uma conclusao para ADR quando ela resultar em escolha normativa.
 - Use prioritariamente documentacao oficial, schemas publicados e testes
   reproduziveis.
+
+- [Revisão final M1 e reconciliação dos gates de integração](2026-10-07-dashboard-milestone-one-final-review.md)

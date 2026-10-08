@@ -48,3 +48,9 @@ Fontes, comandos e limites:
 [relatório auth](../../docs/research/2026-10-05-dashboard-auth-proof.md),
 [política de reserva](../../docs/research/2026-10-05-dashboard-code-redemption-plugin.md) e
 [avaliação OAuth](../../docs/research/2026-10-05-dashboard-oauth-security-requirements.md).
+
+A fundação M1 extraiu a persistência da reserva para
+[`packages/db`](../../packages/db/src/github-code-redemption.server.ts). O módulo
+local de reserva delega a esse adapter; toda a suite OAuth continua exercitando
+a mesma primitiva D1 canônica, sem duplicar o algoritmo. Auth/plugin permanecem
+nesta prova até a composição de produção em M2.
