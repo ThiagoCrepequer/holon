@@ -44,7 +44,7 @@
         "APP_ORIGIN": "https://holon-dashboard.thiago-crepequer.workers.dev",
         "AUTH_ENVIRONMENT": "production",
         "AUTH_REGISTERED_ORIGINS": "{\"preview\":[],\"production\":[\"https://holon-dashboard.thiago-crepequer.workers.dev\"]}",
-        "AUTH_ENABLED": "false",
+        "AUTH_ENABLED": "true",
       },
       "d1_databases": [
         {

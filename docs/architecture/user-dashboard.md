@@ -27,7 +27,9 @@ persistidas continuam entregas separadas.
 Os manifests mantêm o ambiente local e acrescentam produção com dois D1
 próprios e origem HTTPS explicitamente registrada. `AUTH_ENABLED=false` permite
 publicar a fundação enquanto faltam as credenciais GitHub: auth e tenancy privadas
-continuam indisponíveis. A composição passa ambiente e origens homologadas para
+continuam indisponíveis. Após o responsável configurar os secrets, o manifest
+de produção usa `AUTH_ENABLED=true` e exige a composição completa; uma leitura
+anônima de sessão 200 não representa validação do OAuth real. A composição passa ambiente e origens homologadas para
 `packages/auth`; não os infere de Host ou de `APP_ORIGIN`. O email Worker é privado
 e mantém o contrato de bootstrap. Os dois Workers de produção do core permanecem
 inalterados por esta operação.
@@ -217,7 +219,7 @@ Consulte [testes e evidência](../engineering/testing-and-evidence.md),
 [operação](../operations/dashboard-environments-and-recovery.md) e o
 [registro M1](../research/2026-10-06-dashboard-foundation-results.md) para comandos,
 evidência e pendências. O runbook registra os bindings/IDs e a origem de produção,
-as migrations aplicadas e as credenciais pendentes. A publicação inicial desses
+as migrations aplicadas e o estado de configuração de auth. A publicação inicial desses
 apps é uma operação explícita; não há deploy deles no pipeline automático da
 ADR-0048. Bootstrap e liveness não provam OAuth real, envio ou dataset privado.
 

@@ -67,9 +67,10 @@ if (expectedEnv === "production") {
     "https://holon-dashboard.thiago-crepequer.workers.dev",
   );
   assert.equal(config.vars.AUTH_ENVIRONMENT, "production");
-  assert(
-    ["true", "false"].includes(config.vars.AUTH_ENABLED),
-    `AUTH_ENABLED must be "true" or "false", received: ${config.vars.AUTH_ENABLED}`,
+  assert.equal(
+    config.vars.AUTH_ENABLED,
+    "true",
+    `Production build requires AUTH_ENABLED === "true", received: ${config.vars.AUTH_ENABLED}`,
   );
   const origins = JSON.parse(config.vars.AUTH_REGISTERED_ORIGINS);
   assert(

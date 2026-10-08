@@ -21,7 +21,9 @@ projeções e recursos de preview/produção?
 A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada em
 2026-10-08 provisionou os D1 de produção e suas migrations. O ambiente de
 bootstrap publicou a fundação estática com autenticação desabilitada. A ativação
-GitHub exige as credenciais e a callback descritas abaixo. Preview e recuperação
+posterior pelo responsável cadastrou os secrets GitHub e habilitou auth; o
+manifest de produção acompanha esse estado com `AUTH_ENABLED=true`. O OAuth
+real ainda não foi validado. Preview e recuperação
 remota continuam propostas. O pipeline automático do core não publica esses apps.
 
 ## Bootstrap de produção
@@ -29,12 +31,12 @@ remota continuam propostas. O pipeline automático do core não publica esses ap
 Conta Cloudflare: `4be6ae7d1bb4a3b2a395c6d30e2671a5`. Owner operacional desta
 provisão: Thiago Crepequer. Os recursos são exclusivos destes apps:
 
-| Recurso         | Nome / valor                                                | Estado                                                                                      |
-| --------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Dashboard       | `holon-dashboard`                                           | Publicado; origem `https://holon-dashboard.thiago-crepequer.workers.dev`; auth desabilitado |
-| Email           | `holon-email-delivery`                                      | Publicado privado; sem rota pública, URL de preview, Queue ou envio implementado            |
-| `IDENTITY_DB`   | `holon-identity` / `52a95f05-168f-4702-a064-10934931d3c8`   | Migrations `0001`–`0005` aplicadas; autoridade `identity`                                   |
-| `PROJECTION_DB` | `holon-projection` / `af121530-2f99-4d01-8155-c20efc040a3b` | Migration `0001` aplicada; autoridade `projection`                                          |
+| Recurso         | Nome / valor                                                | Estado                                                                                    |
+| --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Dashboard       | `holon-dashboard`                                           | Publicado; origem `https://holon-dashboard.thiago-crepequer.workers.dev`; auth habilitado |
+| Email           | `holon-email-delivery`                                      | Publicado privado; sem rota pública, URL de preview, Queue ou envio implementado          |
+| `IDENTITY_DB`   | `holon-identity` / `52a95f05-168f-4702-a064-10934931d3c8`   | Migrations `0001`–`0005` aplicadas; autoridade `identity`                                 |
+| `PROJECTION_DB` | `holon-projection` / `af121530-2f99-4d01-8155-c20efc040a3b` | Migration `0001` aplicada; autoridade `projection`                                        |
 
 A provisão usou a API Cloudflare, após conferir a conta e os recursos existentes.
 O D1 antigo `holon-admin-d1` não pertence a esta entrega. Os bancos novos estavam
@@ -85,6 +87,22 @@ bootstrap; POST de origem não confiável 403. Chromium validou hidratação,
 troca pt-BR/en e modal sem erro de página ou violação CSP em **2026-10-08T02:46:48Z**.
 Essas amostras não provam OAuth GitHub, tenancy autenticada, projeções ou envio
 real de email. O envio permanece um stub privado sem Queue/provider.
+
+### Alinhamento após a configuração de auth
+
+O responsável configurou os secrets GitHub e `AUTH_ENABLED=true` no Worker.
+A versão ativa passou a `86f5345f-21d5-4b68-9ee8-8dcdfa443969`, publicada pelo
+dashboard Cloudflare em **2026-10-08T02:52:07Z**. Em **2026-10-08T02:58:55Z**,
+a API confirmou `AUTH_ENABLED=true` e os nomes `AUTH_SECRET`,
+`GITHUB_APP_CLIENT_ID` e `GITHUB_APP_CLIENT_SECRET`, sem recuperar seus valores.
+A leitura anônima de `/api/auth/session` respondeu 200 com `null`.
+
+O manifest versionado e o gate de build de produção exigem agora
+`AUTH_ENABLED=true`, para que uma publicação futura não desfaça essa
+configuração. Essa alteração de código não executa um novo deploy. A leitura de
+sessão comprova a composição ativa, mas não valida as credenciais no GitHub,
+callback, login ou logout reais. Não existe página `/login` nem botão de login
+na UI atual; a experiência completa pertence à #159 e o smoke produtivo à #167.
 
 ## Operação local materializada
 
@@ -177,7 +195,7 @@ O primeiro recorte implementa login social GitHub, não SSO corporativo.
 | Local padrão  | `http://127.0.0.1:8794`                                | `http://127.0.0.1:8794/api/auth/callback/github` | Manifest local; autenticação requer secrets locais; não é registro real da App |
 | Teste de auth | Origem loopback HTTPS sintética definida pelo harness  | Mesma origem + `/api/auth/callback/github`       | GitHub controlado, D1 isolado e nenhum OAuth real                              |
 | Preview       | Não definido                                           | Não definido                                     | Exige origem HTTPS não loopback explicitamente homologada e recursos próprios  |
-| Produção      | `https://holon-dashboard.thiago-crepequer.workers.dev` | Mesma origem + `/api/auth/callback/github`       | Bootstrap com auth desabilitado; credenciais GitHub pendentes                  |
+| Produção      | `https://holon-dashboard.thiago-crepequer.workers.dev` | Mesma origem + `/api/auth/callback/github`       | Auth habilitado; secrets cadastrados; OAuth real ainda não validado            |
 
 `validateGitHubAuthConfig` rejeita credenciais ausentes, URL com caminho/query/
 fragmento/credencial, desenvolvimento fora de loopback e ambientes remotos sem
@@ -206,7 +224,11 @@ configurado e auth habilitado sem IDENTITY_DB fecham com 503 sanitizado.
 Sem nenhum secret auth, a fundação estática M1 permanece utilizável. Com
 `AUTH_ENABLED=true`, o trio completo e `IDENTITY_DB` são obrigatórios.
 
-### Obter e ativar as credenciais pendentes
+### Obter e configurar credenciais por ambiente
+
+Na produção acima, o responsável já cadastrou os secrets. O procedimento abaixo
+orienta novos ambientes ou mudanças autorizadas; não recriar secrets existentes
+apenas para reproduzir o deploy.
 
 1. No GitHub, abrir **Settings → Developer settings → GitHub Apps** da conta
    proprietária, ou **Organization settings → Developer settings → GitHub Apps**
@@ -223,7 +245,7 @@ Sem nenhum secret auth, a fundação estática M1 permanece utilizável. Com
    Variables and Secrets**. Adicionar como secrets `GITHUB_APP_CLIENT_ID` e
    `GITHUB_APP_CLIENT_SECRET`. `AUTH_SECRET` é provisionado separadamente e não
    deve ser substituído. Não enviar os valores em chat ou commit.
-5. Alterar `AUTH_ENABLED` para `true` no ambiente de produção versionado,
+5. Conferir `AUTH_ENABLED=true` no ambiente de produção versionado,
    construir/publicar o novo artefato e executar OAuth real com usuário de teste,
    callback, logout, novo login e isolamento de workspace. Sem esse smoke, não
    declarar login real validado. Não habilitar auth enquanto faltar um secret.
