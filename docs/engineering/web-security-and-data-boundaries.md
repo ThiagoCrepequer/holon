@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - frontend-application-structure.md
   - dashboard-identity-and-workspaces.md
@@ -28,6 +28,11 @@ Markdown/email ainda não estão integrados. Os budgets desses fluxos acompanham
 as issues donas. As garantias futuras abaixo continuam condições de aceite,
 sem alegar validação de produção.
 
+Os contratos dashboard usam o modo público jitless do Zod, configurado antes
+da construção de seus schemas. Assim, validação no browser não sonda eval nem
+exige ampliar a CSP. A política permanece sem unsafe-inline/unsafe-eval; a
+prova browser acompanha violações inclusive depois de trocar idioma/tema.
+
 ## Base HTTP implementada em M1
 
 `apps/dashboard/app/server/http-security.server.ts` valida origem de configuração
@@ -42,7 +47,8 @@ o secret servidor. O cliente recebe esse valor em `X-CSRF-Token` e cookie
 confiar no cookie enviado. Nova sessão/secret produz outro token.
 
 O handler oferece liveness e devolve códigos/UUID para erros. A allowlist M2
-admite POST de login/logout e criação personal/team; demais mutações são negadas.
+admite POST de login/logout, revogação própria/global, preferências e
+criação personal/team; mutações sem método/path autorizado são negadas.
 Login/callback/logout usam a superfície nativa restrita e origens exatas.
 Login também nega Fetch Metadata contraditória; logout exige JSON estrito e
 CSRF derivado da sessão antes de chamar a revogação nativa.
@@ -59,20 +65,23 @@ para provar SSR/CSP/hidratação/404 e nega GET/POST nos comandos inexistentes.
 A [evidência M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
 acrescenta biblioteca nativa, D1 e composição HTTP de identidade/tenancy. Isso
 não comprova segurança dos futuros endpoints de convites, Markdown/email
-ou gestão de dispositivos. Cada owner integra seus gates na mesma issue.
+ou os demais consumidores ainda inexistentes. A #141 acrescenta provas nativas
+de sessões/dispositivos; cada owner integra seus gates na mesma issue.
 A [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md)
 rastreia a separação autorizada: #148/#149, #152, #157/#158, #159 e #161; #163
 integra as jornadas antes da promoção.
 
 ## Budgets técnicos dos consumidores atuais
 
-| Consumidor                      | Chave confiável                                       | Janela / máximo |
-| ------------------------------- | ----------------------------------------------------- | --------------- |
-| Login GitHub nativo             | IP fornecido por Cloudflare                           | 60 s / 10       |
-| Logout nativo                   | IP fornecido por Cloudflare                           | 60 s / 30       |
-| Demais paths nativos admitidos  | IP fornecido por Cloudflare                           | 10 s / 100      |
-| Leitura de sessão ou workspaces | IP fornecido por Cloudflare, por superfície           | 60 s / 120      |
-| Mutação de tenancy              | Ator da sessão admitida, compartilhado entre comandos | 60 s / 30       |
+| Consumidor                              | Chave confiável                                              | Janela / máximo |
+| --------------------------------------- | ------------------------------------------------------------ | --------------- |
+| Login GitHub nativo                     | IP fornecido por Cloudflare                                  | 60 s / 10       |
+| Logout nativo                           | IP fornecido por Cloudflare                                  | 60 s / 30       |
+| Demais paths nativos admitidos          | IP fornecido por Cloudflare                                  | 10 s / 100      |
+| Leitura de sessão ou workspaces         | IP fornecido por Cloudflare, por superfície                  | 60 s / 120      |
+| Leitura de dispositivos/perfil          | IP fornecido por Cloudflare, por superfície                  | 60 s / 120      |
+| Revogação própria/global ou preferência | Ator da sessão admitida, no budget compartilhado de mutações | 60 s / 30       |
+| Mutação de tenancy                      | Ator da sessão admitida, compartilhado entre comandos        | 60 s / 30       |
 
 O IP usa somente `cf-connecting-ip`, que o ingress Cloudflare controla; X-Forwarded-For
 não é autoridade. Sem esse header, consumidores anônimos compartilham um bucket.
@@ -178,6 +187,52 @@ Não alterar o payload nativo por regex ou monkey patch. O adapter traduz a
 capacidade para um contrato explícito e restrito. Logging nativo também precisa
 de integração sanitizada: codes/IDs operacionais, sem exceção arbitrária, cookies,
 headers de autorização ou resposta de provider. CI usa credenciais sintéticas.
+
+### Dispositivos, perfil e fronteira SSR em M2
+
+A lista de dispositivos valida `sessionDeviceListDtoSchema` antes de responder.
+Expõe apenas ID público, datas, sessão atual e categoria de navegador; token,
+IP e user agent bruto não entram no DTO. IDs de revogação são validados e
+fixados ao User da sessão admitida. Todos os cookies nativos são preservados
+em respostas permitidas e negadas; limpar cookies usa a API oficial de sign-out.
+Revogação concorrente entre admissão HTTP e execução SQL nega o efeito.
+
+Preferências usam schemas strict de entrada e saída e respostas `{ preferences }`.
+Locale/fuso não autorizam acesso nem alteram configuração da equipe. A escrita
+SQL fixa User/Account/Session na própria condição do UPSERT; nenhuma sessão
+válida de outro dispositivo substitui a que iniciou o comando. Corpo com User
+ID ou propriedades extras é negado antes do efeito. Storage indisponível,
+perfil corrompido e confirmação perdida não se apresentam como save concluído.
+
+O loader raiz recebe capabilities privadas por request e devolve snapshot
+público reduzido. Falha de persistência não vira perfil ausente. O bundle real
+nega auth/DB/secrets no cliente. A UI fecha o snapshot privado após negação
+confirmada e compara a geração da sessão antes de atender callbacks antigos;
+requests de uma sessão anterior não retiram nem repovoam uma sessão nova.
+
+### Governança e reautenticação por intenção
+
+`/api/auth/reauth/init` usa a mesma fronteira de mutação admitida: Origin,
+CSRF, JSON strict e budget antes do INSERT condicionado. A intenção fixa
+User, subject GitHub, sessão original, equipe, ação e alvo. Somente a sessão
+original ainda válida pode iniciar OAuth com essa intenção; anônimo, outro
+User ou outro dispositivo não obtêm autoridade conhecendo seu ID.
+
+As ações são promoção, rebaixamento, remoção e saída. Pending TTL é 10 minutos;
+proof TTL é 5 minutos desde callback bem-sucedido. Subject real é verificado
+antes de linking por email; o slot OAuth de servidor guarda contexto confiável.
+`additionalData` arbitrário do cliente continua negado. Confirmação exige User
+real e sessão nova do callback, diferentes da sessão original ainda válida.
+Falha, replay ou confirmação negada não se apresentam como reauth concluída.
+
+A batch revalida sessão exata, Account, membership/papel atual, equipe, alvo,
+ação e proof TTL pelo relógio SQLite antes de consumir e aplicar o efeito.
+Owner não ganha autoridade em outra equipe; promoção não cria participante;
+personal workspace é negado. Triggers fazem rollback de saída, remoção ou
+rebaixamento do último owner, preservando a prova não consumida. Uma resposta
+perdida depois do commit, inclusive com leitura de reconciliação indisponível,
+é resultado desconhecido sanitizado; não permite reconstruir participação
+histórica por replay. Membership removida perde acesso na próxima request.
 
 ## Reserva durável de authorization code
 

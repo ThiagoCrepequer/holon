@@ -4,7 +4,7 @@ kind: planning
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-06
+last-reviewed: 2026-10-08
 related:
   - dashboard-engineering-decision-review.md
   - ../engineering/frontend-application-structure.md
@@ -29,8 +29,14 @@ GitHub informa o estado atual de execução.
 **Estado: M0 qualificado; fundações locais M1 materializadas conforme
 [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md).**
 O [registro M1](../research/2026-10-06-dashboard-foundation-results.md) identifica
-comandos, primeiros resultados e limites. Auth/tenancy e dados privados ainda
-não estão compostos no runtime, e nenhum novo Worker foi publicado. Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
+comandos, primeiros resultados e limites. O [primeiro recorte M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
+materializa auth/tenancy; o [complemento M2](../research/2026-10-08-dashboard-milestone-two-results.md)
+integra sessões/dispositivos, governança com reauth e preferências persistidas
+ao SSR e aos controles mínimos. Dados privados de
+reviews, convites e conexões GitHub continuam entregas posteriores. O
+[runbook](../operations/dashboard-environments-and-recovery.md) registra a
+publicação de bootstrap de 2026-10-08, separada desta implementação e das
+migrations/deploy futuros. Os [resultados datados](../research/2026-10-05-dashboard-milestone-zero-results.md)
 ligam cada gate à bancada e sua evidência. Com a
 [política de linking aprovada em 2026-10-05](../engineering/dashboard-identity-and-workspaces.md#vinculação-por-email-verificado-ajuste-aprovado-em-2026-10-05),
 Better Auth/Drizzle/D1 e D1 nativo recuperam Account interrompida por novo OAuth

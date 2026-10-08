@@ -4,7 +4,7 @@ kind: reference
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - frontend-application-structure.md
   - ../planning/dashboard-engineering-decision-review.md
@@ -35,8 +35,8 @@ janela de revogação, autoridade de conexão, convite por email, múltiplos own
 e onboarding self-service. Somam-se a cadastro GitHub aberto com pessoal vazio,
 pt-BR/en, sessão móvel de 7 dias/renovação após 24 h e interseção privada.
 O modelo de produto está acordado; identidade/tenancy locais estão implementadas.
-Convites, conexões, governança e recursos privados mantêm suas provas pendentes.
-Este documento não adiciona schema, plugin, binding, endpoint ou migration.
+Convites, conexões e recursos privados mantêm suas provas pendentes.
+Este guia acompanha o estado do código; não autoriza operação remota.
 
 A [revisão de robustez](../research/2026-10-04-dashboard-plan-robustness-review.md)
 e o [plano de implementação](../planning/dashboard-implementation-plan.md)
@@ -61,6 +61,71 @@ Esta entrega cobre #139/#140/#142 e o complemento de persistência #134.
 Dispositivos, logout global, governança/reauth, preferências, convites e recursos
 privados serão PRs separados. O modelo acordado abaixo inclui essas condições
 futuras; sua presença não demonstra que já estão implementadas.
+
+## Complemento local de sessões e preferências em 2026-10-08
+
+A #141 acrescenta lista de dispositivos sem credenciais e revogação da sessão
+atual, de outra sessão própria e de todas as sessões. O contexto admitido é
+estritamente `AdmittedUser`; a batch verifica User, subject GitHub e sessão
+exata pelo relógio SQLite na escrita. A sessão permanece móvel de 7 dias,
+renovada após 24 h, sem teto absoluto adicional. Atualização concorrente não
+encurta uma expiração mais nova; expiração observada antes de uma renovação
+não apaga a sessão já renovada. A criação nativa também recebe o relógio
+injetável pelo database hook público, sem substituir `Date` globalmente.
+
+Logout nativo limpa cookies com o sign-out oficial da biblioteca. Revogar outro
+dispositivo mantém a sessão e os cookies atuais. O próximo request da sessão
+revogada/expirada perde admissão. A página mínima apresenta login/reconexão,
+dispositivos e logout; verifica autoridade nas leituras/intencões explícitas e
+ignora respostas atrasadas de uma identidade anterior. Ao detectar outra sessão
+na listagem, descarta o contexto antigo e revalida o documento. Não consulta
+automaticamente por timer, foco ou visibilidade. Esse recorte não antecipa
+o onboarding completo #159 nem prova grants de repositórios.
+
+A #144 persiste locale `en`/`pt-BR` e fuso IANA/UTC por User, fora de Workspace.
+O input nunca aceita User ID. A leitura exige a sessão exata e a atualização
+condiciona o UPSERT à mesma autoridade no D1. Perfil não salvo tem os dois
+campos nulos, distinguindo UTC explicitamente salvo da ausência de escolha.
+Perfil inválido ou falha de storage fecham a leitura com erro sanitizado;
+não se tornam uma preferência ausente. Resposta perdida depois do commit é
+resultado desconhecido; ler/repetir os mesmos valores reconcilia a escolha.
+
+SSR resolve preferência pessoal → escolha transitória `lang` → idioma do
+navegador → inglês; usa fuso salvo ou UTC. A inferência do dispositivo acontece
+somente depois da hidratação e continua uma proposta até o save confirmado.
+Outro dispositivo autenticado lê os valores persistidos no próximo documento.
+Trocar locale não traduz o conteúdo da revisão nem dispara outra execução.
+
+## Política de governança e reauth do complemento M2
+
+Promover, rebaixar, remover participante e sair da equipe exigem novo OAuth
+GitHub para cada intenção. Promoção/rebaixamento/remoção pertencem ao owner
+atual do workspace; saída pertence à própria pessoa. Promoção altera apenas
+membership existente. Workspace pessoal não participa desses comandos.
+
+A intenção pendente dura **10 minutos**. Um callback nativo bem-sucedido,
+com o mesmo subject GitHub e User, confirma uma prova válida por **5 minutos
+a partir da conclusão**. A prova é ligada à sessão nova emitida no callback,
+ao account original, workspace, ação e alvo. Sessão renovada, outra sessão
+preexistente ou flag enviada pelo cliente não substituem essa prova. A sessão
+original precisa continuar válida durante o fluxo. Não se promete senha ou
+MFA ao GitHub por parâmetro OAuth.
+
+Consumir a prova e alterar membership pertencem à mesma batch D1. A autoridade
+e os prazos são revalidados na escrita, incluindo o relógio SQLite. Triggers
+aditivos de identidade impedem remover ou rebaixar o último owner, inclusive
+em disputa; a operação negada não consome a prova. Resultado de escrita
+desconhecido exige ler o estado atual antes de uma nova intenção; replay não
+recria uma participação removida. A remoção altera acesso na próxima leitura
+ou comando, independentemente de a sessão humana continuar válida.
+
+Os cenários executados e seus limites ficam no
+[relatório M2](../research/2026-10-08-dashboard-milestone-two-results.md).
+
+As migrations novas desta entrega são aditivas e não foram aplicadas remotamente.
+O [runbook](../operations/dashboard-environments-and-recovery.md) diferencia
+merge, migrations e deploy; o registro datado da entrega separa provas locais
+Workerd/D1/browser de um OAuth GitHub ou publicação reais.
 
 ## Modelo acordado e integração pendente
 
@@ -139,7 +204,9 @@ expirado sem confirmação não autoriza leitura; indisponibilidade tem estado
 próprio, sem ser apresentada como lista vazia ou ausência comprovada de permissão.
 O limite se aplica à decisão de uma nova leitura; não apaga dados já entregues
 nem promete interromper retroativamente requests previamente autorizadas.
-Reautenticação de operações sensíveis ainda será definida.
+As quatro ações de membership e sua janela de reautenticação estão descritas
+na política do complemento M2 acima. Operações de conexão/instalação terão
+suas próprias provas nas entregas donas.
 
 Falha transitória preserva dado confirmado apenas enquanto houver autorização
 válida. 401/403/revogação ou grant expirado sem confirmação fecham apresentação

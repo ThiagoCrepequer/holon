@@ -101,8 +101,11 @@ O manifest versionado e o gate de build de produção exigem agora
 `AUTH_ENABLED=true`, para que uma publicação futura não desfaça essa
 configuração. Essa alteração de código não executa um novo deploy. A leitura de
 sessão comprova a composição ativa, mas não valida as credenciais no GitHub,
-callback, login ou logout reais. Não existe página `/login` nem botão de login
-na UI atual; a experiência completa pertence à #159 e o smoke produtivo à #167.
+callback, login ou logout reais. Nesse artefato publicado não existia página
+`/login` nem botão de login. O complemento M2 acrescenta o botão mínimo na
+página `/`, além de reconexão, dispositivos e preferências; esses controles só
+chegam a produção após a operação de rollout correspondente. O onboarding
+completo pertence à #159 e o smoke produtivo à #167.
 
 ## Operação local materializada
 
@@ -182,6 +185,68 @@ para fixtures, logs, bundle, documentos ou artefatos de CI.
 Este roteiro não exige ferramenta nova por iniciativa do agente. Enquadrar
 dashboard/email no fluxo de CI/deploy real em decisão própria; ADR-0048 não
 prova que novos Workers já estão cobertos. Não ressuscitar admin/read model antigo.
+
+## Publicação da conclusão de M2
+
+O bootstrap de produção descrito acima aplicou as migrations de identidade
+`0001`–`0005` e a migration inicial de projeção. Isso não demonstra que as
+migrations posteriores já tenham sido aplicadas. O complemento M2 acrescenta
+`0006_membership_governance_and_reauth.sql` e `0007_user_preferences.sql`
+na identidade; não altera as cinco migrations aplicadas nem a projeção.
+A conclusão local de M2 e a integração de seu PR não publicam automaticamente
+`holon-dashboard`.
+
+Antes de publicar esse artefato, em operação autorizada:
+
+1. Confirmar conta, D1 de identidade, SHA e lista de migrations pendentes pelo
+   manifest de produção; preservar os receipts anteriores e o ponto de recuperação.
+2. Conferir as invariantes existentes, inclusive equipes sem owner, e revisar
+   as migrations aditivas. Não transformar erro de preflight em reset de dados.
+3. Aplicar somente as migrations revisadas no D1 de identidade, conferir
+   receipts e `PRAGMA foreign_key_check`, e publicar o Worker correspondente.
+4. Validar sessão anônima, OAuth autorizado, preferência em outro dispositivo,
+   logout atual/todos e negação de uma sessão revogada na request seguinte.
+   Separar esse smoke real da prova Workerd/D1 com provider controlado.
+
+Rollback de Worker não desfaz schema nem revogação. Restore de D1 pode reviver
+sessões ou provas de reautenticação; seguir as restrições de recuperação abaixo
+antes de reabrir tráfego. Os comandos locais de migration continuam com
+`--local`; a tarefa de implementação/PR não autoriza aplicar novas migrations
+remotas, alterar credenciais ou publicar Workers.
+
+### Sessões e preferências: recuperação mínima
+
+A página `/` oferece login GitHub e recuperação de sessão perdida; não há uma
+rota `/login`. Após expiração/revogação, o novo login usa outro fluxo OAuth.
+Reapresentar code/state consumidos não recupera sessão. O controle de dispositivos
+lista apenas sessões próprias; logout atual/global limpa cookies pelo SDK.
+Outro dispositivo perde admissão na próxima request. A UI detecta essa perda
+na próxima leitura/intenção explícita e não consulta por timer/foco/visibilidade.
+Uma sessão diferente fecha o contexto antigo e revalida SSR, preservando a nova
+sessão permitida; uma aba parada não recebe limpeza instantânea.
+
+Para preferências, ler `GET /api/preferences` após resultado desconhecido ou
+repetir o mesmo POST `{ locale, timezone }`, preservando sessão/CSRF válidos.
+O UPSERT mantém uma linha por User; o retry não cria equipe nem dispara review.
+`command_unknown` não é prova de rollback. Perfil corrompido/indisponível exige
+corrigir o storage; não remover dados para simular preferência ausente.
+
+### Governança: confirmação e resultado desconhecido
+
+Os quatro comandos de equipe — promoção, rebaixamento, remoção e saída —
+precisam de uma intenção criada por POST `/api/auth/reauth/init`, seguida de
+novo OAuth GitHub com `reauthIntentId`. A intenção pendente vence em 10 minutos;
+prova confirmada vence 5 minutos depois do callback e pertence à nova sessão,
+ação, equipe e alvo originais. Renovação comum não satisfaz essa exigência.
+Após negação/expiração, revalidar sessão e membership e criar outra intenção;
+não reutilizar code/state ou modificar prazos/prova diretamente no banco.
+
+Se a escrita retornar `command_unknown`, consultar workspaces/membership atuais
+antes de decidir outro comando. Consumo e efeito são transacionais, mas perder
+a resposta não prova rollback. Replay de prova consumida é negado e não deve
+recriar membership. A negação do último owner exige promover outro participante
+existente antes de sair/rebaixar/remover; não apagar triggers para contorná-la.
+Uma sessão humana continuar válida após remoção não concede acesso à equipe.
 
 ## Login GitHub: configuração e rotação do recorte M2
 
