@@ -5,14 +5,17 @@ import {
   authRegisteredOriginsSchema,
   type AuthEnvironment,
 } from "@holon/contracts/dashboard";
-import { createTenancyPersistence } from "@holon/db/identity/server";
+import {
+  createPreferencesPersistence,
+  createTenancyPersistence,
+} from "@holon/db/identity/server";
 import {
   createRequestHandler,
   RouterContextProvider,
   type ServerBuild,
 } from "react-router";
 
-import { nonceContext } from "../app/request-context.js";
+import { nonceContext, viewerServicesContext } from "../app/request-context.js";
 import { createDashboardHandler } from "../app/server/http-app.server.js";
 import {
   errorResponse,
@@ -55,9 +58,10 @@ const render = createRequestHandler(
   import.meta.env.MODE,
 );
 
-const handle = createDashboardHandler((request, requestNonce) => {
+const handle = createDashboardHandler((request, requestNonce, services) => {
   const context = new RouterContextProvider();
   context.set(nonceContext, requestNonce);
+  context.set(viewerServicesContext, services);
   return render(request, context);
 });
 
@@ -165,6 +169,10 @@ export default {
       return await handle(request, appOrigin, {
         authService,
         tenancyPersistence,
+        preferencesPersistence:
+          shouldCreateAuth && env.IDENTITY_DB
+            ? createPreferencesPersistence(env.IDENTITY_DB)
+            : undefined,
         authSecret: shouldCreateAuth ? authSecret : undefined,
       });
     } catch (error: unknown) {

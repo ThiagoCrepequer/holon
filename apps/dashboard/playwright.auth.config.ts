@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "test/browser",
-  testMatch: "auth.spec.ts",
+  testMatch: ["auth.spec.ts", "milestone-two.spec.ts"],
   workers: 1,
   retries: 0,
   timeout: 30_000,

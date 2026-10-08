@@ -213,6 +213,18 @@ async function control(request) {
       headers: { Location: callback.href },
     });
   }
+  if (url.pathname === "/__test/session/expire" && request.method === "POST") {
+    const input = await request.json();
+    assert.equal(typeof input.sessionId, "string");
+    const database = await runtime.getD1Database("IDENTITY_DB");
+    await database
+      .prepare(
+        "UPDATE session SET expiresAt = CAST(unixepoch('subsec') * 1000 AS INTEGER) - 1 WHERE id = ?",
+      )
+      .bind(input.sessionId)
+      .run();
+    return Response.json({ ok: true });
+  }
   if (url.pathname === "/__test/configuration" && request.method === "GET") {
     const results = [];
     for (const worker of misconfigured) {
@@ -297,6 +309,16 @@ const server = createServer(
         if (typeof value === "string") headers.set(name, value);
         else if (value) for (const item of value) headers.append(name, item);
       }
+      // Test-only ingress isolation: emulate the Cloudflare-supplied address per scenario.
+      // Keep the real persistent budgets and ignore any client-supplied CF address.
+      const testClient = headers.get("X-Holon-Test-Client") ?? "anonymous";
+      assert(/^(?:[0-9]{1,8}|anonymous)$/u.test(testClient));
+      const syntheticAddress =
+        testClient === "anonymous"
+          ? "192.0.2.1"
+          : `198.18.${Math.floor(Number(testClient) / 256) % 256}.${Number(testClient) % 256}`;
+      headers.set("CF-Connecting-IP", syntheticAddress);
+      headers.delete("X-Holon-Test-Client");
       const request = new Request(`${origin}${incoming.url}`, {
         method,
         headers,
