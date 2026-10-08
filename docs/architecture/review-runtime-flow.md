@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -69,7 +69,7 @@ sequenceDiagram
         AG->>AW: Workflow com identidade por fase
         AW->>AG: step.prompt para tentar refutar candidatos
         AG->>LE: reservar inferências e tools no mesmo saldo
-        AG->>GW: até oito passos de verificação
+        AG->>GW: até dois passos de verificação
         AG->>EX: inspecionar guardas, chamadores e contratos
         AG-->>AW: confirmed/refuted/inconclusive por candidato
         AW-->>WF: avaliações e resumo corrigido
@@ -117,10 +117,32 @@ completo não é serializado como resultado de step. Sem reconstrução, 50 shar
 usam uma leitura completa e um cálculo do digest nessa invocação.
 
 O analisador estrutural produz pistas para investigar contratos, não findings.
-Uma declaração de `interface` ou `type` movida e reexportada como tipo no mesmo
-módulo não recebe a pista de símbolo exportado removido. Isso não substitui a
-verificação de consumidores nem comprova que uma reexportação aponta para um
-destino válido.
+A verificação de símbolos exportados removidos utiliza a AST completa do módulo
+em HEAD (`@babel/parser`): declarações movidas e reexportadas (inclusive via
+fachadas multiline e aliases públicos) não disparam alerta se o nome público e o
+namespace correspondente continuarem expostos no módulo original. `interface` e
+`type` exigem o namespace type; `class`, `function` e `const` exigem o namespace
+value. Classes e enums podem expor ambos; funções e variáveis não preservam um
+tipo homônimo. Reexportar uma classe somente como tipo não preserva seu valor.
+Declarações `declare` não comprovam um valor implementado; uma variável ambiente
+também não cria um tipo homônimo.
+Arquivo ausente do inventário, erro de parse ou
+namespace incerto conservam o alerta. O inventário do repositório prioriza a
+leitura dos módulos alterados antes dos consumidores downstream, respeitando os
+tetos de 100 arquivos, 64 kB por arquivo e 1 MB total; o esgotamento da cota
+pelos módulos alterados marca truncamento de downstream. Arquivos que excedem
+os tetos não entram no inventário. Antes de ler conteúdo, o inventário consulta
+modo e tamanho no HEAD com `git ls-tree`: somente blobs regulares cabem nessa
+prova. Symlinks, submódulos, metadados ausentes ou inválidos e arquivos maiores
+que o teto não autorizam leitura; a omissão conserva a pista e marca truncamento.
+Esse comando não faz checkout, fetch ou execução de código do repositório.
+Fonte oficial, consultada em 2026-10-08:
+[Git ls-tree](https://git-scm.com/docs/git-ls-tree).
+Isso não substitui a verificação de
+consumidores, a compatibilidade do contrato nem comprova que uma reexportação
+aponta para um destino válido. Os plugins seguem a extensão do arquivo; erro
+de sintaxe não é recuperado para suprimir uma pista. Fonte oficial, consultada
+em 2026-10-08: [Babel Parser](https://babeljs.io/docs/babel-parser).
 
 ## Agent e tools
 
@@ -158,10 +180,18 @@ Refutação confiável descarta o candidato; incerteza ou resposta inválida blo
 sua publicação e marca a revisão parcial. Limitações anteriores não são apagadas.
 Resoluções anteriores seguem seu gate existente de evidência positiva.
 
-O provider é AI SDK por AI Gateway Dynamic Route. `AGENT_TRACE_PAYLOADS` está
+O provider é AI SDK por AI Gateway Dynamic Route. `stream_options.include_usage`
+é solicitado em streaming para obter o uso reportado pelo provedor; uso ausente
+mantém a reserva de saída. O hook
+`transformRequestBody` impõe `provider.require_parameters=true` (restringindo a
+seleção a nós que suportam os parâmetros enviados, incluindo `tool_choice`) e define
+`reasoning: { enabled: false }` (removendo parâmetros contraditórios de esforço/teto
+para prevenir reativação implícita de raciocínio). `AGENT_TRACE_PAYLOADS` está
 `enabled` durante o beta; **desabilitar quando o usuário solicitar**. Os spans
 do Agent podem conter mensagens e outputs de tools. O Gateway mantém coleta
-de payload desligada.
+de payload desligada. O hook `onStepEnd` do Agent emite o evento
+`model.step_finished` com telemetria allowlisted (stepNumber, finishReason, tools
+permitidas e contagens seguras de tokens), sem expor texto, diffs ou raciocínio.
 
 ## Causas de falha no filho
 
@@ -216,7 +246,7 @@ e [limites oficiais de Workflows](https://developers.cloudflare.com/workflows/re
 (verificados em 2026-10-07).
 
 As duas fases compartilham esses tetos e o mesmo deadline. A investigação
-admite 16 passos; a verificação admite oito e um timeout de cinco minutos,
+admite quatro passos; a verificação admite dois e um timeout de cinco minutos,
 sempre subordinado ao deadline da análise. Sem candidatos não há fase extra.
 
 O adapter espera o estado do Workflow do shard até o deadline da análise.
