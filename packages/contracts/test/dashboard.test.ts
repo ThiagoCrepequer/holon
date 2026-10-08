@@ -14,6 +14,10 @@ import {
   createTeamWorkspaceInputSchema,
   personalWorkspaceInputSchema,
   sessionOutputDtoSchema,
+  sessionDeviceDtoSchema,
+  sessionDeviceListDtoSchema,
+  revokeSessionInputSchema,
+  revokeAllSessionsInputSchema,
   authSocialSignInInputSchema,
   authEnvironmentSchema,
   authRegisteredOriginsSchema,
@@ -33,6 +37,34 @@ it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
     expiresAt: "2030-01-01T00:00:00Z",
   };
   expect(sessionIdentitySchema.parse(identity)).toEqual(identity);
+  expect(revokeSessionInputSchema.safeParse({}).success).toBe(true);
+  expect(revokeSessionInputSchema.safeParse({ extra: 1 }).success).toBe(false);
+  expect(revokeAllSessionsInputSchema.safeParse({}).success).toBe(true);
+  expect(revokeAllSessionsInputSchema.safeParse({ extra: 1 }).success).toBe(
+    false,
+  );
+  expect(
+    sessionDeviceDtoSchema.safeParse({
+      id: "opaque-1",
+      createdAt: "2030-01-01T00:00:00.000Z",
+      expiresAt: "2030-01-08T00:00:00.000Z",
+      isCurrent: true,
+      label: "chrome",
+    }).success,
+  ).toBe(true);
+  expect(
+    sessionDeviceListDtoSchema.safeParse({
+      sessions: [
+        {
+          id: "opaque-1",
+          createdAt: "2030-01-01T00:00:00.000Z",
+          expiresAt: "2030-01-08T00:00:00.000Z",
+          isCurrent: true,
+          label: "chrome",
+        },
+      ],
+    }).success,
+  ).toBe(true);
   expect(
     sessionIdentitySchema.safeParse({ ...identity, token: "secret" }).success,
   ).toBe(false);

@@ -174,7 +174,15 @@ it("SSR/API share HTTP boundaries and the bootstrap exposes no command or fake a
   ).toEqual({ status: "ok" });
   for (const path of ["/api/auth/get-session", "/api/send", "/api/unknown"])
     expect((await handle(new Request(origin + path), origin)).status).toBe(404);
-  expect((await handle(command(), origin)).status).toBe(405);
+  expect((await handle(command(), origin)).status).toBe(503);
+  expect(
+    (
+      await handle(
+        new Request(`${origin}/api/unknown`, { method: "POST" }),
+        origin,
+      )
+    ).status,
+  ).toBe(405);
   expect(
     (await handle(new Request(`${origin}/?q=${"x".repeat(2049)}`), origin))
       .status,
@@ -280,6 +288,26 @@ function createFakeAuthService(
         headers,
       };
     },
+    async listSessions() {
+      return [
+        {
+          id: sessionId,
+          createdAt: "2026-10-01T00:00:00Z",
+          expiresAt: "2030-01-01T00:00:00Z",
+          isCurrent: true,
+          label: "chrome",
+        },
+      ];
+    },
+    async revokeSession() {
+      return true;
+    },
+    async revokeAllSessions() {
+      return 1;
+    },
+    async clearSessionCookies() {
+      return [];
+    },
     async pruneExpiredCodes() {},
   };
   return authService;
@@ -336,6 +364,27 @@ function createFakeTenancyPersistence() {
       const ws = workspaces.get(workspaceId);
       if (!ws) return null;
       return { workspace: ws, role: "owner" as const };
+    },
+    async createReauthIntent() {
+      throw new Error("Unexpected governance command");
+    },
+    async readPendingReauthContext() {
+      return null;
+    },
+    async confirmReauthIntent() {
+      throw new Error("Unexpected governance command");
+    },
+    async promoteMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async demoteMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async removeMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async leaveWorkspace() {
+      throw new Error("Unexpected governance command");
     },
     async readMembership(userId: string, workspaceId: string) {
       if (!workspaces.has(workspaceId)) return null;
@@ -679,6 +728,28 @@ it("integrates tenancy routes: verifies admission and session CSRF on mutations,
 it("ORM and database exceptions return 503 unavailable without leaking SQL or schema internals and preserve cookies", async () => {
   const authService = createFakeAuthService({ admitted: true });
   const ormFaultPersistence: TenancyPersistence = {
+    async createReauthIntent() {
+      throw new Error("Unexpected governance command");
+    },
+    async readPendingReauthContext() {
+      return null;
+    },
+    async confirmReauthIntent() {
+      throw new Error("Unexpected governance command");
+    },
+    async promoteMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async demoteMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async removeMember() {
+      throw new Error("Unexpected governance command");
+    },
+    async leaveWorkspace() {
+      throw new Error("Unexpected governance command");
+    },
+
     async provisionPersonalWorkspace() {
       throw new Error(
         "DrizzleError: table workspace constraint violated: SELECT * FROM workspace",

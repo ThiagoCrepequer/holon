@@ -6,6 +6,7 @@ import {
   type SessionOutputDto,
   type AdmittedUser,
   type AuthEnvironment,
+  type SessionDeviceDto,
 } from "@holon/contracts/dashboard";
 import { identityAuthSchema } from "@holon/db/auth-integration/server";
 import {
@@ -21,6 +22,13 @@ import {
   validateGitHubAuthConfig,
   type GitHubAppAuthConfig,
 } from "./github-config.server.js";
+import { createReauthPlugin } from "./reauth-plugin.server.js";
+import {
+  createSessionLifecyclePlugin,
+  listSessions,
+  revokeAllSessions,
+  revokeSession,
+} from "./session-lifecycle.server.js";
 
 export { validateGitHubAuthConfig, type GitHubAppAuthConfig };
 
@@ -34,6 +42,7 @@ export interface AuthServiceOptions {
   readonly githubClientSecret: string;
   readonly environment?: AuthEnvironment;
   readonly homologatedOrigins?: ReadonlyMap<AuthEnvironment, readonly string[]>;
+  readonly clock?: (() => number) | undefined;
 }
 export type { AdmittedUser, RateLimitStorage };
 
@@ -50,6 +59,13 @@ export interface AuthService {
     status: AdmittedUserStatus;
     headers: Headers;
   }>;
+  listSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<SessionDeviceDto[]>;
+  revokeSession(actor: AdmittedUser, sessionId: string): Promise<boolean>;
+  revokeAllSessions(actor: AdmittedUser): Promise<number>;
+  clearSessionCookies(request: Request): Promise<string[]>;
   pruneExpiredCodes(): Promise<void>;
 }
 
@@ -127,7 +143,16 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         transaction: false,
       },
     ),
-    plugins: [githubCodeRedemptionPlugin(options.database)],
+    plugins: [
+      githubCodeRedemptionPlugin(options.database),
+      createSessionLifecyclePlugin({
+        database: options.database,
+        clock: options.clock,
+      }),
+      createReauthPlugin({
+        database: options.database,
+      }),
+    ],
     socialProviders: {
       github: {
         clientId: config.clientId,
@@ -144,6 +169,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       expiresIn: 7 * 86400,
       updateAge: 86400,
       cookieCache: { enabled: false },
+      deferSessionRefresh: true,
     },
     advanced: {
       useSecureCookies: true,
@@ -309,16 +335,30 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
             "provider",
             "callbackURL",
             "disableRedirect",
+            "reauthIntentId",
           ]);
           if (Object.keys(payload).some((key) => !allowedKeys.has(key))) {
             return new Response(null, { status: 400, headers: privateHeaders });
           }
         }
 
+        const callbackURL = parsed.data.callbackURL?.startsWith("/")
+          ? `${config.appOrigin}${parsed.data.callbackURL}`
+          : parsed.data.callbackURL;
+
+        const authPayload = {
+          provider: parsed.data.provider,
+          callbackURL,
+          disableRedirect: parsed.data.disableRedirect,
+          ...(parsed.data.reauthIntentId
+            ? { additionalData: { reauthIntentId: parsed.data.reauthIntentId } }
+            : {}),
+        };
+
         const freshRequest = new Request(request.url, {
           method: request.method,
           headers: request.headers,
-          body: readResult.raw,
+          body: JSON.stringify(authPayload),
         });
 
         const response = await auth.handler(freshRequest);
@@ -359,6 +399,29 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       const { admittedUser, status, headers } =
         await resolveSessionWithAccount(request);
       return { user: admittedUser, status, headers };
+    },
+
+    async listSessions(userId: string, currentSessionId: string) {
+      const now = (options.clock ?? Date.now)();
+      return listSessions(options.database, userId, currentSessionId, now);
+    },
+
+    async revokeSession(actor: AdmittedUser, sessionId: string) {
+      const now = (options.clock ?? Date.now)();
+      return revokeSession(options.database, actor, sessionId, now);
+    },
+
+    async revokeAllSessions(actor: AdmittedUser) {
+      const now = (options.clock ?? Date.now)();
+      return revokeAllSessions(options.database, actor, now);
+    },
+
+    async clearSessionCookies(request: Request): Promise<string[]> {
+      const signOutResponse = await auth.api.signOut({
+        headers: request.headers,
+        asResponse: true,
+      });
+      return signOutResponse.headers.getSetCookie();
     },
 
     async pruneExpiredCodes(): Promise<void> {

@@ -218,23 +218,36 @@ it("creation replay uses the current membership and cannot recreate a removed pa
   const store = createTenancyPersistence(database);
   const command = { name: "Synthetic team", operationId: "review_creation" };
   const created = await store.createTeamWorkspace(reviewActor, command);
+  await database.batch([
+    database.prepare(
+      "INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt) VALUES ('remaining_owner','Remaining owner','remaining@example.invalid',1,0,0)",
+    ),
+    database
+      .prepare(
+        "INSERT INTO membership (workspace_id,user_id,role,created_at,updated_at) VALUES (?,'remaining_owner','owner',0,0)",
+      )
+      .bind(created.workspace.id),
+  ]);
   await database
-    .prepare("UPDATE membership SET role='member' WHERE workspace_id=?")
-    .bind(created.workspace.id)
+    .prepare(
+      "UPDATE membership SET role='member' WHERE workspace_id=? AND user_id=?",
+    )
+    .bind(created.workspace.id, reviewActor.id)
     .run();
   expect(
     (await store.createTeamWorkspace(reviewActor, command)).membership.role,
   ).toBe("member");
   await database
-    .prepare("DELETE FROM membership WHERE workspace_id=?")
-    .bind(created.workspace.id)
+    .prepare("DELETE FROM membership WHERE workspace_id=? AND user_id=?")
+    .bind(created.workspace.id, reviewActor.id)
     .run();
   await expect(
     store.createTeamWorkspace(reviewActor, command),
   ).rejects.toThrow();
   expect(
-    (await database.prepare("SELECT * FROM membership").all()).results,
-  ).toHaveLength(0);
+    (await database.prepare("SELECT user_id,role FROM membership").all())
+      .results,
+  ).toEqual([{ user_id: "remaining_owner", role: "owner" }]);
   expect(
     (await database.prepare("SELECT * FROM workspace").all()).results,
   ).toHaveLength(1);

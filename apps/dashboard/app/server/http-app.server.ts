@@ -1,13 +1,29 @@
 import type { WorkspaceTenancyPort } from "@holon/application/dashboard-ports";
+import type { PersonalPreferencesPort } from "@holon/application/preferences-port";
 import type { AuthService } from "@holon/auth/server";
 import {
   createTeamWorkspaceInputSchema,
   dashboardIdSchema,
+  demoteMemberInputSchema,
+  leaveWorkspaceInputSchema,
   personalWorkspaceInputSchema,
+  promoteMemberInputSchema,
+  reauthInitInputSchema,
+  reauthReceiptSchema,
+  removeMemberInputSchema,
+  revokeAllSessionsInputSchema,
+  revokeSessionInputSchema,
+  sessionDeviceListDtoSchema,
   type AdmittedUser,
 } from "@holon/contracts/dashboard";
 import {
+  personalPreferencesOutputSchema,
+  updatePreferencesInputSchema,
+  updatePreferencesOutputSchema,
+} from "@holon/contracts/dashboard-preferences";
+import {
   deriveRateLimitKey,
+  PreferencesError,
   RateLimitStorageError,
   TenancyError,
   type RateLimitStorage,
@@ -28,6 +44,7 @@ import {
 export interface DashboardServices {
   readonly authService?: AuthService | undefined;
   readonly tenancyPersistence?: WorkspaceTenancyPort | undefined;
+  readonly preferencesPersistence?: PersonalPreferencesPort | undefined;
   readonly authSecret?: string | undefined;
   readonly rateLimitStorage?: RateLimitStorage | undefined;
 }
@@ -41,17 +58,62 @@ interface ApiEnv {
 const ALLOWED_MUTATION_PATHS = new Set([
   "/api/auth/sign-in/social",
   "/api/auth/sign-out",
+  "/api/auth/sign-out/all",
+  "/api/auth/reauth/init",
+  "/api/preferences",
   "/api/workspaces/personal",
   "/api/workspaces/team",
 ]);
 
+function isAllowedMutationPath(pathname: string): boolean {
+  if (ALLOWED_MUTATION_PATHS.has(pathname)) return true;
+  if (/^\/api\/auth\/sessions\/[a-zA-Z0-9_-]+\/revoke$/.test(pathname)) {
+    return true;
+  }
+  if (
+    /^\/api\/workspaces\/[a-zA-Z0-9_-]+\/members\/(promote|demote|remove)$/.test(
+      pathname,
+    )
+  ) {
+    return true;
+  }
+  if (/^\/api\/workspaces\/[a-zA-Z0-9_-]+\/leave$/.test(pathname)) {
+    return true;
+  }
+  return false;
+}
+
 function mapBoundaryError(error: unknown): unknown {
+  if (error instanceof PreferencesError) {
+    if (error.code === "invalid_preferences") {
+      return new HttpBoundaryError("invalid_request", 400);
+    }
+    if (error.code === "user_not_admitted") {
+      return new HttpBoundaryError("denied", 403);
+    }
+    if (error.code === "command_unknown") {
+      return new HttpBoundaryError("command_unknown", 503);
+    }
+    return new HttpBoundaryError("unavailable", 503);
+  }
   if (error instanceof TenancyError) {
     if (error.code === "operation_conflict") {
       return new HttpBoundaryError("invalid_request", 409);
     }
     if (error.code === "user_not_admitted") {
       return new HttpBoundaryError("denied", 403);
+    }
+    if (error.code === "governance_denied") {
+      return new HttpBoundaryError("denied", 403);
+    }
+    if (error.code === "reauth_required") {
+      return new HttpBoundaryError("reconnect_required", 401);
+    }
+    if (error.code === "member_not_found") {
+      return new HttpBoundaryError("invalid_request", 404);
+    }
+    if (error.code === "invalid_role_transition") {
+      return new HttpBoundaryError("invalid_request", 400);
     }
     if (error.code === "command_unknown") {
       return new HttpBoundaryError("command_unknown", 503);
@@ -206,7 +268,11 @@ async function handleAuthRequest(
 }
 
 export function createDashboardHandler(
-  render: (request: Request, requestNonce: string) => Promise<Response>,
+  render: (
+    request: Request,
+    requestNonce: string,
+    services: DashboardServices,
+  ) => Promise<Response>,
   defaultServices?: DashboardServices,
 ) {
   const api = new Hono<{ Bindings: ApiEnv }>();
@@ -277,6 +343,130 @@ export function createDashboardHandler(
     return authRes;
   });
 
+  api.get("/api/auth/sessions", async (c) => {
+    await consumeReadRateLimit(c.req.raw, c.env.services, "/api/auth/sessions");
+    const { user } = await requireAdmittedSession(
+      c.req.raw,
+      c.env.services,
+      c.env.sessionCookies,
+    );
+    if (!c.env.services.authService) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const sessions = await c.env.services.authService.listSessions(
+      user.id,
+      user.sessionId,
+    );
+    const dto = sessionDeviceListDtoSchema.parse({ sessions });
+    return respondWithCookies(dto, c.env.sessionCookies);
+  });
+
+  api.post("/api/auth/sessions/:id/revoke", async (c) => {
+    const sessionIdParam = c.req.param("id");
+    if (
+      !sessionIdParam ||
+      !dashboardIdSchema.safeParse(sessionIdParam).success
+    ) {
+      throw new HttpBoundaryError("invalid_request", 400);
+    }
+    const { user } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      revokeSessionInputSchema,
+    );
+    if (!c.env.services.authService) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const revoked = await c.env.services.authService.revokeSession(
+      user,
+      sessionIdParam,
+    );
+    if (sessionIdParam === user.sessionId) {
+      const clearCookies = await c.env.services.authService.clearSessionCookies(
+        c.req.raw,
+      );
+      c.env.sessionCookies.push(...clearCookies);
+    }
+    return respondWithCookies({ revoked }, c.env.sessionCookies);
+  });
+
+  api.post("/api/auth/sign-out/all", async (c) => {
+    const { user } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      revokeAllSessionsInputSchema,
+    );
+    if (!c.env.services.authService) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const revokedCount =
+      await c.env.services.authService.revokeAllSessions(user);
+    const clearCookies = await c.env.services.authService.clearSessionCookies(
+      c.req.raw,
+    );
+    c.env.sessionCookies.push(...clearCookies);
+    return respondWithCookies({ revokedCount }, c.env.sessionCookies);
+  });
+
+  api.get("/api/preferences", async (c) => {
+    await consumeReadRateLimit(c.req.raw, c.env.services, "/api/preferences");
+    const { user } = await requireAdmittedSession(
+      c.req.raw,
+      c.env.services,
+      c.env.sessionCookies,
+    );
+    if (!c.env.services.preferencesPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const preferences =
+      await c.env.services.preferencesPersistence.readPreferences(user);
+    const dto = personalPreferencesOutputSchema.parse({ preferences });
+    return respondWithCookies(dto, c.env.sessionCookies);
+  });
+
+  api.post("/api/preferences", async (c) => {
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      updatePreferencesInputSchema,
+    );
+    if (!c.env.services.preferencesPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const preferences =
+      await c.env.services.preferencesPersistence.updatePreferences(
+        user,
+        payload,
+      );
+    const dto = updatePreferencesOutputSchema.parse({ preferences });
+    return respondWithCookies(dto, c.env.sessionCookies);
+  });
+
+  api.post("/api/auth/reauth/init", async (c) => {
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      reauthInitInputSchema,
+    );
+    if (!c.env.services.tenancyPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const receipt = await c.env.services.tenancyPersistence.createReauthIntent(
+      user,
+      payload,
+    );
+    const dto = reauthReceiptSchema.parse(receipt);
+    return respondWithCookies(dto, c.env.sessionCookies);
+  });
+
   api.all("/api/auth", handleAuthRequest);
   api.all("/api/auth/*", handleAuthRequest);
 
@@ -322,6 +512,102 @@ export function createDashboardHandler(
 
   api.all("/api/workspaces/leave", () => {
     throw new HttpBoundaryError("invalid_request", 404);
+  });
+
+  api.post("/api/workspaces/:id/members/promote", async (c) => {
+    const id = c.req.param("id");
+    const idParsed = dashboardIdSchema.safeParse(id);
+    if (!idParsed.success) {
+      throw new HttpBoundaryError("invalid_request", 400);
+    }
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      promoteMemberInputSchema,
+    );
+    if (!c.env.services.tenancyPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const result = await c.env.services.tenancyPersistence.promoteMember(
+      user,
+      idParsed.data,
+      payload,
+    );
+    return respondWithCookies(result, c.env.sessionCookies);
+  });
+
+  api.post("/api/workspaces/:id/members/demote", async (c) => {
+    const id = c.req.param("id");
+    const idParsed = dashboardIdSchema.safeParse(id);
+    if (!idParsed.success) {
+      throw new HttpBoundaryError("invalid_request", 400);
+    }
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      demoteMemberInputSchema,
+    );
+    if (!c.env.services.tenancyPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const result = await c.env.services.tenancyPersistence.demoteMember(
+      user,
+      idParsed.data,
+      payload,
+    );
+    return respondWithCookies(result, c.env.sessionCookies);
+  });
+
+  api.post("/api/workspaces/:id/members/remove", async (c) => {
+    const id = c.req.param("id");
+    const idParsed = dashboardIdSchema.safeParse(id);
+    if (!idParsed.success) {
+      throw new HttpBoundaryError("invalid_request", 400);
+    }
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      removeMemberInputSchema,
+    );
+    if (!c.env.services.tenancyPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const result = await c.env.services.tenancyPersistence.removeMember(
+      user,
+      idParsed.data,
+      payload,
+    );
+    return respondWithCookies(result, c.env.sessionCookies);
+  });
+
+  api.post("/api/workspaces/:id/leave", async (c) => {
+    const id = c.req.param("id");
+    const idParsed = dashboardIdSchema.safeParse(id);
+    if (!idParsed.success) {
+      throw new HttpBoundaryError("invalid_request", 400);
+    }
+    const { user, payload } = await requireAdmittedMutation(
+      c.req.raw,
+      c.env.origin,
+      c.env.services,
+      c.env.sessionCookies,
+      leaveWorkspaceInputSchema,
+    );
+    if (!c.env.services.tenancyPersistence) {
+      throw new HttpBoundaryError("unavailable", 503);
+    }
+    const result = await c.env.services.tenancyPersistence.leaveWorkspace(
+      user,
+      idParsed.data,
+      payload,
+    );
+    return respondWithCookies(result, c.env.sessionCookies);
   });
 
   api.get("/api/workspaces/:id", async (c) => {
@@ -394,15 +680,12 @@ export function createDashboardHandler(
         if (!["GET", "HEAD"].includes(request.method)) {
           throw new HttpBoundaryError("invalid_request", 405);
         }
-        const response = await render(request, requestNonce);
+        const response = await render(request, requestNonce, services);
         return secureResponse(response, requestNonce);
       }
 
       if (!["GET", "HEAD"].includes(request.method)) {
-        if (
-          request.method !== "POST" ||
-          !ALLOWED_MUTATION_PATHS.has(url.pathname)
-        ) {
+        if (request.method !== "POST" || !isAllowedMutationPath(url.pathname)) {
           throw new HttpBoundaryError("invalid_request", 405);
         }
       }
