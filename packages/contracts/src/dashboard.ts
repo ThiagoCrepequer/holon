@@ -82,10 +82,19 @@ export const sessionDeviceDtoSchema = z.strictObject({
   label: deviceBrowserLabelSchema,
 });
 export const sessionDeviceListDtoSchema = z.strictObject({
-  sessions: z.array(sessionDeviceDtoSchema),
+  sessions: z.array(sessionDeviceDtoSchema).max(100),
+  currentSessionId: dashboardIdSchema,
+  nextCursor: dashboardIdSchema.nullable(),
 });
 export const revokeSessionInputSchema = z.strictObject({});
 export const revokeAllSessionsInputSchema = z.strictObject({});
+export const signOutOutputSchema = z.strictObject({ success: z.literal(true) });
+export const revokeSessionOutputSchema = z.strictObject({
+  revoked: z.boolean(),
+});
+export const revokeAllSessionsOutputSchema = z.strictObject({
+  revokedCount: z.number().int().nonnegative().safe(),
+});
 export const reauthActionSchema = z.enum([
   "promote",
   "demote",

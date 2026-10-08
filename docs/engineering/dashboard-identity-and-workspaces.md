@@ -111,6 +111,14 @@ preexistente ou flag enviada pelo cliente não substituem essa prova. A sessão
 original precisa continuar válida durante o fluxo. Não se promete senha ou
 MFA ao GitHub por parâmetro OAuth.
 
+A criação admitida de outra intenção remove até 100 intenções vencidas por
+comando, por índice de expiração e relógio SQLite. A expiração atual governa
+a retenção: uma prova confirmada permanece disponível durante seus cinco
+minutos mesmo se a criação da intenção ocorreu há mais de dez minutos.
+Intenções vencidas pendentes ou consumidas não precisam ser conservadas para
+autorizar replay. A limpeza retoma no próximo init depois de ociosidade;
+esse recorte não provisiona um scheduler remoto.
+
 Consumir a prova e alterar membership pertencem à mesma batch D1. A autoridade
 e os prazos são revalidados na escrita, incluindo o relógio SQLite. Triggers
 aditivos de identidade impedem remover ou rebaixar o último owner, inclusive

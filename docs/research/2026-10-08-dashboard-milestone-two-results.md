@@ -303,3 +303,62 @@ exemplo publicado para outra versão.
 `additionalData` do cliente não é autoridade. Subject real do provider, contexto
 reservado do servidor, sessão emitida e guarda SQL têm provas distintas; linking
 por mesmo email verificado não confirma reauth da conta original.
+
+## Revisão adicional do PR #177 em 2026-10-08
+
+A revisão integral partiu do head `cc7889f` sobre a base `b360283`. Os resultados
+anteriores deste documento são evidência daquela implementação, não uma
+garantia de ausência de defeitos. A revisão adicional de especificação e padrões
+encontrou oito problemas e acrescentou correções locais e regressões:
+
+| Problema encontrado                                                                           | Correção e evidência                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Uma request concorrente com snapshot antigo renovava novamente antes de 24 h                  | UPDATE condicional aplica a cadência à row atual; teste nativo intercala a primeira renovação e verifica o próximo limite de 24 h                                                                |
+| Revogação ou desconexão entre admissão HTTP e SELECT ainda permitia ler dispositivos          | Uma única consulta revalida sessão exata, conta GitHub, expiração da request e SQLite junto da página; dois testes HTTP nativos reproduzem a corrida                                             |
+| Intenções de reauth expiradas permaneciam indefinidamente                                     | Init admitido remove até 100 expiradas por comando; migration aditiva 0008 indexa expiração; teste com 120 expiradas preserva intenção e prova vivas e confirma sua utilização                   |
+| SSR consultava sessão e preferências fora dos budgets HTTP                                    | Viewer consome os mesmos buckets antes das respectivas leituras; testes verificam 429 sem leitura e chaves compartilhadas                                                                        |
+| Falha de preferências no SSR descartava cookies já renovados e perdia a classificação do erro | Response sanitizada conserva cookies e status 403/429/503; teste com React Router confirma headers do loader e erro sem detalhes privados                                                        |
+| Logout nativo podia terminar com cookie de renovação depois do cookie de limpeza              | Cookies de limpeza ficam por último; teste OAuth/D1 com sessão envelhecida confirma jar anônima e ausência da row                                                                                |
+| Cliente confirmava revogação com qualquer resposta 2xx                                        | Contracts strict validam respostas por comando; HTML, JSON inválido e campos extras não confirmam sucesso; resultado idempotente continua válido                                                 |
+| Listagem de dispositivos fazia SELECT, resposta e render sem limite                           | Cursor próprio, ordem estável e lotes de 100 em DB, auth, HTTP, contracts e UI; migration aditiva 0009 indexa paginação; teste D1 percorre 210 sessões e browser verifica substituição da página |
+
+As regressões comportamentais focadas foram observadas em RED antes das
+correções e passaram depois. A paginação verifica a geração pela sessão atual
+no envelope, inclusive quando esse dispositivo está em outra página. Cursor
+expirado, revogado ou de outro User não permite continuar a leitura; refresh
+retoma a primeira página. A retenção é oportunística no próximo init admitido,
+sem scheduler novo. As migrations 0001–0007 não foram reescritas.
+
+Foram atualizados os contratos e implementações em `packages/auth`,
+`packages/db`, `packages/contracts` e `apps/dashboard`, seus testes e os guias
+de arquitetura, engenharia e operação correspondentes. Nenhum recurso remoto,
+secret, migration remota ou deploy foi alterado nesta revisão.
+
+O novo `pnpm verify` passou com Node 24.11.0 e pnpm 11.24.0: 21 tarefas de
+typecheck, 32 de cobertura e 17 de build. Preservou os thresholds, os 14 testes
+de arquitetura e os 347 testes do control-plane. Houve reutilização de cache
+Turbo em 4, 15 e 13 tarefas dessas fases, respectivamente; a evidência não
+representa reexecução de todas as tarefas previamente cacheadas.
+
+| Fronteira após a revisão | Testes | Statements | Branches | Funções | Linhas |
+| ------------------------ | ------ | ---------- | -------- | ------- | ------ |
+| Auth Workerd/D1          | 79     | 95,48%     | 87,90%   | 100%    | 95,41% |
+| DB Workerd/D1            | 108    | 94,65%     | 87,22%   | 100%    | 95,33% |
+| Dashboard Node           | 112    | 96,10%     | 93,24%   | 96,72%  | 96,38% |
+| Dashboard Workerd        | 74     | 95,77%     | 91,55%   | 97,67%  | 95,95% |
+
+O dashboard passou em 36 cenários browser, sendo 12 públicos e 24 autenticados
+em Chromium, Firefox e WebKit. A prova browser independente manteve 60 casos.
+O novo cenário de paginação controla somente a resposta de dispositivos após
+login nativo para provar render e transporte; a paginação e a autoridade no
+SELECT real são provadas separadamente em D1/HTTP. OAuth usa provider
+controlado; a execução local não comprova OAuth remoto nem produção.
+
+Comandos desta revisão incluem `pnpm install --frozen-lockfile`, regressões
+focadas de auth/DB/dashboard, `pnpm test:architecture`, extração/verificação
+i18n, formatação e `pnpm verify`. O gate usou Workerd/D1, browsers e Docker
+locais e terminou os builds Workers com dry-run. A validação foi concluída
+localmente em `codex/review-pr-177`, antes do commit e do envio autorizado pelo
+usuário à mesma branch do PR, `codex/dashboard-milestone-two-completion`.
+A CI do head original não valida este novo diff. O build de produção separado
+relatado acima pertence à entrega original e não foi repetido nesta revisão.

@@ -56,6 +56,11 @@ msgstr "Loading sessions…"
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
+msgid "session.nextPage"
+msgstr "Next sessions"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
 msgid "session.deviceDescription"
 msgstr "Only your sessions are listed. Browser names are approximate."
 

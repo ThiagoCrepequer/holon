@@ -52,7 +52,11 @@ function fixture() {
       status: "admitted" as const,
       headers: refreshed,
     })),
-    listSessions: vi.fn(async () => []),
+    listSessions: vi.fn(async () => ({
+      sessions: [],
+      currentSessionId: user.sessionId,
+      nextCursor: null,
+    })),
     revokeSession: vi.fn(async () => true),
     revokeAllSessions: vi.fn(async () => 1),
     clearSessionCookies: vi.fn(async () => []),

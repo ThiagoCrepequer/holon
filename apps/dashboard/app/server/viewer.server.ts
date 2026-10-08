@@ -7,9 +7,14 @@ import {
 } from "@holon/contracts/dashboard-preferences";
 
 import {
+  errorResponse,
   HttpBoundaryError,
   issueSessionCsrfToken,
 } from "./http-security.server.js";
+import {
+  consumeReadRateLimit,
+  mapBoundaryError,
+} from "./http-services.server.js";
 
 export type DashboardViewer =
   | { status: "disabled" | "anonymous" | "disconnected" }
@@ -33,38 +38,49 @@ export async function readDashboardViewer(
 ): Promise<{ viewer: DashboardViewer; headers: Headers }> {
   if (!services.authService)
     return { viewer: { status: "disabled" }, headers: new Headers() };
-  const resolution = await services.authService.getAdmittedUser(request);
-  if (!resolution.user)
+  const headers = new Headers();
+  try {
+    await consumeReadRateLimit(request, services, "/api/auth/session");
+    const resolution = await services.authService.getAdmittedUser(request);
+    for (const cookie of resolution.headers.getSetCookie())
+      headers.append("Set-Cookie", cookie);
+    if (!resolution.user)
+      return {
+        viewer: {
+          status:
+            resolution.status === "disconnected" ? "disconnected" : "anonymous",
+        },
+        headers: resolution.headers,
+      };
+    if (!services.authSecret || !services.preferencesPersistence)
+      throw new HttpBoundaryError("unavailable", 503);
+    const actor = admittedUserSchema.parse(resolution.user);
+    await consumeReadRateLimit(request, services, "/api/preferences");
+    const preferences = personalPreferencesSchema.parse(
+      await services.preferencesPersistence.readPreferences(actor),
+    );
+    const csrf = await issueSessionCsrfToken(
+      actor.sessionId,
+      services.authSecret,
+    );
+    headers.append(
+      "Set-Cookie",
+      `holon_csrf=${csrf}; Path=/; SameSite=Lax; Secure`,
+    );
     return {
       viewer: {
-        status:
-          resolution.status === "disconnected" ? "disconnected" : "anonymous",
+        status: "authenticated",
+        user: { id: actor.id, name: actor.name },
+        sessionId: actor.sessionId,
+        csrf,
+        preferences,
       },
-      headers: resolution.headers,
+      headers,
     };
-  if (!services.authSecret || !services.preferencesPersistence)
-    throw new HttpBoundaryError("unavailable", 503);
-  const actor = admittedUserSchema.parse(resolution.user);
-  const preferences = personalPreferencesSchema.parse(
-    await services.preferencesPersistence.readPreferences(actor),
-  );
-  const csrf = await issueSessionCsrfToken(
-    actor.sessionId,
-    services.authSecret,
-  );
-  const headers = new Headers(resolution.headers);
-  headers.append(
-    "Set-Cookie",
-    `holon_csrf=${csrf}; Path=/; SameSite=Lax; Secure`,
-  );
-  return {
-    viewer: {
-      status: "authenticated",
-      user: { id: actor.id, name: actor.name },
-      sessionId: actor.sessionId,
-      csrf,
-      preferences,
-    },
-    headers,
-  };
+  } catch (error) {
+    const response = errorResponse(mapBoundaryError(error));
+    for (const cookie of headers.getSetCookie())
+      response.headers.append("Set-Cookie", cookie);
+    throw response;
+  }
 }

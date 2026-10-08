@@ -22,6 +22,48 @@ afterEach(async () => {
   await reset();
 });
 
+it("current logout after renewal age clears the native credential rather than restoring admission renewal", async () => {
+  const { signIn, command, handle } = await fixture();
+  const current = await signIn("aged-current-logout");
+  const now = Date.now();
+  await bindings.AUTH_DB.prepare(
+    "UPDATE session SET createdAt=?, updatedAt=?, expiresAt=? WHERE id=?",
+  )
+    .bind(
+      now - 86400_001,
+      now - 86400_001,
+      now + 6 * 86400_000 - 1,
+      current.session.session.id,
+    )
+    .run();
+  const response = await command(current, "/api/auth/sign-out");
+  expect(response.status).toBe(200);
+  const sessionCookies = response.headers
+    .getSetCookie()
+    .filter((cookie) =>
+      cookie.startsWith("__Secure-better-auth.session_token="),
+    );
+  expect(sessionCookies).toHaveLength(2);
+  expect(sessionCookies[0]).not.toMatch(
+    /^__Secure-better-auth\.session_token=;/u,
+  );
+  expect(sessionCookies[1]).toMatch(/^__Secure-better-auth\.session_token=;/u);
+  current.jar.capture(response);
+  expect(current.jar.hasSession()).toBe(false);
+  expect(
+    await bindings.AUTH_DB.prepare("SELECT COUNT(*) FROM session WHERE id=?")
+      .bind(current.session.session.id)
+      .first("COUNT(*)"),
+  ).toBe(0);
+  const denied = await handle(
+    new Request(`${testOrigin}/api/auth/sessions`, {
+      headers: current.jar.headers(),
+    }),
+    testOrigin,
+  );
+  expect(denied.status).toBe(403);
+});
+
 async function fixture(database = bindings.AUTH_DB) {
   const authService = await setupAuthService({ database });
   const handle = createDashboardHandler(
@@ -105,6 +147,77 @@ it("public device DTO lists only the authenticated user's sessions and refuses a
       .first("COUNT(*)"),
   ).toBe(1);
 });
+
+it.each(["revoked", "disconnected"])(
+  "an actor %s after admission cannot read device metadata",
+  async (change) => {
+    let armed = false;
+    let currentSessionId = "";
+    let userId = "";
+    const database = new Proxy(bindings.AUTH_DB, {
+      get(target, property) {
+        if (property === "prepare")
+          return (sql: string) => {
+            function wrap(statement: D1PreparedStatement): D1PreparedStatement {
+              return new Proxy(statement, {
+                get(inner, key) {
+                  if (key === "bind")
+                    return (...values: unknown[]) =>
+                      wrap(inner.bind(...values));
+                  if (key === "all")
+                    return async () => {
+                      if (armed) {
+                        armed = false;
+                        await (
+                          change === "revoked"
+                            ? bindings.AUTH_DB.prepare(
+                                "DELETE FROM session WHERE id=?",
+                              ).bind(currentSessionId)
+                            : bindings.AUTH_DB.prepare(
+                                "DELETE FROM account WHERE userId=?",
+                              ).bind(userId)
+                        ).run();
+                      }
+                      return inner.all();
+                    };
+                  const value = Reflect.get(inner, key);
+                  return typeof value === "function"
+                    ? value.bind(inner)
+                    : value;
+                },
+              });
+            }
+            const statement = target.prepare(sql);
+            return sql.startsWith("WITH admitted_session AS")
+              ? wrap(statement)
+              : statement;
+          };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { handle, signIn } = await fixture(database);
+    const current = await signIn("read-guard-current");
+    const other = await signIn("read-guard-other");
+    currentSessionId = current.session.session.id;
+    userId = current.session.user.id;
+    armed = true;
+    const response = await handle(
+      new Request(`${testOrigin}/api/auth/sessions`, {
+        headers: current.jar.headers(),
+      }),
+      testOrigin,
+    );
+    expect(armed).toBe(false);
+    expect(response.status).toBe(403);
+    expect(await response.text()).not.toContain(other.session.session.id);
+    expect(
+      await bindings.AUTH_DB.prepare("SELECT COUNT(*) FROM session WHERE id=?")
+        .bind(other.session.session.id)
+        .first("COUNT(*)"),
+    ).toBe(1);
+  },
+);
 
 it("denies CSRF and read-method revocations without changing the target device", async () => {
   const { handle, signIn, command } = await fixture();

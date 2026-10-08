@@ -4,6 +4,71 @@ import { expect, test, type Page } from "@playwright/test";
 const origin = "https://127.0.0.1:8795";
 test.use({ timezoneId: "Asia/Tokyo" });
 
+test("device pages replace the visible batch and keep generation checks outside the page", async ({
+  page,
+}, info) => {
+  const subject =
+    99000 + ["chromium", "firefox", "webkit"].indexOf(info.project.name);
+  await signIn(page, subject, `m2-pages-${subject}`);
+  const session = sessionOutputDtoSchema.parse(
+    await page.evaluate(
+      async () => await (await fetch("/api/auth/session")).json(),
+    ),
+  );
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    id: index === 0 ? session.session.id : `paged_device_${index}`,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    expiresAt: session.session.expiresAt,
+    isCurrent: index === 0,
+    label: "chrome",
+  }));
+  const reads: string[] = [];
+  await page.route("**/api/auth/sessions?*", async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    expect(cursor).toBe("paged_device_99");
+    reads.push(cursor!);
+    await route.fulfill({
+      json: {
+        sessions: [
+          { ...firstPage[99], id: "paged_device_100", isCurrent: false },
+        ],
+        currentSessionId: session.session.id,
+        nextCursor: null,
+      },
+    });
+  });
+  await page.route("**/api/auth/sessions", async (route) => {
+    reads.push("first");
+    await route.fulfill({
+      json: {
+        sessions: firstPage,
+        currentSessionId: session.session.id,
+        nextCursor: "paged_device_99",
+      },
+    });
+  });
+  await page
+    .getByRole("button", { name: "Active sessions", exact: true })
+    .click();
+  const devices = page.getByRole("dialog").getByRole("listitem");
+  await expect(devices).toHaveCount(100);
+  await page
+    .getByRole("button", { name: "Next sessions", exact: true })
+    .click();
+  await expect(devices).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Next sessions", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Active sessions", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Refresh sessions", exact: true })
+    .click();
+  await expect(devices).toHaveCount(100);
+  expect(reads).toEqual(["first", "paged_device_99", "first"]);
+});
+
 test("an idle document does not probe or renew the session automatically", async ({
   page,
 }, info) => {

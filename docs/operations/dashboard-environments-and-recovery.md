@@ -191,10 +191,19 @@ prova que novos Workers já estão cobertos. Não ressuscitar admin/read model a
 O bootstrap de produção descrito acima aplicou as migrations de identidade
 `0001`–`0005` e a migration inicial de projeção. Isso não demonstra que as
 migrations posteriores já tenham sido aplicadas. O complemento M2 acrescenta
-`0006_membership_governance_and_reauth.sql` e `0007_user_preferences.sql`
+`0006_membership_governance_and_reauth.sql`, `0007_user_preferences.sql`,
+`0008_reauth_intent_retention.sql` e `0009_session_device_pagination.sql`
 na identidade; não altera as cinco migrations aplicadas nem a projeção.
 A conclusão local de M2 e a integração de seu PR não publicam automaticamente
 `holon-dashboard`.
+
+A migration 0008 acrescenta somente o índice de expiração das intenções de
+reautenticação. Cada nova inicialização admitida limpa até 100 intenções
+vencidas, pendentes ou consumidas. A limpeza usa a expiração atual da prova
+confirmada e retoma no próximo init após ociosidade; não há scheduler novo.
+A migration 0009 acrescenta o índice da paginação de dispositivos. A listagem
+usa cursor de sessão própria e lotes de 100; cursor invalidado por revogação
+ou expiração tem erro seguro e pode ser recuperado com refresh da primeira página.
 
 Antes de publicar esse artefato, em operação autorizada:
 

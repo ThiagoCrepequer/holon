@@ -207,6 +207,47 @@ it("a stale renewal cannot shorten a newer concurrent renewal", async () => {
   ).toBe(later + 7 * day);
 });
 
+it("a later concurrent request reuses the first renewal until another 24h have passed", async () => {
+  let now = Date.now();
+  let earlier = now;
+  let request: () => Request;
+  const renewingAuth = await setupAuthService({ clock: () => earlier });
+  const database = interleaveWrite(
+    bindings.AUTH_DB,
+    (sql) => /^UPDATE\s+session\s+SET\s+expiresAt/iu.test(sql),
+    async () => {
+      expect((await renewingAuth.getSession(request())).session).not.toBeNull();
+    },
+  );
+  const auth = await setupAuthService({ database, clock: () => now });
+  const loggedIn = await login(auth);
+  request = loggedIn.request;
+  earlier = loggedIn.stored.updatedAt + day;
+  now = earlier + 1_000;
+  const concurrent = await auth.getSession(request());
+  expect(concurrent.session?.session.expiresAt).toBe(
+    new Date(earlier + 7 * day).toISOString(),
+  );
+  expect(
+    await bindings.AUTH_DB.prepare(
+      "SELECT updatedAt, expiresAt FROM session WHERE id = ?",
+    )
+      .bind(loggedIn.sessionId)
+      .first(),
+  ).toEqual({
+    updatedAt: earlier,
+    expiresAt: earlier + 7 * day,
+  });
+  now = earlier + day - 1;
+  expect((await auth.getSession(request())).session?.session.expiresAt).toBe(
+    new Date(earlier + 7 * day).toISOString(),
+  );
+  now += 1;
+  expect((await auth.getSession(request())).session?.session.expiresAt).toBe(
+    new Date(now + 7 * day).toISOString(),
+  );
+});
+
 it("renewal cannot revive a row whose persisted expiry changed after the SDK read", async () => {
   let now = Date.now();
   let sessionId = "";

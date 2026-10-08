@@ -289,15 +289,19 @@ function createFakeAuthService(
       };
     },
     async listSessions() {
-      return [
-        {
-          id: sessionId,
-          createdAt: "2026-10-01T00:00:00Z",
-          expiresAt: "2030-01-01T00:00:00Z",
-          isCurrent: true,
-          label: "chrome",
-        },
-      ];
+      return {
+        currentSessionId: sessionId,
+        nextCursor: null,
+        sessions: [
+          {
+            id: sessionId,
+            createdAt: "2026-10-01T00:00:00Z",
+            expiresAt: "2030-01-01T00:00:00Z",
+            isCurrent: true,
+            label: "chrome",
+          },
+        ],
+      };
     },
     async revokeSession() {
       return true;

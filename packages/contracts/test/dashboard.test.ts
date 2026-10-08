@@ -54,6 +54,8 @@ it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
   ).toBe(true);
   expect(
     sessionDeviceListDtoSchema.safeParse({
+      currentSessionId: "opaque-1",
+      nextCursor: null,
       sessions: [
         {
           id: "opaque-1",

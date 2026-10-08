@@ -178,6 +178,13 @@ provas de corrida estão no [guia de segurança web](../engineering/web-security
 
 GET `/api/auth/sessions` lista somente os dispositivos da pessoa admitida,
 com ID público, datas, indicador da sessão atual e navegador em enum reduzido.
+O envelope `{ sessions, currentSessionId, nextCursor }` limita cada página a
+100 dispositivos. O cursor identifica uma sessão própria ainda vigente, em
+ordem `createdAt/id` decrescente; cursor removido/expirado exige refresh da
+primeira página. A sessão atual fica no envelope também quando não pertence
+à página. A UI substitui a página por interação, sem acumulação ilimitada.
+A própria consulta exige a sessão corrente ainda vigente e uma conta GitHub
+vinculada; perder autoridade entre admissão HTTP e SELECT nega a leitura.
 POST `/api/auth/sessions/:id/revoke` e POST `/api/auth/sign-out/all` exigem
 admissão, origem, CSRF e budget; a guarda D1 revalida a sessão exata na escrita.
 A limpeza de cookies usa o sign-out oficial do Better Auth e preserva todos os
@@ -185,7 +192,10 @@ A limpeza de cookies usa o sign-out oficial do Better Auth e preserva todos os
 
 A duração móvel é de 7 dias, com renovação depois de 24 horas. Renovação
 condicional não encurta uma expiração mais nova nem ressuscita uma sessão
-revogada. Uma leitura que encontrou expiração revalida a row antes de apagá-la.
+revogada. A guarda verifica também as 24 horas na row persistida: requests
+concorrentes reutilizam a primeira renovação até a próxima janela, mesmo que
+tenham lido um snapshot anterior. Uma leitura que encontrou expiração revalida
+a row antes de apagá-la.
 Os hooks e database hooks públicos da versão fixada implementam essa política;
 não há patch nem import privado do SDK.
 

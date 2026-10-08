@@ -56,6 +56,11 @@ msgstr "Carregando sessões…"
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
+msgid "session.nextPage"
+msgstr "Próximas sessões"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
 msgid "session.deviceDescription"
 msgstr "Somente suas sessões são listadas. Os nomes dos navegadores são aproximados."
 

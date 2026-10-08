@@ -1,6 +1,6 @@
 import type {
   AdmittedUser,
-  SessionDeviceDto,
+  SessionDeviceListDto,
 } from "@holon/contracts/dashboard";
 import {
   createSessionPersistence,
@@ -21,11 +21,13 @@ export async function listSessions(
   userId: string,
   currentSessionId: string,
   now: number,
-): Promise<SessionDeviceDto[]> {
+  cursor?: string,
+): Promise<SessionDeviceListDto> {
   return createSessionPersistence(database).listSessions(
     userId,
     currentSessionId,
     now,
+    cursor,
   );
 }
 

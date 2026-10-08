@@ -111,6 +111,91 @@ function interleaveIntentWrite(
   });
 }
 
+it("reauth initialization prunes a bounded expired batch while preserving live pending and confirmed proofs", async () => {
+  const { database, actor } = await fixture();
+  const tenancy = createTenancyPersistence(database);
+  const input = {
+    workspaceId: "review_team",
+    action: "promote" as const,
+    targetUserId: "review_member",
+  };
+  const pending = await tenancy.createReauthIntent(actor, input);
+  const confirmed = await tenancy.createReauthIntent(actor, input);
+  const now = Date.now();
+  await database.batch([
+    database
+      .prepare(
+        "INSERT INTO session (id,token,userId,expiresAt,createdAt,updatedAt) VALUES ('retention_proof','synthetic_retention_proof','review_owner',?,?,?)",
+      )
+      .bind(now + 60_000, now, now),
+    database
+      .prepare("UPDATE reauth_intent SET created_at=? WHERE id=?")
+      .bind(now - 11 * 60_000, confirmed.reauthIntentId),
+  ]);
+  expect(
+    await tenancy.confirmReauthIntent(
+      confirmed.reauthIntentId,
+      actor.githubAccountId,
+      actor.id,
+      "retention_proof",
+    ),
+  ).toBe(true);
+  // Expiration, rather than creation age or consumption, decides retention.
+  await database
+    .prepare(
+      `WITH RECURSIVE expired(n) AS (
+         SELECT 1 UNION ALL SELECT n+1 FROM expired WHERE n < 120
+       )
+       INSERT INTO reauth_intent (
+         id,user_id,account_id,original_session_id,workspace_id,action,target_user_id,
+         created_at,expires_at,confirmed_at,consumed_at
+       )
+       SELECT 'retention_expired_' || n,user_id,account_id,original_session_id,
+         workspace_id,action,target_user_id,0,0,
+         CASE WHEN n % 2 = 0 THEN 0 ELSE NULL END,
+         CASE WHEN n % 2 = 0 THEN 0 ELSE NULL END
+       FROM expired CROSS JOIN reauth_intent WHERE id=?`,
+    )
+    .bind(pending.reauthIntentId)
+    .run();
+
+  await tenancy.createReauthIntent(actor, input);
+  expect(
+    await database
+      .prepare("SELECT COUNT(*) AS count FROM reauth_intent WHERE expires_at=0")
+      .first("count"),
+  ).toBe(20);
+  await tenancy.createReauthIntent(actor, input);
+  expect(
+    await database
+      .prepare("SELECT COUNT(*) AS count FROM reauth_intent WHERE expires_at=0")
+      .first("count"),
+  ).toBe(0);
+  expect(
+    await tenancy.readPendingReauthContext(
+      pending.reauthIntentId,
+      actor.sessionId,
+      actor.id,
+    ),
+  ).not.toBeNull();
+  expect(
+    await database
+      .prepare("SELECT confirmed_at, consumed_at FROM reauth_intent WHERE id=?")
+      .bind(confirmed.reauthIntentId)
+      .first(),
+  ).toEqual({ confirmed_at: expect.any(Number), consumed_at: null });
+  await expect(
+    tenancy.promoteMember(
+      { ...actor, sessionId: "retention_proof" },
+      "review_team",
+      {
+        targetUserId: "review_member",
+        reauthIntentId: confirmed.reauthIntentId,
+      },
+    ),
+  ).resolves.toMatchObject({ role: "owner" });
+});
+
 for (const loss of ["session", "owner-role"] as const) {
   it(`reauth initialization cannot persist an intent after ${loss} is lost at the write`, async () => {
     const { database, actor } = await fixture();

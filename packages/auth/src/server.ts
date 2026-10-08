@@ -6,7 +6,7 @@ import {
   type SessionOutputDto,
   type AdmittedUser,
   type AuthEnvironment,
-  type SessionDeviceDto,
+  type SessionDeviceListDto,
 } from "@holon/contracts/dashboard";
 import { identityAuthSchema } from "@holon/db/auth-integration/server";
 import {
@@ -62,7 +62,8 @@ export interface AuthService {
   listSessions(
     userId: string,
     currentSessionId: string,
-  ): Promise<SessionDeviceDto[]>;
+    cursor?: string,
+  ): Promise<SessionDeviceListDto>;
   revokeSession(actor: AdmittedUser, sessionId: string): Promise<boolean>;
   revokeAllSessions(actor: AdmittedUser): Promise<number>;
   clearSessionCookies(request: Request): Promise<string[]>;
@@ -401,9 +402,19 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       return { user: admittedUser, status, headers };
     },
 
-    async listSessions(userId: string, currentSessionId: string) {
+    async listSessions(
+      userId: string,
+      currentSessionId: string,
+      cursor?: string,
+    ) {
       const now = (options.clock ?? Date.now)();
-      return listSessions(options.database, userId, currentSessionId, now);
+      return listSessions(
+        options.database,
+        userId,
+        currentSessionId,
+        now,
+        cursor,
+      );
     },
 
     async revokeSession(actor: AdmittedUser, sessionId: string) {

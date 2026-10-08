@@ -736,7 +736,7 @@ describe("Governance Ports & Invariants", () => {
       expect(expired.status).toBe("denied");
     });
 
-    it("renewSession returns denied when changes is 0 and current is older than newExpiresAtMs", async () => {
+    it("renewSession denies an unapplied seven-day renewal when no concurrent renewal exists", async () => {
       const { database, alice } = await setupFixture();
       const now = Date.now();
       await database
@@ -789,7 +789,7 @@ describe("Governance Ports & Invariants", () => {
         alice.sessionId,
         alice.id,
         now,
-        now + 100_000,
+        now + 7 * 86_400_000,
         now,
       );
       expect(res.status).toBe("denied");

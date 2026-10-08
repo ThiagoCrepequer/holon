@@ -20,8 +20,36 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("session recovery client", () => {
+  it("reads one bounded page and validates session generation even when the current device is absent", async () => {
+    response({
+      currentSessionId: "session_a",
+      nextCursor: "session_c",
+      sessions: [
+        {
+          id: "session_b",
+          label: "chrome",
+          createdAt: "2030-01-01T00:00:00.000Z",
+          expiresAt: snapshot.session.expiresAt,
+          isCurrent: false,
+        },
+      ],
+    });
+    expect(
+      await readDevices(signal, "session_a", "session_cursor"),
+    ).toMatchObject({
+      status: "ready",
+      nextCursor: "session_c",
+      sessions: [{ id: "session_b" }],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/sessions?cursor=session_cursor",
+      expect.objectContaining({ signal }),
+    );
+  });
   it("rejects devices from a new session generation without an intermediate logout", async () => {
     response({
+      currentSessionId: "session_b",
+      nextCursor: null,
       sessions: [
         {
           id: "session_b",
@@ -50,6 +78,8 @@ describe("session recovery client", () => {
   );
   it("validates privacy-preserving device DTOs", async () => {
     response({
+      currentSessionId: "session_a",
+      nextCursor: null,
       sessions: [
         {
           id: "session_a",
@@ -79,7 +109,7 @@ describe("session recovery client", () => {
     expect(await revokeDevice("/api/auth/sign-out", "csrf", signal)).toBe(
       "unavailable",
     );
-    response({});
+    response({ success: true });
     expect(await revokeDevice("/api/auth/sign-out", "csrf", signal)).toBe(
       "done",
     );
@@ -92,6 +122,38 @@ describe("session recovery client", () => {
       }),
     );
   });
+  it.each([
+    ["/api/auth/sign-out", { success: false }],
+    ["/api/auth/sign-out", {}],
+    ["/api/auth/sign-out", { success: true, token: "secret" }],
+    ["/api/auth/sign-out/all", { revokedCount: -1 }],
+    ["/api/auth/sign-out/all", { revokedCount: 1.5 }],
+    ["/api/auth/sessions/session_a/revoke", { revoked: "true" }],
+    ["/api/auth/sessions/session_a/revoke", { success: true }],
+  ])("does not confirm malformed successful command %#", async (path, body) => {
+    response(body);
+    expect(await revokeDevice(path, "csrf", signal)).toBe("unavailable");
+  });
+  it("does not confirm an HTML success response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>unavailable</html>")),
+    );
+    expect(await revokeDevice("/api/auth/sign-out", "csrf", signal)).toBe(
+      "unavailable",
+    );
+  });
+  it.each([
+    ["/api/auth/sign-out", { success: true }],
+    ["/api/auth/sign-out/all", { revokedCount: 0 }],
+    ["/api/auth/sessions/session_a/revoke", { revoked: false }],
+  ])(
+    "confirms the correct strict result for %# including idempotent revocation",
+    async (path, body) => {
+      response(body);
+      expect(await revokeDevice(path, "csrf", signal)).toBe("done");
+    },
+  );
   it("fails safely on a lost network or invalid JSON", async () => {
     vi.stubGlobal(
       "fetch",

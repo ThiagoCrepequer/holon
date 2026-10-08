@@ -73,7 +73,10 @@ describe("Issue #141: Session lifecycle, devices, and revocation", () => {
     const currentSessionId = session1.session!.session.id;
 
     // List devices for user 1
-    const devices = await auth.listSessions(userId, currentSessionId);
+    const page = await auth.listSessions(userId, currentSessionId);
+    const devices = page.sessions;
+    expect(page.currentSessionId).toBe(currentSessionId);
+    expect(page.nextCursor).toBeNull();
 
     // Expect 2 devices for user 1 (user 2 is NOT included)
     expect(devices).toHaveLength(2);
@@ -337,7 +340,8 @@ describe("Issue #141: Session lifecycle, devices, and revocation", () => {
     expect(resAfterRevoke.session).toBeNull();
 
     // Verify database row is truly gone
-    const devices = await auth.listSessions(userId, sessionId);
-    expect(devices).toHaveLength(0);
+    await expect(auth.listSessions(userId, sessionId)).rejects.toMatchObject({
+      code: "user_not_admitted",
+    });
   });
 });

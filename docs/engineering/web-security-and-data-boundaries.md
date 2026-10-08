@@ -91,6 +91,11 @@ recriar services/isolate não reinicia budget. Cada consumo expurga no máximo
 10 chaves vencidas há pelo menos uma hora e duas janelas; o helper operacional
 expurga no máximo 100 por chamada. Nenhum expurgo remove budget ativo.
 
+O loader raiz SSR compartilha os mesmos buckets das leituras HTTP de sessão e
+perfil. Consome o budget de sessão antes de resolver identidade e o de perfil
+antes de ler preferências admitidas; path de página ou request de revalidação
+não cria outro bucket nem permite contornar a proteção por meio do documento.
+
 A mutação consome budget depois de validar sessão, origem, CSRF e schema. Falha
 ou resposta ambígua do storage fecha a operação. Esses valores são proteção
 técnica local, não quotas comerciais nem budgets dos futuros convites/conteúdo.
@@ -191,6 +196,12 @@ headers de autorização ou resposta de provider. CI usa credenciais sintéticas
 ### Dispositivos, perfil e fronteira SSR em M2
 
 A lista de dispositivos valida `sessionDeviceListDtoSchema` antes de responder.
+Cada resposta contém no máximo 100 dispositivos, com cursor opaco de sessão própria;
+o envelope informa a sessão atual independentemente de ela estar na página e
+o próximo cursor. A UI solicita uma página por interação, sem agregar uma lista
+ilimitada no browser. Respostas de logout e revogação também têm schemas strict
+compartilhados entre produtor e cliente; um HTTP 200 com corpo inválido não
+confirma o efeito.
 Expõe apenas ID público, datas, sessão atual e categoria de navegador; token,
 IP e user agent bruto não entram no DTO. IDs de revogação são validados e
 fixados ao User da sessão admitida. Todos os cookies nativos são preservados
@@ -205,9 +216,15 @@ ID ou propriedades extras é negado antes do efeito. Storage indisponível,
 perfil corrompido e confirmação perdida não se apresentam como save concluído.
 
 O loader raiz recebe capabilities privadas por request e devolve snapshot
-público reduzido. Falha de persistência não vira perfil ausente. O bundle real
-nega auth/DB/secrets no cliente. A UI fecha o snapshot privado após negação
-confirmada e compara a geração da sessão antes de atender callbacks antigos;
+público reduzido. Falha de persistência não vira perfil ausente.
+
+Falhas na resolução do viewer são Responses sanitizadas para o React Router,
+com status e cookies da admissão preservados mesmo quando o perfil falha ou seu
+budget nega a leitura. No logout atual, cookies de renovação precedem os clears
+nativos: uma renovação obtida na admissão não restaura o cookie após o logout.
+
+O bundle real nega auth/DB/secrets no cliente. A UI fecha o snapshot privado após
+negação confirmada e compara a geração da sessão antes de atender callbacks antigos;
 requests de uma sessão anterior não retiram nem repovoam uma sessão nova.
 
 ### Governança e reautenticação por intenção

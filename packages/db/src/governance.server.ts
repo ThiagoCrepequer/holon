@@ -296,6 +296,19 @@ export function createGovernancePersistence(
         }
       }
 
+      // Expiration is authorization's final boundary; confirmed proofs have a
+      // later expiry than their pending intents. Limit cleanup work per command.
+      await database
+        .prepare(
+          `DELETE FROM reauth_intent WHERE id IN (
+             SELECT id FROM reauth_intent
+             WHERE expires_at <= CAST(unixepoch('subsec') * 1000 AS INTEGER)
+             ORDER BY expires_at, id
+             LIMIT 100
+           )`,
+        )
+        .run();
+
       const id = `reauth_${crypto.randomUUID().replace(/-/gu, "")}`;
       const now = Date.now();
       const expiresAt = now + 10 * 60 * 1000;

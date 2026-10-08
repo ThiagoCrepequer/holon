@@ -1,18 +1,25 @@
 import {
   sessionDeviceListDtoSchema,
+  signOutOutputSchema,
+  revokeSessionOutputSchema,
+  revokeAllSessionsOutputSchema,
   type SessionDeviceDto,
 } from "@holon/contracts/dashboard";
 
 export type DeviceRead =
-  | { status: "ready"; sessions: SessionDeviceDto[] }
+  | { status: "ready"; sessions: SessionDeviceDto[]; nextCursor: string | null }
   | { status: "lost" }
   | { status: "unavailable" };
 export async function readDevices(
   signal: AbortSignal,
   expectedSessionId: string,
+  cursor?: string | null,
 ): Promise<DeviceRead> {
   try {
-    const response = await fetch("/api/auth/sessions", {
+    const path = cursor
+      ? `/api/auth/sessions?cursor=${encodeURIComponent(cursor)}`
+      : "/api/auth/sessions";
+    const response = await fetch(path, {
       credentials: "same-origin",
       signal,
     });
@@ -21,12 +28,13 @@ export async function readDevices(
     if (!response.ok) return { status: "unavailable" };
     const parsed = sessionDeviceListDtoSchema.safeParse(await response.json());
     if (!parsed.success) return { status: "unavailable" };
-    if (
-      parsed.data.sessions.find((device) => device.isCurrent)?.id !==
-      expectedSessionId
-    )
+    if (parsed.data.currentSessionId !== expectedSessionId)
       return { status: "lost" };
-    return { status: "ready", sessions: parsed.data.sessions };
+    return {
+      status: "ready",
+      sessions: parsed.data.sessions,
+      nextCursor: parsed.data.nextCursor,
+    };
   } catch {
     return { status: "unavailable" };
   }
@@ -37,6 +45,15 @@ export async function revokeDevice(
   signal: AbortSignal,
 ): Promise<"done" | "lost" | "unavailable"> {
   try {
+    const outputSchema =
+      path === "/api/auth/sign-out"
+        ? signOutOutputSchema
+        : path === "/api/auth/sign-out/all"
+          ? revokeAllSessionsOutputSchema
+          : /^\/api\/auth\/sessions\/[a-zA-Z0-9_-]+\/revoke$/u.test(path)
+            ? revokeSessionOutputSchema
+            : null;
+    if (!outputSchema) return "unavailable";
     const response = await fetch(path, {
       method: "POST",
       credentials: "same-origin",
@@ -45,7 +62,10 @@ export async function revokeDevice(
       signal,
     });
     if (response.status === 401 || response.status === 403) return "lost";
-    return response.ok ? "done" : "unavailable";
+    if (!response.ok) return "unavailable";
+    return outputSchema.safeParse(await response.json()).success
+      ? "done"
+      : "unavailable";
   } catch {
     return "unavailable";
   }

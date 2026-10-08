@@ -50,7 +50,11 @@ function fixture() {
       status: "admitted",
       headers: refreshed,
     })),
-    listSessions: vi.fn(async () => devices),
+    listSessions: vi.fn<AuthService["listSessions"]>(async () => ({
+      sessions: devices,
+      currentSessionId: actor.sessionId,
+      nextCursor: null,
+    })),
     revokeSession: vi.fn(async () => true),
     revokeAllSessions: vi.fn(async () => 2),
     clearSessionCookies: vi.fn(async () => [
@@ -113,13 +117,78 @@ function fixture() {
   return { auth, preferences, tenancy, services, refreshed, handle, get, post };
 }
 describe("device command HTTP projection", () => {
-  it("lists coarse device DTOs and passes the current actor to revocation without client authority", async () => {
+  it("validates pagination cursor and delegates only the admitted identity", async () => {
     const test = fixture();
-    const list = await test.get("/api/auth/sessions?userId=foreign");
-    expect(await list.json()).toEqual({ sessions: devices });
+    const page = await test.get("/api/auth/sessions?cursor=session_cursor");
+    expect(page.status).toBe(200);
     expect(test.auth.listSessions).toHaveBeenCalledWith(
       actor.id,
       actor.sessionId,
+      "session_cursor",
+    );
+    expect(
+      (await test.get("/api/auth/sessions?cursor=../foreign")).status,
+    ).toBe(400);
+    expect(test.auth.listSessions).toHaveBeenCalledTimes(1);
+  });
+  it("rejects an over-limit device page before exposing it", async () => {
+    const test = fixture();
+    test.auth.listSessions.mockResolvedValue({
+      sessions: Array.from({ length: 101 }, () => devices[0]!),
+      currentSessionId: actor.sessionId,
+      nextCursor: null,
+    });
+    const response = await test.get("/api/auth/sessions");
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("firefox");
+  });
+  it("does not forward malformed native success or a secret while preserving the native clear", async () => {
+    const test = fixture();
+    const clear = "native_refresh=; Max-Age=0; HttpOnly; Secure";
+    test.auth.handleAuthRequest.mockResolvedValueOnce(
+      Response.json(
+        { success: true, token: "synthetic-private" },
+        { headers: { "Set-Cookie": clear } },
+      ),
+    );
+    const response = await test.post("/api/auth/sign-out");
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("synthetic-private");
+    expect(response.headers.getSetCookie()).toEqual([
+      ...test.refreshed.getSetCookie(),
+      clear,
+    ]);
+  });
+  it("places native logout clears after an admission renewal of the same cookie", async () => {
+    const test = fixture();
+    const clear = "native_refresh=; Max-Age=0; HttpOnly; Secure";
+    test.auth.handleAuthRequest.mockResolvedValueOnce(
+      Response.json(
+        { success: true },
+        {
+          headers: { "Set-Cookie": clear },
+        },
+      ),
+    );
+    const response = await test.post("/api/auth/sign-out");
+    expect(response.status).toBe(200);
+    expect(response.headers.getSetCookie()).toEqual([
+      ...test.refreshed.getSetCookie(),
+      clear,
+    ]);
+  });
+  it("lists coarse device DTOs and passes the current actor to revocation without client authority", async () => {
+    const test = fixture();
+    const list = await test.get("/api/auth/sessions?userId=foreign");
+    expect(await list.json()).toEqual({
+      sessions: devices,
+      currentSessionId: actor.sessionId,
+      nextCursor: null,
+    });
+    expect(test.auth.listSessions).toHaveBeenCalledWith(
+      actor.id,
+      actor.sessionId,
+      undefined,
     );
     const response = await test.post("/api/auth/sessions/session_other/revoke");
     expect(response.status).toBe(200);
@@ -163,9 +232,11 @@ describe("device command HTTP projection", () => {
   });
   it("does not disclose malformed private device output", async () => {
     const test = fixture();
-    test.auth.listSessions.mockResolvedValue([
-      { ...devices[0], token: "private-token" },
-    ] as unknown as SessionDeviceDto[]);
+    test.auth.listSessions.mockResolvedValue({
+      sessions: [{ ...devices[0], token: "private-token" }],
+      currentSessionId: actor.sessionId,
+      nextCursor: null,
+    } as unknown as Awaited<ReturnType<AuthService["listSessions"]>>);
     const response = await test.get("/api/auth/sessions");
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("private-token");

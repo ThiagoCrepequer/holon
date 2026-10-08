@@ -58,6 +58,7 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
   const { i18n } = useLingui();
   const [open, setOpen] = useState(false);
   const [devices, setDevices] = useState<SessionDeviceDto[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "failed">(
     "idle",
   );
@@ -71,12 +72,12 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
       controller.current?.abort();
     };
   }, [sessionId, onSessionLost]);
-  async function reload() {
+  async function reload(cursor?: string) {
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
     setStatus("loading");
-    const result = await readDevices(request.signal, sessionId);
+    const result = await readDevices(request.signal, sessionId, cursor);
     if (!active.current || request.signal.aborted) return;
     if (result.status === "lost") {
       setDevices([]);
@@ -89,6 +90,7 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
       return;
     }
     setDevices(result.sessions);
+    setNextCursor(result.nextCursor);
     setStatus("ready");
   }
   async function revoke(path: string, endsCurrent: boolean) {
@@ -194,6 +196,19 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
               </li>
             ))}
           </ul>
+        )}
+        {status === "ready" && nextCursor !== null && (
+          <Button
+            variant="quiet"
+            onClick={() => {
+              void reload(nextCursor);
+            }}
+          >
+            {i18n._({
+              id: "session.nextPage",
+              message: "Next sessions",
+            })}
+          </Button>
         )}
         <Button
           variant="danger"

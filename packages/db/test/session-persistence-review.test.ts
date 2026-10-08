@@ -94,8 +94,11 @@ async function count(sql: string) {
 
 it("lists only live sessions of the requested User with coarse labels and no credentials", async () => {
   const { store, actor, now } = await fixture();
-  const sessions = await store.listSessions(actor.id, actor.sessionId, now);
-  sessionDeviceListDtoSchema.parse({ sessions });
+  const page = await store.listSessions(actor.id, actor.sessionId, now);
+  sessionDeviceListDtoSchema.parse(page);
+  const sessions = page.sessions;
+  expect(page.currentSessionId).toBe(actor.sessionId);
+  expect(page.nextCursor).toBeNull();
   expect(sessions.map((s) => s.id).toSorted()).toEqual([
     "current",
     "edge",
@@ -117,6 +120,81 @@ it("lists only live sessions of the requested User with coarse labels and no cre
   expect(serialized).not.toContain("synthetic-token");
   expect(serialized).not.toContain("192.0.2.10");
   expect(serialized).not.toContain("Synthetic Chrome");
+});
+
+it("bounds every device page and traverses tied timestamps without skipping own sessions", async () => {
+  const { store, actor, now } = await fixture();
+  await database
+    .prepare(
+      `WITH RECURSIVE devices(n) AS (
+         SELECT 1 UNION ALL SELECT n+1 FROM devices WHERE n < 205
+       )
+       INSERT INTO session (id,token,userId,expiresAt,createdAt,updatedAt)
+       SELECT 'page_' || printf('%03d', n), 'synthetic_page_' || n, ?, ?, ?, ?
+       FROM devices`,
+    )
+    .bind(actor.id, now + 120_000, now, now)
+    .run();
+  const seen: string[] = [];
+  let cursor: string | undefined;
+  const sizes: number[] = [];
+  do {
+    const page = await store.listSessions(
+      actor.id,
+      actor.sessionId,
+      now,
+      cursor,
+    );
+    sessionDeviceListDtoSchema.parse(page);
+    expect(page.currentSessionId).toBe(actor.sessionId);
+    sizes.push(page.sessions.length);
+    seen.push(...page.sessions.map((session) => session.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(sizes).toEqual([100, 100, 10]);
+  expect(seen).toEqual([
+    ...Array.from(
+      { length: 205 },
+      (_, index) => `page_${String(205 - index).padStart(3, "0")}`,
+    ),
+    "unknown",
+    "safari",
+    "firefox",
+    "edge",
+    "current",
+  ]);
+  expect(new Set(seen).size).toBe(210);
+  expect(
+    await store.listSessions(actor.id, actor.sessionId, now, "current"),
+  ).toEqual({
+    sessions: [],
+    currentSessionId: actor.sessionId,
+    nextCursor: null,
+  });
+});
+
+it("rejects foreign, missing and expired device cursors instead of restarting pagination", async () => {
+  const { store, actor, now } = await fixture();
+  for (const cursor of ["foreign", "missing", "expired"]) {
+    await expect(
+      store.listSessions(actor.id, actor.sessionId, now, cursor),
+    ).rejects.toMatchObject({
+      code: "operation_conflict",
+    });
+  }
+  await store.revokeSession(actor, "edge", now);
+  await expect(
+    store.listSessions(actor.id, actor.sessionId, now, "edge"),
+  ).rejects.toMatchObject({
+    code: "operation_conflict",
+  });
+  // Empty pages still require live authority in the same SQL snapshot.
+  await store.revokeSession(actor, actor.sessionId, now);
+  await expect(
+    store.listSessions(actor.id, actor.sessionId, now, "safari"),
+  ).rejects.toMatchObject({
+    code: "user_not_admitted",
+  });
 });
 
 it("revokes only an own target, makes replay safe and cleans each transient guard", async () => {
