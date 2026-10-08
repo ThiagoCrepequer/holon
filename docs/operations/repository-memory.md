@@ -3,7 +3,7 @@ id: OPS-REPOSITORY-MEMORY
 kind: reference
 status: current
 owners: [core-team]
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-07
 ---
 
 # Operar propostas e regras de memória
@@ -58,3 +58,30 @@ ledger funcional; logs não contêm justificativas nem conteúdo da memória.
 Remoção/suspensão da instalação bloqueia acesso e agenda purga da memória da
 geração. Restauração não recupera regras antigas; o repositório começa outra
 geração. Backups/plataforma e comentários GitHub têm ciclos de vida separados.
+
+## Falha ao selecionar memória em PRs grandes
+
+O snapshot admite até 256 paths validados e seleciona até 16 observações não
+originadas de feedback. A consulta precisa aplicar a seleção completa antes de
+ordenar por `created_at DESC, id` e limitar os resultados. A lista de paths é
+transportada como um único parâmetro JSON e expandida por `json_each`; paths
+vazios mantêm a seleção de todo o repositório. Não truncar paths para acomodar
+limites SQL nem concatenar seus valores na query.
+
+Em 2026-10-07, a instância
+`review-029261cd48966ab0e10eb1fccd710910045495d6da4557663bd0f95daab850f9`
+falhou três vezes em `resolve-repository-memory` com
+`too many SQL variables at offset 320: SQLITE_ERROR`, antes da análise. O
+histórico do Workflow foi consultado com `--no-step-output`; Workers Observability
+também confirmou o evento da instância em `2026-10-07T23:43:39.075Z`.
+A consulta anterior criava um parâmetro por path e outro para `LIMIT`: 100 paths
+já excediam os 100 parâmetros aceitos pelo SQLite dos Durable Objects. A
+regressão local em Workerd reproduziu a falha com 100 e 256 paths; neste último
+caso, também reproduziu o offset 320. A correção da seleção não altera limites,
+schemas, retenção nem snapshots já selados.
+
+Fonte primária verificada em 2026-10-07:
+[limites SQL dos Durable Objects](https://developers.cloudflare.com/durable-objects/platform/limits/)
+e [extensão JSON no SQLite dos Durable Objects](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/).
+Uma validação local não demonstra recuperação de runs remotas anteriores;
+deploy e nova execução exigem autorização operacional própria.

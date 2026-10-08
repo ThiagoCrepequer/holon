@@ -57,6 +57,103 @@ async function proposal(overrides = {}) {
   });
 }
 afterEach(() => reset());
+it.each([99, 100, 256])(
+  "selects matching observations across %i changed paths",
+  async (count) => {
+    const paths = Array.from(
+      { length: count },
+      (_, index) => `src/file-${index}.ts`,
+    );
+    const first = {
+      ...observation(7, "investigation"),
+      id: "first-path",
+      path: paths[0]!,
+    };
+    const last = {
+      ...observation(8, "investigation"),
+      id: "last-path",
+      path: paths.at(-1)!,
+    };
+    const unrelated = {
+      ...observation(9, "investigation"),
+      id: "unrelated",
+      path: "other/file.ts",
+    };
+    await memory().record(first);
+    await memory().record(last);
+    await memory().record(unrelated);
+    await memory().record({ ...observation(10), path: paths.at(-1)! });
+    const snapshot = await memory().snapshot(source(), "99/42", paths);
+    expect(snapshot.observations.map((item) => item.id).toSorted()).toEqual([
+      "first-path",
+      "last-path",
+    ]);
+    await evictDurableObject(memory());
+    expect(
+      (await memory().snapshot(source(), "99/42", paths)).observations,
+    ).toEqual(snapshot.observations);
+  },
+);
+it("keeps the global newest-observation limit and deterministic tie order with 256 paths", async () => {
+  const paths = Array.from(
+    { length: 256 },
+    (_, index) => `src/file-${index}.ts`,
+  );
+  const createdAt = new Date().toISOString();
+  const items = Array.from({ length: 20 }, (_, index) => ({
+    ...observation(7, "investigation"),
+    id: `selection-${String(index).padStart(2, "0")}`,
+    path: paths[index % 2 === 0 ? index : 255 - index]!,
+    createdAt,
+  }));
+  for (const item of items.toReversed()) await memory().record(item);
+  const newer = {
+    ...items[0]!,
+    id: "newest",
+    path: paths[255]!,
+    createdAt: new Date(Date.parse(createdAt) + 1000).toISOString(),
+  };
+  await memory().record(newer);
+  const result = await memory().snapshot(source(), "99/42", paths);
+  expect(result.observations.map((item) => item.id)).toEqual([
+    newer.id,
+    ...items.slice(0, 15).map((item) => item.id),
+  ]);
+  expect(
+    (
+      await memory().snapshot(source(), "99/42", [
+        ...paths.slice(0, 255),
+        paths[0]!,
+      ])
+    ).observations.some((item) => item.id === newer.id),
+  ).toBe(false);
+});
+it("matches quoted and Unicode paths literally without expanding their scope", async () => {
+  const path = "src/ação' OR 1=1 --\".ts";
+  const exact = { ...observation(7, "investigation"), id: "quoted-path", path };
+  await memory().record(exact);
+  await memory().record({
+    ...observation(8, "investigation"),
+    id: "unrelated",
+  });
+  expect(
+    (await memory().snapshot(source(), "99/42", [path, path])).observations,
+  ).toEqual([exact]);
+});
+it("rejects paths beyond the admitted limit and invalid paths", async () => {
+  await runInDurableObject(memory(), (object) => {
+    expect(() =>
+      object.snapshot(
+        source(),
+        "99/42",
+        Array.from({ length: 257 }, (_, index) => `src/${index}.ts`),
+      ),
+    ).toThrow("Memory path limit exceeded");
+    expect(() =>
+      object.snapshot(source(), "99/42", ["../outside.ts"]),
+    ).toThrow();
+  });
+});
 it("persists observations after eviction, deduplicates and rejects identity conflicts", async () => {
   const item = observation();
   await memory().record(item);
