@@ -1,4 +1,7 @@
-import { reviewExecutionLimits } from "@holon/contracts";
+import {
+  reviewExecutionLimits,
+  type StructuralImpactReport,
+} from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import { splitPullRequestDiff } from "../src/diff.js";
@@ -211,4 +214,117 @@ it("packs small hunks of the same file without spending one shard per hunk", () 
       ),
     ),
   ).toEqual(Array(200).fill("+new  "));
+});
+
+function connectedImpact(): StructuralImpactReport {
+  return {
+    changedSymbols: [
+      {
+        path: "packages/core/src/api.ts",
+        name: "send",
+        line: 1,
+        kind: "function",
+        change: "modified",
+        isExported: true,
+      },
+    ],
+    contractBreaks: [],
+    securitySurfaces: [],
+    downstreamReferences: [
+      {
+        targetPath: "packages/core/src/api.ts",
+        callerPath: "apps/web/src/client.ts",
+        callerLine: 1,
+        symbolName: "send",
+        excerpt: "send()",
+      },
+    ],
+  };
+}
+it("co-locates contracts and consumers with different names using verified structural relationships", () => {
+  const files = splitPullRequestDiff(
+    ["aaa.ts", "apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map((path) => patchFor(path))
+      .join(""),
+  );
+  const plan = buildReviewPlan(files, {
+    maxShardFiles: 2,
+    structuralImpact: connectedImpact(),
+  });
+  expect(
+    plan.shards
+      .find((shard) =>
+        shard.files.some((file) => file.path === "packages/core/src/api.ts"),
+      )
+      ?.files.map((file) => file.path),
+  ).toEqual(
+    expect.arrayContaining([
+      "apps/web/src/client.ts",
+      "packages/core/src/api.ts",
+    ]),
+  );
+  expect(
+    buildReviewPlan(files.toReversed(), {
+      maxShardFiles: 2,
+      structuralImpact: connectedImpact(),
+    }),
+  ).toEqual(plan);
+});
+it("adds bounded canonical contract windows when a relationship crosses partitions", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`,
+      )
+      .join(""),
+  );
+  const plan = buildReviewPlan(files, { structuralImpact: connectedImpact() });
+  expect(plan.shards).toHaveLength(3);
+  const check = plan.shards[2]!;
+  expect(check.id).toBe("contract-check-0");
+  expect(check.changedLines).toHaveLength(160);
+  expect(
+    check.changedLines.every((line) => line.line >= 1 && line.line <= 80),
+  ).toBe(true);
+  expect(
+    check.files.every((file) =>
+      file.patch.includes("+export const value = 1;"),
+    ),
+  ).toBe(true);
+  expect(plan.shards.every((shard) => shard.totalShards === 3)).toBe(true);
+  expect(plan.totalEligibleLines).toBe(1200);
+  expect(plan.scopeStatus).toBe("complete");
+});
+it("reports contract relationships left unchecked by part or canonical-window limits", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map((path) => patchFor(path))
+      .join(""),
+  );
+  const impact = connectedImpact();
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardFiles: 1,
+  });
+  expect(plan.scopeStatus).toBe("partial_by_policy");
+  expect(plan.omissionReasons).toContainEqual({
+    code: "contract_checks",
+    count: 1,
+  });
+  expect(plan.shards).toHaveLength(2);
+  const outside = {
+    ...impact,
+    changedSymbols: impact.changedSymbols.map((item) => ({
+      ...item,
+      line: 1000,
+    })),
+  };
+  expect(
+    buildReviewPlan(files, {
+      structuralImpact: outside,
+      maxShardLines: 1,
+      maxShards: 2,
+    }).omissionReasons,
+  ).toContainEqual({ code: "contract_checks", count: 1 });
 });

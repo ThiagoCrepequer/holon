@@ -5,6 +5,9 @@ import type {
 import { wrapLanguageModel, type LanguageModel } from "ai";
 
 export interface ModelGenerationBudget {
+  readonly outputLimits?:
+    | { readonly repository: number; readonly final: number }
+    | undefined;
   reserve(
     request: Omit<ModelGenerationReservation, "shardIndex" | "shardCount">,
   ): Promise<ModelGenerationAdmission | undefined>;
@@ -37,9 +40,21 @@ export function withGenerationBudget(
     readonly prompt: unknown;
     readonly tools?: unknown;
     readonly responseFormat?: unknown;
+    readonly toolChoice?: unknown;
   }) => {
     params.abortSignal?.throwIfAborted();
-    const maximum = params.maxOutputTokens;
+    let maximum = params.maxOutputTokens;
+    if (budget.outputLimits && maximum !== undefined) {
+      const choice = params.toolChoice as
+        | { type?: string; toolName?: string }
+        | undefined;
+      const final =
+        choice?.type === "tool" && choice.toolName === "think_final_answer";
+      maximum = Math.min(
+        maximum,
+        final ? budget.outputLimits.final : budget.outputLimits.repository,
+      );
+    }
     if (maximum === undefined || !Number.isSafeInteger(maximum) || maximum <= 0)
       throw new TypeError("Model generation requires a bounded output maximum");
     const reservation = await budget.reserve({

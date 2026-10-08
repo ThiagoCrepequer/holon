@@ -161,3 +161,18 @@ acesso a repositórios por si.
 
 **Finding clarification**
 : Investigação limitada de uma pergunta explícita na discussão de um finding publicado. Tem identidade e orçamento próprios, ligados à decisão original e ao SHA atual, sem iniciar outra review run. Pode confirmar, delimitar, refutar ou declarar insuficiência de evidência.
+
+**Review budget profile**
+: Conjunto fixo de tetos de inferências, entrada cumulativa, saída reservada e
+consultas ao repositório, selecionado e selado antes da análise. A quantidade de
+partes e o tamanho estimado dos prompts determinam o perfil; não estima custo.
+
+**Protected investigation**
+: Capacidade mínima que o ledger conserva para investigar cada parte ainda
+aberta. Partes anteriores não podem consumir essa reserva. Sobra liberada após
+checkpoint pode financiar trabalho adicional, sempre sob o teto da execução.
+
+**Cross-shard contract check**
+: Investigação adicional de uma relação entre produtor e consumidor alterados
+que a partição separou. Usa janelas do diff canônico, integra os gates normais
+e declara relações omitidas quando os limites impedem analisá-las.

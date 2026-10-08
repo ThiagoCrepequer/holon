@@ -1,7 +1,3 @@
-import {
-  reviewGenerationCallsPerShard,
-  modelGenerationLimits,
-} from "@holon/contracts";
 import type { ReviewPlan } from "@holon/contracts";
 import { expect, it } from "vitest";
 
@@ -41,28 +37,34 @@ it.each([0, 1, 9])(
   },
 );
 
-it("omits unbudgeted work before dispatch and retains prior omissions and eligible totals", () => {
+it("retains prior omissions and eligible totals without cutting budgeted work", () => {
   const plan = {
     ...planFor(50),
     scopeStatus: "partial_by_policy" as const,
     omissionReasons: [{ code: "executor_budget" as const }],
   };
   const admitted = admitReviewPlan(plan);
-  expect(admitted.shards).toHaveLength(9);
+  expect(admitted.shards).toHaveLength(50);
   expect(
     admitted.shards.every(
       (s, i) =>
-        s.index === i && s.totalShards === 9 && s.id === plan.shards[i]?.id,
+        s.index === i && s.totalShards === 50 && s.id === plan.shards[i]?.id,
     ),
   ).toBe(true);
-  expect(
-    admitted.shards.length * reviewGenerationCallsPerShard,
-  ).toBeLessThanOrEqual(modelGenerationLimits.calls);
-  expect(admitted.omissionReasons).toEqual([
-    { code: "executor_budget" },
-    { code: "model_budget", maximum: 9, planned: 50 },
-  ]);
+  expect(admitted.omissionReasons).toEqual([{ code: "executor_budget" }]);
   expect(admitted.totalEligibleLines).toBe(50);
   expect(admitted.scopeStatus).toBe("partial_by_policy");
   expect(admitReviewPlan(admitted)).toEqual(admitted);
 });
+
+it.each([19, 24, 50, 64])(
+  "admits every eligible shard of a large %s-part review",
+  (count) => {
+    const plan = planFor(count);
+    const admitted = admitReviewPlan(plan);
+    expect(admitted.shards).toHaveLength(count);
+    expect(admitted.scopeStatus).toBe("complete");
+    expect(admitted.totalEligibleLines).toBe(count);
+    expect(admitted.omissionReasons).toEqual([]);
+  },
+);

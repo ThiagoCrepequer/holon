@@ -11,7 +11,7 @@ related:
   - ../decisions/0039-partition-large-reviews-and-bound-concurrency.md
   - ../decisions/0049-use-cloudflare-think-for-pr-review.md
   - ../decisions/0050-verify-finding-causality-before-publication.md
-  - ../decisions/0053-align-review-admission-with-generation-budget.md
+  - ../decisions/0055-fund-large-reviews-with-protected-investigation.md
 ---
 
 # Fluxo de execução de uma review
@@ -100,12 +100,13 @@ Duplicatas e ordem de entrega não dão autoridade. A configuração do reposit�
 executor classifica patches como estruturais ou textuais e produz contexto
 limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard,
 com no máximo 64 shards estruturais e três análises simultâneas. Antes do
-despacho, a [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
-limita a admissão a nove shards prioritários: quatro inferências de investigação,
-duas de verificação causal e uma de recuperação narrativa por ciclo máximo.
-O plano efetivo fixa `totalShards` antes do digest e conserva os totais elegíveis.
-`model_budget` explica a omissão das partes não admitidas. Contexto omitido gera
-limitação explícita; não é tratado como cobertura.
+despacho, a [ADR-0055](../decisions/0055-fund-large-reviews-with-protected-investigation.md)
+admite todas as partes e fixa um perfil por quantidade e tamanho estimado dos
+prompts. O plano efetivo fixa `totalShards` antes do digest e conserva os totais
+elegíveis. Referências estruturais unem produtor/consumidor alterados; até oito
+partes adicionais investigam relações separadas por limites, com janelas
+canônicas de até 80 linhas por arquivo. `contract_checks` registra relações que
+não couberam; contexto omitido permanece explícito e não conta como cobertura.
 
 O coordenador mantém contexto validado, plano e digest apenas na memória da
 invocação de análise. Cada onda compartilha uma barreira de preparação: verifica
@@ -209,18 +210,19 @@ no modelo ou na rota; não há parser de texto nem resposta limpa fabricada.
 
 ## Orçamento, falhas e idempotência
 
-O ledger reserva recursos antes da inferência, incluindo chamadas, bytes de
-entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
-de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
-por run entre todos os shards. Esses limites não são uma estimativa exata de
-tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
-Cada shard admitido tem uma parcela protegida `floor(teto / totalShards)` nas
-três dimensões. Investigação, causalidade e recuperação compartilham essa parcela;
-settlement não transfere recursos entre shards. A saída máxima normal por chamada
-é `min(12.000, floor((parcela de saída - 1.024) / 6))`. As recusas `shard_calls`,
-`shard_input_bytes` e `shard_output_tokens` falham somente a parte atual, sem
-bloquear pares ou ondas seguintes. Histórico crescente ainda pode ultrapassar a
-parcela de entrada; uma parte incompleta não demonstra ausência de regressões.
+O ledger sela perfil, estimativa de entrada e pesos antes do despacho. Os perfis
+`normal`, `large` e `very_large` permitem respectivamente 64/192/512 inferências,
+4/12/32 MB de entrada cumulativa, 120/360/960 mil tokens de saída e 96/288/768
+tools. Retry e eviction não renovam saldo; uso incerto mantém a reserva.
+Cada parte protege quatro inferências, três tools e uma parcela igual de 70%
+da entrada/saída; o saldo é ponderado por pistas de risco. O checkpoint do
+resultado precede a liberação durável de sobra para partes ainda abertas.
+Chamadas e entrada gastas não são recuperadas. Perfis não estimam faturamento.
+
+Tools recebem até 1.000 tokens de saída; a finalização forçada recebe até 5.000
+na investigação e 2.500 na verificação causal. Recuperação mantém 1.024. Think
+continua controlando `toolChoice` e finalização. Recusas locais falham somente
+a parte atual; cobertura incompleta ou saída degradada nunca aprova o PR.
 
 A primeira recusa de teto agregado persiste sua dimensão em
 `model_generation_plans.stop_reason`, na mesma transação da decisão de admissão

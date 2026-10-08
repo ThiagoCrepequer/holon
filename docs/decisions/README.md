@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-08
 ---
 
 # Decisões
@@ -105,6 +105,8 @@ vigentes; os textos anteriores são preservados como histórico.
 
 - [ADR-0052 — Responder perguntas sobre findings](0052-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.
 
-- [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — trabalho admitido, quotas por shard e causas duráveis de falha.
+- [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — admissão e quotas substituídas pela ADR-0055; causas duráveis de falha preservadas.
 
 - [ADR-0054 — Estabelecer as fundações do dashboard dos usuários](0054-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.
+
+- [ADR-0055 — Financiar reviews grandes com investigação protegida](0055-fund-large-reviews-with-protected-investigation.md) — perfis, quotas, empréstimo após checkpoint e verificações de contrato entre partes.
