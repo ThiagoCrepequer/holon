@@ -1,3 +1,4 @@
+import { parse } from "@babel/parser";
 import type {
   ChangedSymbol,
   ContractBreakSignal,
@@ -46,70 +47,238 @@ function isContractBoundary(
   return true;
 }
 
-function addedTypeReexports(
-  files: readonly { readonly patch: string; readonly path: string }[],
-): ReadonlyMap<string, ReadonlySet<string>> {
-  const byPath = new Map<string, Set<string>>();
-  for (const file of files) {
-    if (!/\.(?:[cm]?ts|tsx)$/iu.test(file.path)) continue;
-    let patches;
-    try {
-      patches = parsePatch(file.patch);
-    } catch {
-      continue;
-    }
-    for (const patch of patches) {
-      for (const hunk of patch.hunks ?? []) {
-        for (const line of hunk.lines) {
-          if (!line.startsWith("+")) continue;
-          const reexport =
-            /^\+\s*export\s+type\s*\{([^}]+)\}\s*from\s*["'][^"']+["']\s*;?\s*$/u.exec(
-              line,
-            );
-          if (reexport?.[1] === undefined) continue;
-          const names = byPath.get(file.path) ?? new Set<string>();
-          for (const entry of reexport[1].split(",")) {
-            const specifier =
-              /^\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/u.exec(
-                entry,
-              );
-            const publicName = specifier?.[2] ?? specifier?.[1];
-            if (publicName !== undefined) names.add(publicName);
-          }
-          byPath.set(file.path, names);
+interface PreservedModuleExports {
+  readonly types: Set<string>;
+  readonly values: Set<string>;
+}
+
+function getBabelPlugins(
+  filePath: string,
+): import("@babel/parser").ParserPlugin[] {
+  const lower = filePath.toLowerCase();
+  const isTs = /\.(?:[cm]?ts|tsx)$/u.test(lower);
+  const isJsx = /\.[jt]sx$/u.test(lower);
+  const plugins: import("@babel/parser").ParserPlugin[] = [];
+  if (isTs) plugins.push("typescript");
+  if (isJsx) plugins.push("jsx");
+  return plugins;
+}
+
+function extractExportsFromAst(
+  source: string,
+  filePath: string,
+): PreservedModuleExports | undefined {
+  let ast;
+  try {
+    ast = parse(source, {
+      sourceType: "module",
+      plugins: getBabelPlugins(filePath),
+    });
+  } catch {
+    return undefined;
+  }
+
+  const localTypeDeclarations = new Set<string>();
+  const localValueDeclarations = new Set<string>();
+
+  for (const rawStmt of ast.program.body) {
+    const isNamedExport = rawStmt.type === "ExportNamedDeclaration";
+    const isDefaultExport = rawStmt.type === "ExportDefaultDeclaration";
+    const stmt =
+      (isNamedExport || isDefaultExport) && "declaration" in rawStmt
+        ? rawStmt.declaration
+        : rawStmt;
+    if (!stmt) continue;
+
+    const isAmbient =
+      ("declare" in stmt && (stmt as { declare?: boolean }).declare) ||
+      (isNamedExport &&
+        (("declare" in rawStmt && (rawStmt as { declare?: boolean }).declare) ||
+          rawStmt.exportKind === "type"));
+
+    if (
+      stmt.type === "TSInterfaceDeclaration" ||
+      stmt.type === "TSTypeAliasDeclaration"
+    ) {
+      if (stmt.id?.name) localTypeDeclarations.add(stmt.id.name);
+    } else if (stmt.type === "ClassDeclaration") {
+      if (stmt.id?.name) {
+        localTypeDeclarations.add(stmt.id.name);
+        if (!isAmbient) {
+          localValueDeclarations.add(stmt.id.name);
+        }
+      }
+    } else if (stmt.type === "FunctionDeclaration") {
+      if (stmt.id?.name && !isAmbient) {
+        localValueDeclarations.add(stmt.id.name);
+      }
+    } else if (stmt.type === "VariableDeclaration") {
+      if (!isAmbient) {
+        for (const d of stmt.declarations) {
+          if (d.id.type === "Identifier") localValueDeclarations.add(d.id.name);
+        }
+      }
+    } else if (stmt.type === "TSEnumDeclaration") {
+      if (stmt.id?.name) {
+        localTypeDeclarations.add(stmt.id.name);
+        if (!isAmbient) {
+          localValueDeclarations.add(stmt.id.name);
         }
       }
     }
   }
-  return byPath;
+
+  const types = new Set<string>();
+  const values = new Set<string>();
+
+  for (const stmt of ast.program.body) {
+    if (stmt.type === "ExportNamedDeclaration") {
+      const isStatementTypeOnly = stmt.exportKind === "type";
+      const isExternalReexport =
+        stmt.source !== null && stmt.source !== undefined;
+
+      for (const spec of stmt.specifiers) {
+        if (spec.type === "ExportSpecifier") {
+          const isSpecTypeOnly = spec.exportKind === "type";
+          const localName =
+            spec.local.type === "Identifier"
+              ? spec.local.name
+              : spec.local.value;
+          const exportedName =
+            spec.exported.type === "Identifier"
+              ? spec.exported.name
+              : spec.exported.value;
+
+          if (isStatementTypeOnly || isSpecTypeOnly) {
+            if (isExternalReexport || localTypeDeclarations.has(localName)) {
+              types.add(exportedName);
+            }
+          } else if (isExternalReexport) {
+            values.add(exportedName);
+            types.add(exportedName);
+          } else {
+            if (localValueDeclarations.has(localName)) {
+              values.add(exportedName);
+            }
+            if (localTypeDeclarations.has(localName)) {
+              types.add(exportedName);
+            }
+          }
+        }
+      }
+
+      if (stmt.declaration) {
+        const decl = stmt.declaration;
+        const isAmbient = Boolean(
+          ("declare" in decl && (decl as { declare?: boolean }).declare) ||
+          ("declare" in stmt && (stmt as { declare?: boolean }).declare),
+        );
+
+        if (decl.type === "ClassDeclaration") {
+          if (decl.id?.name) {
+            types.add(decl.id.name);
+            if (!isAmbient && !isStatementTypeOnly) {
+              values.add(decl.id.name);
+            }
+          }
+        } else if (
+          decl.type === "FunctionDeclaration" ||
+          decl.type === "TSDeclareFunction"
+        ) {
+          if (decl.id?.name) {
+            if (
+              !isAmbient &&
+              !isStatementTypeOnly &&
+              decl.type === "FunctionDeclaration"
+            ) {
+              values.add(decl.id.name);
+            }
+          }
+        } else if (decl.type === "VariableDeclaration") {
+          if (!isAmbient && !isStatementTypeOnly) {
+            for (const d of decl.declarations) {
+              if (d.id.type === "Identifier") {
+                values.add(d.id.name);
+              }
+            }
+          }
+        } else if (
+          decl.type === "TSInterfaceDeclaration" ||
+          decl.type === "TSTypeAliasDeclaration"
+        ) {
+          if (decl.id?.name) {
+            types.add(decl.id.name);
+          }
+        } else if (decl.type === "TSEnumDeclaration") {
+          if (decl.id?.name) {
+            types.add(decl.id.name);
+            if (!isAmbient && !isStatementTypeOnly) {
+              values.add(decl.id.name);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { types, values };
 }
 
 export function detectContractBreaks(
   files: readonly { readonly patch: string; readonly path: string }[],
   changedSymbols: readonly ChangedSymbol[],
   downstreamReferences?: readonly DownstreamReference[],
+  repositoryFiles?: readonly {
+    readonly content: string;
+    readonly path: string;
+  }[],
 ): readonly ContractBreakSignal[] {
   const breaks: ContractBreakSignal[] = [];
-  const reexports = addedTypeReexports(files);
+
+  const sourceByPath = new Map<string, string>();
+  if (repositoryFiles) {
+    for (const rf of repositoryFiles) {
+      sourceByPath.set(rf.path, rf.content);
+    }
+  }
+
+  const parsedExportsByPath = new Map<
+    string,
+    PreservedModuleExports | undefined
+  >();
 
   // 1. Detect removed exported symbols on contract boundaries
   for (const symbol of changedSymbols) {
     if (
       symbol.isExported &&
       symbol.change === "deleted" &&
-      !(
-        (symbol.kind === "interface" || symbol.kind === "type") &&
-        reexports.get(symbol.path)?.has(symbol.name)
-      ) &&
       isContractBoundary(symbol.path, symbol.name, downstreamReferences)
     ) {
-      breaks.push({
-        description: `Exported ${symbol.kind} '${symbol.name}' was removed from ${symbol.path}`,
-        kind: "exported_symbol_removed",
-        line: symbol.line,
-        path: symbol.path,
-        severity: "critical",
-      });
+      let isPreserved = false;
+      const source = sourceByPath.get(symbol.path);
+      if (source !== undefined) {
+        let exports = parsedExportsByPath.get(symbol.path);
+        if (!parsedExportsByPath.has(symbol.path)) {
+          exports = extractExportsFromAst(source, symbol.path);
+          parsedExportsByPath.set(symbol.path, exports);
+        }
+        if (exports !== undefined) {
+          isPreserved =
+            symbol.kind === "interface" || symbol.kind === "type"
+              ? exports.types.has(symbol.name)
+              : exports.values.has(symbol.name);
+        }
+      }
+
+      if (!isPreserved) {
+        breaks.push({
+          description: `Exported ${symbol.kind} '${symbol.name}' was removed from ${symbol.path}`,
+          kind: "exported_symbol_removed",
+          line: symbol.line,
+          path: symbol.path,
+          severity: "critical",
+        });
+      }
     }
   }
 
