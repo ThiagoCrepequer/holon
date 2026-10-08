@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
-    "./dashboard-preferences": "./src/dashboard-preferences.ts"
+    "./dashboard-preferences": "./src/dashboard-preferences.ts",
+    "./dashboard-collaboration": "./src/dashboard-collaboration.ts"
   },
   "scripts": {
     "test": "vitest run --config ../../vitest.config.ts --root .",

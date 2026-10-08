@@ -13,6 +13,11 @@ vi.mock("react-router", async (importOriginal) => {
   };
 });
 
+// RPC runtime is exercised by the native browser harness; this suite isolates HTTP composition.
+vi.mock("../workers/github-access-events.js", () => ({
+  GitHubAccessEvents: class {},
+}));
+
 import worker, { type DashboardWorkerBindings } from "../workers/index.js";
 
 const prodOrigin = "https://holon-dashboard.thiago-crepequer.workers.dev";

@@ -64,6 +64,7 @@ async function request(
       GITHUB_APP_PRIVATE_KEY_CURRENT: "fake-key",
       GITHUB_APP_SLUG: "holon-reviewer",
       GITHUB_WEBHOOK_SECRET: "secret",
+      DASHBOARD_ACCESS_EVENTS: env.DASHBOARD_ACCESS_EVENTS,
       REVIEW_QUEUE: {
         send: (message: unknown) => {
           if (queueError !== undefined) return Promise.reject(queueError);
@@ -374,3 +375,37 @@ it("revokes only removed repositories and validates signed revocation payloads",
     ).response.status,
   ).toBe(202);
 }, 15_000);
+
+it("signed user revocation enters the durable access queue before acknowledgement", async () => {
+  const body = JSON.stringify({ action: "revoked", sender: { id: 1001 } });
+  const result = await request(body, {
+    "x-github-event": "github_app_authorization",
+  });
+  expect(result.response.status).toBe(202);
+  expect(result.sent).toEqual([
+    {
+      event: "github_access",
+      access: {
+        deliveryId: "delivery-123",
+        action: "user_revoked",
+        githubAccountId: "1001",
+      },
+    },
+  ]);
+  expect(
+    (await request("{}", { "x-github-event": "github_app_authorization" }))
+      .response.status,
+  ).toBe(400);
+  expect(
+    (await request("{", { "x-github-event": "github_app_authorization" }))
+      .response.status,
+  ).toBe(400);
+  expect(
+    (
+      await request(body, {
+        "x-github-event": "github_app_authorization",
+        "x-hub-signature-256": "invalid",
+      })
+    ).response.status,
+  ).toBe(401);
+});

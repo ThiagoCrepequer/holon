@@ -53,6 +53,7 @@ Nao criam uma decisao por si so.
 
 - [Fundação M1: workspaces, gates locais e limites das provas](2026-10-06-dashboard-foundation-results.md)
 - [Primeiro recorte M2: identidade e tenancy locais](2026-10-07-dashboard-identity-tenancy-results.md)
+- [GitHub e convites M3: critérios, implementação e evidência local](2026-10-08-dashboard-milestone-three-results.md)
 - [Complemento M2: sessões, governança e preferências](2026-10-08-dashboard-milestone-two-results.md)
 
 Para implementar o dashboard, comece pelo [plano consolidado](../planning/dashboard-implementation-plan.md).

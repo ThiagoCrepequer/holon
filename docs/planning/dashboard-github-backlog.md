@@ -166,3 +166,14 @@ para revisão/merge, com sessões, governança e preferências. Sua evidência l
 não fecha automaticamente o milestone nem publica Workers. Migrations aditivas
 seguem a operação autorizada descrita no runbook. O onboarding completo #159 e
 o smoke real #167 mantêm o escopo nos milestones donos.
+
+## Entrega local M3 em 2026-10-08
+
+O [relatório M3](../research/2026-10-08-dashboard-milestone-three-results.md)
+rastreia a implementação completa de #145–#149 e os critérios de aceite. Está
+sobre a conclusão M2 do PR #177; estado de merge/encerramento é autoridade do
+GitHub. M3 materializa coordenação de credenciais, dupla autoridade de conexão,
+grants e ciclo de convites com obrigação durável. Email delivery continua em
+#150–#153/M4 e dataset/projeção privados em M5. Gates locais não equivalem a
+OAuth real, migrations remotas ou publicação. Nenhuma operação remota M3 foi
+executada para preparar o PR.

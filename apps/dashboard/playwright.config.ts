@@ -1,7 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "test/browser",
-  testIgnore: ["auth.spec.ts", "milestone-two.spec.ts"],
+  testIgnore: [
+    "auth.spec.ts",
+    "milestone-two.spec.ts",
+    "milestone-three.spec.ts",
+  ],
   retries: 0,
   timeout: 30_000,
   expect: { timeout: 5_000 },

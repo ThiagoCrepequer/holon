@@ -62,3 +62,22 @@ export function createIdentityPersistence(database: D1Database) {
     preferences: createPreferencesPersistence(database),
   };
 }
+
+export {
+  createInvitationPersistence,
+  type RecipientProof,
+} from "./invitations.server.js";
+export {
+  CollaborationError,
+  type CollaborationErrorCode,
+} from "./collaboration-error.server.js";
+
+export {
+  createConnectionPersistence,
+  type InstallationProof,
+} from "./github-connections.server.js";
+
+export {
+  createGrantPersistence,
+  type GrantIdentity,
+} from "./github-grants.server.js";

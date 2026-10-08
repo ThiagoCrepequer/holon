@@ -9,6 +9,7 @@
   "vars": {
     "APP_ORIGIN": "http://127.0.0.1:8794",
   },
+  "triggers": { "crons": ["*/15 * * * *"] },
   "observability": {
     "enabled": false,
   },

@@ -1,7 +1,7 @@
 ---
 id: ENGINEERING-DASHBOARD-IDENTITY-WORKSPACES
 kind: reference
-status: proposed
+status: current
 owners:
   - core-team
 last-reviewed: 2026-10-08
@@ -35,7 +35,8 @@ janela de revogação, autoridade de conexão, convite por email, múltiplos own
 e onboarding self-service. Somam-se a cadastro GitHub aberto com pessoal vazio,
 pt-BR/en, sessão móvel de 7 dias/renovação após 24 h e interseção privada.
 O modelo de produto está acordado; identidade/tenancy locais estão implementadas.
-Convites, conexões e recursos privados mantêm suas provas pendentes.
+M3 implementa convites, conexões e autorização de grants no produto local;
+a leitura do dataset privado continua em M5.
 Este guia acompanha o estado do código; não autoriza operação remota.
 
 A [revisão de robustez](../research/2026-10-04-dashboard-plan-robustness-review.md)
@@ -137,14 +138,14 @@ Workerd/D1/browser de um OAuth GitHub ou publicação reais.
 
 ## Modelo acordado e integração pendente
 
-| Conceito             | Responsabilidade                                      | Limite                                                                                                                      |
-| -------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Holon user           | Identidade interna estável da pessoa                  | Não usar email, username GitHub ou workspace como identidade da pessoa                                                      |
-| Login identity       | Vínculo comprovado com provider e identidade externa  | Uma pessoa pode vincular outros providers depois; login não concede membership nem grant privado                            |
-| Session              | Autenticação de um dispositivo/navegador              | Duração de sessão não é duração de membership ou grant GitHub                                                               |
-| Holon workspace      | Espaço de produto com recursos e membros              | Pessoal/equipe usam a mesma entidade; organização é sinônimo, sem nível adicional                                           |
-| Membership           | Participação e papel de um usuário em um workspace    | Papel pertence ao vínculo, não globalmente ao usuário                                                                       |
-| Workspace connection | Vínculo autorizado com instalação/repositórios GitHub | Várias instalações por workspace; cada instalação em um único workspace, com autoridade exigida em Q31 e mecanismo a provar |
+| Conceito             | Responsabilidade                                      | Limite                                                                                                                                |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Holon user           | Identidade interna estável da pessoa                  | Não usar email, username GitHub ou workspace como identidade da pessoa                                                                |
+| Login identity       | Vínculo comprovado com provider e identidade externa  | Uma pessoa pode vincular outros providers depois; login não concede membership nem grant privado                                      |
+| Session              | Autenticação de um dispositivo/navegador              | Duração de sessão não é duração de membership ou grant GitHub                                                                         |
+| Holon workspace      | Espaço de produto com recursos e membros              | Pessoal/equipe usam a mesma entidade; organização é sinônimo, sem nível adicional                                                     |
+| Membership           | Participação e papel de um usuário em um workspace    | Papel pertence ao vínculo, não globalmente ao usuário                                                                                 |
+| Workspace connection | Vínculo autorizado com instalação/repositórios GitHub | Várias instalações por workspace; cada instalação em um único workspace, com autoridade exigida em Q31, implementada localmente em M3 |
 
 ```mermaid
 erDiagram
@@ -158,7 +159,7 @@ workspace compartilhado pode ter vários usuários. Por exemplo, a mesma pessoa
 pode ser owner em A e member em B; entrar com outro provider vinculado conserva
 sua identidade e memberships. Não colocar apenas `workspaceId` em User nem
 `ownerUserId` como substituto de membership. M2 materializa User/Account/Session e Workspace/Membership; conexões e convites
-continuam entregas posteriores.
+são materializados por M3.
 
 Cada usuário tem um workspace pessoal exclusivo, sem convites ou conversão
 silenciosa. Workspaces de equipe têm N membros. Ambos usam a mesma fronteira
@@ -356,5 +357,21 @@ replay do mesmo state/code consumido é negado.
 Fontes de linking revalidadas em **2026-10-05**; as demais fontes permanecem
 na conferência de **2026-10-04**. O [primeiro recorte M2](../research/2026-10-07-dashboard-identity-tenancy-results.md)
 materializa auth e tenancy no produto local, com provas nativas Workerd/D1;
-convites, conexões e isolamento de conteúdo de reviews permanecem pendentes.
+convites/conexões/grants agora têm implementação M3; isolamento do dataset
+de reviews e envio permanecem em M5/M4.
 Não houve benchmark, criação de recursos ou operação remota.
+
+## Implementação de GitHub e convites em 2026-10-08
+
+A [arquitetura M3](../architecture/user-dashboard.md#github-e-convites-implementação-m3)
+é a fonte do estado materializado para Q22/Q30/Q31/Q32. Credenciais humanas
+compartilham coordenação D1 com OAuth nativo; link exige dupla autoridade e
+reauth; leitura verifica grants antes de paginação de conteúdo; convite cria
+obrigação durável e só o alvo atualmente verificado aceita por POST. Alocação
+revogada não vira transferência. Login/account não concedem membership.
+
+Os testes de [M3](../research/2026-10-08-dashboard-milestone-three-results.md)
+incluem falsos positivos de email, não primário verificado, replays após remoção,
+concorrência e revogação. As seções históricas acima descrevem a sequência M2;
+requisitos de email delivery, projeção, onboarding completo e promoção remota
+continuam nas issues donas. Nenhum teste local autoriza alterar recursos remotos.
