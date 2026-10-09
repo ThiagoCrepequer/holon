@@ -5,15 +5,23 @@ export { DashboardReviewReader } from "../../src/dashboard-read-entrypoint.js";
 /** Test-only fixture generation uses the production ledger and projection writer. */
 export default class ReviewFixture extends WorkerEntrypoint<Cloudflare.Env> {
   override async fetch(request: Request) {
-    const { subject, count = 65 } = (await request.json()) as {
+    const {
+      subject,
+      count = 65,
+      findingCount = 0,
+    } = (await request.json()) as {
       subject: number;
       count?: number;
+      findingCount?: number;
     };
     if (
       !Number.isSafeInteger(subject) ||
       subject < 1 ||
       count > 100 ||
-      count < 1
+      count < 1 ||
+      !Number.isSafeInteger(findingCount) ||
+      findingCount < 0 ||
+      findingCount > 200
     )
       return new Response(null, { status: 400 });
     for (let number = 1; number <= count; number++) {
@@ -53,12 +61,35 @@ export default class ReviewFixture extends WorkerEntrypoint<Cloudflare.Env> {
         date,
         `start-${number}`,
       );
+      const findings = Array.from({ length: findingCount }, (_, index) => ({
+        confidence: 0.95,
+        diagnostic: "**Synthetic finding** " + "D".repeat(1900),
+        evidence: Array.from({ length: 4 }, () => ({
+          excerpt: 'const value = "<b>原文</b>";\n' + "E".repeat(1100),
+          path: "src/file.ts",
+          reason: "R".repeat(600),
+          startLine: 1,
+        })),
+        location: {
+          line: index + 1,
+          path: "src/file.ts",
+          side: "RIGHT" as const,
+        },
+        severity: "high" as const,
+        suggestion: "S".repeat(3000),
+        fingerprint: `fp:${index.toString(16).padStart(64, "0")}` as const,
+        evidenceFingerprint: index.toString(16).padStart(64, "0"),
+        status: "new" as const,
+      }));
       await ledger.saveReviewAnalysis(run.id, {
         findings: [],
-        activeFindings: [],
+        activeFindings: findings,
         updatedTrackedFindings: [],
         resolvedFindings: [],
-        summary: "Synthetic evidence </script><svg onload=hostile()>",
+        summary: findingCount
+          ? "**Synthetic summary**\n\n![tracking](https://tracker.example.invalid/pixel)\n\n[unsafe](javascript:hostile())\n\n<script>window.holonHostile=true</script>" +
+            "T".repeat(14000)
+          : "Synthetic evidence </script><svg onload=hostile()>",
         output: { language: "en", detail: "concise", maxInlineComments: 40 },
         omissionReasons: [],
         scopeStatus: "complete",

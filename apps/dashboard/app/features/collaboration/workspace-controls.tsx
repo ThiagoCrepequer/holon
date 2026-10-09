@@ -1,6 +1,9 @@
 import {
+  createTeamWorkspaceInputSchema,
   workspaceDtoSchema,
   workspaceRoleSchema,
+  dashboardIdSchema,
+  reauthActionSchema,
 } from "@holon/contracts/dashboard";
 import { connectionCommandSchema } from "@holon/contracts/dashboard-collaboration";
 import { Button } from "@holon/ui/button";
@@ -16,14 +19,21 @@ import {
 } from "./collaboration-client.js";
 import { WorkspaceConnections } from "./workspace-connections.js";
 import { WorkspaceInvitations } from "./workspace-invitations.js";
+import { WorkspaceMembers } from "./workspace-members.js";
 import { workspaceMessages } from "./workspace-messages.js";
 import type { Workspace } from "./workspace-types.js";
 type Props = {
   sessionId: string;
+  userId: string;
   csrf: string;
   onSessionLost: (id: string) => void;
 };
-export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
+export function WorkspaceControls({
+  sessionId,
+  userId,
+  csrf,
+  onSessionLost,
+}: Props) {
   const { i18n } = useLingui();
   const [parameters, setParameters] = useSearchParams();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -34,7 +44,7 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
   const [teamName, setTeamName] = useState("");
   const pending = useRef<AbortController | null>(null);
   const generation = useRef(0);
-  const teamOperation = useRef<string | null>(null);
+  const teamOperation = useRef<{ id: string; name: string } | null>(null);
   useLayoutEffect(() => {
     setInteractive(true);
     return () => {
@@ -51,6 +61,7 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
     onReady: (data: unknown) => void,
     global = false,
   ) {
+    if (pending.current && body !== undefined) return;
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
@@ -92,14 +103,18 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
           !Array.isArray(data.workspaces)
         )
           throw new Error();
-        setWorkspaces(
-          data.workspaces.map((row) => {
-            if (!row || typeof row !== "object") throw new Error();
-            return {
-              workspace: workspaceDtoSchema.parse(row.workspace),
-              role: workspaceRoleSchema.parse(row.role),
-            };
-          }),
+        const rows = data.workspaces.map((row) => {
+          if (!row || typeof row !== "object") throw new Error();
+          return {
+            workspace: workspaceDtoSchema.parse(row.workspace),
+            role: workspaceRoleSchema.parse(row.role),
+          };
+        });
+        setWorkspaces(rows);
+        setWorkspace(
+          rows.find(
+            (row) => row.workspace.id === parameters.get("workspace"),
+          ) ?? null,
         );
       },
       true,
@@ -144,6 +159,14 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
   });
   const confirmationAction = parameters.get("connectionAction");
   const confirmationWorkspace = parameters.get("workspace");
+  const memberAction = reauthActionSchema.safeParse(
+    parameters.get("memberAction"),
+  );
+  const memberProof = dashboardIdSchema.safeParse(parameters.get("reauth"));
+  const memberTarget = dashboardIdSchema.safeParse(
+    parameters.get("targetUser"),
+  );
+  const memberWorkspace = dashboardIdSchema.safeParse(confirmationWorkspace);
   return (
     <section className="holon-collaboration" aria-label={labels.title}>
       <Button
@@ -154,6 +177,39 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
       >
         {labels.load}
       </Button>
+      {memberAction.success &&
+        memberProof.success &&
+        memberTarget.success &&
+        memberWorkspace.success && (
+          <Button
+            disabled={!interactive || status === "loading"}
+            onClick={() =>
+              void run(
+                memberAction.data === "leave"
+                  ? `/api/workspaces/${memberWorkspace.data}/leave`
+                  : `/api/workspaces/${memberWorkspace.data}/members/${memberAction.data}`,
+                {
+                  reauthIntentId: memberProof.data,
+                  ...(memberAction.data === "leave"
+                    ? {}
+                    : { targetUserId: memberTarget.data }),
+                },
+                () => {
+                  const next = new URLSearchParams(parameters);
+                  for (const key of ["memberAction", "targetUser", "reauth"])
+                    next.delete(key);
+                  setParameters(next);
+                  void loadWorkspaces();
+                },
+              )
+            }
+          >
+            {i18n._({
+              id: "members.confirm",
+              message: "Confirm member change",
+            })}
+          </Button>
+        )}
       {confirmation.success &&
         confirmationWorkspace &&
         (confirmationAction === "link" || confirmationAction === "unlink") && (
@@ -164,7 +220,14 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
                 `/api/workspaces/${encodeURIComponent(confirmationWorkspace)}/github/${confirmationAction}`,
                 confirmation.data,
                 () => {
-                  setParameters({});
+                  const next = new URLSearchParams(parameters);
+                  for (const key of [
+                    "connectionAction",
+                    "installation",
+                    "reauth",
+                  ])
+                    next.delete(key);
+                  setParameters(next);
                   void loadWorkspaces();
                 },
               )
@@ -194,6 +257,9 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
                 workspaces.find((w) => w.workspace.id === event.target.value) ??
                   null,
               );
+              const next = new URLSearchParams(parameters);
+              next.set("workspace", event.target.value);
+              setParameters(next);
               setStatus("idle");
             }}
           />
@@ -212,10 +278,25 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              teamOperation.current ??= crypto.randomUUID();
+              if (
+                !createTeamWorkspaceInputSchema.safeParse({
+                  name: teamName,
+                  operationId: "validation",
+                }).success
+              ) {
+                setStatus("unavailable");
+                return;
+              }
+              teamOperation.current ??= {
+                id: crypto.randomUUID(),
+                name: teamName,
+              };
               void run(
                 "/api/workspaces/team",
-                { name: teamName, operationId: teamOperation.current },
+                {
+                  name: teamOperation.current.name,
+                  operationId: teamOperation.current.id,
+                },
                 () => {
                   teamOperation.current = null;
                   setTeamName("");
@@ -230,21 +311,34 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
                 id="team-name"
                 value={teamName}
                 maxLength={128}
+                disabled={
+                  teamOperation.current !== null || status === "loading"
+                }
                 required
                 onChange={(event) => {
-                  teamOperation.current = null;
-                  setTeamName(event.target.value);
+                  if (!teamOperation.current) setTeamName(event.target.value);
                 }}
               />
             </div>
+            {teamOperation.current && <p role="status">{labels.unconfirmed}</p>}
             <Button type="submit" disabled={status === "loading"}>
               {labels.createTeam}
             </Button>
           </form>
           {workspace && (
             <>
+              {workspace.workspace.type === "team" && (
+                <WorkspaceMembers
+                  key={`members-${workspace.workspace.id}`}
+                  workspace={workspace}
+                  userId={userId}
+                  csrf={csrf}
+                  busy={status === "loading"}
+                  run={run}
+                />
+              )}
               <WorkspaceConnections
-                key={workspace.workspace.id}
+                key={`connections-${workspace.workspace.id}`}
                 workspace={workspace}
                 labels={labels}
                 busy={status === "loading"}
@@ -254,7 +348,7 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
               {workspace.workspace.type === "team" &&
                 workspace.role === "owner" && (
                   <WorkspaceInvitations
-                    key={workspace.workspace.id}
+                    key={`invitations-${workspace.workspace.id}`}
                     workspaceId={workspace.workspace.id}
                     labels={labels}
                     busy={status === "loading"}

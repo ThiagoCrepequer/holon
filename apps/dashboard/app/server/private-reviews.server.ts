@@ -4,7 +4,7 @@ import {
 } from "@holon/application/private-review-reads";
 import { coreReviewDetailResultSchema } from "@holon/contracts/dashboard-reviews";
 
-import { reviewParameters } from "../features/reviews/public.js";
+import { reviewParameters } from "../review-parameters.js";
 import type { DashboardServices } from "./http-context.server.js";
 import { HttpBoundaryError } from "./http-security.server.js";
 import {
@@ -25,6 +25,7 @@ export async function readPrivateReviews(
   kind: "list" | "detail",
   cookies: string[],
 ) {
+  const startedAt = Date.now();
   const parameters = readReviewParameters(new URL(request.url), kind);
   await consumeReadRateLimit(request, services, "/api/reviews");
   const assertLive = () => {
@@ -111,8 +112,24 @@ export async function readPrivateReviews(
         ? await reads.list(parameters)
         : await reads.detail(parameters);
     assertLive();
+    console.info(
+      JSON.stringify({
+        event: "private_review_read",
+        kind: kind === "list" ? 0 : 1,
+        duration_ms: Date.now() - startedAt,
+        code: 0,
+      }),
+    );
     return { identity: identity!, result };
   } catch (error) {
+    console.info(
+      JSON.stringify({
+        event: "private_review_read",
+        kind: kind === "list" ? 0 : 1,
+        duration_ms: Date.now() - startedAt,
+        code: 1,
+      }),
+    );
     if (error instanceof PrivateReviewError)
       throw new HttpBoundaryError(
         error.code,

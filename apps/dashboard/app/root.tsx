@@ -27,6 +27,7 @@ import { resolveLocale } from "./i18n/locale.js";
 import { loadMessages } from "./i18n/messages.server.js";
 import { nonceContext, viewerServicesContext } from "./request-context.js";
 import { readDashboardViewer } from "./server/viewer.server.js";
+import type { DashboardViewerData } from "./viewer-data.js";
 
 import stylesheet from "./styles.css?url";
 export function links() {
@@ -49,7 +50,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
   return routeData(
     {
-      viewer,
+      viewer: viewer satisfies DashboardViewerData["viewer"],
       locale,
       messages: await loadMessages(locale),
       theme: url.searchParams.get("theme") === "dark" ? "dark" : "light",

@@ -46,6 +46,12 @@ function setup() {
     pruneExpiredCodes: vi.fn(),
   } satisfies AuthService;
   const tenancy = {
+    listMembers: vi.fn(async () => ({
+      members: [{ userId: "actor", name: "Synthetic", role: "owner" as const }],
+      actorRole: "owner" as const,
+      ownerCount: 1,
+      nextCursor: null,
+    })),
     provisionPersonalWorkspace: vi.fn(),
     createTeamWorkspace: vi.fn(),
     listUserWorkspaces: vi.fn(),
@@ -116,7 +122,7 @@ function setup() {
     );
   }
 
-  return { auth, collaboration, services, handle, request };
+  return { auth, tenancy, collaboration, services, handle, request };
 }
 it("all collaboration APIs enforce the same admission, CSRF and DTOs", async () => {
   const f = setup();
@@ -248,4 +254,32 @@ it.each([
   );
   if (code === "rate_limited")
     expect(response.headers.get("Retry-After")).toBe("60");
+});
+
+it("member HTTP delivery trusts the atomic tenancy admission with no later asynchronous reads", async () => {
+  const { request, auth, tenancy } = setup();
+  const response = await request("/api/workspaces/team/members");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    members: [{ userId: "actor", name: "Synthetic", role: "owner" }],
+    actorRole: "owner",
+    ownerCount: 1,
+    nextCursor: null,
+  });
+  expect(response.headers.get("Cache-Control")).toContain("no-store");
+  expect(auth.getAdmittedUser).toHaveBeenCalledTimes(1);
+  expect(tenancy.readMembership).not.toHaveBeenCalled();
+  tenancy.listMembers.mockRejectedValue(
+    new (await import("@holon/db/identity/server")).TenancyError(
+      "user_not_admitted",
+    ),
+  );
+  const denied = await request("/api/workspaces/team/members");
+  expect(denied.status).toBe(403);
+  expect(await denied.text()).not.toContain("Synthetic");
+  const prior = tenancy.listMembers.mock.calls.length;
+  expect(
+    (await request("/api/workspaces/team/members?cursor=%20")).status,
+  ).toBe(400);
+  expect(tenancy.listMembers.mock.calls.length).toBe(prior);
 });

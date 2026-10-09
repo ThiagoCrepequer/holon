@@ -132,3 +132,14 @@ export const authSecretRingSchema = z
     if (new Set(keys.map((k) => k.version)).size !== keys.length)
       ctx.addIssue({ code: "custom", message: "duplicate secret version" });
   });
+
+export const authorizedRepositoryListSchema = z.strictObject({
+  repositories: z
+    .array(
+      z.strictObject({
+        installationId: installationIdSchema,
+        repositoryId: installationIdSchema,
+      }),
+    )
+    .max(10000),
+});

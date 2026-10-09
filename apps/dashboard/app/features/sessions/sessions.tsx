@@ -10,6 +10,10 @@ export function SignIn({ reconnect = false }: { reconnect?: boolean }) {
   const { i18n } = useLingui();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+  useEffect(() => {
+    setInteractive(true);
+  }, []);
   return (
     <div>
       {reconnect && (
@@ -22,6 +26,7 @@ export function SignIn({ reconnect = false }: { reconnect?: boolean }) {
       )}
       <Button
         busy={busy}
+        disabled={!interactive}
         onClick={async () => {
           if (busy) return;
           setBusy(true);
@@ -57,6 +62,8 @@ type Props = {
 export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
   const { i18n } = useLingui();
   const [open, setOpen] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+  const devicesTrigger = useRef<HTMLButtonElement>(null);
   const [devices, setDevices] = useState<SessionDeviceDto[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "failed">(
@@ -67,6 +74,7 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
   const pending = useRef(false);
   useEffect(() => {
     active.current = true;
+    setInteractive(true);
     return () => {
       active.current = false;
       controller.current?.abort();
@@ -125,6 +133,8 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
     <>
       <Button
         variant="quiet"
+        ref={devicesTrigger}
+        disabled={!interactive}
         onClick={() => {
           setOpen(true);
           void reload();
@@ -134,6 +144,7 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
       </Button>
       <Button
         variant="quiet"
+        disabled={!interactive}
         onClick={() => {
           void revoke("/api/auth/sign-out", true);
         }}
@@ -141,6 +152,7 @@ export function SessionControls({ sessionId, csrf, onSessionLost }: Props) {
         {i18n._({ id: "session.signout", message: "Sign out" })}
       </Button>
       <Dialog
+        returnFocusRef={devicesTrigger}
         open={open}
         onOpenChange={(next) => {
           setOpen(next);

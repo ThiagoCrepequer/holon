@@ -3,6 +3,7 @@ import {
   reauthReceiptSchema,
 } from "@holon/contracts/dashboard";
 import {
+  authorizedRepositoryListSchema,
   connectionCommandSchema,
   connectionDtoSchema,
   connectionListSchema,
@@ -110,7 +111,9 @@ export function registerCollaborationRoutes(
       readPathId(c.req.param("id")),
     );
     return respondWithCookies(
-      { repositories: scope.repositories },
+      authorizedRepositoryListSchema.parse({
+        repositories: scope.repositories,
+      }),
       c.env.sessionCookies,
     );
   });

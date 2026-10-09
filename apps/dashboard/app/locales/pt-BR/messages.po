@@ -15,6 +15,11 @@ msgid "reviews.count"
 msgstr "{count, plural, =0 {# revisões} one {# revisão} other {# revisões}}"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.lastOwner"
+msgstr "Uma equipe precisa de um owner. Promova outro membro antes de o último owner sair."
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.accepted"
 msgstr "Aceito"
@@ -30,6 +35,13 @@ msgid "collaboration.denied"
 msgstr "Acesso negado. Recarregue seus workspaces."
 
 #. js-lingui-explicit-id
+#: app/features/account/account-overview.tsx
+#: app/features/reviews/review-recovery.tsx
+#: app/features/reviews/review-screen.tsx
+msgid "account.title"
+msgstr "Conta e workspaces"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.active"
 msgstr "Ativa"
@@ -40,7 +52,7 @@ msgid "session.devices"
 msgstr "Sessões ativas"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.all"
 msgstr "Todos os estados"
 
@@ -50,9 +62,14 @@ msgid "collaboration.notice"
 msgstr "Um convite registra uma intenção de entrega. Isso não confirma o envio do email. Cancelar interrompe próximos envios; uma mensagem já em trânsito ainda pode chegar."
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.apply"
 msgstr "Aplicar filtros"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-connections.tsx
+msgid "repositories.title"
+msgstr "Repositórios autorizados"
 
 #. js-lingui-explicit-id
 #: app/features/reviews/review-messages.ts
@@ -60,7 +77,8 @@ msgid "reviews.state.awaiting"
 msgstr "Aguardando revisão"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-recovery.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.back"
 msgstr "Voltar às revisões"
 
@@ -75,12 +93,22 @@ msgid "collaboration.canceled"
 msgstr "Cancelado"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-connections.tsx
+msgid "repositories.load"
+msgstr "Escolher um repositório"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.choose"
 msgstr "Escolha um workspace"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/account/account-overview.tsx
+msgid "account.steps"
+msgstr "Escolha um workspace, conecte sua instalação do GitHub e abra um repositório autorizado para ler as reviews."
+
+#. js-lingui-explicit-id
+#: app/features/account/account-overview.tsx
 msgid "preferences.description"
 msgstr "Escolha como você lê o Holon."
 
@@ -90,7 +118,7 @@ msgid "session.close"
 msgstr "Fechar sessões ativas"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/account/account-overview.tsx
 msgid "preferences.close"
 msgstr "Fechar preferências"
 
@@ -105,6 +133,11 @@ msgid "collaboration.confirm"
 msgstr "Confirmar mudança na conexão"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-controls.tsx
+msgid "members.confirm"
+msgstr "Confirmar alteração de membro"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/invitation-controls.tsx
 msgid "invitation.accept"
 msgstr "Confirmar destinatário e aceitar"
@@ -113,6 +146,11 @@ msgstr "Confirmar destinatário e aceitar"
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.loading"
 msgstr "Confirmando o acesso atual…"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.loading"
+msgstr "Confirmando o acesso atual às reviews…"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -125,9 +163,9 @@ msgid "collaboration.createTeam"
 msgstr "Criar equipe"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
-msgid "reviews.observation"
-msgstr "Observação atual. Atualize para ver a atividade recente."
+#: app/features/reviews/review-screen.tsx
+msgid "severity.critical"
+msgstr "Crítica"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -138,6 +176,11 @@ msgstr "Estado atual confirmado."
 #: app/features/preferences/preferences.tsx
 msgid "theme.dark"
 msgstr "Escuro"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "finding.dismissed"
+msgstr "Dispensado"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -165,6 +208,11 @@ msgid "reviews.state.failed"
 msgstr "Falhou"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.findings"
+msgstr "achados"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "delivery.canceled"
 msgstr "Próximas tentativas de email interrompidas"
@@ -180,6 +228,16 @@ msgid "collaboration.installation"
 msgstr "ID da instalação GitHub"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "severity.high"
+msgstr "Alta"
+
+#. js-lingui-explicit-id
+#: app/features/account/account-overview.tsx
+msgid "account.home"
+msgstr "Início"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/invitation-controls.tsx
 msgid "invitation.accepted"
 msgstr "Convite aceito. O acesso aos repositórios é verificado separadamente."
@@ -188,6 +246,16 @@ msgstr "Convite aceito. O acesso aos repositórios é verificado separadamente."
 #: app/features/preferences/preferences.tsx
 msgid "preferences.language"
 msgstr "Idioma"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.activityOrder"
+msgstr "Atividade mais recente primeiro"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.leave"
+msgstr "Sair do workspace"
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -205,9 +273,34 @@ msgid "session.loading"
 msgstr "Carregando sessões…"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "severity.low"
+msgstr "Baixa"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.demote"
+msgstr "Tornar membro"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.load"
 msgstr "Gerenciar workspaces"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "severity.medium"
+msgstr "Média"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.member"
+msgstr "Membro"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.title"
+msgstr "Membros e owners"
 
 #. js-lingui-explicit-id
 #: app/features/reviews/review-messages.ts
@@ -215,12 +308,22 @@ msgid "reviews.state.conflict"
 msgstr "Metadados precisam de reconciliação"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.nextFindings"
 msgstr "Mais achados"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
+msgid "finding.new"
+msgstr "Novo"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.next"
+msgstr "Próximos membros"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.next"
 msgstr "Próxima página"
 
@@ -230,9 +333,24 @@ msgid "session.nextPage"
 msgstr "Próximas sessões"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/collaboration/workspace-connections.tsx
+msgid "repositories.empty"
+msgstr "Nenhum repositório autorizado atualmente. Confira a conexão e seu acesso no GitHub."
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.empty"
 msgstr "Nenhuma revisão corresponde a estes filtros."
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.observedAt"
+msgstr "Observado em"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "finding.obsolete"
+msgstr "Obsoleto"
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
@@ -240,14 +358,29 @@ msgid "session.deviceDescription"
 msgstr "Somente suas sessões são listadas. Os nomes dos navegadores são aproximados."
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-connections.tsx
+msgid "repositories.open"
+msgstr "Abrir reviews"
+
+#. js-lingui-explicit-id
 #: app/routes/invitation/route.tsx
 msgid "invitation.privacy"
 msgstr "Abrir este link não altera nada nem revela detalhes do workspace. Entre e confirme seu email atual verificado no GitHub para aceitar."
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.order"
+msgstr "Ordem"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.other"
 msgstr "Outro navegador"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.owner"
+msgstr "Owner"
 
 #. js-lingui-explicit-id
 #: app/root.tsx
@@ -261,7 +394,12 @@ msgid "collaboration.pending"
 msgstr "Pendente"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/reviews/review-screen.tsx
+msgid "finding.persistent"
+msgstr "Persistente"
+
+#. js-lingui-explicit-id
+#: app/features/account/account-overview.tsx
 msgid "preferences.title"
 msgstr "Preferências"
 
@@ -269,6 +407,11 @@ msgstr "Preferências"
 #: app/features/preferences/preferences.tsx
 msgid "preferences.saved"
 msgstr "Preferências salvas."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.promote"
+msgstr "Promover a owner"
 
 #. js-lingui-explicit-id
 #: app/features/reviews/review-messages.ts
@@ -301,7 +444,8 @@ msgid "collaboration.invite"
 msgstr "Registrar convite"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-recovery.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.refresh"
 msgstr "Atualizar"
 
@@ -316,17 +460,37 @@ msgid "collaboration.list"
 msgstr "Atualizar convites"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.refresh"
+msgstr "Atualizar membros"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.refresh"
 msgstr "Atualizar sessões"
 
 #. js-lingui-explicit-id
-#: app/features/collaboration/workspace-messages.ts
-msgid "collaboration.unconfirmed"
-msgstr "Resultado desconhecido. Repita o mesmo convite para confirmar sua intenção original."
+#: app/features/reviews/review-screen.tsx
+msgid "finding.reintroduced"
+msgstr "Reintroduzido"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.remove"
+msgstr "Remover membro"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "finding.resolved"
+msgstr "Resolvido"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.unconfirmed"
+msgstr "Resultado desconhecido. Repita a mesma ação para confirmar a intenção original."
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.results"
 msgstr "resultados"
 
@@ -341,12 +505,12 @@ msgid "invitation.home"
 msgstr "Voltar ao Holon"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-recovery.tsx
 msgid "reviews.unavailable"
 msgstr "Dados da revisão indisponíveis. Verifique seu acesso e tente novamente."
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.status"
 msgstr "Estado da revisão"
 
@@ -356,7 +520,7 @@ msgid "reviews.state.running"
 msgstr "Em revisão"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.title"
 msgstr "Revisões"
 
@@ -369,6 +533,11 @@ msgstr "Revogar sessão"
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.revoked"
 msgstr "Revogada"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.reauth"
+msgstr "Alterações de função e saída exigem confirmação com a mesma identidade do GitHub."
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -386,7 +555,7 @@ msgid "preferences.saving"
 msgstr "Salvando…"
 
 #. js-lingui-explicit-id
-#: app/routes/reviews/route.tsx
+#: app/features/reviews/review-screen.tsx
 msgid "reviews.search"
 msgstr "Buscar título ou número do PR"
 
@@ -411,6 +580,16 @@ msgid "session.signoutAll"
 msgstr "Sair em todos os dispositivos"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.snapshotAt"
+msgstr "Snapshot observado em"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.summary"
+msgstr "Resumo"
+
+#. js-lingui-explicit-id
 #: app/features/reviews/review-messages.ts
 msgid "reviews.state.obsolete"
 msgstr "Substituído"
@@ -429,6 +608,11 @@ msgstr "Nome da equipe"
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.privacy"
 msgstr "O link do convite não revela detalhes do workspace. O aceite exige o email atual verificado no GitHub do destinatário e concede apenas participação como membro."
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-screen.tsx
+msgid "reviews.observation"
+msgstr "A projeção pode estar atrasada em relação ao core. Atualizar confirma o acesso e lê a observação disponível mais recente."
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -466,12 +650,17 @@ msgid "session.failed"
 msgstr "Não foi possível confirmar a sessão. Tente novamente."
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-members.tsx
+msgid "members.failed"
+msgstr "Não foi possível confirmar esta alteração. Atualize os membros e tente novamente."
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/invitation-controls.tsx
 msgid "invitation.failed"
 msgstr "Não foi possível confirmar este convite. Confira sua conta GitHub atual e tente novamente."
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/account/account-overview.tsx
 msgid "welcome.description"
 msgstr "Entenda cada mudança com clareza e o contexto que importa."
 
@@ -506,7 +695,7 @@ msgid "collaboration.title"
 msgstr "Workspaces e acesso"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/account/account-overview.tsx
 msgid "welcome.heading"
 msgstr "Suas reviews, em contexto."
 

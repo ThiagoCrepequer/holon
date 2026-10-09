@@ -41,6 +41,21 @@ export const workspaceMembershipDtoSchema = z.strictObject({
   userId: dashboardIdSchema,
   role: workspaceRoleSchema,
 });
+export const workspaceMemberPageSchema = z.strictObject({
+  members: z
+    .array(
+      z.strictObject({
+        userId: dashboardIdSchema,
+        name: z.string().min(1).max(256),
+        role: workspaceRoleSchema,
+      }),
+    )
+    .max(100),
+  actorRole: workspaceRoleSchema,
+  ownerCount: z.number().int().positive().safe(),
+  nextCursor: dashboardIdSchema.nullable(),
+});
+export type WorkspaceMemberPage = z.infer<typeof workspaceMemberPageSchema>;
 export const createTeamWorkspaceInputSchema = z.strictObject({
   name: z.string().trim().min(1).max(128),
   operationId: dashboardIdSchema,

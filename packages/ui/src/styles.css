@@ -172,3 +172,27 @@ body {
     transform: none;
   }
 }
+
+.holon-panel {
+  border: var(--holon-border-thin) solid var(--holon-border-subtle);
+  border-radius: var(--holon-radius-panel);
+  padding: var(--holon-space-4);
+  background: var(--holon-bg-surface);
+  animation: holon-reveal var(--holon-motion-base) var(--holon-motion-ease);
+}
+@keyframes holon-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--holon-motion-distance-small));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .holon-panel {
+    animation: none;
+    transform: none;
+  }
+}

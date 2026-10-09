@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentPropsWithRef } from "react";
 
 import { cn } from "./classes.js";
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends ComponentPropsWithRef<"button"> {
   variant?: "primary" | "secondary" | "quiet" | "danger";
   busy?: boolean;
 }

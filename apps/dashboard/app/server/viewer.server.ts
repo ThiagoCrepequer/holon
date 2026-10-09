@@ -1,11 +1,9 @@
 import type { PersonalPreferencesPort } from "@holon/application/preferences-port";
 import type { AuthService } from "@holon/auth/server";
 import { admittedUserSchema } from "@holon/contracts/dashboard";
-import {
-  personalPreferencesSchema,
-  type PersonalPreferences,
-} from "@holon/contracts/dashboard-preferences";
+import { personalPreferencesSchema } from "@holon/contracts/dashboard-preferences";
 
+import type { DashboardViewer } from "../viewer-data.js";
 import {
   errorResponse,
   HttpBoundaryError,
@@ -16,15 +14,6 @@ import {
   mapBoundaryError,
 } from "./http-services.server.js";
 
-export type DashboardViewer =
-  | { status: "disabled" | "anonymous" | "disconnected" }
-  | {
-      status: "authenticated";
-      user: { id: string; name: string };
-      sessionId: string;
-      csrf: string;
-      preferences: PersonalPreferences;
-    };
 export interface ViewerServices {
   authService?: AuthService | undefined;
   authSecret?: string | undefined;

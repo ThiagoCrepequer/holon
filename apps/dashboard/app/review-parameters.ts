@@ -4,6 +4,12 @@ import {
 } from "@holon/contracts/dashboard-reviews";
 export type ReviewResource = "list" | "detail";
 export function reviewParameters(url: URL, kind: ReviewResource) {
+  if (
+    kind === "list" &&
+    url.searchParams.has("order") &&
+    url.searchParams.get("order") !== "activity"
+  )
+    throw new Error("invalid_review_order");
   const number = (key: string) => Number(url.searchParams.get(key));
   const shared = {
     workspaceId: url.searchParams.get("workspace") ?? "",
@@ -42,4 +48,8 @@ export function reviewQueryKey(
     kind,
     reviewParameters(url, kind),
   ] as const;
+}
+
+export function reviewResource(url: URL): ReviewResource {
+  return url.pathname.endsWith("/detail") ? "detail" : "list";
 }

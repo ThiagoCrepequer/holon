@@ -65,70 +65,97 @@ export function createWorkspaceCollaboration(
       return { unlinked: true };
     },
     async authorizeReviews(actor: AdmittedUser, workspaceId: string) {
-      const links = await connections.list(actor, workspaceId);
-      const active = links.filter((l) => l.state === "active");
-      const identity = await github.identity(actor);
-      const repositories: { installationId: number; repositoryId: number }[] =
-        [];
-      const authorized: {
-        installationId: number;
-        generation: number;
-        grantExpiresAt: number;
-      }[] = [];
-      for (const link of active) {
-        const key = {
-          accountId: identity.accountId,
-          credentialGeneration: identity.generation,
-          installationId: link.installationId,
-          connectionGeneration: link.generation,
-        };
-        let grant = await grants.read(actor, workspaceId, key);
-        if (grant === null) {
-          const observedAt = Date.now();
-          const proof = await github.repositories(actor, link.installationId);
-          if (
-            proof.accountId !== identity.accountId ||
-            proof.generation !== identity.generation
-          )
-            throw new CollaborationError("reconnect_required");
-          if (
-            !(await grants.write(
-              actor,
-              workspaceId,
-              key,
-              proof.repositoryIds,
-              observedAt,
-            ))
-          )
-            throw new CollaborationError("denied");
-          grant = {
-            repositoryIds: proof.repositoryIds,
-            expiresAt: observedAt + 60000,
-          };
-        }
-        authorized.push({ ...link, grantExpiresAt: grant.expiresAt });
-        for (const id of grant.repositoryIds)
-          repositories.push({
+      const startedAt = Date.now();
+      try {
+        const links = await connections.list(actor, workspaceId);
+        const active = links.filter((l) => l.state === "active");
+        const identity = await github.identity(actor);
+        const repositories: { installationId: number; repositoryId: number }[] =
+          [];
+        const authorized: {
+          installationId: number;
+          generation: number;
+          grantExpiresAt: number;
+        }[] = [];
+        for (const link of active) {
+          const key = {
+            accountId: identity.accountId,
+            credentialGeneration: identity.generation,
             installationId: link.installationId,
-            repositoryId: id,
-          });
+            connectionGeneration: link.generation,
+          };
+          let grant = await grants.read(actor, workspaceId, key);
+          if (grant === null) {
+            const observedAt = Date.now();
+            const proof = await github.repositories(actor, link.installationId);
+            if (
+              proof.accountId !== identity.accountId ||
+              proof.generation !== identity.generation
+            )
+              throw new CollaborationError("reconnect_required");
+            if (
+              !(await grants.write(
+                actor,
+                workspaceId,
+                key,
+                proof.repositoryIds,
+                observedAt,
+              ))
+            )
+              throw new CollaborationError("denied");
+            grant = {
+              repositoryIds: proof.repositoryIds,
+              expiresAt: observedAt + 60000,
+            };
+          }
+          authorized.push({ ...link, grantExpiresAt: grant.expiresAt });
+          for (const id of grant.repositoryIds)
+            repositories.push({
+              installationId: link.installationId,
+              repositoryId: id,
+            });
+        }
+        await grants.assertCurrent(
+          actor,
+          workspaceId,
+          identity.accountId,
+          identity.generation,
+          authorized,
+        );
+        console.info(
+          JSON.stringify({
+            event: "github_authority_health",
+            code: 0,
+            duration_ms: Date.now() - startedAt,
+            repositories: repositories.length,
+          }),
+        );
+        return {
+          userId: actor.id,
+          workspaceId,
+          repositories: repositories.toSorted(
+            (a, b) =>
+              a.installationId - b.installationId ||
+              a.repositoryId - b.repositoryId,
+          ),
+        };
+      } catch (error) {
+        console.info(
+          JSON.stringify({
+            event: "github_authority_health",
+            code:
+              error instanceof CollaborationError
+                ? error.code === "reconnect_required"
+                  ? 2
+                  : error.code === "denied"
+                    ? 1
+                    : 3
+                : 3,
+            duration_ms: Date.now() - startedAt,
+          }),
+        );
+        throw error;
       }
-      await grants.assertCurrent(
-        actor,
-        workspaceId,
-        identity.accountId,
-        identity.generation,
-        authorized,
-      );
-      return {
-        userId: actor.id,
-        workspaceId,
-        repositories: repositories.toSorted(
-          (a, b) =>
-            a.installationId - b.installationId ||
-            a.repositoryId - b.repositoryId,
-        ),
-      };
     },
   };
 }

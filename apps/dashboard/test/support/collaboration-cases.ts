@@ -1,6 +1,9 @@
 import type { GitHubUserService } from "@holon/auth/server";
 import type { AdmittedUser } from "@holon/contracts/dashboard";
-import { createConnectionPersistence } from "@holon/db/identity/server";
+import {
+  createConnectionPersistence,
+  CollaborationError,
+} from "@holon/db/identity/server";
 import { expect, it, vi } from "vitest";
 
 import { createWorkspaceCollaboration } from "../../app/server/collaboration.server.js";
@@ -88,6 +91,37 @@ export function collaborationCases(database: () => D1Database) {
       .run();
     return { installationId: 77, reauthIntentId: id };
   }
+  it("signals reconnect, grants, provider outage and recovery without private coordinates or errors", async () => {
+    const { github, service } = fixture();
+    await service.linkInstallation(actor, "team", await confirmed("signals"));
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    github.identity.mockRejectedValueOnce(
+      new CollaborationError("reconnect_required"),
+    );
+    await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
+      {
+        code: "reconnect_required",
+      },
+    );
+    github.repositories.mockRejectedValueOnce(
+      new Error("private provider body"),
+    );
+    await expect(service.authorizeReviews(actor, "team")).rejects.toThrow();
+    await service.authorizeReviews(actor, "team");
+    await expect(service.authorizeReviews(actor, "foreign")).rejects.toThrow();
+    const signals = log.mock.calls
+      .map(([line]) => JSON.parse(String(line)))
+      .filter((event) => event.event === "github_authority_health");
+    expect(signals.map((event) => event.code)).toEqual([2, 3, 0, 1]);
+    expect(
+      signals.every((event) =>
+        Object.entries(event).every(
+          ([key, value]) => key === "event" || typeof value === "number",
+        ),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(signals)).not.toMatch(/actor|team|901|provider body/);
+  });
   it("composes link, current status, full grants and cache before projection pagination", async () => {
     const { github, service } = fixture();
     expect(await service.connectionStatus(actor)).toEqual({

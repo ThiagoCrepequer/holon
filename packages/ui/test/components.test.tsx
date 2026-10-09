@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { expect, it, vi } from "vitest";
 
 import { BrandMark } from "../src/brand.js";
@@ -109,6 +110,7 @@ it("dialog synchronizes its controlled state and communicates dismissal without 
   const changed = vi.fn();
   const user = userEvent.setup();
   const props = {
+    returnFocusRef: createRef<HTMLButtonElement>(),
     onOpenChange: changed,
     title: "Preferences",
     description: "Choose language",
@@ -129,4 +131,51 @@ it("dialog synchronizes its controlled state and communicates dismissal without 
   expect(changed).toHaveBeenLastCalledWith(false);
   rerender(<Dialog {...props} open={false} />);
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("a queued close event cannot dismiss a dialog that was reopened", () => {
+  const changed = vi.fn();
+  const props = {
+    returnFocusRef: createRef<HTMLButtonElement>(),
+    onOpenChange: changed,
+    title: "Review",
+    description: "Evidence",
+    closeLabel: "Close",
+    children: "content",
+  };
+  const { rerender } = render(<Dialog {...props} open />);
+  const dialog = screen.getByRole("dialog");
+  rerender(<Dialog {...props} open={false} />);
+  rerender(<Dialog {...props} open />);
+  changed.mockClear();
+  fireEvent(dialog, new Event("close"));
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it("dialog restores its explicit trigger after dismissal and unmount even when pointer activation did not focus it", () => {
+  const trigger = createRef<HTMLButtonElement>();
+  const props = {
+    returnFocusRef: trigger,
+    onOpenChange: vi.fn(),
+    title: "Preferences",
+    description: "Choose language",
+    closeLabel: "Close",
+    children: "content",
+  };
+  const view = (open: boolean, mounted = true) => (
+    <>
+      <button ref={trigger}>Open preferences</button>
+      <button>Other control</button>
+      {mounted && <Dialog {...props} open={open} />}
+    </>
+  );
+  const { rerender } = render(view(false));
+  screen.getByRole("button", { name: "Other control" }).focus();
+  rerender(view(true));
+  rerender(view(false));
+  expect(trigger.current).toHaveFocus();
+  rerender(view(true));
+  screen.getByRole("button", { name: "Other control" }).focus();
+  rerender(view(false, false));
+  expect(trigger.current).toHaveFocus();
 });

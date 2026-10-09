@@ -76,10 +76,14 @@ export async function connectionOAuth(
     connectionAction: action,
     reauth: proof.data.reauthIntentId,
   });
+  if (typeof window !== "undefined") {
+    const locale = new URL(window.location.href).searchParams.get("lang");
+    if (locale) parameters.set("lang", locale);
+  }
   return oauthRedirect(
     {
       provider: "github",
-      callbackURL: `/?${parameters}`,
+      callbackURL: `/account?${parameters}`,
       reauthIntentId: proof.data.reauthIntentId,
       disableRedirect: true,
     },
@@ -96,7 +100,7 @@ export function reconnectGitHub(signal: AbortSignal): Promise<string | null> {
     signal,
   );
 }
-async function oauthRedirect(
+export async function oauthRedirect(
   body: unknown,
   signal: AbortSignal,
 ): Promise<string | null> {

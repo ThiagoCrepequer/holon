@@ -7,6 +7,8 @@ export default defineConfig({
     "milestone-two.spec.ts",
     "milestone-three.spec.ts",
     "milestone-five.spec.ts",
+    "milestone-six.spec.ts",
+    "performance-lab.spec.ts",
   ],
   workers: 1,
   retries: 0,

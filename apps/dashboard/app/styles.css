@@ -136,3 +136,77 @@
   outline: 2px solid var(--holon-focus-ring);
   outline-offset: 2px;
 }
+
+/* Workspace and review tasks share a compact, fluid reading surface. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+.holon-account main {
+  max-width: var(--holon-layout-content);
+  padding-top: var(--holon-space-8);
+}
+.holon-account h1 {
+  font-family: var(--holon-font-sans);
+  font-size: var(--holon-type-title-lg);
+  font-weight: var(--holon-weight-semibold);
+}
+.holon-account main p {
+  font-size: var(--holon-type-body);
+  max-width: var(--holon-layout-reading);
+}
+.holon-welcome header {
+  flex-wrap: wrap;
+}
+.holon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--holon-space-2);
+}
+.holon-reviews label {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.holon-reviews input,
+.holon-reviews select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+.holon-reviews :where(h2, h3, p, code, figcaption) {
+  overflow-wrap: anywhere;
+}
+.holon-reviews figure {
+  margin-inline: 0;
+}
+.holon-reviews li {
+  list-style-position: inside;
+}
+.holon-reviews :where(ul, ol) {
+  padding-inline-start: var(--holon-space-4);
+}
+.holon-review-markdown pre code {
+  overflow-wrap: normal;
+}
+.holon-review-markdown a {
+  color: var(--holon-link);
+}
+.holon-reviews h1,
+.holon-account h1 {
+  overflow-wrap: anywhere;
+}
+.holon-actions > *,
+.holon-collaboration button,
+.holon-reviews button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.holon-review-markdown {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.holon-review-markdown pre {
+  overflow-wrap: normal;
+}

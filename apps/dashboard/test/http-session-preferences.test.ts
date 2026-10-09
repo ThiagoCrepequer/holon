@@ -75,6 +75,12 @@ function fixture() {
     ),
   };
   const tenancy = {
+    listMembers: async () => ({
+      members: [],
+      actorRole: "owner" as const,
+      ownerCount: 1,
+      nextCursor: null,
+    }),
     provisionPersonalWorkspace: vi.fn(),
     createTeamWorkspace: vi.fn(),
     createReauthIntent: vi.fn(),

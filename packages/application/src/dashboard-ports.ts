@@ -14,6 +14,7 @@ import type {
   WorkspaceDto,
   WorkspaceMembershipDto,
   WorkspaceRole,
+  WorkspaceMemberPage,
 } from "@holon/contracts/dashboard";
 
 /** Implementations validate the session again on every request, without cookie cache. */
@@ -29,6 +30,12 @@ export interface WorkspaceAccessPort {
 }
 
 export interface WorkspaceTenancyPort {
+  /** Atomically admits current session/account/membership with the returned page. */
+  listMembers(
+    actor: AdmittedUser,
+    workspaceId: string,
+    cursor: string | null,
+  ): Promise<WorkspaceMemberPage>;
   provisionPersonalWorkspace(actor: AdmittedUser): Promise<{
     workspace: WorkspaceDto;
     membership: WorkspaceMembershipDto;
