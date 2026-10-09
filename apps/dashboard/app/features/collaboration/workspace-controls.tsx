@@ -61,7 +61,12 @@ export function WorkspaceControls({
     onReady: (data: unknown) => void,
     global = false,
   ) {
-    if (pending.current && body !== undefined) return;
+    if (
+      pending.current &&
+      !pending.current.signal.aborted &&
+      body !== undefined
+    )
+      return;
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
@@ -214,7 +219,7 @@ export function WorkspaceControls({
         confirmationWorkspace &&
         (confirmationAction === "link" || confirmationAction === "unlink") && (
           <Button
-            disabled={!interactive}
+            disabled={!interactive || status === "loading"}
             onClick={() =>
               void run(
                 `/api/workspaces/${encodeURIComponent(confirmationWorkspace)}/github/${confirmationAction}`,
@@ -265,6 +270,7 @@ export function WorkspaceControls({
           />
           <Button
             variant="quiet"
+            disabled={!interactive || status === "loading"}
             onClick={() =>
               void run(
                 "/api/workspaces/personal",

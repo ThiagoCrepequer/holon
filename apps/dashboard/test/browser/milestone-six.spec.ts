@@ -4,6 +4,63 @@ import { expect, test } from "@playwright/test";
 import { signIn } from "../support/browser-journey.js";
 
 for (const locale of ["en", "pt-BR"]) {
+  test(`${locale}: personal workspace command waits for the current read and accepts its first click`, async ({
+    page,
+  }, info) => {
+    const pt = locale === "pt-BR";
+    const subject =
+      308001 +
+      ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
+      (pt ? 1 : 0);
+    const workspace = await signIn(page, subject, locale);
+    await page.goto(`/account?lang=${locale}`);
+    let blocked = Promise.withResolvers<void>();
+    let release = Promise.withResolvers<void>();
+    await page.route("**/api/workspaces", async (route) => {
+      const current = release;
+      blocked.resolve();
+      await current.promise;
+      await route.continue();
+    });
+    const manage = page.getByRole("button", {
+      name: pt ? "Gerenciar workspaces" : "Manage workspaces",
+      exact: true,
+    });
+    const personal = page.getByRole("button", {
+      name: pt ? "Criar meu workspace pessoal" : "Create my personal workspace",
+      exact: true,
+    });
+    try {
+      for (const cancelRead of [false, true]) {
+        if (cancelRead) {
+          blocked = Promise.withResolvers<void>();
+          release = Promise.withResolvers<void>();
+        }
+        await manage.click();
+        await blocked.promise;
+        await expect(personal).toBeDisabled();
+        if (cancelRead)
+          await page
+            .getByLabel("Workspace", { exact: true })
+            .selectOption(workspace);
+        release.resolve();
+        await expect(personal).toBeEnabled();
+        const response = page.waitForResponse(
+          (r) =>
+            new URL(r.url()).pathname === "/api/workspaces/personal" &&
+            r.request().method() === "POST",
+        );
+        await personal.click();
+        expect((await response).status()).toBe(200);
+        await expect(
+          page.getByLabel("Workspace", { exact: true }).locator("option"),
+        ).toHaveCount(2);
+        await expect(manage).toBeEnabled();
+      }
+    } finally {
+      release.resolve();
+    }
+  });
   test(`${locale}: login and account actions wait for hydration before accepting the first click`, async ({
     page,
     browser,
@@ -566,6 +623,14 @@ for (const locale of ["en", "pt-BR"]) {
         exact: true,
       })
       .click();
+    await expect(page).toHaveURL(/\/account\?/);
+    await expect(
+      page.getByRole("heading", {
+        name: pt ? "Conta e workspaces" : "Account and workspaces",
+        exact: true,
+        level: 1,
+      }),
+    ).toBeVisible();
     await page
       .getByRole("link", {
         name: pt ? "Voltar às revisões" : "Back to reviews",
