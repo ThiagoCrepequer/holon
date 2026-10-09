@@ -222,7 +222,7 @@ com sua reserva, sem contar novamente `initial-partial`.
 
 Duas regressões locais demonstraram que edits apenas no corpo, com assinatura
 fora do hunk, omitiam o símbolo e seus consumidores. A
-[ADR-0056](../decisions/0056-trace-edited-declarations-in-verified-head.md) registra
+[ADR-0057](../decisions/0057-trace-edited-declarations-in-verified-head.md) registra
 a correção: ler os arquivos alterados no HEAD verificado, extrair declarações
 contendo as linhas editadas com o parser já instalado e só então buscar downstream.
 Metadados, symlinks e orçamento compartilhado continuam validados antes de ler.
@@ -238,7 +238,7 @@ O prompt passou a oferecer linhas produtoras exatas derivadas do índice canôni
 sem o prefixo `+` e preservando espaços. Isso não amplia a evidência publicável.
 A conversa causal recebe uma projeção factual do snapshot, idioma e limitações,
 sem repetir as instruções de investigação aberta. Depois de erros recorrentes
-de IDs e intervalos, a [ADR-0057](../decisions/0057-select-host-evidence-receipts-in-causal-assessments.md)
+de IDs e intervalos, a [ADR-0058](../decisions/0058-select-host-evidence-receipts-in-causal-assessments.md)
 simplificou a resposta para seleção de `evidenceReceiptIds`: o host resolve toda
 a janela inspecionada. IDs desconhecidos, metadados inválidos e truncamento
 continuam impedindo publicação. Prompts não substituem esse gate.

@@ -2,21 +2,41 @@ import { BrandMark } from "@holon/ui/brand";
 import { Button } from "@holon/ui/button";
 import { Dialog } from "@holon/ui/dialog";
 import { Icon } from "@holon/ui/icons";
-import { SelectField } from "@holon/ui/select-field";
 import { useLingui } from "@lingui/react";
-import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useRevalidator, useRouteLoaderData } from "react-router";
+
+import { PreferencesForm } from "../../features/preferences/public.js";
+import { SessionControls, SignIn } from "../../features/sessions/public.js";
+import type { loader } from "../../root.js";
 export function meta() {
   return [{ title: "Holon" }];
 }
 export default function Welcome() {
   const { i18n } = useLingui();
+  const data = useRouteLoaderData<typeof loader>("root")!;
+  const { revalidate } = useRevalidator();
+  const currentSession = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    currentSession.current =
+      data.viewer.status === "authenticated" ? data.viewer.sessionId : null;
+  }, [data.viewer]);
   const [open, setOpen] = useState(false);
-  const [parameters, setParameters] = useSearchParams();
-  const heading = i18n._({
-    id: "welcome.heading",
-    message: "Your reviews, in context.",
-  });
+  const [deniedSessionId, setDeniedSessionId] = useState<string | null>(null);
+  const onSessionLost = useCallback(
+    (sessionId: string) => {
+      if (sessionId !== currentSession.current) return;
+      setDeniedSessionId(sessionId);
+      setOpen(false);
+      void revalidate();
+    },
+    [revalidate],
+  );
+  const viewer = data.viewer;
+  const admitted =
+    viewer.status === "authenticated" && viewer.sessionId !== deniedSessionId
+      ? viewer
+      : null;
   const preferences = i18n._({
     id: "preferences.title",
     message: "Preferences",
@@ -37,7 +57,12 @@ export default function Welcome() {
         </Button>
       </header>
       <main>
-        <h1>{heading}</h1>
+        <h1>
+          {i18n._({
+            id: "welcome.heading",
+            message: "Your reviews, in context.",
+          })}
+        </h1>
         <p>
           {i18n._({
             id: "welcome.description",
@@ -45,6 +70,22 @@ export default function Welcome() {
               "Understand every change with clarity and the context that matters.",
           })}
         </p>
+        {admitted ? (
+          <SessionControls
+            key={admitted.sessionId}
+            sessionId={admitted.sessionId}
+            csrf={admitted.csrf}
+            onSessionLost={onSessionLost}
+          />
+        ) : (
+          viewer.status !== "disabled" && (
+            <SignIn
+              reconnect={
+                viewer.status === "disconnected" || deniedSessionId !== null
+              }
+            />
+          )
+        )}
       </main>
       <Dialog
         open={open}
@@ -59,37 +100,18 @@ export default function Welcome() {
           message: "Close preferences",
         })}
       >
-        <SelectField
-          label={i18n._({ id: "preferences.language", message: "Language" })}
-          value={i18n.locale}
-          options={[
-            { value: "en", label: "English" },
-            { value: "pt-BR", label: "Português (Brasil)" },
-          ]}
-          onChange={(event) => {
-            const next = new URLSearchParams(parameters);
-            next.set("lang", event.target.value);
-            setParameters(next, { preventScrollReset: true });
+        <PreferencesForm
+          key={admitted?.sessionId ?? "anonymous"}
+          sessionId={admitted?.sessionId ?? null}
+          csrf={admitted?.csrf ?? null}
+          preferences={
+            admitted?.preferences ?? { locale: null, timezone: null }
+          }
+          locale={data.locale}
+          onSaved={() => {
+            void revalidate();
           }}
-        />
-        <SelectField
-          label={i18n._({ id: "preferences.theme", message: "Theme" })}
-          value={parameters.get("theme") === "dark" ? "dark" : "light"}
-          options={[
-            {
-              value: "light",
-              label: i18n._({ id: "theme.light", message: "Light" }),
-            },
-            {
-              value: "dark",
-              label: i18n._({ id: "theme.dark", message: "Dark" }),
-            },
-          ]}
-          onChange={(event) => {
-            const next = new URLSearchParams(parameters);
-            next.set("theme", event.target.value);
-            setParameters(next, { preventScrollReset: true });
-          }}
+          onSessionLost={onSessionLost}
         />
       </Dialog>
     </div>

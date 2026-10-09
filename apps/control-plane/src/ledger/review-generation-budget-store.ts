@@ -1,6 +1,5 @@
 import {
-  modelGenerationLimits,
-  modelGenerationShardLimits,
+  reviewBudgetProfiles,
   modelGenerationStopReasonSchema,
   type ModelGenerationStopReason,
   type ModelGenerationAdmission,
@@ -10,6 +9,7 @@ import {
 } from "@holon/contracts";
 
 import { consoleLogger, type StructuredLogger } from "../observability.js";
+import { ReviewBudgetPlanStore } from "./review-budget-plan-store.js";
 
 /** Call only inside the ledger transaction. Uncertain calls retain their full reservation. */
 export class ReviewGenerationBudgetStore {
@@ -29,20 +29,9 @@ export class ReviewGenerationBudgetStore {
       !this.sql.exec("SELECT 1 FROM runs WHERE id = ?", runId).toArray().length
     )
       throw new Error("Model budget run is unavailable");
-    this.sql.exec(
-      "INSERT INTO model_generation_plans(run_id, shard_count) VALUES (?,?) ON CONFLICT(run_id) DO NOTHING",
-      runId,
-      request.shardCount,
-    );
-    if (
-      this.sql
-        .exec<{ shard_count: number }>(
-          "SELECT shard_count FROM model_generation_plans WHERE run_id=?",
-          runId,
-        )
-        .one().shard_count !== request.shardCount
-    )
-      throw new Error("Model budget plan changed");
+    const plans = new ReviewBudgetPlanStore(this.sql);
+    const plan = plans.load(runId, request.shardCount);
+    const limits = reviewBudgetProfiles[plan.profile];
     const totals = this.sql
       .exec<{ calls: number; input: number; output: number }>(
         "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=?",
@@ -73,13 +62,13 @@ export class ReviewGenerationBudgetStore {
           requested,
           limit: ceiling,
           callsCurrent: totals.calls,
-          callsLimit: modelGenerationLimits.calls,
+          callsLimit: limits.calls,
           callsRequested: 1,
           inputBytesCurrent: totals.input,
-          inputBytesLimit: modelGenerationLimits.inputBytes,
+          inputBytesLimit: limits.inputBytes,
           inputBytesRequested: request.inputBytes,
           outputTokensCurrent: totals.output,
-          outputTokensLimit: modelGenerationLimits.outputTokens,
+          outputTokensLimit: limits.outputTokens,
           outputTokensRequested: request.outputTokens,
         });
       } catch {
@@ -96,12 +85,25 @@ export class ReviewGenerationBudgetStore {
     // A request outside its allocation cannot stop peers while the run still has
     // capacity. Already exhausted aggregate ceilings retain global precedence.
     if (
-      request.shardCount > 1 &&
-      totals.calls < modelGenerationLimits.calls &&
-      totals.input < modelGenerationLimits.inputBytes &&
-      totals.output < modelGenerationLimits.outputTokens
+      totals.calls < limits.calls &&
+      totals.input < limits.inputBytes &&
+      totals.output < limits.outputTokens
     ) {
-      const allocation = modelGenerationShardLimits(request.shardCount);
+      const available = {
+        calls: plans.available(runId, plan, request.shardIndex, "calls"),
+        inputBytes: plans.available(
+          runId,
+          plan,
+          request.shardIndex,
+          "inputBytes",
+        ),
+        outputTokens: plans.available(
+          runId,
+          plan,
+          request.shardIndex,
+          "outputTokens",
+        ),
+      };
       const shard = this.sql
         .exec<{ calls: number; input: number; output: number }>(
           "SELECT COUNT(*) AS calls, COALESCE(SUM(input_bytes),0) AS input, COALESCE(SUM(output_tokens),0) AS output FROM model_generation_reservations WHERE run_id=? AND shard_index=?",
@@ -109,41 +111,43 @@ export class ReviewGenerationBudgetStore {
           request.shardIndex,
         )
         .one();
-      if (shard.calls >= allocation.calls)
-        return reject("shard_calls", shard.calls, 1, allocation.calls);
-      if (shard.input + request.inputBytes > allocation.inputBytes)
+      if (available.calls < 1)
+        return reject(
+          "shard_calls",
+          shard.calls,
+          1,
+          shard.calls + available.calls,
+        );
+      if (request.inputBytes > available.inputBytes)
         return reject(
           "shard_input_bytes",
           shard.input,
           request.inputBytes,
-          allocation.inputBytes,
+          shard.input + available.inputBytes,
         );
-      if (shard.output + request.outputTokens > allocation.outputTokens)
+      if (request.outputTokens > available.outputTokens)
         return reject(
           "shard_output_tokens",
           shard.output,
           request.outputTokens,
-          allocation.outputTokens,
+          shard.output + available.outputTokens,
         );
     }
-    if (totals.calls >= modelGenerationLimits.calls)
-      return reject("calls", totals.calls, 1, modelGenerationLimits.calls);
-    if (totals.input + request.inputBytes > modelGenerationLimits.inputBytes)
+    if (totals.calls >= limits.calls)
+      return reject("calls", totals.calls, 1, limits.calls);
+    if (totals.input + request.inputBytes > limits.inputBytes)
       return reject(
         "input_bytes",
         totals.input,
         request.inputBytes,
-        modelGenerationLimits.inputBytes,
+        limits.inputBytes,
       );
-    if (
-      totals.output + request.outputTokens >
-      modelGenerationLimits.outputTokens
-    )
+    if (totals.output + request.outputTokens > limits.outputTokens)
       return reject(
         "output_tokens",
         totals.output,
         request.outputTokens,
-        modelGenerationLimits.outputTokens,
+        limits.outputTokens,
       );
     const id = this.sql
       .exec<{ id: number }>(

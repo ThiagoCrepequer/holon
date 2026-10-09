@@ -5,6 +5,7 @@ import type {
   ReviewPublisher,
 } from "@holon/application";
 import type {
+  ReviewBudgetPlan,
   ModelGenerationAdmission,
   ModelGenerationReservation,
   ModelGenerationStopReason,
@@ -103,6 +104,8 @@ export interface WorkflowLedger
   ): Promise<ReviewAnalysisCheckpoint>;
   loadReviewAnalysis(runId: string): Promise<ReconciledReviewOutput>;
 
+  configureReviewBudget(runId: string, plan: ReviewBudgetPlan): Promise<void>;
+  completeReviewBudgetShard(runId: string, index: number): Promise<void>;
   reserveModelGeneration(
     runId: string,
     request: ModelGenerationReservation,

@@ -49,7 +49,7 @@ a [comparação externa](research/2026-10-08-review-system-comparison.md) e o
 evoluções de precisão, uso de tools e velocidade. O
 [relatório de implementação](research/2026-10-08-review-core-implementation.md)
 liga cada entrega aos testes, benchmarks e gates ainda abertos; a
-[ADR-0055](decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md)
+[ADR-0056](decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md)
 registra o runtime resultante.
 
 A [continuação de 2026-10-09](research/2026-10-09-review-core-code-follow-up.md)

@@ -105,12 +105,16 @@ vigentes; os textos anteriores são preservados como histórico.
 
 - [ADR-0052 — Responder perguntas sobre findings](0052-answer-finding-questions-in-pr-threads.md) — investigação limitada na discussão inline, correção auditável e publicação idempotente.
 
-- [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — trabalho admitido, quotas por shard e causas duráveis de falha.
+- [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — admissão e quotas substituídas pela ADR-0055; causas duráveis de falha preservadas.
 
 - [ADR-0054 — Estabelecer as fundações do dashboard dos usuários](0054-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.
 
-- [ADR-0055 — Preservar evidência e agendar análise em lanes estáveis](0055-preserve-review-evidence-and-schedule-stable-lanes.md) — complementa evidência, tools e publicação; substitui o agrupamento/agendamento anterior, preservando quotas de modelo da ADR-0053.
+- [ADR-0055 — Financiar reviews grandes com investigação protegida](0055-fund-large-reviews-with-protected-investigation.md) — perfis, quotas, empréstimo após checkpoint e verificações de contrato entre partes.
 
-- [ADR-0056 — Rastrear declarações cujo corpo mudou no HEAD verificado](0056-trace-edited-declarations-in-verified-head.md).
+- [ADR-0056 — Preservar evidência e agendar análise em lanes estáveis](0056-preserve-review-evidence-and-schedule-stable-lanes.md) — evidência, cache, receipts e lanes; regras de orçamento compostas com a ADR-0055 pela ADR-0059.
 
-- [ADR-0057 — Selecionar receipts do host nos assessments causais](0057-select-host-evidence-receipts-in-causal-assessments.md).
+- [ADR-0057 — Rastrear declarações cujo corpo mudou no HEAD verificado](0057-trace-edited-declarations-in-verified-head.md).
+
+- [ADR-0058 — Selecionar receipts do host nos assessments causais](0058-select-host-evidence-receipts-in-causal-assessments.md).
+
+- [ADR-0059 — Compor lanes estáveis com perfis de orçamento](0059-compose-stable-review-lanes-with-budget-profiles.md) — conserva as decisões de orçamento da main e libera saldo somente após checkpoint.

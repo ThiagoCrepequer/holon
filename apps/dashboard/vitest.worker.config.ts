@@ -8,6 +8,8 @@ export default defineConfig({
     include: [
       "test/http-security.test.ts",
       "test/http-composition-review.test.ts",
+      "test/http-session-preferences.test.ts",
+      "test/viewer.test.ts",
     ],
     fileParallelism: false,
     coverage: {

@@ -8,25 +8,21 @@ import {
   type WorkspaceMembershipDto,
   type WorkspaceRole,
   type CreateTeamWorkspaceInput,
+  type ReauthInitInput,
+  type ReauthReceipt,
+  type PromoteMemberInput,
+  type DemoteMemberInput,
+  type RemoveMemberInput,
+  type LeaveWorkspaceInput,
 } from "@holon/contracts/dashboard";
 
-export type TenancyErrorCode =
-  | "user_not_admitted"
-  | "operation_conflict"
-  | "command_unknown"
-  | "personal_workspace_provision_failed"
-  | "team_workspace_creation_failed"
-  | "storage_corrupted";
+import {
+  createGovernancePersistence,
+  type PendingReauthContext,
+} from "./governance.server.js";
+import { TenancyError, type TenancyErrorCode } from "./tenancy-error.server.js";
 
-export class TenancyError extends Error {
-  readonly code: TenancyErrorCode;
-
-  constructor(code: TenancyErrorCode) {
-    super(code);
-    this.name = "TenancyError";
-    this.code = code;
-  }
-}
+export { TenancyError, type TenancyErrorCode, type PendingReauthContext };
 
 export interface TenancyPersistence {
   provisionPersonalWorkspace(actor: AdmittedUser): Promise<{
@@ -51,6 +47,42 @@ export interface TenancyPersistence {
     userId: string,
     workspaceId: string,
   ): Promise<{ workspaceId: string; role: WorkspaceRole } | null>;
+  createReauthIntent(
+    actor: AdmittedUser,
+    input: ReauthInitInput,
+  ): Promise<ReauthReceipt>;
+  confirmReauthIntent(
+    reauthIntentId: string,
+    accountId: string,
+    userId: string,
+    proofSessionId: string,
+  ): Promise<boolean>;
+  readPendingReauthContext(
+    reauthIntentId: string,
+    callerSessionId: string,
+    callerUserId: string,
+    now?: number,
+  ): Promise<PendingReauthContext | null>;
+  promoteMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: PromoteMemberInput,
+  ): Promise<WorkspaceMembershipDto>;
+  demoteMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: DemoteMemberInput,
+  ): Promise<WorkspaceMembershipDto>;
+  removeMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: RemoveMemberInput,
+  ): Promise<{ removed: true }>;
+  leaveWorkspace(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: LeaveWorkspaceInput,
+  ): Promise<{ left: true }>;
 }
 
 async function sha256Hex(data: string): Promise<string> {
@@ -173,6 +205,11 @@ export function createTenancyPersistence(
       membership,
     };
   }
+
+  const governance = createGovernancePersistence(database, {
+    assertAdmittedActor,
+    readVerifiedMembership,
+  });
 
   return {
     async provisionPersonalWorkspace(actor: AdmittedUser) {
@@ -538,6 +575,43 @@ export function createTenancyPersistence(
       const membership = await readVerifiedMembership(workspaceId, userId);
       if (!membership) return null;
       return { workspaceId: membership.workspaceId, role: membership.role };
+    },
+
+    createReauthIntent(actor, input) {
+      return governance.createReauthIntent(actor, input);
+    },
+    confirmReauthIntent(reauthIntentId, accountId, userId, proofSessionId) {
+      return governance.confirmReauthIntent(
+        reauthIntentId,
+        accountId,
+        userId,
+        proofSessionId,
+      );
+    },
+    readPendingReauthContext(
+      reauthIntentId,
+      callerSessionId,
+      callerUserId,
+      now,
+    ) {
+      return governance.readPendingReauthContext(
+        reauthIntentId,
+        callerSessionId,
+        callerUserId,
+        now,
+      );
+    },
+    promoteMember(actor, workspaceId, input) {
+      return governance.promoteMember(actor, workspaceId, input);
+    },
+    demoteMember(actor, workspaceId, input) {
+      return governance.demoteMember(actor, workspaceId, input);
+    },
+    removeMember(actor, workspaceId, input) {
+      return governance.removeMember(actor, workspaceId, input);
+    },
+    leaveWorkspace(actor, workspaceId, input) {
+      return governance.leaveWorkspace(actor, workspaceId, input);
     },
   };
 }

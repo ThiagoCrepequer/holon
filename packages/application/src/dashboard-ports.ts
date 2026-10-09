@@ -3,6 +3,12 @@ import type {
   CreateTeamWorkspaceInput,
   DeliveryWake,
   DeliveryWakeResult,
+  DemoteMemberInput,
+  LeaveWorkspaceInput,
+  PromoteMemberInput,
+  ReauthInitInput,
+  ReauthReceipt,
+  RemoveMemberInput,
   ReviewPage,
   SessionIdentity,
   WorkspaceAccess,
@@ -46,6 +52,30 @@ export interface WorkspaceTenancyPort {
     userId: string,
     workspaceId: string,
   ): Promise<WorkspaceAccess | null>;
+  createReauthIntent(
+    actor: AdmittedUser,
+    input: ReauthInitInput,
+  ): Promise<ReauthReceipt>;
+  promoteMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: PromoteMemberInput,
+  ): Promise<WorkspaceMembershipDto>;
+  demoteMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: DemoteMemberInput,
+  ): Promise<WorkspaceMembershipDto>;
+  removeMember(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: RemoveMemberInput,
+  ): Promise<{ removed: true }>;
+  leaveWorkspace(
+    actor: AdmittedUser,
+    workspaceId: string,
+    input: LeaveWorkspaceInput,
+  ): Promise<{ left: true }>;
 }
 
 /** A wake-up is transport, not the durable invitation/delivery obligation. */

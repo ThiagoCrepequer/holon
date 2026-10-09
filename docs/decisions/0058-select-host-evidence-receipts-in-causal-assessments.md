@@ -1,12 +1,12 @@
 ---
-id: ADR-0057
+id: ADR-0058
 kind: decision
 status: accepted
 date: 2026-10-09
 owners: [core-team]
 related:
   - 0050-verify-finding-causality-before-publication.md
-  - 0055-preserve-review-evidence-and-schedule-stable-lanes.md
+  - 0056-preserve-review-evidence-and-schedule-stable-lanes.md
 ---
 
 # Selecionar receipts do host nos assessments causais
@@ -23,7 +23,7 @@ falhas conservam segurança ao reter candidatos, mas reduzem recall operacional.
 O contrato atual usa `evidenceReceiptIds: string[]`. A resposta seleciona IDs
 completos emitidos pelo host; não redefine path ou intervalo. Atualizar schema,
 prompt, host e consumidores juntos, sem aliases ou fallback para o formato antigo.
-Esta decisão complementa as ADRs 0050/0055, preservando suas garantias.
+Esta decisão complementa as ADRs 0050/0056, preservando suas garantias.
 
 Cada ID selecionado deve pertencer a uma leitura completa da execução. O host
 resolve a janela inteira do receipt e valida seu schema, inclusive limites de

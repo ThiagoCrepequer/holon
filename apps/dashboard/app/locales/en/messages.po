@@ -5,9 +5,19 @@ msgstr ""
 "Language: en\n"
 
 #. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.current"
+msgstr "(this device)"
+
+#. js-lingui-explicit-id
 #: app/i18n/catalogs.ts
 msgid "reviews.count"
 msgstr "{count, plural, one {# review} other {# reviews}}"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.devices"
+msgstr "Active sessions"
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
@@ -15,24 +25,49 @@ msgid "preferences.description"
 msgstr "Choose how you read Holon."
 
 #. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.close"
+msgstr "Close active sessions"
+
+#. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
 msgid "preferences.close"
 msgstr "Close preferences"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "theme.dark"
 msgstr "Dark"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "preferences.language"
 msgstr "Language"
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/preferences/preferences.tsx
 msgid "theme.light"
 msgstr "Light"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.loading"
+msgstr "Loading sessions…"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.nextPage"
+msgstr "Next sessions"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.deviceDescription"
+msgstr "Only your sessions are listed. Browser names are approximate."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.other"
+msgstr "Other browser"
 
 #. js-lingui-explicit-id
 #: app/root.tsx
@@ -46,14 +81,74 @@ msgid "preferences.title"
 msgstr "Preferences"
 
 #. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.saved"
+msgstr "Preferences saved."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.refresh"
+msgstr "Refresh sessions"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.revoke"
+msgstr "Revoke session"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.save"
+msgstr "Save preferences"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.personal"
+msgstr "Saved to your account across devices."
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.saving"
+msgstr "Saving…"
+
+#. js-lingui-explicit-id
 #: app/root.tsx
 msgid "error.service"
 msgstr "Service unavailable. Please try again."
 
 #. js-lingui-explicit-id
-#: app/routes/welcome/route.tsx
+#: app/features/sessions/sessions.tsx
+msgid "session.signin"
+msgstr "Sign in with GitHub"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.signout"
+msgstr "Sign out"
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.signoutAll"
+msgstr "Sign out on all devices"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
 msgid "preferences.theme"
 msgstr "Theme"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.timezone"
+msgstr "Time zone"
+
+#. js-lingui-explicit-id
+#: app/features/preferences/preferences.tsx
+msgid "preferences.failed"
+msgstr "Unable to confirm the save. Please try again."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.failed"
+msgstr "Unable to confirm the session. Please try again."
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
@@ -64,3 +159,8 @@ msgstr "Understand every change with clarity and the context that matters."
 #: app/routes/welcome/route.tsx
 msgid "welcome.heading"
 msgstr "Your reviews, in context."
+
+#. js-lingui-explicit-id
+#: app/features/sessions/sessions.tsx
+msgid "session.expired"
+msgstr "Your session is unavailable. Sign in again to continue."

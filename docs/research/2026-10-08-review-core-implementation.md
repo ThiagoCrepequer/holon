@@ -11,7 +11,7 @@ last-reviewed: 2026-10-09
 Este relatório liga a [auditoria F01–F08](2026-10-08-review-core-audit.md) ao
 [plano R01–R10](../planning/review-core-improvement-proposal.md). O baseline é
 `1941a4f`; código, testes e documentação foram alterados localmente. A
-[ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md)
+[ADR-0056](../decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md)
 registra a arquitetura resultante. Não houve push, deploy nem avaliação com
 provider remoto.
 
@@ -154,9 +154,9 @@ US$ 0,060062421 informados, exposição conservadora de US$ 0,177000834, falhas 
 gates que permanecem abertos. As rodadas de 4/4 não sobreviveram à repetição;
 a confirmação posterior demonstrou falso positivo causal.
 
-A investigação motivou correção do inventário body-only (ADR-0056), pistas
+A investigação motivou correção do inventário body-only (ADR-0057), pistas
 canônicas exatas, contexto factual separado para a conversa causal e seleção
-de receipts por ID (ADR-0057). Regressões locais preservam export local, body
+de receipts por ID (ADR-0058). Regressões locais preservam export local, body
 fora do hunk, orçamento compartilhado, symlink, IDs desconhecidos, metadados
 inválidos, truncamento e integração Think de refutação após read. O controle
 financeiro persiste reserva antes do transporte, não renova caps e registra

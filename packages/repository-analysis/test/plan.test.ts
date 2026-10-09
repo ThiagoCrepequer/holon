@@ -1,4 +1,7 @@
-import { reviewExecutionLimits } from "@holon/contracts";
+import {
+  reviewExecutionLimits,
+  type StructuralImpactReport,
+} from "@holon/contracts";
 import { describe, expect, it } from "vitest";
 
 import { splitPullRequestDiff } from "../src/diff.js";
@@ -213,32 +216,193 @@ it("packs small hunks of the same file without spending one shard per hunk", () 
   ).toEqual(Array(200).fill("+new  "));
 });
 
-it("groups observed producer/consumer edges and retains hard shard limits", () => {
-  const paths = ["a/consumer.ts", "b/unrelated.ts", "c/producer.ts"];
+function connectedImpact(): StructuralImpactReport {
+  return {
+    changedSymbols: [
+      {
+        path: "packages/core/src/api.ts",
+        name: "send",
+        line: 1,
+        kind: "function",
+        change: "modified",
+        isExported: true,
+      },
+    ],
+    contractBreaks: [],
+    securitySurfaces: [],
+    downstreamReferences: [
+      {
+        targetPath: "packages/core/src/api.ts",
+        callerPath: "apps/web/src/client.ts",
+        callerLine: 1,
+        symbolName: "send",
+        excerpt: "send()",
+      },
+    ],
+  };
+}
+it("co-locates contracts and consumers with different names using verified structural relationships", () => {
   const files = splitPullRequestDiff(
-    paths.map((path) => patchFor(path)).join(""),
+    ["aaa.ts", "apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map((path) => patchFor(path))
+      .join(""),
   );
-  const relationships = [{ callerPath: paths[0]!, targetPath: paths[2]! }];
-  const related = buildReviewPlan(files, { maxShardFiles: 2, relationships });
+  const plan = buildReviewPlan(files, {
+    maxShardFiles: 2,
+    structuralImpact: connectedImpact(),
+  });
   expect(
-    related.shards.some((shard) =>
-      paths
-        .filter((path) => path !== paths[1])
-        .every((path) => shard.files.some((file) => file.path === path)),
-    ),
-  ).toBe(true);
+    plan.shards
+      .find((shard) =>
+        shard.files.some((file) => file.path === "packages/core/src/api.ts"),
+      )
+      ?.files.map((file) => file.path),
+  ).toEqual(
+    expect.arrayContaining([
+      "apps/web/src/client.ts",
+      "packages/core/src/api.ts",
+    ]),
+  );
   expect(
     buildReviewPlan(files.toReversed(), {
       maxShardFiles: 2,
-      relationships: relationships.toReversed(),
+      structuralImpact: connectedImpact(),
     }),
-  ).toEqual(related);
-  const constrained = buildReviewPlan(files, {
-    maxShardFiles: 1,
-    relationships,
-  });
-  expect(constrained.shards).toHaveLength(3);
-  expect(constrained.shards.every((shard) => shard.files.length <= 1)).toBe(
-    true,
+  ).toEqual(plan);
+});
+it("adds bounded canonical contract windows when a relationship crosses partitions", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`,
+      )
+      .join(""),
   );
+  const plan = buildReviewPlan(files, { structuralImpact: connectedImpact() });
+  expect(plan.shards).toHaveLength(3);
+  const check = plan.shards[2]!;
+  expect(check.id).toBe("contract-check-0");
+  expect(check.changedLines).toHaveLength(160);
+  expect(
+    check.changedLines.every((line) => line.line >= 1 && line.line <= 80),
+  ).toBe(true);
+  expect(
+    check.files.every((file) =>
+      file.patch.includes("+export const value = 1;"),
+    ),
+  ).toBe(true);
+  expect(plan.shards.every((shard) => shard.totalShards === 3)).toBe(true);
+  expect(plan.totalEligibleLines).toBe(1200);
+  expect(plan.scopeStatus).toBe("complete");
+});
+it("reports contract relationships left unchecked by part or canonical-window limits", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map((path) => patchFor(path))
+      .join(""),
+  );
+  const impact = connectedImpact();
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardFiles: 1,
+  });
+  expect(plan.scopeStatus).toBe("partial_by_policy");
+  expect(plan.omissionReasons).toContainEqual({
+    code: "contract_checks",
+    count: 1,
+  });
+  expect(plan.shards).toHaveLength(2);
+  const outside = {
+    ...impact,
+    changedSymbols: impact.changedSymbols.map((item) => ({
+      ...item,
+      line: 1000,
+    })),
+  };
+  expect(
+    buildReviewPlan(files, {
+      structuralImpact: outside,
+      maxShardLines: 1,
+      maxShards: 2,
+    }).omissionReasons,
+  ).toContainEqual({ code: "contract_checks", count: 1 });
+});
+
+it.each([19, 24, 50, 64])(
+  "retains every eligible part of a %s-part canonical plan",
+  (count) => {
+    const files = splitPullRequestDiff(
+      Array.from({ length: count }, (_, index) => {
+        const path = `src/file-${index}.ts`;
+        return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`;
+      }).join(""),
+    );
+    const plan = buildReviewPlan(files);
+    expect(plan.shards).toHaveLength(count);
+    expect(plan.totalEligibleLines).toBe(count * 600);
+    expect(plan.scopeStatus).toBe("complete");
+    expect(plan.omissionReasons).toEqual([]);
+  },
+);
+
+it("limits complete canonical contract windows including unchanged context", () => {
+  const paths = ["apps/web/src/client.ts", "packages/core/src/api.ts"];
+  const files = splitPullRequestDiff(
+    paths
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,100 +1,1000 @@\n${" existing\n".repeat(100)}${"+changed\n".repeat(900)}`,
+      )
+      .join(""),
+  );
+  const impact = connectedImpact();
+  // Different base parts are required here; their canonical content is sufficient
+  // for the cross-check despite a strict global part count.
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardDiffBytes: 96_000,
+  });
+  const check = plan.shards.find((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(check).toBeDefined();
+  for (const file of check!.files) {
+    const body = file.patch
+      .split("\n")
+      .filter(
+        (line) =>
+          /^[ +-]/u.test(line) &&
+          !line.startsWith("---") &&
+          !line.startsWith("+++"),
+      );
+    expect(body.length).toBeLessThanOrEqual(80);
+  }
+});
+it("uses original coordinates for a deleted symbol displaced by preceding removals", () => {
+  const source = "packages/core/src/api.ts";
+  const caller = "apps/web/src/client.ts";
+  const diff = `diff --git a/${source} b/${source}\n--- a/${source}\n+++ b/${source}\n@@ -1,200 +0,0 @@\n${"-old context\n".repeat(200)}@@ -500,1 +299,0 @@\n-export const gone = 1;\n@@ -701,1 +500,1 @@\n-marker old\n+marker new\ndiff --git a/${caller} b/${caller}\n--- a/${caller}\n+++ b/${caller}\n@@ -0,0 +1,600 @@\n${"+gone();\n".repeat(600)}`;
+  const impact = connectedImpact();
+  impact.changedSymbols[0] = {
+    ...impact.changedSymbols[0]!,
+    name: "gone",
+    line: 500,
+    change: "deleted",
+  };
+  impact.downstreamReferences[0] = {
+    ...impact.downstreamReferences[0]!,
+    symbolName: "gone",
+  };
+  const plan = buildReviewPlan(splitPullRequestDiff(diff), {
+    structuralImpact: impact,
+    maxShardLines: 400,
+  });
+  const check = plan.shards.find((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(check).toBeDefined();
+  const patch = check!.files.find((file) => file.path === source)!.patch;
+  expect(patch).toContain("-export const gone = 1;");
+  expect(patch).not.toContain("marker new");
 });

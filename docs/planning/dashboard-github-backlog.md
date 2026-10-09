@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-05
+last-reviewed: 2026-10-08
 related:
   - dashboard-implementation-plan.md
   - dashboard-engineering-decision-review.md
@@ -39,8 +39,10 @@ DASH-02 tem GO local nos dois adapters; as quatro provas de viabilidade
 integram o gate geral. O GitHub conserva o estado de revisão/merge e
 encerramento; não confundir prova M0 com auth produtiva.
 
-Nenhum prazo ou responsável individual foi inventado. Não foram criados
-recursos, secrets, DNS, migrations remotas nem deploys. ADRs aceitos continuam
+Nenhum prazo ou responsável individual foi inventado. A publicação deste
+backlog não criou recursos, secrets, DNS, migrations remotas nem deploys.
+Operações posteriores estão no [runbook](../operations/dashboard-environments-and-recovery.md),
+com autorização e evidência datadas. ADRs aceitos continuam
 prevalecendo; novos ADRs e as provas técnicas são entregas iniciais. Um no-go
 de candidato não é conclusão bem-sucedida da integração e bloqueia dependentes.
 
@@ -155,3 +157,12 @@ em #161. #163 integra essas provas nas jornadas completas antes da promoção.
 A reconciliação conserva os requisitos e elimina a dependência circular; não
 encerra M3–M6 nem declara implementação ou operação remota. A revisão final dos
 critérios M1 está em [revisão final M1](../research/2026-10-07-dashboard-milestone-one-final-review.md).
+
+## Reconciliação de Dashboard 2 em 2026-10-08
+
+A consulta ao GitHub confirmou #139/#140/#142 encerradas e #141/#143/#144
+abertas. A entrega de conclusão de M2 prepara os critérios dessas três issues
+para revisão/merge, com sessões, governança e preferências. Sua evidência local
+não fecha automaticamente o milestone nem publica Workers. Migrations aditivas
+seguem a operação autorizada descrita no runbook. O onboarding completo #159 e
+o smoke real #167 mantêm o escopo nos milestones donos.

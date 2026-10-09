@@ -19,7 +19,9 @@ registra as correções e as provas atuais.
 
 ADRs aceitos e o [contrato de qualidade](../product/review-quality-contract.md)
 continuam prevalecendo. Cache efêmero, receipts e lanes seguem a
-[ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md).
+[ADR-0056](../decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md),
+composta com os perfis da ADR-0055 pela
+[ADR-0059](../decisions/0059-compose-stable-review-lanes-with-budget-profiles.md).
 Revisão incremental e diversidade conservam os gates do
 [plano](../planning/review-core-improvement-proposal.md). Se uma correção mudar decisão,
 persistência, capacidade ou escopo, atualizar os contratos e propor o ADR necessário.
@@ -118,7 +120,7 @@ verificado, preservando a distinção entre adição, modificação e remoção.
 a linha textual mais próxima como substituto da estrutura. Testar a descoberta
 do consumidor pelo inventário, além da função de extração. Em leitura por lotes,
 o orçamento total pertence à operação inteira; iniciar outro lote não renova
-bytes nem autoriza symlinks. Essas regras seguem a ADR-0056.
+bytes nem autoriza symlinks. Essas regras seguem a ADR-0057.
 
 Associar exports locais aos nomes públicos obtidos da AST; procurar apenas o
 nome da implementação perde callers que importam um alias. Distinguir essa pista

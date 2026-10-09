@@ -73,6 +73,44 @@ contexto insuficiente. Deve distinguir candidatos confirmados, refutados e
 inconclusivos e medir falsos positivos removidos, regressões indevidamente
 retidas, precisão/recall final, parcialidade, custo e latência adicionais.
 
+## Qualificação da política para PRs grandes — 2026-10-08
+
+A ADR-0055 aumenta limites máximos; isso não comprova aumento de qualidade.
+A qualificação deve fixar base/head e usar o Agent/Workflow reais, incluindo
+verificação causal, tools e ledger. O conjunto precisa conter:
+
+- PR #177 antes das correções (`cc7889f` contra `b360283`), com os oito defeitos
+  confirmados na revisão humana como expected findings, e a versão corrigida
+  (`515f6e4`) como controle negativo para esses defeitos.
+- PR #171 e PRs de 25–64 partes, com relações produtor/consumidor separadas,
+  mudanças sem defeito e casos de contrato reexportado que não justificam finding.
+- Falhas de protocolo, saída/entrada truncadas, retry/eviction e gasto incerto.
+
+Relatar partes e linhas elegíveis, investigadas, omitidas e falhas; verificações
+de contrato adicionadas/omitidas; recall dos defeitos conhecidos, falsos positivos,
+finalização estruturada, chamadas, bytes cumulativos, tokens e duração por ondas.
+Comparar os perfis no mesmo SHA e rota, distinguindo admissão de qualidade do
+modelo. Não tratar passagem de gravações sintéticas como detecção dos oito bugs.
+
+Os testes locais desta alteração exercitam a política e o ciclo simulado de
+19, 24, 50 e 64 partes. A comparação live e suas métricas de qualidade/custo
+permanecem pendentes de uma execução remota autorizada; não houve replay de
+PR, deploy, alteração de rota nem chamada paga ao modelo nesta entrega.
+
+Em 2026-10-08, a medição offline de `buildReviewPlan` sobre o diff Git contra
+`b360283`, sem inventário estrutural externo nem inferência, produziu:
+
+| Head do PR #177 | Partes | Arquivos elegíveis | Linhas elegíveis | Bytes de patch | Perfil por quantidade |
+| --------------- | ------ | ------------------ | ---------------- | -------------- | --------------------- |
+| `cc7889f`       | 17     | 68                 | 8.807            | 370.654        | `large`               |
+| `515f6e4`       | 19     | 71                 | 9.776            | 414.193        | `large`               |
+
+Ambos os planos conservaram todas as partes elegíveis, sem omissão de orçamento.
+O número de partes pode mudar quando o executor acrescenta pistas estruturais e
+verificações de contrato. O perfil real também depende do prompt compilado.
+Esta medição confirma admissão; não investigou código nem mediu recall, custo
+ou confiabilidade do modelo.
+
 ## Métricas e corpus atuais (2026-10-08)
 
 O runner conserva `rawGrade` e candidatos brutos antes do filtro canônico.
@@ -97,7 +135,9 @@ não demonstram benefício de especialista ou modelo distinto.
 
 Os [benchmarks locais](../research/experiments/2026-10-08-review-core-implementation/README.md)
 medem índice/cache/lanes e políticas experimentais. Revisão incremental, prefetch
-adicional e quotas ponderadas de modelo não foram ativados sem seus gates.
+adicional continuam sujeitos aos gates. Quotas ponderadas e empréstimo foram
+incorporados pela ADR-0055 e compostos com lanes pela ADR-0059; seus testes locais
+não substituem a comparação real de qualidade dos perfis maiores.
 Nenhum comando de avaliação live do motor retirado foi restaurado.
 
 ## Harness Think real e orçamento de campanha (2026-10-09)

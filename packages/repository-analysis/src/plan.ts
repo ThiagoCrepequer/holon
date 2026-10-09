@@ -1,6 +1,7 @@
 import {
   reviewPlanSchema,
   reviewExecutionLimits,
+  type StructuralImpactReport,
   type ReviewContextFile,
   type ReviewFileMode,
   type ReviewPlan,
@@ -8,6 +9,7 @@ import {
 } from "@holon/contracts";
 import type { ChangedLine } from "@holon/domain";
 
+import { buildContractChecks } from "./contract-checks.js";
 import {
   collectChangedLines,
   isNonBinaryPullRequestPatch,
@@ -18,9 +20,7 @@ import { classifyPullRequestDiffFile } from "./policy.js";
 import { mapReviewSurface } from "./surface.js";
 
 export interface BuildReviewPlanOptions {
-  readonly relationships?:
-    | readonly { readonly callerPath: string; readonly targetPath: string }[]
-    | undefined;
+  readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly additionalExcludes?: readonly string[] | undefined;
   readonly maxShardDiffBytes?: number | undefined;
   readonly maxShardFiles?: number | undefined;
@@ -221,37 +221,34 @@ export function buildReviewPlan(
 
   let oversizedFileCount = 0;
 
-  // Unite only observed static edges; unknown or dynamic consumers remain retrieval obligations.
-  const parents = new Map<string, string>();
-  const root = (key: string): string => {
-    const parent = parents.get(key);
-    if (!parent || parent === key) return key;
-    const result = root(parent);
-    parents.set(key, result);
-    return result;
-  };
-  const keys = new Set(
-    prioritizedFiles.map((file) => relatedFileKey(file.file.path)),
+  const keys = new Map(
+    prioritizedFiles.map((file) => [
+      file.file.path,
+      relatedFileKey(file.file.path),
+    ]),
   );
-  for (const edge of options?.relationships ?? []) {
-    const left = relatedFileKey(edge.callerPath),
-      right = relatedFileKey(edge.targetPath);
-    if (!keys.has(left) || !keys.has(right)) continue;
-    const pair = [root(left), root(right)].toSorted();
-    parents.set(pair[1]!, pair[0]!);
+  // Union only relationship hints produced by the structural analyzer. A component
+  // can still be partitioned when the canonical patch ceilings require it.
+  for (const reference of options?.structuralImpact?.downstreamReferences ??
+    []) {
+    const caller = keys.get(reference.callerPath);
+    const target = keys.get(reference.targetPath);
+    if (caller === undefined || target === undefined || caller === target)
+      continue;
+    const representative = [caller, target].toSorted()[0]!;
+    for (const [path, key] of keys)
+      if (key === caller || key === target) keys.set(path, representative);
   }
-  const groupingKey = (path: string) => root(relatedFileKey(path));
   const relatedGroups = new Map<string, EligibleFile[]>();
   for (const file of prioritizedFiles) {
-    const key = groupingKey(file.file.path);
+    const key = keys.get(file.file.path)!;
     const group = relatedGroups.get(key) ?? [];
     group.push(file);
     relatedGroups.set(key, group);
   }
-  // Balance whole groups so textual coverage cannot separate a source/test pair.
   const groups = balanceReviewModes(
     [...relatedGroups.values()].map((group) => group[0]!),
-  ).map((first) => relatedGroups.get(groupingKey(first.file.path))!);
+  ).map((first) => relatedGroups.get(keys.get(first.file.path)!)!);
   for (const group of groups) {
     const groupBytes = group.reduce((sum, file) => sum + file.patchBytes, 0);
     const groupLines = group.reduce(
@@ -407,6 +404,22 @@ export function buildReviewPlan(
       totalShards,
     };
   });
+
+  const cross = buildContractChecks(
+    shards,
+    eligibleFiles.map((item) => item.file),
+    options?.structuralImpact,
+    maxShards,
+    maxShardDiffBytes,
+    maxShardLines,
+    maxShardFiles,
+  );
+  shards.push(...cross.checks);
+  for (const shard of shards) shard.totalShards = shards.length;
+  if (cross.omitted) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push({ code: "contract_checks", count: cross.omitted });
+  }
 
   return reviewPlanSchema.parse({
     omissionReasons,

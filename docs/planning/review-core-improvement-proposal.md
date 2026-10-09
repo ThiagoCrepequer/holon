@@ -26,10 +26,12 @@ novas/substitutivas são necessárias onde a proposta mudar suas garantias.
 Recorte atual em 2026-10-09: a [continuação focada em código](../research/2026-10-09-review-core-code-follow-up.md)
 fecha C01–C08 com regressões e validação do par de alias no Gemma. O gate global
 de geração confiável permanece aberto para falsos positivos causais e schema;
-a causa não foi isolada exclusivamente na capacidade do modelo. R05/R07/R09/R10
+a causa não foi isolada exclusivamente na capacidade do modelo. R05/R09/R10
 conservam experimentos condicionais não ativados, fora do recorte de correção de
-defeitos ativos. Não converter o resultado 2/2 em autorização de prefetch,
-ponderação, skipping ou especialistas.
+defeitos ativos. A main incorporou quotas ponderadas/empréstimo pela ADR-0055,
+integrados às lanes pela ADR-0059; o gate real de R07 permanece aberto. Não
+converter o resultado 2/2 em prova dos perfis maiores nem em autorização de
+prefetch, skipping ou especialistas.
 
 ## Estado de partida
 
@@ -334,5 +336,5 @@ O próximo recorte deve atacar a confirmação de cenário não alcançável e a
 estabilidade da saída, com contratos adjudicados e famílias novas. A campanha
 com 243 requests usou US$ 0,060062421 informados, exposição conservadora de
 US$ 0,177000834 e manteve todas as falhas; não há benefício em gastar o restante
-de US$ 0,50 sem uma hipótese mais forte. A ADR-0056 registra o inventário
-body-only e a ADR-0057 simplifica seleção de receipts sem enfraquecer validação.
+de US$ 0,50 sem uma hipótese mais forte. A ADR-0057 registra o inventário
+body-only e a ADR-0058 simplifica seleção de receipts sem enfraquecer validação.

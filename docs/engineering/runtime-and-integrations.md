@@ -122,7 +122,7 @@ permissão. Scheduling/cache novos precisam das provas e decisões aplicáveis.
 O [guia de qualidade do core](review-core-quality.md) define os critérios;
 o [plano](../planning/review-core-improvement-proposal.md) conserva alternativas
 os gates de evoluções ainda experimentais. A implementação de cache/receipts/lanes
-segue a [ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md).
+segue a [ADR-0056](../decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md).
 Timings/contadores não devem acrescentar payload privado aos logs.
 
 ## Configuração de deploy e operação

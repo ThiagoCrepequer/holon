@@ -231,11 +231,12 @@ recusa de admissão antes da chamada, por limite agregado durável. Não reinici
 repetidamente para contornar esse limite: compare cobertura, consultas e usage
 da execução. A ausência de status HTTP não demonstra sucesso do provider.
 
-## Core vigente: checkpoints, tools e cleanup (2026-10-08)
+## Core vigente: checkpoints, tools e cleanup (2026-10-09)
 
 Os eventos de investigação/rodadas das ADRs 0043–0046 descritos acima são históricos.
 O Think vigente usa `model.step_finished`; não esperar o protocolo do gerador
-retirado. A admissão efetiva é até nove shards e a concorrência é três. O
+retirado. A admissão efetiva é até 64 shards e a concorrência é três. A ADR-0055
+sela perfis de orçamento e pesos; a ADR-0059 os compõe com lanes estáveis. O
 planejamento conserva lanes estáveis; `admit-shard-N` registra admissão/deadline e
 `analyze-shard-N` registra o resultado. Não há `analysis-wave-N` no caminho atual.
 
@@ -248,8 +249,9 @@ fase, resultado e duração; nenhum prompt, diff ou exceção livre foi acrescen
 `repository.tool_read` distingue execução física de reuso por `reused`, bytes,
 truncamento e duração. `repository.tool_operation` inclui a espera RPC `tool_read`
 e a verificação de lease. Hit continua consumindo quota lógica do ledger;
-`peer_protection` é recusa para conservar o mínimo dos peers, `run_calls` é teto
-agregado. Não somar hits com execuções físicas como se fossem processos novos.
+`shard_calls` é recusa por allocation/proteção de peers, `run_calls` é teto
+agregado do perfil. `peer_protection` pertence à política histórica anterior.
+Não somar hits com execuções físicas como se fossem processos novos.
 `repository.cleanup_finished` mede a tentativa de cleanup; falha conserva a
 obrigação durável e não autoriza reset manual do consumo.
 

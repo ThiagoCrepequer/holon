@@ -99,6 +99,8 @@ function createMockServices(
       loadRunConfiguration: () => defaultRunConfiguration(job),
       loadPrFindings: () => Promise.resolve([]),
       loadModelGenerationStop: async () => undefined,
+      configureReviewBudget: async () => {},
+      completeReviewBudgetShard: async () => {},
       savePrFindings: () => Promise.resolve(),
     } as unknown as ReviewServices["ledger"],
     loadContext: () =>
@@ -1233,7 +1235,7 @@ it("admits investigation discoveries only with canonical changed-line evidence",
   ]);
 });
 
-it("admits only budgeted shards from a fifty-part plan without repeating context transfers", async () => {
+it("admits every eligible shard from a fifty-part plan without repeating context transfers", async () => {
   const services = createMockServices(
     {
       changedLines: [],
@@ -1254,13 +1256,10 @@ it("admits only budgeted shards from a fifty-part plan without repeating context
     return original(...args);
   };
   const result = await analyzeReview(job, services, vi.fn());
-  expect(result.totalShards).toBe(9);
-  expect(result.shardsAnalyzed).toBe(9);
-  expect(result.scopeStatus).toBe("partial_by_policy");
-  expect(result.verdict).toBe("COMMENT");
-  expect(result.omissionReasons).toContain(
-    "Generation budget admitted 9 of 50 priority shards; the remaining shards were not investigated.",
-  );
+  expect(result.totalShards).toBe(50);
+  expect(result.shardsAnalyzed).toBe(50);
+  expect(result.scopeStatus).toBe("complete");
+  expect(result.omissionReasons).toEqual([]);
   expect(transfers).toBe(1);
 });
 
@@ -1456,6 +1455,123 @@ it("reloads and validates the plan after invocation replay without repeating com
   ).rejects.toThrow("Review plan changed during replay");
   expect(load).toHaveBeenCalledTimes(2);
   expect(review).toHaveBeenCalledOnce();
+});
+
+it("preserves a prior finding when another fragment of the same file failed despite local correction evidence", async () => {
+  const { computeEvidenceFingerprint } = await import("@holon/domain");
+  const fingerprint = `fp:${"f".repeat(64)}` as const;
+  const patch =
+    "@@ -0,0 +1,1000 @@\n" +
+    "+// context\n".repeat(9) +
+    "+return null;\n" +
+    "+// context\n".repeat(990);
+  const services = createMockServices({
+    truncated: false,
+    changedLines: [],
+    files: [{ path: "src/index.ts", mode: "structural", patch }],
+  });
+  services.ledger.loadPrFindings = vi.fn().mockResolvedValue([
+    {
+      fingerprint,
+      evidenceFingerprint: await computeEvidenceFingerprint("src/index.ts", [
+        { ...moderateFinding.evidence[0]!, excerpt: "return user.name;" },
+      ]),
+      diagnostic: "The null user property dereference throws before returning",
+      filePath: "src/index.ts",
+      line: 10,
+      confidence: 0.95,
+      severity: "high",
+      status: "new",
+      prKey: "github:42:pr:7",
+      firstSeenHeadSha: "b".repeat(40),
+      lastSeenHeadSha: "b".repeat(40),
+      firstSeenRunId: job.runId,
+      lastSeenRunId: job.runId,
+      updatedAt: "2026-10-08T12:00:00Z",
+    },
+  ]);
+  services.createShardReviewer = (index) => ({
+    model: {
+      review: async () => {
+        if (index !== 0) throw new ThinkReviewFailure("model_output_missing");
+        return {
+          promptTruncated: false,
+          output: {
+            findings: [],
+            summary: "Checked correction",
+            resolutions: [
+              {
+                fingerprint,
+                confidence: 0.95,
+                diagnostic: "The return no longer dereferences user",
+                location: moderateFinding.location,
+                evidence: [
+                  { ...moderateFinding.evidence[0]!, excerpt: "return null;" },
+                ],
+              },
+            ],
+          },
+        };
+      },
+    },
+  });
+  const result = await analyzeReview(job, services, vi.fn());
+  expect(result.totalShards).toBe(2);
+  expect(result.resolvedFindings).toHaveLength(0);
+  expect(result.scopeStatus).toBe("partial_by_failure");
+  expect(result.verdict).toBe("COMMENT");
+});
+
+it("passes structural relationships through the coordinator and budgets additional contract checks", async () => {
+  const paths = ["packages/core/src/api.ts", "apps/web/src/client.ts"];
+  const services = createMockServices(
+    {
+      truncated: false,
+      changedLines: [],
+      files: paths.map((path) => ({
+        path,
+        mode: "structural" as const,
+        patch: `@@ -0,0 +1,600 @@\n${"+export const value = 1;\n".repeat(600)}`,
+      })),
+      structuralImpact: {
+        changedSymbols: [
+          {
+            path: paths[0]!,
+            line: 1,
+            name: "send",
+            change: "modified",
+            kind: "function",
+            isExported: true,
+          },
+        ],
+        contractBreaks: [],
+        securitySurfaces: [],
+        downstreamReferences: [
+          {
+            targetPath: paths[0]!,
+            callerPath: paths[1]!,
+            callerLine: 1,
+            symbolName: "send",
+            excerpt: "send()",
+          },
+        ],
+      },
+    },
+    { promptTruncated: false, output: { findings: [], summary: "Checked" } },
+  );
+  const configure = vi.fn(async () => {});
+  const complete = vi.fn(async () => {});
+  services.ledger.configureReviewBudget = configure;
+  services.ledger.completeReviewBudgetShard = complete;
+  const result = await analyzeReview(job, services, vi.fn());
+  expect(result.totalShards).toBe(3);
+  expect(result.shardsAnalyzed).toBe(3);
+  expect(result.scopeStatus).toBe("complete");
+  expect(configure).toHaveBeenCalledWith(
+    job.runId,
+    expect.objectContaining({ shardWeights: [1, 1, 2] }),
+  );
+  expect(complete).toHaveBeenCalledTimes(3);
 });
 
 it("starts later work in a free lane while a peer is still investigating", async () => {

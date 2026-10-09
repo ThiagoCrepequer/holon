@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 related:
   - typescript-and-module-design.md
   - ../research/2026-10-04-dashboard-library-landscape.md
@@ -21,7 +21,8 @@ A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) material
 as fundações locais de `apps/dashboard`, `apps/email-delivery`, `packages/ui` e
 `packages/db`. A [arquitetura do dashboard](../architecture/user-dashboard.md)
 descreve arquivos/interfaces concretos. Exemplos de review/auth/queries abaixo
-continuam desenhos para M2–M6, sem pastas vazias ou comportamento simulado.
+incluem a integração M2 de sessão/preferências; os exemplos de reviews/queries
+continuam desenhos para M5–M6, sem pastas vazias ou comportamento simulado.
 A ADR-0040 permanece vigente para o admin retirado.
 O [guia TypeScript](typescript-and-module-design.md) continua valendo para
 imports, tipos, módulos e contratos de todo o Holon.
@@ -505,3 +506,33 @@ exportados, sem alias wildcard para internals. Não gerar componentes de produto
 num diretório central por padrão; indicar a rota dona. `add` não foi executado
 na fundação e não autoriza sobrescrever APIs existentes ou adicionar SDKs sem
 comportamento, tokens e testes correspondentes.
+
+## Features materializadas em M2
+
+`features/preferences` mantém o formulário, validação dos campos e transporte
+strict de `GET/POST /api/preferences`. O estado salvo muda depois da confirmação
+persistida; erro mantém a escolha anterior, com retry explícito. Detecção de
+fuso e enumeração das opções IANA acontecem depois da hidratação: a primeira
+render preserva o UTC/valor salvo e não depende de catálogos ICU idênticos no
+servidor e no navegador. Preferência pessoal prevalece sobre a URL e o idioma
+negociado do navegador, sem alterar idioma da revisão nem disparar execução.
+
+`features/sessions` mantém login/reconexão, lista reduzida de dispositivos e
+revogação atual/global. Os módulos de transporte são internos à feature e
+validam DTOs antes de apresentar estado. Uma negação confirmada fecha somente
+a identidade que iniciou a request; callbacks antigos não removem uma sessão
+nova. O ID da sessão identifica a geração dos controles e AbortController
+cancela requests ao desmontar/trocar contexto. Leituras de dispositivos exigem
+que a sessão marcada atual corresponda à geração renderizada; diferença fecha
+o snapshot anterior e revalida SSR. Não há polling/refetch por foco/visibilidade
+nem renovação automática de uma aba parada.
+
+`server/viewer.server.ts` usa as capabilities privadas passadas pela composição
+Workers, sem self-HTTP. O loader raiz devolve snapshot público validado e todos
+os cookies nativos; capabilities, bindings e secrets não entram no estado
+hidratado. O build inspeciona os chunks reais para conferir essa fronteira.
+A página welcome compõe essas duas features; onboarding de equipes/convites e
+conteúdo privado seguem #159 e suas dependências.
+Cada feature expõe somente seus controles de apresentação por `public.ts`;
+a rota não importa transporte ou outros módulos privados. O gate de imports
+confere essas interfaces no código materializado.

@@ -164,7 +164,7 @@ identidade e o conteúdo no snapshot esperado. `causalVerificationSchema` exige
 `basis` (`patch`/`repository`) e `evidenceReceiptIds`; repository requer IDs de
 receipts inspecionados e completos, patch requer lista vazia. O host resolve a
 janela inteira pelos IDs e valida os metadados, além da cobertura posicional única
-de candidatos. A [ADR-0057](../decisions/0057-select-host-evidence-receipts-in-causal-assessments.md)
+de candidatos. A [ADR-0058](../decisions/0058-select-host-evidence-receipts-in-causal-assessments.md)
 remove a repetição de path/coordenadas na resposta, preservando a validação de
 identidade/conteúdo pelo adapter.
 

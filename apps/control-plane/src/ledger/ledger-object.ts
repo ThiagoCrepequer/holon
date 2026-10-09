@@ -12,6 +12,7 @@ import {
   reconciledReviewOutputSchema as memoryReviewOutputSchema,
 } from "@holon/contracts";
 import type {
+  ReviewBudgetPlan,
   ModelGenerationReservation,
   ModelGenerationStopReason,
   ModelGenerationAdmission,
@@ -68,6 +69,7 @@ import { FindingClarificationStore } from "./finding-clarification-store.js";
 import { FindingLedgerStore } from "./finding-ledger-store.js";
 import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
+import { ReviewBudgetPlanStore } from "./review-budget-plan-store.js";
 import { ReviewGenerationBudgetStore } from "./review-generation-budget-store.js";
 import { ReviewToolBudgetStore } from "./review-tool-budget-store.js";
 import { RunConfigurationStore } from "./run-configuration-store.js";
@@ -1010,6 +1012,40 @@ export class ReviewLedgerObject
     return Promise.resolve(
       new ReviewAnalysisStore(this.ctx.storage).load(runId),
     );
+  }
+
+  public configureReviewBudget(
+    rawRunId: string,
+    plan: ReviewBudgetPlan,
+  ): Promise<void> {
+    const runId = runIdSchema.parse(rawRunId);
+    this.ctx.storage.transactionSync(() => {
+      if (
+        this.latestRunId() !== runId ||
+        this.runState(runId as RunId) !== "running"
+      )
+        throw new Error("Review budget run is not authorized");
+      new ReviewBudgetPlanStore(this.ctx.storage.sql).configure(runId, plan);
+    });
+    return Promise.resolve();
+  }
+  public completeReviewBudgetShard(
+    rawRunId: string,
+    index: number,
+  ): Promise<void> {
+    const runId = runIdSchema.parse(rawRunId);
+    this.ctx.storage.transactionSync(() => {
+      const budget = new ReviewBudgetPlanStore(this.ctx.storage.sql);
+      // A replay of a persisted completion has no effect even after publishing.
+      if (budget.isComplete(runId, index)) return;
+      if (
+        this.latestRunId() !== runId ||
+        this.runState(runId as RunId) !== "running"
+      )
+        throw new Error("Review budget run is not authorized");
+      budget.complete(runId, index);
+    });
+    return Promise.resolve();
   }
 
   public reserveModelGeneration(

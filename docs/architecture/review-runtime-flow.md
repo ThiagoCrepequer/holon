@@ -11,7 +11,7 @@ related:
   - ../decisions/0039-partition-large-reviews-and-bound-concurrency.md
   - ../decisions/0049-use-cloudflare-think-for-pr-review.md
   - ../decisions/0050-verify-finding-causality-before-publication.md
-  - ../decisions/0053-align-review-admission-with-generation-budget.md
+  - ../decisions/0055-fund-large-reviews-with-protected-investigation.md
 ---
 
 # Fluxo de execução de uma review
@@ -101,12 +101,13 @@ Duplicatas e ordem de entrega não dão autoridade. A configuração do reposit�
 executor classifica patches como estruturais ou textuais e produz contexto
 limitado. O plano admite até 16 arquivos, 768 linhas e 96 kB de patch por shard,
 com no máximo 64 shards estruturais e três análises simultâneas. Antes do
-despacho, a [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
-limita a admissão a nove shards prioritários: quatro inferências de investigação,
-duas de verificação causal e uma de recuperação narrativa por ciclo máximo.
-O plano efetivo fixa `totalShards` antes do digest e conserva os totais elegíveis.
-`model_budget` explica a omissão das partes não admitidas. Contexto omitido gera
-limitação explícita; não é tratado como cobertura.
+despacho, a [ADR-0055](../decisions/0055-fund-large-reviews-with-protected-investigation.md)
+admite todas as partes e fixa um perfil por quantidade e tamanho estimado dos
+prompts. O plano efetivo fixa `totalShards` antes do digest e conserva os totais
+elegíveis. Referências estruturais unem produtor/consumidor alterados; até oito
+partes adicionais investigam relações separadas por limites, com janelas
+canônicas de até 80 linhas por arquivo. `contract_checks` registra relações que
+não couberam; contexto omitido permanece explícito e não conta como cobertura.
 
 O coordenador mantém contexto validado, plano e digest apenas na memória da
 invocação de análise. Lanes compartilham uma barreira de preparação; cada shard
@@ -119,7 +120,9 @@ completo não é serializado como resultado de step. Sem reconstrução, os shar
 admitidos compartilham uma leitura completa e um cálculo do digest nessa invocação.
 Relações produtor/consumidor podem orientar os grupos, respeitando os mesmos caps;
 referências que atravessam partes seguem como pistas compactas em ambos.
-Consulte a [ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md).
+Consulte a [ADR-0056](../decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md)
+e sua composição com os perfis na
+[ADR-0059](../decisions/0059-compose-stable-review-lanes-with-budget-profiles.md).
 
 O analisador estrutural produz pistas para investigar contratos, não findings.
 Na composição local, `review-analysis.ts` coordena preparação/plano/agregação;
@@ -137,7 +140,7 @@ usa a mesma fronteira lexical de identificadores no `rg` e no tracer JavaScript,
 incluindo `$`, letras Unicode e join controls, sem tratar nomes maiores como
 referências ao fragmento. Ela continua lexical nos consumidores: não resolve aliases arbitrários de import,
 reexports encadeados ou imports dinâmicos nem demonstra fechamento de dependências. Consulte a
-[ADR-0056](../decisions/0056-trace-edited-declarations-in-verified-head.md).
+[ADR-0057](../decisions/0057-trace-edited-declarations-in-verified-head.md).
 Tetos do relatório registram `omittedSignals` antes de cortar os arrays;
 projeções preservam essas contagens, acrescentam suas perdas e indicam contexto
 limitado. Varredura incompleta permanece um sinal distinto.
@@ -233,20 +236,19 @@ no modelo ou na rota; não há parser de texto nem resposta limpa fabricada.
 
 ## Orçamento, falhas e idempotência
 
-O ledger reserva recursos antes da inferência, incluindo chamadas, bytes de
-entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
-de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
-por run entre todos os shards. O ledger protege `max(1, floor(96/(2*N)))`
-chamadas ainda não consumidas de cada peer; o restante é compartilhado, com
-cardinalidade fixa pela migração aditiva 23. Esses limites não são uma estimativa exata de
-tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
-Cada shard admitido tem uma parcela protegida `floor(teto / totalShards)` nas
-três dimensões. Investigação, causalidade e recuperação compartilham essa parcela;
-settlement não transfere recursos entre shards. A saída máxima normal por chamada
-é `min(12.000, floor((parcela de saída - 1.024) / 6))`. As recusas `shard_calls`,
-`shard_input_bytes` e `shard_output_tokens` falham somente a parte atual, sem
-bloquear pares ou shards seguintes. Histórico crescente ainda pode ultrapassar a
-parcela de entrada; uma parte incompleta não demonstra ausência de regressões.
+O ledger sela perfil, estimativa de entrada e pesos antes do despacho. Os perfis
+`normal`, `large` e `very_large` permitem respectivamente 64/192/512 inferências,
+4/12/32 MB de entrada cumulativa, 120/360/960 mil tokens de saída e 96/288/768
+tools. Retry e eviction não renovam saldo; uso incerto mantém a reserva.
+Cada parte protege quatro inferências, três tools e uma parcela igual de 70%
+da entrada/saída; o saldo é ponderado por pistas de risco. O checkpoint do
+resultado precede a liberação durável de sobra para partes ainda abertas.
+Chamadas e entrada gastas não são recuperadas. Perfis não estimam faturamento.
+
+Tools recebem até 1.000 tokens de saída; a finalização forçada recebe até 5.000
+na investigação e 2.500 na verificação causal. Recuperação mantém 1.024. Think
+continua controlando `toolChoice` e finalização. Recusas locais falham somente
+a parte atual; cobertura incompleta ou saída degradada nunca aprova o PR.
 
 A primeira recusa de teto agregado persiste sua dimensão em
 `model_generation_plans.stop_reason`, na mesma transação da decisão de admissão
@@ -355,7 +357,7 @@ patches canônicos, contexto factual limitado e preferências de saída. A conve
 causal recebe essa projeção, candidatos e reads inspecionados; não recebe outra
 cópia das instruções para realizar investigação aberta.
 
-Conforme a [ADR-0057](../decisions/0057-select-host-evidence-receipts-in-causal-assessments.md),
+Conforme a [ADR-0058](../decisions/0058-select-host-evidence-receipts-in-causal-assessments.md),
 assessments selecionam `evidenceReceiptIds`. O host resolve a janela inteira de
 cada leitura completa e retém candidatos quando a seleção não corresponde aos
 receipts validados. A validação de pacote continua vinculada ao conteúdo e snapshot.

@@ -1,3 +1,4 @@
+import { createReviewBudgetPlan } from "@holon/contracts";
 import { evictDurableObject, reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it } from "vitest";
@@ -33,14 +34,14 @@ async function ledgerForRun() {
 it("protects all nine peers through complete uncertain shard cycles and eviction", async () => {
   const ledger = await ledgerForRun();
   const admitted = [];
-  for (const phase of [
-    "investigation",
-    "investigation",
-    "investigation",
-    "investigation",
-    "causal_verification",
-    "causal_verification",
-    "recovery",
+  for (const [phase, outputTokens] of [
+    ["investigation", 1000],
+    ["investigation", 1000],
+    ["investigation", 1000],
+    ["investigation", 5000],
+    ["causal_verification", 1000],
+    ["causal_verification", 2500],
+    ["recovery", 1024],
   ] as const) {
     const round = await Promise.all(
       Array.from({ length: 9 }, (_, shardIndex) =>
@@ -49,7 +50,7 @@ it("protects all nine peers through complete uncertain shard cycles and eviction
           shardCount: 9,
           phase,
           inputBytes: 10_000,
-          outputTokens: phase === "recovery" ? 1024 : 2051,
+          outputTokens,
         }),
       ),
     );
@@ -84,25 +85,23 @@ it("protects all nine peers through complete uncertain shard cycles and eviction
   expect(await ledger.loadModelGenerationStop(runId)).toBeUndefined();
 });
 
-it("preserves the protected tool capacity of eight peers when a ninth consumes the shared surplus", async () => {
+it("preserves the allocated tool capacity of eight peers when a ninth reaches its allocation", async () => {
   const ledger = await ledgerForRun();
-  for (let index = 0; index < 56; index++)
+  for (let index = 0; index < 10; index++)
     expect(await ledger.reserveAnalysisToolCall(runId, 0, 9)).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 9)).toBe(false);
   await evictDurableObject(ledger);
   const peers = await Promise.all(
     Array.from({ length: 8 }, async (_, index) => {
       const admissions = [];
-      for (let call = 0; call < 5; call++)
+      for (let call = 0; call < 10; call++)
         admissions.push(
           await ledger.reserveAnalysisToolCall(runId, index + 1, 9),
         );
       return admissions;
     }),
   );
-  expect(peers).toEqual(
-    Array.from({ length: 8 }, () => [true, true, true, true, true]),
-  );
+  expect(peers).toEqual(Array.from({ length: 8 }, () => Array(10).fill(true)));
   const exhausted = await Promise.all(
     Array.from({ length: 9 }, (_, index) =>
       ledger.reserveAnalysisToolCall(runId, index, 9),
@@ -394,8 +393,8 @@ it("counts historical reservations in the current aggregate ceiling", async () =
     );
   });
   const request = {
-    shardIndex: 1,
-    shardCount: 2,
+    shardIndex: 0,
+    shardCount: 1,
     phase: "investigation" as const,
     inputBytes: 2_000_000,
     outputTokens: 1,
@@ -616,4 +615,135 @@ it("does not turn a request above the shard allocation into a global stop while 
       inputBytes: 2_000_000,
     }),
   ).toMatchObject({ accepted: true });
+});
+
+it.each([19, 24, 64])(
+  "funds investigation, optional causality and recovery of all %s parts",
+  async (count) => {
+    const ledger = await ledgerForRun();
+    await ledger.configureReviewBudget(runId, createReviewBudgetPlan(count));
+    for (let index = 0; index < count; index++) {
+      for (const [phase, outputTokens] of [
+        ["investigation", 1000],
+        ["investigation", 1000],
+        ["investigation", 1000],
+        ["investigation", 5000],
+        ["causal_verification", 1000],
+        ["causal_verification", 2500],
+        ["recovery", 1024],
+      ] as const) {
+        const admission = await ledger.reserveModelGeneration(runId, {
+          shardIndex: index,
+          shardCount: count,
+          phase,
+          inputBytes: 20_000,
+          outputTokens,
+        });
+        expect(admission?.accepted).toBe(true);
+      }
+      await ledger.completeReviewBudgetShard(runId, index);
+      if (index === 0) await evictDurableObject(ledger);
+    }
+    expect(await ledger.loadModelGenerationStop(runId)).toBeUndefined();
+  },
+);
+it("freezes prompt profile and risk, releases completed surplus and preserves uncertain charges", async () => {
+  const ledger = await ledgerForRun();
+  const plan = createReviewBudgetPlan(2, 0, [4, 1]);
+  await ledger.configureReviewBudget(runId, plan);
+  await ledger.configureReviewBudget(runId, plan);
+  await evictDurableObject(ledger);
+  await runInDurableObject(ledger, (object) => {
+    expect(() =>
+      object.configureReviewBudget(runId, createReviewBudgetPlan(2)),
+    ).toThrow("plan changed");
+    expect(() => object.completeReviewBudgetShard(runId, 2)).toThrow();
+  });
+  const reserve = (index: number, inputBytes: number) =>
+    ledger.reserveModelGeneration(runId, {
+      shardIndex: index,
+      shardCount: 2,
+      phase: "investigation",
+      inputBytes,
+      outputTokens: 1,
+    });
+  expect(await reserve(0, 2_360_000)).toMatchObject({ accepted: true });
+  expect(await reserve(0, 1)).toMatchObject({
+    accepted: false,
+    reason: "shard_input_bytes",
+  });
+  expect(await reserve(1, 100)).toMatchObject({ accepted: true });
+  await ledger.completeReviewBudgetShard(runId, 1);
+  await ledger.completeReviewBudgetShard(runId, 1);
+  await evictDurableObject(ledger);
+  expect(await reserve(1, 1)).toMatchObject({ accepted: false });
+  expect(await reserve(0, 1_639_900)).toMatchObject({ accepted: true });
+  expect(await reserve(0, 1)).toMatchObject({
+    accepted: false,
+    reason: "input_bytes",
+    consumed: 4_000_000,
+  });
+});
+it("rejects budget configuration and completion for unauthorized runs without persisting a plan", async () => {
+  const ledger = await ledgerForRun();
+  await ledger.transition(
+    runId,
+    "running",
+    "obsolete",
+    new Date().toISOString(),
+    "obsolete-budget",
+  );
+  await runInDurableObject(ledger, (object) => {
+    expect(() =>
+      object.configureReviewBudget(runId, createReviewBudgetPlan(1)),
+    ).toThrow("not authorized");
+    expect(() => object.completeReviewBudgetShard(runId, 0)).toThrow(
+      "not authorized",
+    );
+  });
+});
+it("requires replanning a pre-migration budget without resetting its debt", async () => {
+  const ledger = await ledgerForRun();
+  await runInDurableObject(ledger, (_object, state) => {
+    state.storage.sql.exec(
+      "INSERT INTO model_generation_plans(run_id,shard_count) VALUES (?,1)",
+      runId,
+    );
+    const store = new ReviewGenerationBudgetStore(state.storage.sql);
+    expect(() =>
+      store.reserve(runId, {
+        shardIndex: 0,
+        shardCount: 1,
+        phase: "investigation",
+        inputBytes: 1,
+        outputTokens: 1,
+      }),
+    ).toThrow("replanning");
+  });
+});
+
+it("replays a persisted completion after publication without reopening its budget", async () => {
+  const ledger = await ledgerForRun();
+  await ledger.configureReviewBudget(runId, createReviewBudgetPlan(1));
+  await ledger.completeReviewBudgetShard(runId, 0);
+  await ledger.transition(
+    runId,
+    "running",
+    "publishing",
+    new Date().toISOString(),
+    "publish-budget",
+  );
+  await evictDurableObject(ledger);
+  await expect(
+    ledger.completeReviewBudgetShard(runId, 0),
+  ).resolves.toBeUndefined();
+  await expect(
+    ledger.reserveModelGeneration(runId, {
+      shardCount: 1,
+      shardIndex: 0,
+      phase: "investigation",
+      inputBytes: 1,
+      outputTokens: 1,
+    }),
+  ).resolves.toBeUndefined();
 });

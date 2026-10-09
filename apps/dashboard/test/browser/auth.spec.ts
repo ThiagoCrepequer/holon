@@ -12,6 +12,9 @@ for (const locale of ["en", "pt-BR"] as const) {
       ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
       (locale === "en" ? 1 : 2);
     const code = `synthetic_browser_${subject}`;
+    await context.setExtraHTTPHeaders({
+      "X-Holon-Test-Client": String(subject),
+    });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`/?lang=${locale}`);

@@ -144,6 +144,8 @@ A primeira gravação do artefato
 Gravação de findings reaplica feedback na mesma transação. O matching
 secundário exige unicidade; registros legados preservam o ID primário.
 
+A migração aditiva 23 sela o plano de orçamento em `model_generation_plans.budget_json` e cria `review_budget_completions`. Perfil/pesos são imutáveis; a conclusão de uma parte é registrada somente depois do checkpoint do resultado. Reservas históricas permanecem cobradas. Um plano anterior sem snapshot exige nova run, sem reset de dívida.
+
 Reservas de tools ocorrem atomicamente no DO. Não são persistidos tempos por
 etapa nem snapshots de telemetria (ADR-0040).
 Resoluções usam o mesmo protocolo de claim/marcador/reconciliação de publicação,

@@ -14,7 +14,6 @@ export const reviewExecutionLimits = {
 
 /** Hard investigation limits shared by the model, service and durable ledger. */
 export const reviewInvestigationLimits = {
-  toolCalls: 96,
   outputTokens: 12_000,
 } as const;
 

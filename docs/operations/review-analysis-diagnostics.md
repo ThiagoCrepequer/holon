@@ -123,14 +123,18 @@ Implementação: `apps/control-plane/src/review/review-agent.ts`,
 
 ## Admissão de geração e causas do Think
 
-A [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
-admite até nove shards antes do despacho, dentro dos tetos agregados. O plano
-estrutural pode ter mais partes; `model_budget` registra a quantidade original e
-a admitida. `executor_budget` continua uma limitação independente de contexto,
-incluindo o teto de 32.000 entradas de linhas alteradas.
+A [ADR-0055](../decisions/0055-fund-large-reviews-with-protected-investigation.md)
+admite até 64 shards e sela perfil, estimativa de entrada e pesos antes do
+despacho. A [ADR-0059](../decisions/0059-compose-stable-review-lanes-with-budget-profiles.md)
+compõe esses limites com lanes estáveis. `contract_checks` registra relações
+que não couberam em partes/janelas canônicas; `executor_budget` continua uma
+limitação independente de contexto, incluindo o teto de 32.000 entradas de
+linhas alteradas. A admissão limitada a nove pela ADR-0053 é histórica.
 
-Cada shard conserva `floor(teto / totalShards)` de chamadas, entrada cumulativa e
-saída. Em `model.budget_rejected`, `rule=shard_calls`, `shard_input_bytes` ou
+Cada shard protege quatro inferências, três tools e uma parcela igual de 70%
+dos bytes/tokens do perfil. O restante é ponderado; sobra de peers concluídos
+só é liberada após persistência do resultado. Em `model.budget_rejected`,
+`rule=shard_calls`, `shard_input_bytes` ou
 `shard_output_tokens` indica a parcela local; `current/requested/limit` são dessa
 parcela. Os campos `callsCurrent/inputBytesCurrent/outputTokensCurrent` continuam
 os totais globais. Recusa local não grava `stop_reason` global e não impede a

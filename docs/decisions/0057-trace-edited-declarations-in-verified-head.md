@@ -1,12 +1,12 @@
 ---
-id: ADR-0056
+id: ADR-0057
 kind: decision
 status: accepted
 date: 2026-10-08
 owners: [core-team]
 related:
   - 0033-investigate-structural-leads-and-preserve-review-output.md
-  - 0055-preserve-review-evidence-and-schedule-stable-lanes.md
+  - 0056-preserve-review-evidence-and-schedule-stable-lanes.md
 ---
 
 # Rastrear declarações cujo corpo mudou no HEAD verificado

@@ -120,7 +120,7 @@ it("checkpoints only a small manifest and round-trips large review evidence afte
   });
 });
 
-it("reserves one shared tool-call ceiling across shards and eviction", async () => {
+it("protects peer tool calls across retries and eviction", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
@@ -141,18 +141,16 @@ it("reserves one shared tool-call ceiling across shards and eviction", async () 
     "budget-test:start",
   );
   const reservations = await Promise.all(
-    Array.from({ length: 96 }, (_, index) =>
-      ledger.reserveAnalysisToolCall(runId, index % 3, 3),
+    Array.from({ length: 97 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 0, 5),
     ),
   );
-  expect(reservations.filter(Boolean)).toHaveLength(96);
+  expect(reservations.filter(Boolean)).toHaveLength(19);
   await evictDurableObject(ledger);
-  await expect(ledger.reserveAnalysisToolCall(runId, 0, 3)).resolves.toBe(
+  await expect(ledger.reserveAnalysisToolCall(runId, 0, 5)).resolves.toBe(
     false,
   );
-  await expect(ledger.reserveAnalysisToolCall(runId, 2, 3)).resolves.toBe(
-    false,
-  );
+  await expect(ledger.reserveAnalysisToolCall(runId, 4, 5)).resolves.toBe(true);
   await runInDurableObject(ledger, (_object, state) => {
     expect(
       state.storage.sql
@@ -161,7 +159,7 @@ it("reserves one shared tool-call ceiling across shards and eviction", async () 
           runId,
         )
         .one().calls,
-    ).toBe(96);
+    ).toBe(20);
   });
   await runInDurableObject(ledger, (object) => {
     expect(() => object.reserveAnalysisToolCall(runId, -1, 5)).toThrow(
@@ -195,16 +193,13 @@ it("allows the last shard of a 64-part plan to spend the shared budget", async (
       ledger.reserveAnalysisToolCall(runId, 63, 64),
     ),
   );
-  expect(results.filter(Boolean)).toHaveLength(25);
+  expect(results.filter(Boolean)).toHaveLength(12);
   await evictDurableObject(ledger);
-  for (let index = 0; index < 63; index++)
-    await expect(
-      ledger.reserveAnalysisToolCall(runId, index, 64),
-    ).resolves.toBe(true);
-  for (let index = 0; index < 8; index++)
-    await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
-      true,
-    );
+  for (let peer = 0; peer < 63; peer++)
+    for (let call = 0; call < 12; call++)
+      await expect(
+        ledger.reserveAnalysisToolCall(runId, peer, 64),
+      ).resolves.toBe(true);
   await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
     false,
   );
@@ -221,7 +216,7 @@ it("allows the last shard of a 64-part plan to spend the shared budget", async (
   });
 });
 
-it("protects peer tools transactionally even when a dominant shard exhausts the unprotected pool", async () => {
+it("protects peer tools transactionally across dominant reservations and eviction", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
   await ledger.claimRun(
     {
@@ -246,11 +241,11 @@ it("protects peer tools transactionally even when a dominant shard exhausts the 
       ledger.reserveAnalysisToolCall(runId, 0, 9),
     ),
   );
-  expect(dominant.filter(Boolean)).toHaveLength(56);
+  expect(dominant.filter(Boolean)).toHaveLength(10);
   await evictDurableObject(ledger);
   const peers = await Promise.all(
     Array.from({ length: 8 }, async (_, index) => {
-      for (let call = 0; call < 5; call++)
+      for (let call = 0; call < 10; call++)
         expect(await ledger.reserveAnalysisToolCall(runId, index + 1, 9)).toBe(
           true,
         );

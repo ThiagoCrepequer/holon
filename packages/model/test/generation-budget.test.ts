@@ -1,6 +1,7 @@
-import { generateText, streamText } from "ai";
+import { generateText, streamText, tool } from "ai";
 import { MockLanguageModelV3, MockLanguageModelV4 } from "ai/test";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { withGenerationBudget } from "../src/generation-budget.js";
 const response = {
@@ -205,3 +206,39 @@ it("applies the admitted output maximum to the actual provider call", async () =
     expect.objectContaining({ maxOutputTokens: 1024 }),
   );
 });
+
+it.each([false, true])(
+  "reserves differentiated provider output for forced finalization: %s",
+  async (final) => {
+    const doGenerate = vi.fn(async () => response);
+    const reserve = vi.fn(async (request: { outputTokens: number }) => ({
+      accepted: true as const,
+      id: 1,
+      outputTokens: request.outputTokens,
+    }));
+    await generateText({
+      model: withGenerationBudget(new MockLanguageModelV4({ doGenerate }), {
+        reserve,
+        settle: async () => {},
+        outputLimits: { repository: 1000, final: 5000 },
+      }),
+      prompt: "Public fixture",
+      maxOutputTokens: 5000,
+      maxRetries: 0,
+      tools: {
+        think_final_answer: tool({
+          inputSchema: z.object({ summary: z.string() }),
+        }),
+      },
+      toolChoice: final
+        ? { type: "tool", toolName: "think_final_answer" }
+        : "auto",
+    });
+    expect(reserve).toHaveBeenCalledWith(
+      expect.objectContaining({ outputTokens: final ? 5000 : 1000 }),
+    );
+    expect(doGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ maxOutputTokens: final ? 5000 : 1000 }),
+    );
+  },
+);
