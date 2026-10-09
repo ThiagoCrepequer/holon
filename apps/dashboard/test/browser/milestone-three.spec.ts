@@ -289,5 +289,35 @@ for (const locale of ["en", "pt-BR"])
         { exact: false },
       ),
     ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .fill(`alias-${subject + 3}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    await expect(link).toHaveCount(3);
+    const failedId = (await link.last().getAttribute("href"))!.split("/").pop();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId: failedId, outcome: "permanent" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt ? "Entrega de email interrompida" : "Email delivery stopped",
+        { exact: false },
+      ),
+    ).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });

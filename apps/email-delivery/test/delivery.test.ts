@@ -319,6 +319,113 @@ it("DLQ replay remains terminal and logs only a bounded signal", async () => {
   );
   signal.mockRestore();
 });
+it("mixed batch acknowledges only individual durable results and invalid payloads", async () => {
+  const success = await invite();
+  const missing = await createInvitationPersistence(db).create(owner, "team", {
+    operationId: "second",
+    email: "other@example.invalid",
+    locale: "en",
+  });
+  const send = vi.fn(async () => ({ messageId: "synthetic" }));
+  const { sender, ctx } = worker(send, {
+    EMAIL_AUTHORITY: {
+      claim: (input) => authority.claim(input),
+      start: (input) => authority.start(input),
+      record: (input) => {
+        if ((input as { jobId: string }).jobId === missing.id)
+          throw new Error("synthetic persistence outage");
+        return authority.record(input);
+      },
+    },
+  });
+  const messages = createMessageBatch("synthetic-jobs", [
+    {
+      id: "durable",
+      timestamp: new Date(),
+      attempts: 1,
+      body: { jobId: success.id },
+    },
+    {
+      id: "unrecorded",
+      timestamp: new Date(),
+      attempts: 1,
+      body: { jobId: missing.id },
+    },
+    {
+      id: "invalid",
+      timestamp: new Date(),
+      attempts: 1,
+      body: { jobId: "forged", recipient: "synthetic" },
+    },
+  ]);
+  await sender.queue(messages);
+  const result = await getQueueResult(messages, ctx);
+  expect(result.explicitAcks.toSorted()).toEqual(["durable", "invalid"]);
+  expect(result.retryMessages).toEqual([{ msgId: "unrecorded" }]);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(
+    await db
+      .prepare("SELECT outcome FROM email_delivery_attempt WHERE job_id=?")
+      .bind(success.id)
+      .first(),
+  ).toEqual({ outcome: "accepted" });
+  expect(
+    await db
+      .prepare("SELECT outcome FROM email_delivery_attempt WHERE job_id=?")
+      .bind(missing.id)
+      .first(),
+  ).toEqual({ outcome: null });
+});
+it("canceling during provider call and a D1 outage preserve acceptance without another effect", async () => {
+  const i = await invite();
+  let finish!: (value: EmailSendResult) => void;
+  const send = vi.fn(
+    () =>
+      new Promise<EmailSendResult>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let writes = 0;
+  const { sender, ctx } = worker(send, {
+    EMAIL_AUTHORITY: {
+      claim: (input) => authority.claim(input),
+      start: (input) => authority.start(input),
+      record: (input) => {
+        if (++writes === 1) throw new Error("synthetic D1 outage");
+        return authority.record(input);
+      },
+    },
+  });
+  const messages = batch({ jobId: i.id });
+  const pending = sender.queue(messages);
+  await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  await createInvitationPersistence(db).cancel(owner, "team", i.id);
+  finish({ messageId: "synthetic-in-flight" });
+  await pending;
+  expect((await getQueueResult(messages, ctx)).explicitAcks).toEqual([
+    "message",
+  ]);
+  expect(writes).toBe(2);
+  expect(
+    await db
+      .prepare(
+        "SELECT state,last_outcome,attempts FROM invitation_delivery_intent",
+      )
+      .first(),
+  ).toEqual({ state: "canceled", last_outcome: "accepted", attempts: 1 });
+  expect(
+    await db.prepare("SELECT outcome FROM email_delivery_attempt").first(),
+  ).toEqual({ outcome: "accepted" });
+  const replay = batch({ jobId: i.id }, "replay");
+  await sender.queue(replay);
+  expect((await getQueueResult(replay, ctx)).explicitAcks).toEqual(["replay"]);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(
+    await db
+      .prepare("SELECT COUNT(*) n FROM membership WHERE user_id='target'")
+      .first(),
+  ).toEqual({ n: 0 });
+});
 it.each(["en", "pt-BR"])(
   "%s HTML/text escape hostile workspace, links and headers; no tracking",
   (locale) => {

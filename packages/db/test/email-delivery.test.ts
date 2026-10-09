@@ -243,3 +243,52 @@ it("deadline and stale generation cannot authorize an effect or resurrect a job"
   ).toEqual({ state: "failed" });
   expect(await delivery.reservePublication(i.id)).toBeNull();
 });
+it("each retry uses the persisted global attempt's backoff, clamped to the unchanged deadline", async () => {
+  const i = await invitation();
+  const original = await db
+    .prepare("SELECT deadline FROM invitation_delivery_intent")
+    .first<{ deadline: number }>();
+  for (const delay of [60000, 300000, 900000, 3600000]) {
+    const c = (await delivery.claim({ jobId: i.id }))!;
+    await delivery.start(attempt(c));
+    const before = Date.now();
+    await delivery.record({ ...attempt(c), outcome: "transient" });
+    const after = Date.now();
+    const row = await db
+      .prepare(
+        "SELECT retry_at,next_action_at,deadline FROM invitation_delivery_intent",
+      )
+      .first<{ retry_at: number; next_action_at: number; deadline: number }>();
+    expect(row!.deadline).toBe(original!.deadline);
+    expect(row!.next_action_at).toBe(row!.retry_at);
+    expect(row!.retry_at).toBeGreaterThanOrEqual(before + delay);
+    expect(row!.retry_at).toBeLessThanOrEqual(after + delay);
+    expect(await delivery.claim({ jobId: i.id })).toBeNull();
+    // Advance only eligibility in this D1-clock test fixture, never the budget/deadline.
+    await db
+      .prepare(
+        "UPDATE invitation_delivery_intent SET retry_at=0,next_action_at=0",
+      )
+      .run();
+  }
+  const c = (await delivery.claim({ jobId: i.id }))!;
+  await delivery.start(attempt(c));
+  const deadline = Date.now() + 10000;
+  await db
+    .prepare("UPDATE invitation_delivery_intent SET deadline=?")
+    .bind(deadline)
+    .run();
+  await delivery.record({ ...attempt(c), outcome: "unknown" });
+  expect(
+    await db
+      .prepare(
+        "SELECT next_action_at,retry_at,state,attempts FROM invitation_delivery_intent",
+      )
+      .first(),
+  ).toEqual({
+    next_action_at: deadline,
+    retry_at: deadline,
+    state: "failed",
+    attempts: 5,
+  });
+});
