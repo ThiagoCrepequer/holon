@@ -430,7 +430,13 @@ export function createReviewServices(
   ) => {
     const model =
       runtime.createModel?.() ??
-      new ThinkReviewModelReviewer(env, shardIndex, shardCount, wait);
+      new ThinkReviewModelReviewer(
+        env,
+        shardIndex,
+        shardCount,
+        wait,
+        (event, fields) => logger.emit(event, { ...logContext, ...fields }),
+      );
     return {
       model: {
         review: (

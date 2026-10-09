@@ -24,6 +24,21 @@ const output: ModelReviewOutput = {
   ],
   summary: "Null dereference in the consumer.",
 };
+it("grades a predeclared body-edit coordinate without accepting the old line-two anchor", () => {
+  const fixture = { ...positive, findingLine: 37 };
+  expect(gradeLiveReview(fixture, output, 0, null).failures).toContain(
+    "location_mismatch",
+  );
+  const adjusted = {
+    ...output,
+    findings: output.findings.map((finding) => ({
+      ...finding,
+      location: { ...finding.location, line: 37 },
+      evidence: finding.evidence.map((item) => ({ ...item, startLine: 37 })),
+    })),
+  };
+  expect(gradeLiveReview(fixture, adjusted, 0, null).passed).toBe(true);
+});
 
 it("rejects an unrelated accusation at the expected patch location", () => {
   expect(

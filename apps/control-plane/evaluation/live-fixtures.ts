@@ -1,3 +1,17 @@
+export interface LiveReviewFixture {
+  readonly id: string;
+  readonly family: string;
+  readonly positive: boolean;
+  readonly findingLine?: number;
+  readonly prNumber: number;
+  readonly baseProducer: string;
+  readonly headProducer: string;
+  readonly consumer: string;
+  readonly files: Readonly<Record<string, string>>;
+  readonly baseFiles?: Readonly<Record<string, string>>;
+  readonly patch: string;
+}
+
 /** Synthetic repositories only. Labels are checked by executing both snapshots before any paid request. */
 export const liveFixtures = [true, false]
   .flatMap((positive) => [

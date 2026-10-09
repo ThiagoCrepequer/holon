@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+/** The severity contract supplied to both the final-answer schema and review instructions. */
+export const reviewSeverityGuidance = [
+  "Choose severity from demonstrated impact: critical requires security exploitation, serious data loss, or widespread, likely unavailability; high is an important functional regression or contract break with a concrete causal path; medium is a real defect of limited scope or a relevant conditional risk; low is an actionable small-impact improvement, normally summary-only.",
+  "Use the least severe level justified by the inspected operation and reachable impact. Confidence does not increase severity. A runtime exception alone does not demonstrate widespread unavailability.",
+].join("\n");
+
 import { investigationObservationSchema } from "./repository-memory.js";
 import {
   reviewTextLimits,
@@ -270,7 +276,9 @@ export const modelReviewPromptSchema = z.object({
             ),
           startLine: z.number().int().nullable(),
         }),
-        severity: z.enum(["critical", "high", "medium", "low"]),
+        severity: z
+          .enum(["critical", "high", "medium", "low"])
+          .describe(reviewSeverityGuidance),
         suggestion: z
           .string()
           .nullable()

@@ -5,6 +5,7 @@ import type {
   StructuralImpactReport,
 } from "@holon/contracts";
 import type { TrackedFinding } from "@holon/domain";
+import { selectStructuralImpact } from "@holon/domain";
 
 /** One projection shared by preflight and execution; no repository reads or inference. */
 export function buildShardReviewContext(
@@ -53,26 +54,10 @@ export function buildShardReviewContext(
     changedLines: shard.changedLines,
     files: shard.files,
     structuralImpact: structuralImpact
-      ? {
-          ...structuralImpact,
-          changedSymbols: structuralImpact.changedSymbols.filter((signal) =>
-            shard.files.some((file) => file.path === signal.path),
-          ),
-          contractBreaks: structuralImpact.contractBreaks.filter((signal) =>
-            shard.files.some((file) => file.path === signal.path),
-          ),
-          downstreamReferences: structuralImpact.downstreamReferences.filter(
-            (signal) =>
-              shard.files.some(
-                (file) =>
-                  file.path === signal.targetPath ||
-                  file.path === signal.callerPath,
-              ),
-          ),
-          securitySurfaces: structuralImpact.securitySurfaces.filter((signal) =>
-            shard.files.some((file) => file.path === signal.path),
-          ),
-        }
+      ? selectStructuralImpact(
+          structuralImpact,
+          shard.files.map((file) => file.path),
+        )
       : undefined,
     surface: shard.surface,
     truncated: inputTruncated,

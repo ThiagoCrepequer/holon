@@ -14,6 +14,13 @@ hipóteses sobre o modelo. Complementa a
 [benchmark anterior](2026-10-08-review-core-live-benchmark.md). As alterações são
 locais; não houve push, publicação, deploy nem troca de modelo ou rota.
 
+Continuação após o PR #184 em 2026-10-09: o
+[ajuste de cobertura](2026-10-09-review-context-coverage.md) amplia C03 e separa
+omissões globais de perdas da projeção local, compartilha janelas de contrato e
+fornece a política de severidade ao modelo. A tabela abaixo preserva o recorte
+anterior, seus tetos e suas provas; a política vigente está na ADR-0060 e o novo
+relatório conserva as três rodadas pagas, inclusive as reprovadas.
+
 ## Defeitos reproduzidos e corrigidos
 
 | Achado                                         | Causa e consequência                                                                                                                                                                                    | Correção e regressão                                                                                                                                                                                                                                  |

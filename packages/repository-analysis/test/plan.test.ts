@@ -241,6 +241,31 @@ function connectedImpact(): StructuralImpactReport {
     ],
   };
 }
+it.each([false, true])(
+  "keeps global structural inventory gaps partial without degrading every shard (scan=%s)",
+  (scan) => {
+    const impact = {
+      ...connectedImpact(),
+      repositoryScanTruncated: scan,
+      omittedSignals: {
+        changedSymbols: scan ? 0 : 351,
+        contractBreaks: 0,
+        downstreamReferences: 0,
+        securitySurfaces: 0,
+      },
+    };
+    const plan = buildReviewPlan(
+      splitPullRequestDiff(patchFor("src/alone.ts")),
+      { structuralImpact: impact },
+    );
+    expect(plan.scopeStatus).toBe("partial_by_policy");
+    expect(plan.omissionReasons).toContainEqual({
+      code: "structural_inventory",
+      count: scan ? 0 : 351,
+      repositoryScanTruncated: scan,
+    });
+  },
+);
 it("co-locates contracts and consumers with different names using verified structural relationships", () => {
   const files = splitPullRequestDiff(
     ["aaa.ts", "apps/web/src/client.ts", "packages/core/src/api.ts"]
@@ -270,6 +295,23 @@ it("co-locates contracts and consumers with different names using verified struc
     }),
   ).toEqual(plan);
 });
+it("does not schedule redundant contract checks when complete patches share a shard and declarations are outside the diff", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -40 +40 @@\n-return 1;\n+return 2;\n`,
+      )
+      .join(""),
+  );
+  const plan = buildReviewPlan(files, { structuralImpact: connectedImpact() });
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.omissionReasons).toEqual([]);
+  expect(plan.shards).toHaveLength(1);
+  expect(plan.shards[0]!.files.map((file) => file.patch)).toEqual(
+    expect.arrayContaining(files.map((file) => file.patch)),
+  );
+});
 it("adds bounded canonical contract windows when a relationship crosses partitions", () => {
   const files = splitPullRequestDiff(
     ["apps/web/src/client.ts", "packages/core/src/api.ts"]
@@ -296,6 +338,107 @@ it("adds bounded canonical contract windows when a relationship crosses partitio
   expect(plan.totalEligibleLines).toBe(1200);
   expect(plan.scopeStatus).toBe("complete");
 });
+it("pairs the verified body edit with a canonical caller instead of omitting its unchanged import", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -500,100 +500,100 @@\n${"-old\n+new\n".repeat(100)}`,
+      )
+      .join(""),
+  );
+  const impact = connectedImpact();
+  impact.changedSymbols[0]!.patchLine = 540;
+  impact.downstreamReferences.push({
+    ...impact.downstreamReferences[0]!,
+    callerLine: 540,
+  });
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardLines: 150,
+  });
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.omissionReasons).toEqual([]);
+  const checks = plan.shards.filter((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(checks).toHaveLength(1);
+  expect(checks[0]!.changedLines).toContainEqual({
+    path: "packages/core/src/api.ts",
+    line: 540,
+    side: "RIGHT",
+  });
+  expect(checks[0]!.changedLines).toContainEqual({
+    path: "apps/web/src/client.ts",
+    line: 540,
+    side: "RIGHT",
+  });
+});
+it("uses a whole bounded caller patch when its discovery reference is unchanged and outside the diff", () => {
+  const files = splitPullRequestDiff(
+    `diff --git a/packages/core/src/api.ts b/packages/core/src/api.ts\n--- a/packages/core/src/api.ts\n+++ b/packages/core/src/api.ts\n@@ -500,100 +500,100 @@\n${"-old\n+new\n".repeat(100)}` +
+      "diff --git a/apps/web/src/client.ts b/apps/web/src/client.ts\n--- a/apps/web/src/client.ts\n+++ b/apps/web/src/client.ts\n@@ -900 +900 @@\n-old\n+new\n",
+  );
+  const impact = connectedImpact();
+  impact.changedSymbols[0]!.patchLine = 540;
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardLines: 100,
+  });
+  expect(plan.scopeStatus).toBe("complete");
+  const check = plan.shards.find((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(
+    check?.files.find((file) => file.path === "apps/web/src/client.ts")?.patch,
+  ).toBe(files[1]!.patch);
+  expect(check?.changedLines).toContainEqual({
+    path: "apps/web/src/client.ts",
+    line: 900,
+    side: "RIGHT",
+  });
+  expect(check?.changedLines).not.toContainEqual({
+    path: "apps/web/src/client.ts",
+    line: 1,
+    side: "RIGHT",
+  });
+});
+it("shares the same canonical producer window across nine consumers without spending nine contract parts", () => {
+  const target = "packages/core/src/api.ts";
+  const callers = Array.from(
+    { length: 9 },
+    (_, index) => `apps/web/src/client-${index}.ts`,
+  );
+  const files = splitPullRequestDiff(
+    callers.map((path) => patchFor(path)).join("") +
+      `diff --git a/${target} b/${target}\n--- a/${target}\n+++ b/${target}\n@@ -0,0 +1,1200 @@\n${"+export const value = 1;\n".repeat(1200)}`,
+  );
+  const impact = connectedImpact();
+  impact.changedSymbols[0]!.patchLine = 1000;
+  impact.downstreamReferences = callers.map((path) => ({
+    ...impact.downstreamReferences[0]!,
+    callerPath: path,
+  }));
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardLines: 200,
+  });
+  expect(plan.scopeStatus).toBe("complete");
+  expect(plan.omissionReasons).toEqual([]);
+  const checks = plan.shards.filter((shard) =>
+    shard.id.startsWith("contract-check-"),
+  );
+  expect(checks).toHaveLength(1);
+  expect(checks[0]!.files.map((file) => file.path)).toEqual(
+    expect.arrayContaining([target, ...callers]),
+  );
+  expect(checks[0]!.changedLines).toContainEqual({
+    path: target,
+    line: 1000,
+    side: "RIGHT",
+  });
+  expect(checks[0]!.changedLines).toHaveLength(89);
+});
 it("reports contract relationships left unchecked by part or canonical-window limits", () => {
   const files = splitPullRequestDiff(
     ["apps/web/src/client.ts", "packages/core/src/api.ts"]
@@ -311,6 +454,7 @@ it("reports contract relationships left unchecked by part or canonical-window li
   expect(plan.omissionReasons).toContainEqual({
     code: "contract_checks",
     count: 1,
+    reasons: { capacity: 1, missingWindow: 0, evidenceWindows: 0 },
   });
   expect(plan.shards).toHaveLength(2);
   const outside = {
@@ -326,7 +470,34 @@ it("reports contract relationships left unchecked by part or canonical-window li
       maxShardLines: 1,
       maxShards: 2,
     }).omissionReasons,
-  ).toContainEqual({ code: "contract_checks", count: 1 });
+  ).toContainEqual({
+    code: "contract_checks",
+    count: 1,
+    reasons: { capacity: 1, missingWindow: 0, evidenceWindows: 0 },
+  });
+});
+
+it("keeps an unavailable caller window partial and reports its precise reason", () => {
+  const files = splitPullRequestDiff(
+    ["apps/web/src/client.ts", "packages/core/src/api.ts"]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -500,100 +500,100 @@\n${"-old\n+new\n".repeat(100)}`,
+      )
+      .join(""),
+  );
+  const impact = connectedImpact();
+  impact.changedSymbols[0]!.patchLine = 540;
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardLines: 150,
+  });
+  expect(plan.scopeStatus).toBe("partial_by_policy");
+  expect(plan.omissionReasons).toContainEqual({
+    code: "contract_checks",
+    count: 1,
+    reasons: { capacity: 0, missingWindow: 1, evidenceWindows: 0 },
+  });
 });
 
 it.each([19, 24, 50, 64])(

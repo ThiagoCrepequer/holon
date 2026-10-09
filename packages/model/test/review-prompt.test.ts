@@ -34,6 +34,41 @@ const job = reviewJobSchema.parse({
 });
 
 describe("Think review prompt boundary", () => {
+  it("supplies the documented impact criteria instead of leaving severity labels undefined", () => {
+    expect(reviewInstructions).toContain("security exploitation");
+    expect(reviewInstructions).toContain("serious data loss");
+    expect(reviewInstructions).toContain("widespread, likely unavailability");
+    expect(reviewInstructions).toContain("important functional regression");
+    expect(reviewInstructions).toContain(
+      "Confidence does not increase severity",
+    );
+  });
+  it("retains a moderate shard's structural leads within the bounded prompt", () => {
+    const result = buildReviewPromptResult(job, {
+      changedLines: [],
+      files: [],
+      truncated: false,
+      structuralImpact: {
+        changedSymbols: Array.from({ length: 80 }, (_, index) => ({
+          path: "packages/billing/src/authorization-and-account-policy.ts",
+          name: `checkAccountPermission${index}`,
+          line: index + 1,
+          kind: "function" as const,
+          change: "modified" as const,
+          isExported: true,
+        })),
+        contractBreaks: [],
+        downstreamReferences: [],
+        securitySurfaces: [],
+      },
+    });
+    expect(result.truncated).toBe(false);
+    expect(result.omittedSections).toEqual([]);
+    expect(result.prompt).toContain("checkAccountPermission79");
+    expect(new TextEncoder().encode(result.prompt).byteLength).toBeLessThan(
+      200_000,
+    );
+  });
   it("presents exact producer excerpts with coordinates separately from downstream leads", () => {
     const result = buildReviewPromptResult(job, {
       changedLines: [{ path: "src/value.ts", line: 2, side: "RIGHT" }],

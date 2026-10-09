@@ -1076,6 +1076,21 @@ describe("check run contracts", () => {
     } as const;
 
     expect(reviewPlanSchema.parse(plan)).toEqual(plan);
+    const partial = {
+      ...plan,
+      scopeStatus: "partial_by_policy",
+      omissionReasons: [{ code: "structural_context", count: 1, bytes: 24000 }],
+    };
+    expect(reviewPlanSchema.parse(partial)).toEqual(partial);
+    for (const invalid of [
+      { code: "structural_context", count: 0, bytes: 24000 },
+      { code: "structural_context", count: 1, bytes: 0 },
+      { code: "structural_context", count: 1, bytes: 24000, unknown: true },
+    ])
+      expect(
+        reviewPlanSchema.safeParse({ ...partial, omissionReasons: [invalid] })
+          .success,
+      ).toBe(false);
 
     const shardResult = {
       findings: [],

@@ -1,33 +1,42 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
 
 import { liveCodeRegressionFixtures } from "../live-code-regression-fixtures.js";
 import { liveConfirmationFixtures } from "../live-confirmation-fixtures.js";
+import { liveCoverageRegressionFixtures } from "../live-coverage-regression-fixtures.js";
 import { validateFixtureOracle } from "../live-fixture-executor.mjs";
 import { validateFixtureTypecheck } from "../live-fixture-typecheck.mjs";
-import { liveFixtures } from "../live-fixtures.js";
+import { liveFixtures, type LiveReviewFixture } from "../live-fixtures.js";
 import { liveHoldoutFixtures } from "../live-holdout-fixtures.js";
 
-for (const fixture of [
+const fixtures: readonly LiveReviewFixture[] = [
   ...liveFixtures,
   ...liveConfirmationFixtures,
   ...liveCodeRegressionFixtures,
+  ...liveCoverageRegressionFixtures,
   ...liveHoldoutFixtures,
-]) {
+];
+for (const fixture of fixtures) {
   await test(`the fixture ${fixture.id} compiles and matches its executable label`, async () => {
     const root = await mkdtemp(resolve(tmpdir(), "holon-oracle-"));
     try {
       for (const snapshot of ["base", "head"]) {
         const directory = resolve(root, snapshot);
         await mkdir(resolve(directory, "src"), { recursive: true });
-        const files = {
-          ...fixture.files,
-          "src/producer.ts":
-            snapshot === "base" ? fixture.baseProducer : fixture.headProducer,
-        };
+        const files =
+          snapshot === "base" && fixture.baseFiles
+            ? fixture.baseFiles
+            : {
+                ...fixture.files,
+                "src/producer.ts":
+                  snapshot === "base"
+                    ? fixture.baseProducer
+                    : fixture.headProducer,
+              };
         for (const [path, source] of Object.entries(files))
           await writeFile(resolve(directory, path), source);
         assert.deepEqual(await validateFixtureTypecheck(directory), {
@@ -41,6 +50,33 @@ for (const fixture of [
           { executed: true, failed: snapshot === "head" && fixture.positive },
         );
       }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const fixture of liveCoverageRegressionFixtures) {
+  await test(`the canonical patch for ${fixture.id} transforms the declared base into the exact head`, async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "holon-canonical-oracle-"));
+    try {
+      await mkdir(resolve(root, "src"));
+      for (const [path, content] of Object.entries(fixture.baseFiles))
+        await writeFile(resolve(root, path), content);
+      const patch = resolve(root, "fixture.patch");
+      await writeFile(patch, fixture.patch);
+      const options = {
+        cwd: root,
+        env: {
+          ...process.env,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+        },
+        timeout: 5000,
+      };
+      execFileSync("git", ["apply", "--unidiff-zero", "--", patch], options);
+      for (const [path, content] of Object.entries(fixture.files))
+        assert.equal(await readFile(resolve(root, path), "utf8"), content);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

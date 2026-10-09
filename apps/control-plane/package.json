@@ -31,6 +31,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@holon/test-kit": "workspace:*",
     "@types/node": "catalog:",
     "ai": "catalog:",
     "tsx": "catalog:",

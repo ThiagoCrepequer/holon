@@ -16,6 +16,7 @@ export * from "./configuration-scope.js";
 export { reviewText } from "./review-language.js";
 
 export * from "./review-messages.js";
+export * from "./structural-context.js";
 
 export type { ReviewLanguage } from "./review-language.js";
 export * from "./finding-question.js";

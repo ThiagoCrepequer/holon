@@ -128,6 +128,18 @@ export const reviewMessages = {
       "{count} verificações de contrato entre partes não couberam nas janelas canônicas ou nos limites da revisão; essas relações permanecem sem verificação.",
     es: "{count} verificaciones de contrato entre partes no caben en las ventanas canónicas o límites; estas relaciones quedan sin verificar.",
   },
+  structural_inventory: {
+    en: "Structural inventory is incomplete: {count} signal(s) omitted; repository scan partial: {repositoryScanTruncated}. This is distinct from local prompt truncation.",
+    "pt-BR":
+      "Inventário estrutural incompleto: {count} sinais omitidos; varredura parcial: {repositoryScanTruncated}. Essa lacuna é distinta do truncamento do prompt local.",
+    es: "Inventario estructural incompleto: {count} señales omitidas; exploración parcial: {repositoryScanTruncated}. Esta limitación es distinta del truncamiento del prompt local.",
+  },
+  structural_context: {
+    en: "Structural context in {count} shard(s) exceeds the {bytes}-byte budget after bounded packing; these projections remain incomplete.",
+    "pt-BR":
+      "O contexto estrutural de {count} parte(s) excede o teto de {bytes} bytes após o agrupamento limitado; essas projeções permanecem incompletas.",
+    es: "El contexto estructural de {count} parte(s) supera el límite de {bytes} bytes después de la agrupación limitada; estas proyecciones siguen incompletas.",
+  },
   executor_budget: {
     en: "Eligible patches or context sections were omitted by the executor budget.",
     "pt-BR":

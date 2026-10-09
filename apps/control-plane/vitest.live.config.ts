@@ -24,8 +24,17 @@ export default defineConfig({
           LIVE_PARTITION: process.env.HOLON_LIVE_PARTITION ?? "development",
           LIVE_QUALITY_CHECK: process.env.HOLON_LIVE_QUALITY_CHECK === "true",
         },
-        serviceBindings: { REPOSITORY_EXECUTOR: "live-fixture-executor" },
+        serviceBindings: {
+          REPOSITORY_EXECUTOR: "live-fixture-executor",
+          DASHBOARD_ACCESS_EVENTS: "live-unused-dashboard",
+        },
         workers: [
+          {
+            name: "live-unused-dashboard",
+            compatibilityDate: "2026-08-29",
+            modules: true,
+            script: `import { WorkerEntrypoint } from "cloudflare:workers"; export default class extends WorkerEntrypoint { applyEvent() { throw new Error("Unexpected dashboard operation in review benchmark"); } }`,
+          },
           {
             name: "live-fixture-executor",
             compatibilityDate: "2026-08-29",
