@@ -8,7 +8,6 @@ import {
   workspaceAccessSchema,
   deliveryWakeSchema,
   deliveryWakeResultSchema,
-  reviewPageSchema,
   workspaceDtoSchema,
   workspaceMembershipDtoSchema,
   createTeamWorkspaceInputSchema,
@@ -230,39 +229,4 @@ it("accepts only narrow DTOs, opaque IDs and documented errors", () => {
   }
   expect(authEnabledSchema.safeParse("yes").success).toBe(false);
   expect(authEnabledSchema.safeParse(true).success).toBe(false);
-});
-
-it("review pages contain bounded metadata without credential or ORM leakage", () => {
-  const item = {
-    runId: "synthetic-run",
-    repositoryId: 123,
-    pullRequestNumber: 1,
-    state: "running",
-    updatedAt: "2030-01-01T00:00:00Z",
-  };
-  expect(reviewPageSchema.parse({ items: [item], nextCursor: null })).toEqual({
-    items: [item],
-    nextCursor: null,
-  });
-  for (const invalid of [
-    { ...item, repositoryId: 0 },
-    { ...item, runId: "../private" },
-    { ...item, state: "unknown" },
-    { ...item, token: "secret" },
-    { ...item, updatedAt: "yesterday" },
-  ])
-    expect(
-      reviewPageSchema.safeParse({ items: [invalid], nextCursor: null })
-        .success,
-    ).toBe(false);
-  expect(
-    reviewPageSchema.safeParse({
-      items: Array.from({ length: 51 }, () => item),
-      nextCursor: null,
-    }).success,
-  ).toBe(false);
-  expect(
-    reviewPageSchema.safeParse({ items: [], nextCursor: "x".repeat(513) })
-      .success,
-  ).toBe(false);
 });

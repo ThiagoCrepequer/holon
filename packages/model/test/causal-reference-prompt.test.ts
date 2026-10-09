@@ -13,6 +13,9 @@ const job = reviewJobSchema.parse({
     installationId: 1,
     receivedAt: "2026-10-08T00:00:00Z",
     pullRequest: {
+      title: "Synthetic review",
+      author: "synthetic",
+      state: "open",
       number: 1,
       headSha: "a".repeat(40),
       baseSha: "b".repeat(40),

@@ -3,7 +3,8 @@ import {
   dispatchFollowUpMessages,
   processFollowUp,
 } from "./ingress/follow-up-queue.js";
-import { dispatchReviewMessages } from "./ingress/queue-consumer.js";
+import { dispatchProjectedReviewMessages } from "./ingress/review-projection-ingress.js";
+export { DashboardReviewReader } from "./dashboard-read-entrypoint.js";
 import { createWebhookApp } from "./ingress/webhook-handler.js";
 
 export { ReviewLedgerObject } from "./ledger/ledger-object.js";
@@ -46,7 +47,7 @@ export default {
     );
     await Promise.all([
       dispatchDashboardAccessMessages(accessEvents, env),
-      dispatchReviewMessages(reviewMessages, env.REVIEW_WORKFLOW),
+      dispatchProjectedReviewMessages(reviewMessages, env),
       dispatchFollowUpMessages(followUps, (message) =>
         processFollowUp(env, message),
       ),

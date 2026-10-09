@@ -98,6 +98,11 @@
   ],
   "services": [
     {
+      "binding": "REVIEW_PROJECTION",
+      "service": "holon-dashboard",
+      "entrypoint": "ReviewProjectionWriter",
+    },
+    {
       "binding": "DASHBOARD_ACCESS_EVENTS",
       "service": "holon-dashboard",
       "entrypoint": "GitHubAccessEvents",

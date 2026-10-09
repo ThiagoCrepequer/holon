@@ -1,3 +1,6 @@
+import type { PrivateReviewCorePort } from "@holon/contracts/dashboard-reviews";
+import { createProjectionPersistence } from "@holon/db/projection/server";
+export { ReviewProjectionWriter } from "./review-projection-writer.js";
 export { EmailDeliveryAuthority } from "./email-delivery-authority.js";
 import type { EmailDeliveryPort } from "@holon/application/dashboard-ports";
 
@@ -37,6 +40,7 @@ import {
 } from "../app/server/http-security.server.js";
 
 export interface DashboardWorkerBindings {
+  readonly REVIEW_CORE?: PrivateReviewCorePort | undefined;
   readonly EMAIL_DELIVERY?: EmailDeliveryPort | undefined;
   readonly APP_ORIGIN?: string | undefined;
   readonly AUTH_ENVIRONMENT?: string | undefined;
@@ -199,6 +203,11 @@ export default {
       return await handle(request, appOrigin, {
         authService,
         tenancyPersistence,
+        reviewCore: env.REVIEW_CORE,
+        reviewProjection:
+          env.PROJECTION_DB && authSecret
+            ? createProjectionPersistence(env.PROJECTION_DB, authSecret)
+            : undefined,
         collaboration:
           shouldCreateAuth && env.IDENTITY_DB && env.GITHUB_APP_ID
             ? createWorkspaceCollaboration(

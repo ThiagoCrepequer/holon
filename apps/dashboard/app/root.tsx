@@ -1,4 +1,6 @@
 import { I18nProvider } from "@lingui/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { useMemo } from "react";
 import {
   data as routeData,
@@ -14,6 +16,12 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import {
+  createReviewQueryClient,
+  reviewClient,
+  bindReviewIdentity,
+  reviewIdentity,
+} from "./features/reviews/public.js";
 import { translator } from "./i18n/catalogs.js";
 import { resolveLocale } from "./i18n/locale.js";
 import { loadMessages } from "./i18n/messages.server.js";
@@ -56,13 +64,24 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 export default function Root() {
   const data = useLoaderData<typeof loader>();
+  if (typeof window !== "undefined")
+    bindReviewIdentity(
+      data.viewer.status === "authenticated"
+        ? reviewIdentity(data.viewer.user.id, data.viewer.sessionId)
+        : null,
+    );
+  const [queryClient] = useState(() =>
+    typeof window === "undefined" ? createReviewQueryClient() : reviewClient(),
+  );
   const i18n = useMemo(
     () => translator(data.locale, data.messages),
     [data.locale, data.messages],
   );
   return (
     <I18nProvider i18n={i18n}>
-      <Outlet />
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+      </QueryClientProvider>
     </I18nProvider>
   );
 }

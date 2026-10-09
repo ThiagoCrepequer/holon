@@ -28,6 +28,10 @@ const validPayload = {
   pull_request: {
     base: { sha: "b".repeat(40) },
     head: { sha: "a".repeat(40) },
+    title: "Synthetic pull request",
+    user: { login: "synthetic" },
+    state: "open",
+    merged: false,
     updated_at: "2026-08-29T12:00:00Z",
   },
   repository: {
@@ -132,7 +136,7 @@ describe("GitHub webhook HTTP boundary", () => {
 
   it("accepts but ignores unsupported pull request actions", async () => {
     const result = await request(
-      JSON.stringify({ ...validPayload, action: "closed" }),
+      JSON.stringify({ ...validPayload, action: "labeled" }),
     );
     expect(result.response.status).toBe(202);
     expect(result.sent).toHaveLength(0);

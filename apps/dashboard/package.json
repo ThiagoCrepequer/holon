@@ -9,12 +9,13 @@
     "typecheck": "wrangler types --check && pnpm i18n:check && react-router typegen && tsc --noEmit",
     "test": "pnpm i18n:check && vitest run --config vitest.config.ts && pnpm test:workers && pnpm test:browser",
     "test:coverage": "pnpm i18n:check && vitest run --config vitest.config.ts --coverage && pnpm test:coverage:workers && pnpm test:browser",
-    "test:browser": "pnpm build && playwright test && playwright test --config playwright.auth.config.ts",
+    "test:browser": "pnpm build && pnpm build:test-core && playwright test && playwright test --config playwright.auth.config.ts",
     "serve:test": "wrangler dev --config build/server/wrangler.json --local --port 8794 --ip 127.0.0.1",
     "i18n:extract": "lingui extract --clean --workers 1",
     "i18n:check": "lingui check sync && lingui check missing --mode catalog && lingui compile --strict --typescript --workers 1 && node scripts/check-i18n-gate.mjs",
     "test:workers": "vitest run --config vitest.worker.config.ts",
-    "test:coverage:workers": "vitest run --config vitest.worker.config.ts --coverage"
+    "test:coverage:workers": "vitest run --config vitest.worker.config.ts --coverage",
+    "build:test-core": "wrangler deploy --dry-run --config ../control-plane/test/support/core-read.wrangler.jsonc --outdir ../../../dashboard/build/test-core"
   },
   "dependencies": {
     "@holon/application": "workspace:*",
@@ -24,6 +25,7 @@
     "@holon/ui": "workspace:*",
     "@lingui/core": "6.9.0",
     "@lingui/react": "6.9.0",
+    "@tanstack/react-query": "5.104.1",
     "hono": "catalog:",
     "react": "19.3.0",
     "react-dom": "19.3.0",

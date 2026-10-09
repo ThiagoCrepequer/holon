@@ -6,6 +6,7 @@ export default defineConfig({
     "auth.spec.ts",
     "milestone-two.spec.ts",
     "milestone-three.spec.ts",
+    "milestone-five.spec.ts",
   ],
   workers: 1,
   retries: 0,

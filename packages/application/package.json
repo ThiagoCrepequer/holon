@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./dashboard-ports": "./src/dashboard-ports.ts",
     "./preferences-port": "./src/preferences-port.ts",
-    "./collaboration-ports": "./src/collaboration-ports.ts"
+    "./collaboration-ports": "./src/collaboration-ports.ts",
+    "./private-review-reads": "./src/private-review-reads.ts"
   },
   "scripts": {
     "test": "vitest run --config ../../vitest.config.ts --root .",

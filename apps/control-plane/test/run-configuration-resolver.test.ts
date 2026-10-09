@@ -16,6 +16,9 @@ function job(baseSha = "b".repeat(40)) {
       event: "pull_request",
       installationId: 99,
       pullRequest: {
+        title: "Synthetic review",
+        author: "synthetic",
+        state: "open",
         baseSha,
         headSha: "a".repeat(40),
         number: 7,

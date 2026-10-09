@@ -22,6 +22,9 @@ const job = reviewJobSchema.parse({
     deliveryId: "github:identification",
     installationId: 99,
     pullRequest: {
+      title: "Synthetic review",
+      author: "synthetic",
+      state: "open",
       baseSha: base,
       headSha: sha,
       number: 7,

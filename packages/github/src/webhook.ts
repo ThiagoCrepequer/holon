@@ -58,6 +58,7 @@ export function mapPullRequestWebhook(
   const root = record(payload, "payload");
   const installation = record(root.installation, "installation");
   const pullRequest = record(root.pull_request, "pull_request");
+  const author = record(pullRequest.user, "pull_request.user");
   const base = record(pullRequest.base, "pull_request.base");
   const head = record(pullRequest.head, "pull_request.head");
   const repository = record(root.repository, "repository");
@@ -72,6 +73,9 @@ export function mapPullRequestWebhook(
       baseSha: base.sha,
       headSha: head.sha,
       number: root.number,
+      title: pullRequest.title,
+      author: author.login,
+      state: pullRequest.merged === true ? "merged" : pullRequest.state,
       updatedAt: pullRequest.updated_at,
     },
     receivedAt,

@@ -19,6 +19,9 @@ const job = reviewJobSchema.parse({
     event: "pull_request",
     installationId: 99,
     pullRequest: {
+      title: "Synthetic review",
+      author: "synthetic",
+      state: "open",
       baseSha: "b".repeat(40),
       headSha: "a".repeat(40),
       number: 7,

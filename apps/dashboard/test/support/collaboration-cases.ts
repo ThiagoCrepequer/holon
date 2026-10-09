@@ -104,10 +104,16 @@ export function collaborationCases(database: () => D1Database) {
     expect(await service.authorizeReviews(actor, "team")).toEqual({
       userId: "actor",
       workspaceId: "team",
-      repositoryIds: [901, 902],
+      repositories: [
+        { installationId: 77, repositoryId: 901 },
+        { installationId: 77, repositoryId: 902 },
+      ],
     });
     expect(await service.authorizeReviews(actor, "team")).toMatchObject({
-      repositoryIds: [901, 902],
+      repositories: [
+        { installationId: 77, repositoryId: 901 },
+        { installationId: 77, repositoryId: 902 },
+      ],
     });
     expect(github.repositories).toHaveBeenCalledTimes(1);
     await service.unlinkInstallation(
@@ -116,7 +122,7 @@ export function collaborationCases(database: () => D1Database) {
       await confirmed("unlink", "unlink"),
     );
     expect(
-      (await service.authorizeReviews(actor, "team")).repositoryIds,
+      (await service.authorizeReviews(actor, "team")).repositories,
     ).toEqual([]);
   });
   it("records/cancels invitation and verifies recipient before acceptance", async () => {
@@ -153,10 +159,10 @@ export function collaborationCases(database: () => D1Database) {
       repositoryIds: [],
     });
     expect(
-      (await service.authorizeReviews(actor, "team")).repositoryIds,
+      (await service.authorizeReviews(actor, "team")).repositories,
     ).toEqual([]);
     expect(
-      (await service.authorizeReviews(actor, "team")).repositoryIds,
+      (await service.authorizeReviews(actor, "team")).repositories,
     ).toEqual([]);
     expect(github.repositories).toHaveBeenCalledTimes(1);
     await database().prepare("DELETE FROM github_grant_cache").run();

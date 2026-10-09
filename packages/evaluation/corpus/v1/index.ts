@@ -10,6 +10,9 @@ function createJob(headSha: string, pullRequestNumber: number) {
       event: "pull_request" as const,
       installationId: 1,
       pullRequest: {
+        title: "Synthetic review",
+        author: "synthetic",
+        state: "open",
         baseSha,
         headSha,
         number: pullRequestNumber,

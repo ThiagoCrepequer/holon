@@ -1,0 +1,14 @@
+{
+  "name": "core-read-test",
+  "main": "core-read-worker.ts",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "REVIEW_LEDGERS", "class_name": "ReviewLedgerObject" },
+    ],
+  },
+  "migrations": [
+    { "tag": "test-core", "new_sqlite_classes": ["ReviewLedgerObject"] },
+  ],
+}

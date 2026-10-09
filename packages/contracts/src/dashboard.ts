@@ -1,4 +1,3 @@
-import { runStates } from "@holon/domain";
 import { z } from "zod";
 
 // Disable JIT compilation to satisfy strict CSP without 'unsafe-eval'
@@ -205,18 +204,3 @@ export type AuthEnabled = z.infer<typeof authEnabledSchema>;
 export type GitHubAppAuthConfig = z.infer<typeof githubAppAuthConfigSchema>;
 export type DeliveryWake = z.infer<typeof deliveryWakeSchema>;
 export type DeliveryWakeResult = z.infer<typeof deliveryWakeResultSchema>;
-
-// Metadata only. The read adapter must receive a server-authorized repository scope.
-export const reviewSummarySchema = z.strictObject({
-  runId: dashboardIdSchema,
-  repositoryId: z.number().int().positive().safe(),
-  pullRequestNumber: z.number().int().positive().safe(),
-  state: z.enum(runStates),
-  updatedAt: z.iso.datetime(),
-});
-export const reviewPageSchema = z.strictObject({
-  items: z.array(reviewSummarySchema).max(50),
-  nextCursor: z.string().min(1).max(512).nullable(),
-});
-export type ReviewSummary = z.infer<typeof reviewSummarySchema>;
-export type ReviewPage = z.infer<typeof reviewPageSchema>;
