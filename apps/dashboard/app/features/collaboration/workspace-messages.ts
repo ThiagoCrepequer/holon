@@ -62,6 +62,31 @@ export function workspaceMessages(i18n: I18n) {
       message:
         "An invitation records a delivery intention. It does not confirm email delivery. Canceling stops future sends; a message already in flight may still arrive.",
     }),
+    intent_recorded: i18n._({
+      id: "delivery.intent",
+      message: "Email scheduled",
+    }),
+    provider_accepted: i18n._({
+      id: "delivery.accepted",
+      message: "Accepted by email provider; inbox delivery unconfirmed",
+    }),
+    failed: i18n._({
+      id: "delivery.failed",
+      message: "Email delivery stopped",
+    }),
+    result_unknown: i18n._({
+      id: "delivery.unknown",
+      message: "Email result unknown; a limited retry may send a duplicate",
+    }),
+    delivery_canceled: i18n._({
+      id: "delivery.canceled",
+      message: "Future email attempts stopped",
+    }),
+    duplicateNotice: i18n._({
+      id: "delivery.duplicate",
+      message:
+        "Limited retries may send the same invitation more than once. Provider acceptance does not confirm inbox delivery.",
+    }),
     privacy: i18n._({
       id: "collaboration.privacy",
       message:

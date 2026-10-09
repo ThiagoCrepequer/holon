@@ -197,3 +197,97 @@ test("Portuguese controls are accessible at 320px and scanners cannot accept or 
   await page.getByRole("button", { name: "Cancelar convite" }).click();
   await expect(page.getByRole("listitem")).toContainText("Cancelado");
 });
+
+for (const locale of ["en", "pt-BR"])
+  test(`email status distinguishes provider acceptance and unknown result in ${locale}`, async ({
+    page,
+  }, info) => {
+    const subject =
+      82001 +
+      ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
+      (locale === "en" ? 0 : 100);
+    await signIn(page, subject, locale);
+    await createTeam(page, "Synthetic delivery", locale === "pt-BR");
+    const pt = locale === "pt-BR";
+    await expect(
+      page.getByText(
+        pt
+          ? "Tentativas limitadas podem enviar o mesmo convite mais de uma vez. A aceitação pelo provedor não confirma a entrega na caixa de entrada."
+          : "Limited retries may send the same invitation more than once. Provider acceptance does not confirm inbox delivery.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .fill(`alias-${subject + 1}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    const link = page.locator('a[href^="/invitations/"]');
+    await expect(link).toHaveCount(1);
+    const jobId = (await link.getAttribute("href"))!.split("/").pop();
+    await expect(
+      page.getByText(pt ? "Email agendado" : "Email scheduled", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId, outcome: "accepted" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt
+          ? "Aceito pelo provedor de email; entrega na caixa de entrada não confirmada"
+          : "Accepted by email provider; inbox delivery unconfirmed",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .fill(`alias-${subject + 2}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    await expect(link).toHaveCount(2);
+    const unknownId = (await link.last().getAttribute("href"))!
+      .split("/")
+      .pop();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId: unknownId, outcome: "unknown" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt
+          ? "Resultado do email desconhecido; uma tentativa limitada pode enviar uma duplicata"
+          : "Email result unknown; a limited retry may send a duplicate",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });

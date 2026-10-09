@@ -541,3 +541,10 @@ e [plugins públicos Better Auth](https://better-auth.com/docs/concepts/plugins)
 REST usa a revisão externa `2026-03-10`; versão externa não é versão de contrato
 Holon. Revogação no GitHub e commit D1 não formam transação distribuída; cache
 limitado/eventos reduzem a janela sem prometer atomicidade externa.
+
+## Atualização de código de Dashboard 4 — 2026-10-09
+
+O código agora implementa Queue/DLQ, provider, RPC de entrega e vigília. As tabelas
+de deploy acima são snapshots datados e não demonstram que esses artefatos
+foram publicados. Os efeitos continuam desabilitados no manifest; ativação,
+recuperação e gates da conta constam no [runbook de email](dashboard-email-delivery.md).

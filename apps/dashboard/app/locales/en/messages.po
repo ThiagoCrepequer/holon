@@ -21,6 +21,11 @@ msgstr "Accepted"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.accepted"
+msgstr "Accepted by email provider; inbox delivery unconfirmed"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.denied"
 msgstr "Access denied. Reload your workspaces."
 
@@ -106,8 +111,28 @@ msgstr "Dark"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.failed"
+msgstr "Email delivery stopped"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.unknown"
+msgstr "Email result unknown; a limited retry may send a duplicate"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.intent"
+msgstr "Email scheduled"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.expired"
 msgstr "Expired"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.canceled"
+msgstr "Future email attempts stopped"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -133,6 +158,11 @@ msgstr "Language"
 #: app/features/preferences/preferences.tsx
 msgid "theme.light"
 msgstr "Light"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.duplicate"
+msgstr "Limited retries may send the same invitation more than once. Provider acceptance does not confirm inbox delivery."
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx

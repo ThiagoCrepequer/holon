@@ -21,6 +21,11 @@ msgstr "Aceito"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.accepted"
+msgstr "Aceito pelo provedor de email; entrega na caixa de entrada não confirmada"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.denied"
 msgstr "Acesso negado. Recarregue seus workspaces."
 
@@ -106,8 +111,28 @@ msgstr "Escuro"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.failed"
+msgstr "Entrega de email interrompida"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.unknown"
+msgstr "Resultado do email desconhecido; uma tentativa limitada pode enviar uma duplicata"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.intent"
+msgstr "Email agendado"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.expired"
 msgstr "Expirado"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.canceled"
+msgstr "Próximas tentativas de email interrompidas"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -133,6 +158,11 @@ msgstr "Idioma"
 #: app/features/preferences/preferences.tsx
 msgid "theme.light"
 msgstr "Claro"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.duplicate"
+msgstr "Tentativas limitadas podem enviar o mesmo convite mais de uma vez. A aceitação pelo provedor não confirma a entrega na caixa de entrada."
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx

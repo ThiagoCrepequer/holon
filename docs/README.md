@@ -131,3 +131,5 @@ donas, com limites entre prova local e validação remota.
 Os [resultados M3](research/2026-10-08-dashboard-milestone-three-results.md)
 rastreiam #145–#149: credenciais/refresh, dupla autoridade GitHub, grants e
 convites atômicos por alvo, com provas Workerd/D1/browser e limites remotos.
+
+- [Evidência de Dashboard 4](planning/dashboard-milestone-four-evidence.md): critérios e limites locais de entrega recuperável.

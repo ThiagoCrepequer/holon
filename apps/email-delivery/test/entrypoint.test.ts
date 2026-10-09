@@ -12,23 +12,27 @@ it("has no public send or status endpoint", async () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   }
 });
-it("validates its real private RPC without claiming delivery during bootstrap", async () => {
-  const delivery = (env as { DELIVERY: Service<EmailDelivery> }).DELIVERY;
+it("validates its real private RPC and publishes only an opaque reference", async () => {
+  const delivery = (env as unknown as { DELIVERY: Service<EmailDelivery> })
+    .DELIVERY;
   for (const input of [
     null,
     {},
     { operationId: "valid", token: "secret" },
     { operationId: "../bad" },
-  ])
-    await expect(Promise.resolve(delivery.wake(input))).rejects.toThrow(
-      "invalid_request",
-    );
+  ]) {
+    using rejected = delivery.wake(input);
+    await expect(Promise.resolve(rejected)).rejects.toThrow("invalid_request");
+  }
   using result = await delivery.wake({ operationId: "synthetic-operation" });
-  expect(result.status).toBe("unavailable");
+  expect(result.status).toBe("accepted");
 });
 
 it("covers contract validation directly while RPC proves the independently built Worker", async () => {
-  const entrypoint = new EmailDelivery(createExecutionContext(), env);
+  const entrypoint = new EmailDelivery(
+    createExecutionContext(),
+    env as unknown as ConstructorParameters<typeof EmailDelivery>[1],
+  );
   await expect(entrypoint.wake(null)).rejects.toThrow("invalid_request");
   expect(await entrypoint.wake({ operationId: "synthetic-operation" })).toEqual(
     { status: "unavailable" },
