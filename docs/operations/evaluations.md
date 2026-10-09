@@ -178,11 +178,24 @@ semântica; ganhos de precisão precisam de inspeção independente. Mudanças d
 fixtures/graders exigem novos resultados, preservando o histórico. Consulte a
 [continuação de código](../research/2026-10-09-review-core-code-follow-up.md).
 
+`--coverage-regression` é outra partição exclusiva, exige `--quality-check` e
+`--structural-context` e testa 131 símbolos, declaração fora do hunk e consumidor
+cujo uso está fora do diff. Executa planejamento e projeção reais antes da revisão;
+exige uma parte completa sem omissões. Seus tetos são 14 requests, 600 kB de
+entrada, 30.000 tokens reservados de saída, 45 s por request e quatro minutos.
+Base/head passam compilação estrita, oracle e aplicação do patch para comprovar
+o HEAD exato. O controle negativo tem guarda para `null`. O grader conserva os
+critérios de severidade; o prompt e o schema fornecem a política de impacto do
+Holon. O [relatório de cobertura](../research/2026-10-09-review-context-coverage.md)
+preserva também as rodadas reprovadas, inclusive a primeira com teto de 250 kB.
+
 O teto acumulado é US$ 0,50, incluindo rodadas anteriores. O CLI confere
 deployment/modelo/preços de endpoints, reserva custos antes de chamar e usa lock
 e checkpoint atômico em `artifacts/evaluation/live-spend.json`. Não apague esse
 ledger para repetir testes. Ausência local recupera o snapshot versionado em
-`docs/research/experiments/2026-10-08-live-review/campaign-spend.json`. Custo
+`docs/research/experiments/2026-10-09-review-context-coverage/campaign-spend.json`.
+Esse seed acrescenta os novos gastos; o seed e o arquivo histórico de 2026-10-08
+continuam intactos para reconciliação dos resultados originais. Custo
 desconhecido mantém reserva integral; margem/duas tentativas não garantem fatura
 interna do provider. Falha HTTP abre o circuito e impede novos requests pagos
 na mesma invocação. Um lock órfão após interrupção forçada requer conferir que

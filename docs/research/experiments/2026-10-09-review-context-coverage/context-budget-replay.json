@@ -1,0 +1,209 @@
+{
+  "recordedAt": "2026-10-09T20:44:23.559Z",
+  "baseSha": "929ed5b8eaed671f7c6d5da3e8cdb1a117ba5ce0",
+  "headSha": "0dcf243be6f8f1a6c8135b01e7285c5f247bce56",
+  "beforeEngineCommit": "0dcf243be6f8f1a6c8135b01e7285c5f247bce56",
+  "sourceDigests": {
+    "packages/domain/src/structural-context.ts": "53fc26efb35cad5ac1042fc51082ddb7f3d399a513594c5b3aa7753dc173de96",
+    "packages/domain/src/index.ts": "905d613882ce33590f856c5a1d5a7fd0a8c48f578fff675cf0a8f4d7f94e9a45",
+    "packages/domain/src/review-messages.ts": "9bf5c8d9ecdd6564f09b3f52ca836278c7370b061a4589d1a73999237f69de17",
+    "packages/repository-analysis/src/plan.ts": "09d6b139bd6a8c2915f9ab46d163e7cd3b0a285c22c2e222a81c1e2dc14a06cf",
+    "packages/repository-analysis/src/contract-checks.ts": "4713684a0107c8ec9ca8863c4925bbb32edcd43e7f0c32b5becb0b0944f35f07",
+    "packages/model/src/reviewer.ts": "3b06c94c30eb67252294fe19f0b6a968f7f3f84b145890689b8d7b7f7f2a350c",
+    "packages/model/src/context-projection.ts": "a58da5554767d11e51c5fbc3e7a7472504afeb2fc8acc43f18a38cc02729b541",
+    "apps/control-plane/src/review/review-shard-context.ts": "b75c9c726322e19b889a0b0e9b6b2fd6da5b6a407b1df2cde5c49bc38c39d679",
+    "packages/contracts/src/review-plan.ts": "6a4c9fe9f36abf6d82c025d90b2114bdd755e87dc2239935d809381fbf1d438f"
+  },
+  "replayScriptDigest": "0e91bfa7713ba3e688706df6b52a98db228fb2bc3b06125d9c64849153f02520",
+  "before": {
+    "scope": "Offline exact-SHA replay using changed modules only; not reproduction of the full production inventory.",
+    "files": 33,
+    "bytes": 354019,
+    "symbols": 100,
+    "allSymbols": 100,
+    "references": 115,
+    "totalRefs": 115,
+    "plan": {
+      "shards": 13,
+      "omissions": [
+        {
+          "code": "structural_inventory",
+          "count": 0,
+          "repositoryScanTruncated": true
+        }
+      ]
+    },
+    "projection": [
+      {
+        "index": 0,
+        "signals": 5,
+        "bytes": 1708,
+        "omitted": 0
+      },
+      {
+        "index": 1,
+        "signals": 1,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 2,
+        "signals": 6,
+        "bytes": 8696,
+        "omitted": 0
+      },
+      {
+        "index": 3,
+        "signals": 12,
+        "bytes": 23866,
+        "omitted": 36
+      },
+      {
+        "index": 4,
+        "signals": 4,
+        "bytes": 10210,
+        "omitted": 0
+      },
+      {
+        "index": 5,
+        "signals": 1,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 6,
+        "signals": 16,
+        "bytes": 4517,
+        "omitted": 0
+      },
+      {
+        "index": 7,
+        "signals": 7,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 8,
+        "signals": 11,
+        "bytes": 23849,
+        "omitted": 20
+      },
+      {
+        "index": 9,
+        "signals": 4,
+        "bytes": 18540,
+        "omitted": 0
+      },
+      {
+        "index": 10,
+        "signals": 2,
+        "bytes": 9829,
+        "omitted": 0
+      },
+      {
+        "index": 11,
+        "signals": 2,
+        "bytes": 9829,
+        "omitted": 0
+      },
+      {
+        "index": 12,
+        "signals": 2,
+        "bytes": 9829,
+        "omitted": 0
+      }
+    ],
+    "changedRelations": 115,
+    "relationsWithBothWholePatches": 81
+  },
+  "after": {
+    "scope": "Offline exact-SHA replay using changed modules only; not reproduction of the full production inventory.",
+    "files": 33,
+    "bytes": 354019,
+    "symbols": 100,
+    "allSymbols": 100,
+    "references": 115,
+    "totalRefs": 115,
+    "plan": {
+      "shards": 11,
+      "omissions": [
+        {
+          "code": "structural_inventory",
+          "count": 0,
+          "repositoryScanTruncated": true
+        }
+      ]
+    },
+    "projection": [
+      {
+        "index": 0,
+        "signals": 5,
+        "bytes": 1708,
+        "omitted": 0
+      },
+      {
+        "index": 1,
+        "signals": 1,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 2,
+        "signals": 6,
+        "bytes": 8696,
+        "omitted": 0
+      },
+      {
+        "index": 3,
+        "signals": 10,
+        "bytes": 22348,
+        "omitted": 0
+      },
+      {
+        "index": 4,
+        "signals": 6,
+        "bytes": 12967,
+        "omitted": 0
+      },
+      {
+        "index": 5,
+        "signals": 1,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 6,
+        "signals": 16,
+        "bytes": 4517,
+        "omitted": 0
+      },
+      {
+        "index": 7,
+        "signals": 7,
+        "bytes": 132,
+        "omitted": 0
+      },
+      {
+        "index": 8,
+        "signals": 9,
+        "bytes": 21706,
+        "omitted": 0
+      },
+      {
+        "index": 9,
+        "signals": 5,
+        "bytes": 22474,
+        "omitted": 0
+      },
+      {
+        "index": 10,
+        "signals": 2,
+        "bytes": 10659,
+        "omitted": 0
+      }
+    ],
+    "changedRelations": 115,
+    "relationsWithBothWholePatches": 103
+  },
+  "limits": "Offline exact-SHA diff with changed modules only and the same partial inventory; no model request, production rerun or measurement of review precision or inference cost."
+}

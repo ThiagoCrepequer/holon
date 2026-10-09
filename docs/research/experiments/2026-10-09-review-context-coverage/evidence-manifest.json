@@ -1,0 +1,690 @@
+{
+  "archive": {
+    "sha256": "c063d41e393fd9af9b7a16c094ffaba104555cba7fbd2e1cc6737f93409dff7a",
+    "bytes": 307306,
+    "expandedBytes": 1019531
+  },
+  "blobCount": 55,
+  "entries": {
+    "live-2026-10-09T19-38-01.723Z/plan.json": {
+      "sha256": "b91a6b220936269bc0326c18b7225d40d246a9009bf4a99ea880a6087363d9f4",
+      "bytes": 9374
+    },
+    "live-2026-10-09T19-38-01.723Z/results.json": {
+      "sha256": "722b69bdff864b3ae5e637a70a561c7d9a6ab73de2586eb29753e4b4d732eac5",
+      "bytes": 10024
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-benchmark-budget.ts.source": {
+      "sha256": "d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854",
+      "bytes": 1455
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-benchmark-policy.ts.source": {
+      "sha256": "b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b",
+      "bytes": 1900
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-benchmark.mts.source": {
+      "sha256": "c0b0bfe95f78192152154f725b443d692ea24706237468796ddc590a657654d3",
+      "bytes": 21950
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-campaign-spend.mts.source": {
+      "sha256": "8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193",
+      "bytes": 2923
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-code-regression-fixtures.ts.source": {
+      "sha256": "eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee",
+      "bytes": 1264
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-confirmation-fixtures.ts.source": {
+      "sha256": "34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840",
+      "bytes": 2105
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-coverage-regression-fixtures.ts.source": {
+      "sha256": "79ffb20365f8c7eb4fba728d23679cec81f18a0ff8ae74b4244ea382451252e7",
+      "bytes": 1934
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-final-validation.ts.source": {
+      "sha256": "13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d",
+      "bytes": 2497
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-fixture-context.mts.source": {
+      "sha256": "28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66",
+      "bytes": 4939
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-fixture-executor.mts.source": {
+      "sha256": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "bytes": 6325
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-fixture-typecheck.mts.source": {
+      "sha256": "7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a",
+      "bytes": 1130
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-fixtures.ts.source": {
+      "sha256": "97ba5adac1fe0af80b5a03e1f17b694804ae93249e8894721c28d267080510f6",
+      "bytes": 3894
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-gateway-route.mts.source": {
+      "sha256": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622",
+      "bytes": 4282
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-holdout-fixtures.ts.source": {
+      "sha256": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51",
+      "bytes": 2147
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-model-relay.mts.source": {
+      "sha256": "3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0",
+      "bytes": 11379
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-model-spend.ts.source": {
+      "sha256": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+      "bytes": 3053
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/live-review-grade.ts.source": {
+      "sha256": "ce2e15c3fbcf6c51e1a8d82679a91343a503c654154a99218bcae8759b2a1d61",
+      "bytes": 3579
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/evaluation/review-core.live.ts.source": {
+      "sha256": "1fa7a66e86da32505cecacac72a176e38c14fbcf2f043a8ca9b709de080139f2",
+      "bytes": 12861
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/src/review/review-agent.ts.source": {
+      "sha256": "6c198587b8ef132095cbe0b0c96f64114f30ebcb57511384c02dcf7bad0a84ec",
+      "bytes": 18818
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/control-plane/src/review/review-shard-context.ts.source": {
+      "sha256": "f5560bb40dd8ab39166f0d5525d0ffeac56657a9432b5a27aaca1cd06b803680",
+      "bytes": 2757
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/repository-executor/src/review-context.ts.source": {
+      "sha256": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+      "bytes": 4879
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/apps/repository-executor/src/structural-repository-inventory.ts.source": {
+      "sha256": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3",
+      "bytes": 7862
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/application/src/evidence.ts.source": {
+      "sha256": "54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0",
+      "bytes": 7512
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/contracts/src/causal-verification.ts.source": {
+      "sha256": "d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871",
+      "bytes": 1498
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/contracts/src/review-output.ts.source": {
+      "sha256": "16e2a18e01f407382d766a5b3151b5e9654b92236afca8d1ea2829e452bdcd01",
+      "bytes": 17642
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/contracts/src/review-plan.ts.source": {
+      "sha256": "9d464e835471bff09547fc347803905778f880f1f293074b07d3e8561bf1c110",
+      "bytes": 4752
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/contracts/src/structural-analysis.ts.source": {
+      "sha256": "68412c6086ee76bffeadf01e7f6d89a45f2da883ce2efe16ac01effee4f96a8a",
+      "bytes": 3464
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/model/src/causal-verification.ts.source": {
+      "sha256": "76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945",
+      "bytes": 4018
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/model/src/context-projection.ts.source": {
+      "sha256": "edccb88a5c11eeda906518f988e34177bc0fab1394c6124206e535a27bbb455c",
+      "bytes": 2500
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/model/src/gateway.ts.source": {
+      "sha256": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "bytes": 5342
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/model/src/reviewer.ts.source": {
+      "sha256": "5f48aa5eee1da7ed03d25c27343e5a279332dcab5b07f9ffd12cfd50c4896524",
+      "bytes": 14733
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/changed-head-declarations.ts.source": {
+      "sha256": "a625767f660cb6dfd39fd61c11aec98ecc3644daba4b4f2e6021215967082174",
+      "bytes": 4744
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/contract-checks.ts.source": {
+      "sha256": "7801969ab6178a469cfdc250affdd470e309f0f708d1443dcae087d372d58ea7",
+      "bytes": 6691
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/downstream-tracer.ts.source": {
+      "sha256": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99",
+      "bytes": 2366
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/plan.ts.source": {
+      "sha256": "8f2f2df655ee451b71f1e68d543b990eb0f6d0f7c04e772514f94fa7191ebb5c",
+      "bytes": 14507
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/repository-module.ts.source": {
+      "sha256": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+      "bytes": 523
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/structural-analyzer.ts.source": {
+      "sha256": "f3d85748eaad17e872314bcb61450f8ef361628fa83ccadafc9f2c6e9e280379",
+      "bytes": 2628
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/packages/repository-analysis/src/symbol-extractor.ts.source": {
+      "sha256": "9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218",
+      "bytes": 7997
+    },
+    "live-2026-10-09T19-38-01.723Z/sources/pnpm-lock.yaml.source": {
+      "sha256": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271",
+      "bytes": 327589
+    },
+    "live-2026-10-09T19-38-49.506Z/plan.json": {
+      "sha256": "28db24f235ec45e86d4f29014efa610aebd8b2eb650dd831eda5ada60e802a81",
+      "bytes": 9478
+    },
+    "live-2026-10-09T19-38-49.506Z/results.json": {
+      "sha256": "dfd0a5afab3d28566f1aa34b866849a1f092326e603a2a65dee0e2f800f7c171",
+      "bytes": 26115
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-benchmark-budget.ts.source": {
+      "sha256": "d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854",
+      "bytes": 1455
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-benchmark-policy.ts.source": {
+      "sha256": "b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b",
+      "bytes": 1900
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-benchmark.mts.source": {
+      "sha256": "78f6d1237dd483cd521565977b3fc44fb767718236292523c74f0648a5ecb5c3",
+      "bytes": 21985
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-campaign-spend.mts.source": {
+      "sha256": "8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193",
+      "bytes": 2923
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-code-regression-fixtures.ts.source": {
+      "sha256": "eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee",
+      "bytes": 1264
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-confirmation-fixtures.ts.source": {
+      "sha256": "34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840",
+      "bytes": 2105
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-coverage-regression-fixtures.ts.source": {
+      "sha256": "79ffb20365f8c7eb4fba728d23679cec81f18a0ff8ae74b4244ea382451252e7",
+      "bytes": 1934
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-final-validation.ts.source": {
+      "sha256": "13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d",
+      "bytes": 2497
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-fixture-context.mts.source": {
+      "sha256": "28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66",
+      "bytes": 4939
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-fixture-executor.mts.source": {
+      "sha256": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "bytes": 6325
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-fixture-typecheck.mts.source": {
+      "sha256": "7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a",
+      "bytes": 1130
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-fixtures.ts.source": {
+      "sha256": "97ba5adac1fe0af80b5a03e1f17b694804ae93249e8894721c28d267080510f6",
+      "bytes": 3894
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-gateway-route.mts.source": {
+      "sha256": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622",
+      "bytes": 4282
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-holdout-fixtures.ts.source": {
+      "sha256": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51",
+      "bytes": 2147
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-model-relay.mts.source": {
+      "sha256": "3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0",
+      "bytes": 11379
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-model-spend.ts.source": {
+      "sha256": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+      "bytes": 3053
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/live-review-grade.ts.source": {
+      "sha256": "ce2e15c3fbcf6c51e1a8d82679a91343a503c654154a99218bcae8759b2a1d61",
+      "bytes": 3579
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/evaluation/review-core.live.ts.source": {
+      "sha256": "1fa7a66e86da32505cecacac72a176e38c14fbcf2f043a8ca9b709de080139f2",
+      "bytes": 12861
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/src/review/review-agent.ts.source": {
+      "sha256": "6c198587b8ef132095cbe0b0c96f64114f30ebcb57511384c02dcf7bad0a84ec",
+      "bytes": 18818
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/src/review/review-shard-context.ts.source": {
+      "sha256": "f5560bb40dd8ab39166f0d5525d0ffeac56657a9432b5a27aaca1cd06b803680",
+      "bytes": 2757
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/control-plane/vitest.live.config.ts.source": {
+      "sha256": "0e926d7ccafdd85ff4a8b5dba64269a1e820e9004e90216ae438c269fbaff9f2",
+      "bytes": 2127
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/repository-executor/src/review-context.ts.source": {
+      "sha256": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+      "bytes": 4879
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/apps/repository-executor/src/structural-repository-inventory.ts.source": {
+      "sha256": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3",
+      "bytes": 7862
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/application/src/evidence.ts.source": {
+      "sha256": "54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0",
+      "bytes": 7512
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/contracts/src/causal-verification.ts.source": {
+      "sha256": "d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871",
+      "bytes": 1498
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/contracts/src/review-output.ts.source": {
+      "sha256": "16e2a18e01f407382d766a5b3151b5e9654b92236afca8d1ea2829e452bdcd01",
+      "bytes": 17642
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/contracts/src/review-plan.ts.source": {
+      "sha256": "9d464e835471bff09547fc347803905778f880f1f293074b07d3e8561bf1c110",
+      "bytes": 4752
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/contracts/src/structural-analysis.ts.source": {
+      "sha256": "68412c6086ee76bffeadf01e7f6d89a45f2da883ce2efe16ac01effee4f96a8a",
+      "bytes": 3464
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/model/src/causal-verification.ts.source": {
+      "sha256": "76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945",
+      "bytes": 4018
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/model/src/context-projection.ts.source": {
+      "sha256": "edccb88a5c11eeda906518f988e34177bc0fab1394c6124206e535a27bbb455c",
+      "bytes": 2500
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/model/src/gateway.ts.source": {
+      "sha256": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "bytes": 5342
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/model/src/reviewer.ts.source": {
+      "sha256": "5f48aa5eee1da7ed03d25c27343e5a279332dcab5b07f9ffd12cfd50c4896524",
+      "bytes": 14733
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/changed-head-declarations.ts.source": {
+      "sha256": "a625767f660cb6dfd39fd61c11aec98ecc3644daba4b4f2e6021215967082174",
+      "bytes": 4744
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/contract-checks.ts.source": {
+      "sha256": "7801969ab6178a469cfdc250affdd470e309f0f708d1443dcae087d372d58ea7",
+      "bytes": 6691
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/downstream-tracer.ts.source": {
+      "sha256": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99",
+      "bytes": 2366
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/plan.ts.source": {
+      "sha256": "8f2f2df655ee451b71f1e68d543b990eb0f6d0f7c04e772514f94fa7191ebb5c",
+      "bytes": 14507
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/repository-module.ts.source": {
+      "sha256": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+      "bytes": 523
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/structural-analyzer.ts.source": {
+      "sha256": "f3d85748eaad17e872314bcb61450f8ef361628fa83ccadafc9f2c6e9e280379",
+      "bytes": 2628
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/packages/repository-analysis/src/symbol-extractor.ts.source": {
+      "sha256": "9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218",
+      "bytes": 7997
+    },
+    "live-2026-10-09T19-38-49.506Z/sources/pnpm-lock.yaml.source": {
+      "sha256": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271",
+      "bytes": 327589
+    },
+    "live-2026-10-09T19-40-53.357Z/plan.json": {
+      "sha256": "6672bbf6034d10634edf4c6e6be927a2bc27223121bb338cadcce4bc749182c7",
+      "bytes": 9483
+    },
+    "live-2026-10-09T19-40-53.357Z/results.json": {
+      "sha256": "e18b8e716201610f0f61fd2538707ca29455e4b29aba37a42660ea5daf71e4a7",
+      "bytes": 25389
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-benchmark-budget.ts.source": {
+      "sha256": "d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854",
+      "bytes": 1455
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-benchmark-policy.ts.source": {
+      "sha256": "b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b",
+      "bytes": 1900
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-benchmark.mts.source": {
+      "sha256": "1f8efd8bcb82cc4b0bdc4ffc3dbfb9e2da62bdaf7e752774a8bf13e8f09309a4",
+      "bytes": 22016
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-campaign-spend.mts.source": {
+      "sha256": "8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193",
+      "bytes": 2923
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-code-regression-fixtures.ts.source": {
+      "sha256": "eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee",
+      "bytes": 1264
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-confirmation-fixtures.ts.source": {
+      "sha256": "34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840",
+      "bytes": 2105
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-coverage-regression-fixtures.ts.source": {
+      "sha256": "79ffb20365f8c7eb4fba728d23679cec81f18a0ff8ae74b4244ea382451252e7",
+      "bytes": 1934
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-final-validation.ts.source": {
+      "sha256": "13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d",
+      "bytes": 2497
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-fixture-context.mts.source": {
+      "sha256": "28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66",
+      "bytes": 4939
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-fixture-executor.mts.source": {
+      "sha256": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "bytes": 6325
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-fixture-typecheck.mts.source": {
+      "sha256": "7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a",
+      "bytes": 1130
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-fixtures.ts.source": {
+      "sha256": "97ba5adac1fe0af80b5a03e1f17b694804ae93249e8894721c28d267080510f6",
+      "bytes": 3894
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-gateway-route.mts.source": {
+      "sha256": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622",
+      "bytes": 4282
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-holdout-fixtures.ts.source": {
+      "sha256": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51",
+      "bytes": 2147
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-model-relay.mts.source": {
+      "sha256": "3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0",
+      "bytes": 11379
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-model-spend.ts.source": {
+      "sha256": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+      "bytes": 3053
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/live-review-grade.ts.source": {
+      "sha256": "ce2e15c3fbcf6c51e1a8d82679a91343a503c654154a99218bcae8759b2a1d61",
+      "bytes": 3579
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/evaluation/review-core.live.ts.source": {
+      "sha256": "1fa7a66e86da32505cecacac72a176e38c14fbcf2f043a8ca9b709de080139f2",
+      "bytes": 12861
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/src/review/review-agent.ts.source": {
+      "sha256": "6c198587b8ef132095cbe0b0c96f64114f30ebcb57511384c02dcf7bad0a84ec",
+      "bytes": 18818
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/src/review/review-shard-context.ts.source": {
+      "sha256": "f5560bb40dd8ab39166f0d5525d0ffeac56657a9432b5a27aaca1cd06b803680",
+      "bytes": 2757
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/control-plane/vitest.live.config.ts.source": {
+      "sha256": "0e926d7ccafdd85ff4a8b5dba64269a1e820e9004e90216ae438c269fbaff9f2",
+      "bytes": 2127
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/repository-executor/src/review-context.ts.source": {
+      "sha256": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+      "bytes": 4879
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/apps/repository-executor/src/structural-repository-inventory.ts.source": {
+      "sha256": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3",
+      "bytes": 7862
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/application/src/evidence.ts.source": {
+      "sha256": "54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0",
+      "bytes": 7512
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/contracts/src/causal-verification.ts.source": {
+      "sha256": "d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871",
+      "bytes": 1498
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/contracts/src/review-output.ts.source": {
+      "sha256": "16e2a18e01f407382d766a5b3151b5e9654b92236afca8d1ea2829e452bdcd01",
+      "bytes": 17642
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/contracts/src/review-plan.ts.source": {
+      "sha256": "9d464e835471bff09547fc347803905778f880f1f293074b07d3e8561bf1c110",
+      "bytes": 4752
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/contracts/src/structural-analysis.ts.source": {
+      "sha256": "68412c6086ee76bffeadf01e7f6d89a45f2da883ce2efe16ac01effee4f96a8a",
+      "bytes": 3464
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/model/src/causal-verification.ts.source": {
+      "sha256": "76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945",
+      "bytes": 4018
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/model/src/context-projection.ts.source": {
+      "sha256": "edccb88a5c11eeda906518f988e34177bc0fab1394c6124206e535a27bbb455c",
+      "bytes": 2500
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/model/src/gateway.ts.source": {
+      "sha256": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "bytes": 5342
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/model/src/reviewer.ts.source": {
+      "sha256": "5f48aa5eee1da7ed03d25c27343e5a279332dcab5b07f9ffd12cfd50c4896524",
+      "bytes": 14733
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/changed-head-declarations.ts.source": {
+      "sha256": "a625767f660cb6dfd39fd61c11aec98ecc3644daba4b4f2e6021215967082174",
+      "bytes": 4744
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/contract-checks.ts.source": {
+      "sha256": "7801969ab6178a469cfdc250affdd470e309f0f708d1443dcae087d372d58ea7",
+      "bytes": 6691
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/downstream-tracer.ts.source": {
+      "sha256": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99",
+      "bytes": 2366
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/plan.ts.source": {
+      "sha256": "8f2f2df655ee451b71f1e68d543b990eb0f6d0f7c04e772514f94fa7191ebb5c",
+      "bytes": 14507
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/repository-module.ts.source": {
+      "sha256": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+      "bytes": 523
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/structural-analyzer.ts.source": {
+      "sha256": "f3d85748eaad17e872314bcb61450f8ef361628fa83ccadafc9f2c6e9e280379",
+      "bytes": 2628
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/packages/repository-analysis/src/symbol-extractor.ts.source": {
+      "sha256": "9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218",
+      "bytes": 7997
+    },
+    "live-2026-10-09T19-40-53.357Z/sources/pnpm-lock.yaml.source": {
+      "sha256": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271",
+      "bytes": 327589
+    },
+    "live-2026-10-09T19-44-15.642Z/plan.json": {
+      "sha256": "3296f2d2d1d129dfd0423c946cfcb6ed87d88f93e7d6934e692b630dfb86513e",
+      "bytes": 9479
+    },
+    "live-2026-10-09T19-44-15.642Z/results.json": {
+      "sha256": "b42373f9e4e279fc74bc1b2ac32eb8117dba2867ffa4a58f052f59992efc3eff",
+      "bytes": 25749
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-benchmark-budget.ts.source": {
+      "sha256": "d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854",
+      "bytes": 1455
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-benchmark-policy.ts.source": {
+      "sha256": "b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b",
+      "bytes": 1900
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-benchmark.mts.source": {
+      "sha256": "1f8efd8bcb82cc4b0bdc4ffc3dbfb9e2da62bdaf7e752774a8bf13e8f09309a4",
+      "bytes": 22016
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-campaign-spend.mts.source": {
+      "sha256": "8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193",
+      "bytes": 2923
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-code-regression-fixtures.ts.source": {
+      "sha256": "eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee",
+      "bytes": 1264
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-confirmation-fixtures.ts.source": {
+      "sha256": "34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840",
+      "bytes": 2105
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-coverage-regression-fixtures.ts.source": {
+      "sha256": "79ffb20365f8c7eb4fba728d23679cec81f18a0ff8ae74b4244ea382451252e7",
+      "bytes": 1934
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-final-validation.ts.source": {
+      "sha256": "13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d",
+      "bytes": 2497
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-fixture-context.mts.source": {
+      "sha256": "28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66",
+      "bytes": 4939
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-fixture-executor.mts.source": {
+      "sha256": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "bytes": 6325
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-fixture-typecheck.mts.source": {
+      "sha256": "7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a",
+      "bytes": 1130
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-fixtures.ts.source": {
+      "sha256": "97ba5adac1fe0af80b5a03e1f17b694804ae93249e8894721c28d267080510f6",
+      "bytes": 3894
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-gateway-route.mts.source": {
+      "sha256": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622",
+      "bytes": 4282
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-holdout-fixtures.ts.source": {
+      "sha256": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51",
+      "bytes": 2147
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-model-relay.mts.source": {
+      "sha256": "3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0",
+      "bytes": 11379
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-model-spend.ts.source": {
+      "sha256": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+      "bytes": 3053
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/live-review-grade.ts.source": {
+      "sha256": "ce2e15c3fbcf6c51e1a8d82679a91343a503c654154a99218bcae8759b2a1d61",
+      "bytes": 3579
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/evaluation/review-core.live.ts.source": {
+      "sha256": "1fa7a66e86da32505cecacac72a176e38c14fbcf2f043a8ca9b709de080139f2",
+      "bytes": 12861
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/src/review/review-agent.ts.source": {
+      "sha256": "6c198587b8ef132095cbe0b0c96f64114f30ebcb57511384c02dcf7bad0a84ec",
+      "bytes": 18818
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/src/review/review-shard-context.ts.source": {
+      "sha256": "f5560bb40dd8ab39166f0d5525d0ffeac56657a9432b5a27aaca1cd06b803680",
+      "bytes": 2757
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/control-plane/vitest.live.config.ts.source": {
+      "sha256": "0e926d7ccafdd85ff4a8b5dba64269a1e820e9004e90216ae438c269fbaff9f2",
+      "bytes": 2127
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/repository-executor/src/review-context.ts.source": {
+      "sha256": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+      "bytes": 4879
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/apps/repository-executor/src/structural-repository-inventory.ts.source": {
+      "sha256": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3",
+      "bytes": 7862
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/application/src/evidence.ts.source": {
+      "sha256": "54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0",
+      "bytes": 7512
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/contracts/src/causal-verification.ts.source": {
+      "sha256": "d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871",
+      "bytes": 1498
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/contracts/src/review-output.ts.source": {
+      "sha256": "59a473a5bfbedca116748107e470a1831b4a8d00adaee8b24e20c395e1befcd2",
+      "bytes": 18407
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/contracts/src/review-plan.ts.source": {
+      "sha256": "9d464e835471bff09547fc347803905778f880f1f293074b07d3e8561bf1c110",
+      "bytes": 4752
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/contracts/src/structural-analysis.ts.source": {
+      "sha256": "68412c6086ee76bffeadf01e7f6d89a45f2da883ce2efe16ac01effee4f96a8a",
+      "bytes": 3464
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/model/src/causal-verification.ts.source": {
+      "sha256": "76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945",
+      "bytes": 4018
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/model/src/context-projection.ts.source": {
+      "sha256": "edccb88a5c11eeda906518f988e34177bc0fab1394c6124206e535a27bbb455c",
+      "bytes": 2500
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/model/src/gateway.ts.source": {
+      "sha256": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "bytes": 5342
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/model/src/reviewer.ts.source": {
+      "sha256": "e79138dbbd07ed45e776292efcbf18088bba05bd004d1ee732bf4229999f61f8",
+      "bytes": 14783
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/changed-head-declarations.ts.source": {
+      "sha256": "a625767f660cb6dfd39fd61c11aec98ecc3644daba4b4f2e6021215967082174",
+      "bytes": 4744
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/contract-checks.ts.source": {
+      "sha256": "7801969ab6178a469cfdc250affdd470e309f0f708d1443dcae087d372d58ea7",
+      "bytes": 6691
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/downstream-tracer.ts.source": {
+      "sha256": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99",
+      "bytes": 2366
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/plan.ts.source": {
+      "sha256": "8f2f2df655ee451b71f1e68d543b990eb0f6d0f7c04e772514f94fa7191ebb5c",
+      "bytes": 14507
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/repository-module.ts.source": {
+      "sha256": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+      "bytes": 523
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/structural-analyzer.ts.source": {
+      "sha256": "f3d85748eaad17e872314bcb61450f8ef361628fa83ccadafc9f2c6e9e280379",
+      "bytes": 2628
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/packages/repository-analysis/src/symbol-extractor.ts.source": {
+      "sha256": "9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218",
+      "bytes": 7997
+    },
+    "live-2026-10-09T19-44-15.642Z/sources/pnpm-lock.yaml.source": {
+      "sha256": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271",
+      "bytes": 327589
+    },
+    "replay-pr184.json": {
+      "sha256": "8a5eba717417a6b3ddf7fb2b3c1862fa1949e82c22514f59e13669f1ac922a38",
+      "bytes": 986
+    },
+    "replay-pr184.mts": {
+      "sha256": "8d3e5d6987ca268816fa4e07613b9bb6c83d8195fa5838f92c96468510d301b6",
+      "bytes": 2589
+    },
+    "summary.json": {
+      "sha256": "5969e25bcaa9b13029e5852212d6642106bb9179b6d95babd4dfcc8c1e77f84a",
+      "bytes": 1281
+    }
+  }
+}

@@ -4,10 +4,27 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 ---
 
 # Diagnóstico de análise parcial ou interrompida
+
+`structural_context` indica partes cujo contexto excede sozinho o teto de
+24.000 bytes, após o planner separar agrupamentos que cabiam no patch mas não
+no prompt. O campo `count` conta partes, não sinais únicos; a projeção registra
+suas perdas em `model.output_limits`. O agrupamento de janelas também mede esse
+teto. Essa limitação conserva o plano parcial e não equivale a erro do provider.
+
+`structural_inventory` registra sinais omitidos e/ou varredura parcial no plano.
+Isso não significa truncamento de todas as projeções locais. Em
+`model.output_limits`, `omittedSections` identifica perdas na projeção daquela
+parte, e `evidenceRejectedCount` pertence ao estágio `publication`. Rejeições
+anteriores usam `model.evidence_rejected` com `stage:causal_admission`.
+`model.output_normalized` conserva limitações do transporte, contagens retidas
+e `exactRejectedCountAvailable:false` quando o resultado não preserva sua origem
+exata. Não interpretar um contador posterior zero como ausência de rejeições.
+`contract_checks.reasons` distingue `capacity`, `missingWindow` e
+`evidenceWindows`, sem capturar paths, código ou conteúdo do modelo.
 
 Use o `runId` do Check Run ou do marcador da review para correlacionar a
 instância de `holon-review-workflow`, os `ReviewShardWorkflow` e os logs do

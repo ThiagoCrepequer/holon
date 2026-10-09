@@ -449,6 +449,10 @@ describe("analyzeReview", () => {
       const result = await analyzeReview(job, services, emit);
       expect(result.findings).toHaveLength(0);
       expect(result.verdict).toBe("COMMENT");
+      expect(result.scopeStatus).toBe("partial_by_policy");
+      expect(result.omissionReasons.join(" ")).toContain(
+        "Structural inventory is incomplete",
+      );
       expect(result.summary).toContain(
         inputOmitted ? "input_context_omitted" : "summary_truncated",
       );
@@ -472,7 +476,7 @@ describe("analyzeReview", () => {
       expect(emit).toHaveBeenCalledWith(
         "review.analysis_partial",
         expect.objectContaining({
-          scopeStatus: inputOmitted ? "partial_by_policy" : "complete",
+          scopeStatus: "partial_by_policy",
           degradedShards: 1,
         }),
         undefined,
@@ -642,6 +646,7 @@ it.each(["silence", "invented", "low-confidence", "unchanged", "valid"])(
           severity: "warning",
           shardIndex: 0,
           candidateKind: "resolution",
+          stage: "publication",
           findingIndex: 0,
           evidenceIndex: 0,
           reason: "evidence_excerpt_mismatch",
@@ -900,6 +905,7 @@ it("logs the exact rejection reason without leaking candidate content", async ()
       severity: "warning",
       shardIndex: 0,
       candidateKind: "finding",
+      stage: "publication",
       findingIndex: 0,
       evidenceIndex: 0,
       reason: "evidence_excerpt_mismatch",

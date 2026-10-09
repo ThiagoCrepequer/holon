@@ -1,4 +1,7 @@
-import type { StructuralImpactReport } from "@holon/contracts";
+import {
+  structuralReportLimits,
+  type StructuralImpactReport,
+} from "@holon/contracts";
 
 import { detectContractBreaks } from "./contract-break-detector.js";
 import {
@@ -30,7 +33,10 @@ export function analyzeStructuralImpact(
   const downstream = findDownstreamReferences(
     changedSymbols,
     input.repositoryFiles,
-    input.options,
+    {
+      maxReferences: structuralReportLimits.downstreamReferences,
+      ...input.options,
+    },
   );
 
   const contractBreaks = detectContractBreaks(
@@ -41,19 +47,44 @@ export function analyzeStructuralImpact(
   );
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);
   const omittedSignals = {
-    changedSymbols: Math.max(0, changedSymbols.length - 100),
-    contractBreaks: Math.max(0, contractBreaks.length - 50),
+    changedSymbols: Math.max(
+      0,
+      changedSymbols.length - structuralReportLimits.changedSymbols,
+    ),
+    contractBreaks: Math.max(
+      0,
+      contractBreaks.length - structuralReportLimits.contractBreaks,
+    ),
     downstreamReferences:
-      downstream.totalCount - Math.min(100, downstream.references.length),
-    securitySurfaces: Math.max(0, securitySurfaces.length - 50),
+      downstream.totalCount -
+      Math.min(
+        structuralReportLimits.downstreamReferences,
+        downstream.references.length,
+      ),
+    securitySurfaces: Math.max(
+      0,
+      securitySurfaces.length - structuralReportLimits.securitySurfaces,
+    ),
   };
 
   return {
-    changedSymbols: changedSymbols.slice(0, 100),
-    contractBreaks: contractBreaks.slice(0, 50),
-    downstreamReferences: downstream.references.slice(0, 100),
+    changedSymbols: changedSymbols.slice(
+      0,
+      structuralReportLimits.changedSymbols,
+    ),
+    contractBreaks: contractBreaks.slice(
+      0,
+      structuralReportLimits.contractBreaks,
+    ),
+    downstreamReferences: downstream.references.slice(
+      0,
+      structuralReportLimits.downstreamReferences,
+    ),
     repositoryScanTruncated: input.repositoryScanTruncated ?? false,
-    securitySurfaces: securitySurfaces.slice(0, 50),
+    securitySurfaces: securitySurfaces.slice(
+      0,
+      structuralReportLimits.securitySurfaces,
+    ),
     totalDownstreamReferencesCount: downstream.totalCount,
     ...(Object.values(omittedSignals).some((count) => count > 0)
       ? { omittedSignals }

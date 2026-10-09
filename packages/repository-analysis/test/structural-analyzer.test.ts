@@ -48,15 +48,37 @@ describe("symbol-extractor", () => {
     ]);
   });
 
+  it("retains a moderate monorepo inventory before shard projection", () => {
+    const report = analyzeStructuralImpact({
+      changedFiles: Array.from({ length: 348 }, (_, index) => ({
+        path: `src/producer-${index}.ts`,
+        patch: `@@ -1 +1 @@\n-export const value${index} = 1;\n+export const value${index} = 2;`,
+      })),
+      repositoryFiles: [
+        {
+          path: "src/consumer.ts",
+          content: Array.from(
+            { length: 153 },
+            (_, index) => `value${index}();`,
+          ).join("\n"),
+        },
+      ],
+    });
+    expect(report.changedSymbols).toHaveLength(348);
+    expect(report.downstreamReferences).toHaveLength(153);
+    expect(report.totalDownstreamReferencesCount).toBe(153);
+    expect(report.omittedSignals).toBeUndefined();
+  });
+
   it("preserves omitted structural signals as incomplete analysis", () => {
     const report = analyzeStructuralImpact({
-      changedFiles: Array.from({ length: 101 }, (_, index) => ({
+      changedFiles: Array.from({ length: 1001 }, (_, index) => ({
         path: `src/producer-${index}.ts`,
         patch: `@@ -1 +1 @@\n-export const value${index} = 1;\n+export const value${index} = 2;`,
       })),
       repositoryFiles: [],
     });
-    expect(report.changedSymbols).toHaveLength(100);
+    expect(report.changedSymbols).toHaveLength(1000);
     expect(report.omittedSignals).toEqual({
       changedSymbols: 1,
       contractBreaks: 0,
@@ -95,6 +117,7 @@ describe("symbol-extractor", () => {
         isExported: true,
         kind: "function",
         line: 1,
+        patchLine: 37,
         name: "produce",
         path: "src/producer.ts",
       },

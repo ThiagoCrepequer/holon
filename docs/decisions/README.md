@@ -118,3 +118,7 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0058 — Selecionar receipts do host nos assessments causais](0058-select-host-evidence-receipts-in-causal-assessments.md).
 
 - [ADR-0059 — Compor lanes estáveis com perfis de orçamento](0059-compose-stable-review-lanes-with-budget-profiles.md) — conserva as decisões de orçamento da main e libera saldo somente após checkpoint.
+
+- [ADR-0060 — Separar inventário de projeção e compartilhar janelas de contrato](0060-separate-review-inventory-and-pack-contract-windows.md) — substitui a seleção/organização das janelas da regra 7 da ADR-0055, mantendo os tetos de execução e geração.
+
+- [ADR-0061 — Agrupar partes considerando o orçamento estrutural](0061-pack-review-shards-with-structural-context-budget.md) — complementa a ADR-0060 com medição compartilhada antes do agrupamento e omissão explícita para contextos acima do teto.

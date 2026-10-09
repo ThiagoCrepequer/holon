@@ -8,6 +8,11 @@ import {
   type ReviewShard,
 } from "@holon/contracts";
 import type { ChangedLine } from "@holon/domain";
+import {
+  selectStructuralImpact,
+  structuralImpactFits,
+  structuralContextLimits,
+} from "@holon/domain";
 
 import { buildContractChecks } from "./contract-checks.js";
 import {
@@ -92,6 +97,15 @@ export function buildReviewPlan(
   const maxShardLines =
     options?.maxShardLines ?? reviewExecutionLimits.shardLines;
   const maxShards = options?.maxShards ?? reviewExecutionLimits.maxShards;
+  const fitsStructuralContext = (files: readonly ReviewContextFile[]) =>
+    structuralImpactFits(
+      options?.structuralImpact
+        ? selectStructuralImpact(
+            options.structuralImpact,
+            files.map((file) => file.path),
+          )
+        : undefined,
+    );
 
   let unsupportedFilesCount = 0;
   let policyExcludedFilesCount = options?.policyExcludedFilesCount ?? 0;
@@ -263,7 +277,8 @@ export function buildReviewPlan(
       group.length <= maxShardFiles &&
       groupBytes <= maxShardDiffBytes &&
       groupLines <= maxShardLines &&
-      groupWindows <= reviewExecutionLimits.shardEvidenceWindows;
+      groupWindows <= reviewExecutionLimits.shardEvidenceWindows &&
+      fitsStructuralContext(group.map((item) => item.file));
     const fitsCurrentShard =
       currentShard.files.length + group.length <= maxShardFiles &&
       currentShard.byteLength + groupBytes <= maxShardDiffBytes &&
@@ -273,7 +288,11 @@ export function buildReviewPlan(
         0,
       ) +
         groupWindows <=
-        reviewExecutionLimits.shardEvidenceWindows;
+        reviewExecutionLimits.shardEvidenceWindows &&
+      fitsStructuralContext([
+        ...currentShard.files,
+        ...group.map((item) => item.file),
+      ]);
     if (currentShard.files.length && fitsEmptyShard && !fitsCurrentShard) {
       rawShards.push(currentShard);
       currentShard = { byteLength: 0, changedLines: [], files: [] };
@@ -316,11 +335,15 @@ export function buildReviewPlan(
           currentShard.files.length > 0 &&
           currentShard.changedLines.length + item.changedLines.length >
             maxShardLines;
+        const wouldExceedStructuralContext =
+          currentShard.files.length > 0 &&
+          !fitsStructuralContext([...currentShard.files, item.file]);
 
         if (
           wouldExceedBytes ||
           wouldExceedFiles ||
           wouldExceedLines ||
+          wouldExceedStructuralContext ||
           wouldExceedWindows
         ) {
           rawShards.push(currentShard);
@@ -360,6 +383,20 @@ export function buildReviewPlan(
 
   const omissionReasons: ReviewPlan["omissionReasons"] = [];
   let scopeStatus: "complete" | "partial_by_policy" = "complete";
+
+  const omittedSignals = Object.values(
+    options?.structuralImpact?.omittedSignals ?? {},
+  ).reduce((sum, count) => sum + count, 0);
+  const repositoryScanTruncated =
+    options?.structuralImpact?.repositoryScanTruncated === true;
+  if (omittedSignals || repositoryScanTruncated) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push({
+      code: "structural_inventory",
+      count: omittedSignals,
+      repositoryScanTruncated,
+    });
+  }
 
   if (oversizedFileCount > 0) {
     scopeStatus = "partial_by_policy";
@@ -418,7 +455,22 @@ export function buildReviewPlan(
   for (const shard of shards) shard.totalShards = shards.length;
   if (cross.omitted) {
     scopeStatus = "partial_by_policy";
-    omissionReasons.push({ code: "contract_checks", count: cross.omitted });
+    omissionReasons.push({
+      code: "contract_checks",
+      count: cross.omitted,
+      reasons: cross.reasons,
+    });
+  }
+  const oversizedStructuralContexts = shards.filter(
+    (shard) => !fitsStructuralContext(shard.files),
+  ).length;
+  if (oversizedStructuralContexts) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push({
+      code: "structural_context",
+      count: oversizedStructuralContexts,
+      bytes: structuralContextLimits.maximumBytes,
+    });
   }
 
   return reviewPlanSchema.parse({

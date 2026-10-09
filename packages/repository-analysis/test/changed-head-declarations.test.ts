@@ -6,6 +6,26 @@ const path = "src/producer.ts";
 const bodyPatch =
   "@@ -1,3 +1,3 @@\n export const produce = () => {\n-  return 1;\n+  return 2;\n };";
 describe("changed head declarations", () => {
+  it("retains a canonical edit coordinate when the declaration starts before its diff hunk", () => {
+    const content =
+      "export function produce() {\n" +
+      "  // padding\n".repeat(35) +
+      "  return 2;\n}";
+    const patch = "@@ -37 +37 @@\n-  return 1;\n+  return 2;";
+    expect(
+      extractChangedSymbols([{ path, patch }], [{ path, content }]),
+    ).toEqual([
+      {
+        path,
+        name: "produce",
+        kind: "function",
+        isExported: true,
+        change: "modified",
+        line: 1,
+        patchLine: 37,
+      },
+    ]);
+  });
   it("traces every public alias of an edited local declaration", () => {
     const content =
       "const produce = () => {\n  return 2;\n};\nexport { produce as payload, produce as result };\nconst other = 3;\nexport { other as unrelated };";
@@ -145,6 +165,7 @@ describe("changed head declarations", () => {
         path,
         name: "Producer",
         line: 1,
+        patchLine: 3,
         kind: "class",
         isExported: true,
         change: "modified",
