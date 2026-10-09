@@ -24,6 +24,11 @@ com conteúdo divergente produz `metadata_conflict`. Somente uma versão causal
 posterior resolve essa ambiguidade. O detalhe fica indisponível nesse estado;
 a lista identifica a necessidade de reconciliação. Não afirmar qual título/head
 é o mais recente quando a fonte não permite determinar essa ordem.
+Quarentena conserva a evidência selecionada, sem entregá-la até reconciliação.
+Uma instalação substituta no mesmo repo/PR é aceita somente por sucessão causal:
+a chave e revisão do PR permanecem, e o novo escopo começa sua geração em 1.
+O detalhe exige a instalação vigente; capturas antigas conservam seu escopo e
+geração originais. Eventos anteriores não reinstalam o vínculo antigo.
 
 `review_read_snapshot` guarda revisão monotônica por PR, geração de recuperação,
 digest do agregado e cabeçalho mínimo. Mudança observável acopla estado, revisão,
@@ -109,8 +114,11 @@ somente leitura.
    qualquer entrega capturada com `g` é rejeitada, inclusive depois da retomada.
 3. Restaure a autoridade pelo procedimento Cloudflare autorizado. Confirme o
    inventário completo e estado dos efeitos; a revisão pode cair de 100 para 60.
-4. Em cada ledger afetado invoque `resumeProjection` com geração esperada `g`
-   e nova `g+1`. Isso só instala a geração e obrigação/wake da projeção atual;
+4. Leia a geração efetivamente restaurada em cada ledger. Invoque
+   `resumeProjection` com essa geração como expectativa e `g+1` da cerca D1
+   como destino. O backup pode preceder outra recuperação e restaurar geração
+   menor que `g`; não presumir que a geração foi conservada. Isso só instala a
+   geração e obrigação/wake da projeção atual;
    não muda revisão de produto nem ressuscita runs. Nunca anexar `g+1` a uma
    captura antiga retida em memória; a captura deve vir da autoridade restaurada.
 5. Aguarde confirmação de todos os PRs inventariados. Conferir que não restam
@@ -123,7 +131,8 @@ somente leitura.
 Falha intermediária conserva leitura fechada. Não decrementar geração, trocar
 payload de mesma revisão, reiniciar contador ou aceitar revisão antiga para
 obter sucesso aparente. O teste local simula a mudança de SQL 100→60, mantendo
-entrega 100/g antiga em voo; isso não constitui um ensaio de PITR remoto.
+entrega 100/g antiga em voo e restaura também uma geração anterior; isso não
+constitui um ensaio de PITR remoto.
 
 ## Promoção e evidência remota
 
@@ -145,10 +154,17 @@ tempo de parede do cliente e CPU são denominadores diferentes. Se CPU não esti
 disponível, registrar ausência e manter esse gate pendente. Remover recursos
 apenas conforme a autorização e preservar resultados sem PII. Esta entrega
 não substitui essas medições por SQLite host nem por estatística inventada.
+O budget local de consulta limita cada statement a menos de 40.000 linhas lidas
+na amostra de 10.000 PRs por repo; o teste exige metadados reais finitos e
+EXPLAIN por índice escopado. Esse teto conservador não é um SLO de latência/CPU
+remotas. Para CPU, a API GraphQL `workersInvocationsAdaptive` fornece quantis
+do Worker isolado; registrar a janela/amostragem e separar requests de seed dos
+requests de consulta. Ausência de amostra não equivale a CPU zero.
 
 Fontes Cloudflare verificadas em 2026-10-09: [transações e cursores DO SQLite](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
 [alarms](https://developers.cloudflare.com/durable-objects/api/alarms/),
 [limites D1](https://developers.cloudflare.com/d1/platform/limits/)
 e [metadados de resultado D1](https://developers.cloudflare.com/d1/worker-api/return-object/).
+Para CPU: [métricas de Workers via GraphQL](https://developers.cloudflare.com/analytics/graphql-api/tutorials/querying-workers-metrics/).
 A evidência local e os gates pendentes estão na
 [matriz M5](../planning/dashboard-milestone-five-evidence.md).

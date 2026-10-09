@@ -443,6 +443,9 @@ it("seals run snapshots and keeps the same selection across retries", async () =
       receivedAt: new Date().toISOString(),
       repository: { id: 42, name: "api", owner: "acme", fullName: "acme/api" },
       pullRequest: {
+        title: "Synthetic review",
+        author: "synthetic",
+        state: "open",
         number: 7,
         headSha,
         baseSha,

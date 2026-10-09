@@ -32,9 +32,27 @@ export async function readPrivateReviews(
   };
   let projectionGeneration: number | undefined;
   let identity: { userId: string; sessionId: string } | undefined;
+  const checkProjectionGeneration = async () => {
+    if (!services.reviewProjection)
+      throw new HttpBoundaryError("unavailable", 503);
+    const scope = await services.reviewProjection.readScope(
+      parameters.installationId,
+      parameters.repositoryId,
+    );
+    const current = scope?.generation ?? 1;
+    if (
+      scope?.state === "rebuilding" ||
+      (projectionGeneration !== undefined && projectionGeneration !== current)
+    )
+      throw new HttpBoundaryError("unavailable", 503);
+    projectionGeneration = current;
+    assertLive();
+  };
   const reads = createPrivateReviewReads({
     async authorize(workspaceId) {
       assertLive();
+      const revalidating = projectionGeneration !== undefined;
+      if (revalidating) await checkProjectionGeneration();
       if (!services.authService || !services.collaboration)
         throw new HttpBoundaryError("unavailable", 503);
       const admission = await services.authService.getAdmittedUser(request);
@@ -58,19 +76,7 @@ export async function readPrivateReviews(
         )
       )
         throw new HttpBoundaryError("denied", 403);
-      if (!services.reviewProjection)
-        throw new HttpBoundaryError("unavailable", 503);
-      const projectionScope = await services.reviewProjection.readScope(
-        parameters.installationId,
-        parameters.repositoryId,
-      );
-      const current = projectionScope?.generation ?? 1;
-      if (
-        projectionScope?.state === "rebuilding" ||
-        (projectionGeneration !== undefined && projectionGeneration !== current)
-      )
-        throw new HttpBoundaryError("unavailable", 503);
-      projectionGeneration = current;
+      if (!revalidating) await checkProjectionGeneration();
       assertLive();
       return { ...scope, sessionId: admission.user.sessionId };
     },

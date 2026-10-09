@@ -5,6 +5,7 @@ export default defineConfig({
     "auth.spec.ts",
     "milestone-two.spec.ts",
     "milestone-three.spec.ts",
+    "milestone-five.spec.ts",
   ],
   retries: 0,
   timeout: 30_000,

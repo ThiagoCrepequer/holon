@@ -34,7 +34,6 @@ export class ReviewReadModel {
     if (row) {
       const previous = pullRequestMetadataSchema.parse(JSON.parse(row.payload));
       if (
-        previous.installationId !== input.installationId ||
         previous.repositoryId !== input.repositoryId ||
         previous.pullRequestNumber !== input.pullRequestNumber
       )
@@ -218,9 +217,12 @@ export class ReviewReadModel {
     ]
       .toSorted()
       .at(-1)!;
-    const generation = previous?.generation ?? 1;
+    const generation =
+      previousSnapshot?.installationId === fields.installationId
+        ? (previous?.generation ?? 1)
+        : 1;
     this.storage.sql.exec(
-      "INSERT INTO review_read_snapshot VALUES(1,?,?,?,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision,signature=excluded.signature,payload=excluded.payload",
+      "INSERT INTO review_read_snapshot VALUES(1,?,?,?,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision,generation=excluded.generation,signature=excluded.signature,payload=excluded.payload",
       review.snapshotRevision,
       generation,
       signature,
@@ -233,10 +235,11 @@ export class ReviewReadModel {
       new Date().toISOString(),
     );
     // A new current head owns a new aggregate; no historical dashboard retention/backfill.
-    this.storage.sql.exec(
-      "DELETE FROM private_review_detail WHERE run_id<>?",
-      review.runId ?? "",
-    );
+    if (!metadata.conflicted)
+      this.storage.sql.exec(
+        "DELETE FROM private_review_detail WHERE run_id<>?",
+        review.runId ?? "",
+      );
   }
   detail(raw: unknown) {
     const input = coreReviewDetailInputSchema.parse(raw),

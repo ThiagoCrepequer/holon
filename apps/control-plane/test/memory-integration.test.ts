@@ -98,7 +98,15 @@ async function setup() {
       installationId: 99,
       receivedAt: now,
       repository: { id: 42, fullName: "acme/api", name: "api", owner: "acme" },
-      pullRequest: { number: 7, headSha, baseSha, updatedAt: now },
+      pullRequest: {
+        title: "Synthetic review",
+        author: "synthetic",
+        state: "open",
+        number: 7,
+        headSha,
+        baseSha,
+        updatedAt: now,
+      },
     },
   });
   const snapshot = await resolveRunMemory(env, job, ledger);

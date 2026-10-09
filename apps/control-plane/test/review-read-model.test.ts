@@ -37,6 +37,43 @@ beforeEach(() =>
   applyD1Migrations(database.PROJECTION_DB, database.PROJECTION_MIGRATIONS),
 );
 afterEach(() => reset());
+it("preserves terminal transition atomicity for a ledger without projection metadata", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
+  await ledger.claimRun(run, "legacy-active");
+  await ledger.transition(
+    run.id,
+    "queued",
+    "running",
+    metadata.sourceUpdatedAt,
+    "start",
+  );
+  await ledger.transition(
+    run.id,
+    "running",
+    "publishing",
+    metadata.sourceUpdatedAt,
+    "publish",
+  );
+  await runInDurableObject(ledger, async (object, state) => {
+    state.storage.sql.exec(
+      "CREATE TRIGGER fail_cleanup BEFORE INSERT ON cleanup_tasks BEGIN SELECT RAISE(ABORT,'synthetic_failure'); END",
+    );
+    await expect(
+      object.transitionAndRequestCleanup(
+        run.id,
+        "publishing",
+        "completed",
+        metadata.sourceUpdatedAt,
+        "complete",
+      ),
+    ).rejects.toThrow();
+    expect(
+      state.storage.sql
+        .exec<{ state: string }>("SELECT state FROM runs WHERE id=?", run.id)
+        .toArray()[0]?.state,
+    ).toBe("publishing");
+  });
+});
 it("commits metadata, state, revision, obligation and alarm together; duplicates and stale events do not advance activity", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
   await ledger.observePullRequest(metadata);
@@ -101,6 +138,26 @@ it("commits metadata, state, revision, obligation and alarm together; duplicates
 it("quarantines equal-version conflicting metadata and clears it only with a causal successor", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
   await ledger.observePullRequest(metadata);
+  await ledger.claimRun(run, "conflict-retention");
+  await ledger.transition(
+    run.id,
+    "queued",
+    "running",
+    metadata.sourceUpdatedAt,
+    "start",
+  );
+  await ledger.saveReviewAnalysis(run.id, {
+    activeFindings: [],
+    findings: [],
+    resolvedFindings: [],
+    updatedTrackedFindings: [],
+    summary: "Evidence must survive quarantine",
+    output: { language: "en", detail: "concise", maxInlineComments: 40 },
+    omissionReasons: [],
+    scopeStatus: "complete",
+    shardsAnalyzed: 1,
+    totalShards: 1,
+  });
   await ledger.observePullRequest({ ...metadata, title: "conflicting" });
   expect(
     (await ledger.reviewDetail({ ...metadataCoordinates(), cursor: null }))
@@ -112,6 +169,9 @@ it("quarantines equal-version conflicting metadata and clears it only with a cau
     sourceUpdatedAt: "2026-10-09T01:00:00.000Z",
   });
   expect((await readDetail(ledger)).review.title).toBe("newer");
+  expect((await readDetail(ledger)).summary).toBe(
+    "Evidence must survive quarantine",
+  );
 });
 function metadataCoordinates() {
   return { installationId: 1, repositoryId: 42, pullRequestNumber: 7 };
@@ -369,7 +429,7 @@ it("rolls back the first metadata/revision/task if alarm creation fails", async 
   expect((await readDetail(ledger)).review.snapshotRevision).toBe(1);
 });
 
-it("fences a captured revision 100 after synthetic DO restore to 60 and reopening generation 2", async () => {
+it("fences a captured revision 100 after synthetic DO restore to 60 and restoring generation 1 and reopening generation 3", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
   await runInDurableObject(ledger, async (object, state) => {
     const bindings = (
@@ -399,40 +459,53 @@ it("fences a captured revision 100 after synthetic DO restore to 60 and reopenin
         .toArray()[0]!;
       const snapshot = { ...JSON.parse(row.payload), snapshotRevision: 100 };
       state.storage.sql.exec(
-        "UPDATE review_read_snapshot SET revision=100,payload=?",
+        "UPDATE review_read_snapshot SET revision=100,generation=2,payload=?",
         JSON.stringify(snapshot),
       );
       state.storage.sql.exec(
-        "UPDATE review_projection_task SET revision=100,next_attempt_at=?",
+        "UPDATE review_projection_task SET revision=100,generation=2,next_attempt_at=?",
         new Date().toISOString(),
       );
       await actual.write({ generation: 1, snapshot });
+      await actual.beginRecovery({
+        installationId: 1,
+        repositoryId: 42,
+        expectedGeneration: 1,
+      });
+      await actual.write({ generation: 2, snapshot });
+      await actual.activateRecovery({
+        installationId: 1,
+        repositoryId: 42,
+        expectedGeneration: 2,
+      });
       const sending = object.alarm();
       await reached;
       expect(
         await actual.beginRecovery({
           installationId: 1,
           repositoryId: 42,
-          expectedGeneration: 1,
+          expectedGeneration: 2,
         }),
-      ).toBe(2);
+      ).toBe(3);
       state.storage.sql.exec(
-        "UPDATE review_read_snapshot SET revision=60,payload=?",
+        "UPDATE review_read_snapshot SET revision=60,generation=1,payload=?",
         JSON.stringify({ ...snapshot, snapshotRevision: 60 }),
       );
-      state.storage.sql.exec("UPDATE review_projection_task SET revision=60");
+      state.storage.sql.exec(
+        "UPDATE review_projection_task SET revision=60,generation=1",
+      );
       await object.resumeProjection({
         installationId: 1,
         repositoryId: 42,
         expectedGeneration: 1,
-        generation: 2,
+        generation: 3,
       });
       bindings.REVIEW_PROJECTION = actual;
       await object.alarm();
       await actual.activateRecovery({
         installationId: 1,
         repositoryId: 42,
-        expectedGeneration: 2,
+        expectedGeneration: 3,
       });
       release();
       await sending;
@@ -449,7 +522,7 @@ it("fences a captured revision 100 after synthetic DO restore to 60 and reopenin
   const row = await database.PROJECTION_DB.prepare(
     "SELECT generation,snapshot_revision FROM review_projection WHERE installation_id=1 AND repository_id=42 AND pull_request_number=7",
   ).first();
-  expect(row).toEqual({ generation: 2, snapshot_revision: 60 });
+  expect(row).toEqual({ generation: 3, snapshot_revision: 60 });
 });
 
 it("changes observable retry state without promoting internal retry activity", async () => {
@@ -486,4 +559,40 @@ it("changes observable retry state without promoting internal retry activity", a
   expect((await readDetail(ledger)).review.activityAt).toBe(
     started.review.activityAt,
   );
+});
+it("accepts a causally newer replacement installation without changing PR identity", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
+  await ledger.observePullRequest(metadata);
+  const before = await readDetail(ledger);
+  await ledger.observePullRequest({
+    ...metadata,
+    installationId: 2,
+    headSha: "c".repeat(40),
+    sourceUpdatedAt: "2026-10-09T04:00:00.000Z",
+  });
+  const result = await ledger.reviewDetail({
+    ...metadataCoordinates(),
+    installationId: 2,
+    cursor: null,
+  });
+  expect(result.status).toBe("available");
+  if (result.status !== "available") throw new Error("new scope missing");
+  expect(result.detail.review.snapshotRevision).toBeGreaterThan(
+    before.review.snapshotRevision,
+  );
+  expect(
+    (await ledger.reviewDetail({ ...metadataCoordinates(), cursor: null }))
+      .status,
+  ).toBe("unavailable");
+  await ledger.observePullRequest({
+    ...metadata,
+    sourceUpdatedAt: "2026-10-09T03:00:00.000Z",
+  });
+  expect(
+    await ledger.reviewDetail({
+      ...metadataCoordinates(),
+      installationId: 2,
+      cursor: null,
+    }),
+  ).toEqual(result);
 });

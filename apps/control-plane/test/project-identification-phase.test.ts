@@ -23,6 +23,9 @@ async function scenario() {
       event: "pull_request",
       installationId: 99,
       pullRequest: {
+        title: "Synthetic review",
+        author: "synthetic",
+        state: "open",
         baseSha,
         headSha,
         number: 7,

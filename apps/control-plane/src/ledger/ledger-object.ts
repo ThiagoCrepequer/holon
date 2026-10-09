@@ -227,7 +227,7 @@ export class ReviewLedgerObject
         .exec("SELECT 1 FROM review_read_metadata LIMIT 1")
         .toArray().length
     ) {
-      const result = mutation();
+      const result = this.ctx.storage.transactionSync(mutation);
       await this.ensureMaintenanceAlarm();
       return result;
     }

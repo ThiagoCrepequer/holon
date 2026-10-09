@@ -124,6 +124,27 @@ it("blocks list and detail while rebuilding, on a concurrent generation change a
   });
   expect((await f.handle(new Request(detailURL), origin)).status).toBe(503);
 });
+it("rechecks current ACL after the final projection generation read", async () => {
+  const f = setup();
+  let scopeReads = 0;
+  f.services.reviewProjection.readScope.mockImplementation(async () => {
+    if (++scopeReads === 2)
+      f.authorizeReviews.mockResolvedValue({
+        userId: actor.id,
+        workspaceId: "team",
+        repositories: [],
+      });
+    return { generation: 1, state: "active" };
+  });
+  const response = await f.handle(
+    new Request(
+      `${origin}/api/reviews/list?workspace=team&installation=1&repository=2`,
+    ),
+    origin,
+  );
+  expect(response.status).toBe(403);
+  expect(await response.text()).not.toContain("hostile");
+});
 it("denies scope before storage and membership/session revocation after storage without returning private data", async () => {
   const f = setup(),
     url = `${origin}/api/reviews/list?workspace=team&installation=1&repository=2`;

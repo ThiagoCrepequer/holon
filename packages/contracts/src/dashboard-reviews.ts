@@ -1,11 +1,12 @@
 import { runStates } from "@holon/domain";
 import { z } from "zod";
 
+// Configure CSP-safe Zod before the dependent core schemas construct objects.
+import { dashboardIdSchema } from "./dashboard.js";
 import { findingStatusSchema } from "./finding-lifecycle.js";
 import { reviewFindingSchema } from "./review-output.js";
 import { runIdSchema } from "./shared.js";
 
-z.config({ jitless: true });
 const id = z.number().int().positive().safe();
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 export const reviewCoordinatesSchema = z.strictObject({
@@ -45,7 +46,7 @@ export const projectionWriteResultSchema = z.enum([
   "fenced",
 ]);
 export const reviewListInputSchema = z.strictObject({
-  workspaceId: z.string().min(1).max(200),
+  workspaceId: dashboardIdSchema,
   installationId: id,
   repositoryId: id,
   status: privateReviewSummarySchema.shape.state.nullable().default(null),
@@ -60,7 +61,7 @@ export const privateReviewPageSchema = z.strictObject({
   observedAt: z.iso.datetime(),
 });
 export const reviewDetailInputSchema = reviewCoordinatesSchema.extend({
-  workspaceId: z.string().min(1).max(200),
+  workspaceId: dashboardIdSchema,
   cursor: z.string().min(1).max(512).nullable().default(null),
 });
 export const coreReviewDetailInputSchema = reviewCoordinatesSchema.extend({

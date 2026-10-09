@@ -192,3 +192,133 @@ test("a revoked grant hides the visible dataset and denied SSR never dehydrates 
   expect(denied.status()).toBe(403);
   expect(await denied.text()).not.toContain("Synthetic revisão 1");
 });
+
+test("navigation cancels an in-flight refresh and keeps the new dataset refreshable", async ({
+  page,
+}, info) => {
+  const subject =
+    99001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
+  const workspace = await signIn(page, subject);
+  expect(
+    (
+      await page.request.post("/__test/reviews/seed", {
+        data: { subject, count: 2 },
+      })
+    ).status(),
+  ).toBe(200);
+  await expect
+    .poll(
+      async () =>
+        await (
+          await page.request.get(`/__test/reviews/proof?subject=${subject}`)
+        ).json(),
+    )
+    .toEqual({ total: 2, completed: 2 });
+  await page.goto(
+    `/reviews?workspace=${workspace}&installation=${subject + 100000}&repository=${subject + 200000}`,
+  );
+  let release!: () => void, entered!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve)),
+    reached = new Promise<void>((resolve) => (entered = resolve));
+  await page.route(
+    (url) =>
+      url.pathname === "/api/reviews/list" && !url.searchParams.has("search"),
+    async (route) => {
+      const response = await route.fetch();
+      entered();
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    },
+  );
+  try {
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await reached;
+    await page.getByLabel("Search title or PR number").fill("1");
+    await page
+      .getByRole("button", { name: "Apply filters", exact: true })
+      .click();
+    await expect(page.getByText("1 results", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeEnabled();
+    release();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeEnabled();
+    await expect(page.getByText("1 results", { exact: true })).toBeVisible();
+  } finally {
+    release();
+  }
+});
+
+test("concurrent SSR users keep datasets, locales and timestamps isolated", async ({
+  browser,
+}, info) => {
+  const offset =
+    ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
+  const contexts = await Promise.all([
+    browser.newContext({ baseURL: origin, ignoreHTTPSErrors: true }),
+    browser.newContext({ baseURL: origin, ignoreHTTPSErrors: true }),
+  ]);
+  try {
+    const subjects = [100001 + offset, 101001 + offset],
+      pages = await Promise.all(contexts.map((context) => context.newPage()));
+    const workspaces = await Promise.all(
+      pages.map((page, index) => signIn(page, subjects[index]!)),
+    );
+    await Promise.all(
+      pages.map(async (page, index) => {
+        const subject = subjects[index]!;
+        expect(
+          (
+            await page.request.post("/__test/reviews/seed", {
+              data: { subject, count: index + 1 },
+            })
+          ).status(),
+        ).toBe(200);
+        await expect
+          .poll(
+            async () =>
+              await (
+                await page.request.get(
+                  `/__test/reviews/proof?subject=${subject}`,
+                )
+              ).json(),
+          )
+          .toEqual({ total: index + 1, completed: index + 1 });
+      }),
+    );
+    const responses = await Promise.all(
+      pages.map((page, index) =>
+        page.request.get(
+          `/reviews?workspace=${workspaces[index]}&installation=${subjects[index]! + 100000}&repository=${subjects[index]! + 200000}&lang=${index === 0 ? "en" : "pt-BR"}`,
+        ),
+      ),
+    );
+    const documents = await Promise.all(
+      responses.map(async (response) => {
+        expect(response.status()).toBe(200);
+        expect(response.headers()["cache-control"]).toBe("private, no-store");
+        return response.text();
+      }),
+    );
+    expect(documents[0]).toContain('lang="en"');
+    expect(documents[1]).toContain('lang="pt-BR"');
+    expect(documents[0]).not.toContain("Synthetic revisão 2");
+    expect(documents[1]).toContain("Synthetic revisão 2");
+    for (const [index, document] of documents.entries()) {
+      expect(document).toContain("dataUpdatedAt");
+      expect(document).not.toContain(workspaces[1 - index]!);
+      for (const secret of [
+        "synthetic-secret-at-least",
+        "access_token",
+        "GITHUB_APP_PRIVATE_KEY",
+        "encryptedToken",
+      ])
+        expect(document).not.toContain(secret);
+    }
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+});

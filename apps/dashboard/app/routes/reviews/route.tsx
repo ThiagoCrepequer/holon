@@ -128,6 +128,7 @@ function ReviewDataset() {
     [error, setError] = useState(false),
     [denied, setDenied] = useState(false);
   useEffect(() => {
+    setRefreshing(false);
     setDenied(false);
     setError(false);
   }, [location.key]);
@@ -163,7 +164,11 @@ function ReviewDataset() {
     } catch {
       if (!controller.signal.aborted) setError(true);
     } finally {
-      if (!controller.signal.aborted) setRefreshing(false);
+      if (
+        !controller.signal.aborted &&
+        refreshController.current === controller
+      )
+        setRefreshing(false);
     }
   };
   const page =

@@ -5,6 +5,7 @@ import {
   dispatchReviewMessages,
   type QueueMessagePort,
 } from "../src/ingress/queue-consumer.js";
+import { dispatchProjectedReviewMessages } from "../src/ingress/review-projection-ingress.js";
 
 const envelope = {
   action: "opened",
@@ -35,6 +36,51 @@ function message(body: unknown) {
 }
 
 describe("queue consumer", () => {
+  it("projects edited/closed metadata without scheduling a review and retries failed projection ingress independently", async () => {
+    const poison = message({ invalid: true }),
+      edited = message({ ...envelope, action: "edited" }),
+      closed = message({
+        ...envelope,
+        action: "closed",
+        pullRequest: { ...envelope.pullRequest, state: "merged" },
+      }),
+      failure = message({
+        ...envelope,
+        repository: { ...envelope.repository, id: 43 },
+      });
+    const observe = vi.fn(async () => "applied"),
+      createBatch = vi.fn(async () => []);
+    const getByName = vi.fn((key: string) => ({
+      observePullRequest:
+        key === "github:43:pr:7"
+          ? async () => {
+              throw new Error("synthetic_down");
+            }
+          : observe,
+    }));
+    await dispatchProjectedReviewMessages(
+      [poison.value, edited.value, closed.value, failure.value],
+      {
+        REVIEW_LEDGERS: {
+          getByName,
+        } as unknown as Cloudflare.Env["REVIEW_LEDGERS"],
+        REVIEW_WORKFLOW: { createBatch, get: vi.fn() },
+      },
+    );
+    expect(createBatch).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installationId: 99,
+        repositoryId: 42,
+        pullRequestNumber: 7,
+        pullRequestState: "merged",
+      }),
+    );
+    for (const queued of [poison, edited, closed])
+      expect(queued.state).toEqual({ acked: true, retried: false });
+    expect(failure.state).toEqual({ acked: false, retried: true });
+  });
   it("starts a workflow with the deterministic run identity then acknowledges", async () => {
     const queued = message(envelope);
     const jobs: unknown[] = [];
