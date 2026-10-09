@@ -86,7 +86,7 @@ um finding `high`, confiança 1, localizado no produtor e com confirmação caus
 apoiada no receipt do consumidor; o negativo leu a guarda e terminou sem finding.
 Não houve falha de execução, schema inválido ou candidato rejeitado nesta rodada.
 O inventário incluiu o consumidor nos dois casos, sem truncamento. Os artefatos
-[do recorte](experiments/2026-10-08-live-review/code-regression/results.json)
+[do recorte](experiments/2026-10-08-live-review/README.md#arquivo-de-evidências)
 preservam as respostas sintéticas e 31 hashes de fontes verificados pelo
 [analisador offline](experiments/2026-10-08-live-review/analyze.mjs).
 
@@ -116,7 +116,7 @@ falha em runtime; o efeito observado é o acesso `.id` em `null`, pois TypeScrip
 apaga a asserção. O grader lexical não detecta essa nuance, outro limite da
 interpretação do modelo e da adjudicação automatizada.
 
-Na [repetição de 2026-10-09T14:14 UTC](experiments/2026-10-08-live-review/code-regression-repeat/results.json),
+Na [repetição de 2026-10-09T14:14 UTC](experiments/2026-10-08-live-review/README.md#arquivo-de-evidências),
 o par passou novamente 2/2: cinco chamadas, 15.414 tokens de entrada e 741 de
 saída, duas tools lógicas/físicas, US$ 0,001330920 informados. Revisões positiva
 e negativa duraram 22,093 s e 7,276 s; não houve falha/rejeição de evidência.

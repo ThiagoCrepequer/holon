@@ -1,0 +1,64 @@
+{
+  "verifiedAt": "2026-10-09T16:16:12.521126+00:00",
+  "baseSHA": "6dcb7e5279a0b413985d401cc90290a62a1f39a9",
+  "previousHeadSHA": "e92079424cbe146c58b688d196a4b52333f6e629",
+  "preservation": {
+    "entries": 167,
+    "uniqueBlobs": 157,
+    "originalBytes": 2581873,
+    "archiveBytes": 750335,
+    "archiveSHA256": "6f67820fc79b91184e4dbc36cbe88202d74d80a25d4bb62c258f490154b15b8f",
+    "comparison": "All entries and campaign-spend.json compared byte for byte with the previous Git head. CLI --read also preserves bytes. No historical regrading."
+  },
+  "before": {
+    "files": 342,
+    "addedLines": 87465,
+    "deletedLines": 1141,
+    "rawDiffBytes": 3483717,
+    "eligibleFiles": 341,
+    "eligibleLines": 87462,
+    "shards": 64,
+    "requiredShards": 166,
+    "scopeStatus": "partial_by_policy"
+  },
+  "after": {
+    "measurement": "Offline current planner on exact Git diff; no executor context/structural inventory or inference. Packaged working tree measured against the same base.",
+    "rawDiffBytes": 811602,
+    "rawFiles": 184,
+    "all": {
+      "eligibleFiles": 182,
+      "eligibleLines": 15518,
+      "eligiblePatchBytes": 810739,
+      "shards": 32,
+      "status": "complete",
+      "omissions": [],
+      "selectedPaths": 182,
+      "selectedExperimentPaths": 14,
+      "selectedSnapshotPaths": 0,
+      "selectedLines": 15518
+    }
+  },
+  "verification": {
+    "command": "pnpm verify",
+    "exitCode": 0,
+    "node": "24.19.0",
+    "pnpm": "11.24.0",
+    "typecheckTasks": 21,
+    "coverageTasks": 32,
+    "buildTasks": 17,
+    "cachedCoverageTasks": 30,
+    "cachedBuildTasks": 16,
+    "archiveTests": 4,
+    "archiveCoveragePercent": {
+      "lines": 100,
+      "branches": 100,
+      "functions": 100
+    },
+    "dashboardBrowserCases": 48,
+    "browserProjects": ["chromium", "firefox", "webkit"],
+    "hydrationRegression": "Delayed modules: failed before the correction, passed after. No timeout/retry increase.",
+    "logSHA256": "7bf4358331d6848c1e0cae080726bfa308dfabdee2de61184fa90ff74242364e"
+  },
+  "newPaidRequests": 0,
+  "scope": "Local validation and offline admission measurement. No structural inventory, inference, CI success, deployment or migration proof."
+}

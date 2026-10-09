@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { posix } from "node:path";
+
+import { unpackEvidence } from "../../../../tooling/evidence/archive.mjs";
+
+const files = unpackEvidence(
+  JSON.parse(
+    await readFile(
+      new URL("./evidence-manifest.json", import.meta.url),
+      "utf8",
+    ),
+  ),
+  await readFile(new URL("./evidence.json.gz", import.meta.url)),
+);
+if (process.argv.length > 2) {
+  assert.equal(process.argv[2], "--read");
+  assert.equal(process.argv.length, 4);
+  const bytes = files.get(process.argv[3]);
+  assert(bytes, `Unknown archived entry: ${process.argv[3]}`);
+  process.stdout.write(bytes);
+  process.exit(0);
+}
 
 const names = [
   "diagnostic-probe",
@@ -28,8 +48,11 @@ const names = [
   "code-regression",
   "code-regression-repeat",
 ];
-const readJson = async (path) =>
-  JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
+const readJson = async (path) => {
+  const bytes = files.get(posix.normalize(path));
+  assert(bytes, `Missing archived entry: ${path}`);
+  return JSON.parse(bytes.toString("utf8"));
+};
 const sum = (items, select) =>
   items.reduce((total, item) => total + select(item), 0);
 const median = (values) => {
@@ -130,12 +153,9 @@ function metrics(report, results, expected, events) {
   };
 }
 async function checkSources(name, configuration) {
-  let manifest;
-  try {
-    manifest = await readJson(`./${name}/source-files.json`);
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
+  const manifest = files.has(`${name}/source-files.json`)
+    ? await readJson(`./${name}/source-files.json`)
+    : undefined;
   let verified = 0;
   const missing = [];
   for (const [path, expected] of Object.entries(
@@ -145,18 +165,14 @@ async function checkSources(name, configuration) {
       posix.join("apps/control-plane", path),
     );
     const entry = manifest?.[`${repositoryPath}.source`];
-    let content;
-    try {
-      content = await readFile(
-        new URL(
-          entry
-            ? `./${name}/${entry.snapshot}`
-            : `./${name}/sources/${repositoryPath}.source`,
-          import.meta.url,
-        ),
-      );
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+    const content = files.get(
+      posix.normalize(
+        entry
+          ? `${name}/${entry.snapshot}`
+          : `${name}/sources/${repositoryPath}.source`,
+      ),
+    );
+    if (!content) {
       missing.push(repositoryPath);
       continue;
     }
@@ -167,7 +183,9 @@ async function checkSources(name, configuration) {
   }
   return { verified, missing, fullGitSnapshot: false };
 }
-const spend = await readJson("./campaign-spend.json");
+const spend = JSON.parse(
+  await readFile(new URL("./campaign-spend.json", import.meta.url), "utf8"),
+);
 const records = new Map(spend.records.map((record) => [record.id, record]));
 assert.equal(records.size, spend.records.length);
 const seenSpend = new Set();
@@ -318,37 +336,9 @@ const summary = {
   protocolOnlyRequests: protocol.results.length,
   cohorts,
 };
-await writeFile(
-  new URL("./summary.json", import.meta.url),
-  JSON.stringify(summary, null, 2) + "\n",
+assert.deepEqual(
+  summary,
+  await readJson("summary.json"),
+  "Historical summary changed",
 );
-console.log(
-  JSON.stringify(
-    {
-      totals,
-      cohorts: cohorts.map(
-        ({
-          name,
-          passed,
-          expectedReviews,
-          detectedPositive,
-          expectedPositive,
-          passedNegative,
-          expectedNegative,
-          cacheHits,
-        }) => ({
-          name,
-          passed,
-          expectedReviews,
-          detectedPositive,
-          expectedPositive,
-          passedNegative,
-          expectedNegative,
-          cacheHits,
-        }),
-      ),
-    },
-    null,
-    2,
-  ),
-);
+console.log(JSON.stringify(summary, null, 2));

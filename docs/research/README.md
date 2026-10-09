@@ -16,6 +16,7 @@ Nao criam uma decisao por si so.
 ## Relatorios
 
 - [Continuação do core: defeitos de código e limites do Gemma](2026-10-09-review-core-code-follow-up.md)
+- [Preservação das evidências e redução do diff do PR #182](2026-10-09-pr-evidence-packaging.md)
 
 - [Implementação do core: correções, gates e benchmarks](2026-10-08-review-core-implementation.md)
 

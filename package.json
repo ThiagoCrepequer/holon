@@ -11,8 +11,8 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
-    "test": "pnpm test:architecture && pnpm test:deploy && turbo run test",
-    "test:coverage": "pnpm test:architecture && pnpm test:deploy:coverage && turbo run test:coverage --concurrency=1",
+    "test": "pnpm test:architecture && pnpm test:deploy && pnpm test:evidence && turbo run test",
+    "test:coverage": "pnpm test:architecture && pnpm test:deploy:coverage && pnpm test:evidence:coverage && turbo run test:coverage --concurrency=1",
     "typecheck": "turbo run typecheck",
     "verify": "pnpm brand:check && pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "config:validate": "pnpm --filter @holon/config-cli holon config validate",
@@ -22,7 +22,9 @@
     "test:architecture": "node --test tooling/architecture/*.test.mjs",
     "test:deploy": "node --test tooling/deploy/*.test.mjs",
     "test:deploy:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/deploy/*.mjs\" --test-coverage-exclude=\"tooling/deploy/*.test.mjs\" tooling/deploy/*.test.mjs",
-    "deploy:guarded": "node tooling/deploy/cli.mjs"
+    "deploy:guarded": "node tooling/deploy/cli.mjs",
+    "test:evidence": "node --test tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null",
+    "test:evidence:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/evidence/archive.mjs\" tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null"
   },
   "devDependencies": {
     "@babel/parser": "8.0.6",

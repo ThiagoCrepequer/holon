@@ -197,3 +197,9 @@ Não registre prompts, raciocínio, headers, tokens nem arquivos privados.
 as chamadas. O CLI remove somente seu diretório temporário, sem alterar Gateway,
 secrets ou GitHub. O [relatório](../research/2026-10-08-review-core-live-benchmark.md)
 conserva as tentativas e distingue schema válido, integridade e verdade causal.
+
+A campanha histórica usa um [arquivo compactado com manifesto de hashes](../research/experiments/2026-10-08-live-review/README.md#arquivo-de-evidências).
+`pnpm test:evidence` valida a integridade e a reconciliação financeira sem
+consumir modelo. O analisador imprime o resumo em stdout e `--read <caminho>`
+consulta uma entrada original. Nunca altere o conteúdo arquivado para representar
+uma execução nova; mantenha o ledger financeiro separado e preserve seus valores.
