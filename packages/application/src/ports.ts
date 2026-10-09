@@ -158,17 +158,18 @@ export interface PublishCommentInput {
   readonly marker: string;
 }
 
+export type PublicationMarkerLookup =
+  | { readonly status: "found"; readonly id: number; readonly body: string }
+  | { readonly status: "absent" }
+  | { readonly status: "inconclusive"; readonly reason: "page_limit" };
+
 export interface ReviewPublisher {
   createCheckRun?(input: CreateCheckRunInput): Promise<number>;
   findCheckRunByExternalId?(externalId: string): Promise<number | undefined>;
   findCommentByMarker(
     marker: string,
     kind: "inline" | "summary",
-  ): Promise<number | undefined>;
-  findCommentWithBodyByMarker?(
-    marker: string,
-    kind: "inline" | "summary",
-  ): Promise<{ readonly body: string; readonly id: number } | undefined>;
+  ): Promise<PublicationMarkerLookup>;
   findReviewCommentsByMarkers?(
     reviewId: number,
     markers: readonly string[],

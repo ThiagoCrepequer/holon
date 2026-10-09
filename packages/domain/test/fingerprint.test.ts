@@ -7,8 +7,22 @@ import {
 } from "../src/fingerprint.js";
 
 describe("fingerprint", () => {
+  it.each([
+    ["const value = 'a b';", "const value = 'a  b';"],
+    ["print(value)", "    print(value)"],
+    ["const value = `a\nb`;", "const value = `a\n\nb`;"],
+    ["const pattern = /a b/;", "const pattern = /a  b/;"],
+  ])("preserves semantic differences in evidence %s", async (first, second) => {
+    const input = {
+      path: "src/example.ts",
+      diagnostic: "The changed value violates the required contract.",
+    };
+    expect(
+      await computeStableFingerprint({ ...input, excerpt: first }),
+    ).not.toBe(await computeStableFingerprint({ ...input, excerpt: second }));
+  });
   describe("normalizeExcerpt", () => {
-    it("trims lines and collapses whitespace", () => {
+    it("preserves whitespace that can change code semantics", () => {
       const raw = `
         const token   =   auth.getToken();
           if (!token) {
@@ -16,14 +30,12 @@ describe("fingerprint", () => {
           }
       `;
       const normalized = normalizeExcerpt(raw);
-      expect(normalized).toBe(
-        'const token = auth.getToken(); if (!token) { throw new Error("Missing token"); }',
-      );
+      expect(normalized).toBe(raw);
     });
 
     it("handles carriage returns and tabs", () => {
       const raw = "\tconst x = 1;\r\n\tconst y = 2;\r\n";
-      expect(normalizeExcerpt(raw)).toBe("const x = 1; const y = 2;");
+      expect(normalizeExcerpt(raw)).toBe("\tconst x = 1;\n\tconst y = 2;\n");
     });
   });
 
@@ -50,16 +62,16 @@ describe("fingerprint", () => {
       expect(fp).toMatch(/^fp:[a-f0-9]{64}$/u);
     });
 
-    it("is invariant to formatting whitespace and line numbers", async () => {
+    it("is invariant to platform line endings and diagnostic line numbers", async () => {
       const fp1 = await computeStableFingerprint({
         diagnostic: "Unescaped user input passed to raw SQL query at line 45.",
-        excerpt: "  db.query(rawSql); \n ",
+        excerpt: "db.query(rawSql);\n",
         path: "src/db/query.ts",
       });
 
       const fp2 = await computeStableFingerprint({
         diagnostic: "Unescaped user input passed to raw SQL query on line 120.",
-        excerpt: "\tdb.query(rawSql);\r\n",
+        excerpt: "db.query(rawSql);\r\n",
         path: "src/db/query.ts",
       });
 

@@ -1,6 +1,8 @@
 import type { ChangedSymbol, ChangedSymbolKind } from "@holon/contracts";
 import { parsePatch } from "diff";
 
+import { changedHeadDeclarations } from "./changed-head-declarations.js";
+
 interface ExtractedRawSymbol {
   readonly isExported: boolean;
   readonly kind: ChangedSymbolKind;
@@ -180,8 +182,15 @@ function extractRawSymbolsFromLine(
 
 export function extractChangedSymbols(
   files: readonly { readonly patch: string; readonly path: string }[],
+  headFiles: readonly {
+    readonly content: string;
+    readonly path: string;
+  }[] = [],
 ): readonly ChangedSymbol[] {
   const changedSymbols: ChangedSymbol[] = [];
+  const headByPath = new Map(
+    headFiles.map((file) => [file.path, file.content]),
+  );
 
   for (const file of files) {
     const config = findLanguageConfig(file.path);
@@ -260,6 +269,26 @@ export function extractChangedSymbols(
         name: removed.name,
         path: file.path,
       });
+    }
+    const head = headByPath.get(file.path);
+    if (head !== undefined) {
+      for (const symbol of changedHeadDeclarations(
+        file.path,
+        file.patch,
+        head,
+      )) {
+        const index = changedSymbols.findIndex(
+          (existing) =>
+            existing.path === file.path && existing.name === symbol.name,
+        );
+        const existing = changedSymbols[index];
+        if (existing === undefined) changedSymbols.push(symbol);
+        else if (existing.change !== "deleted")
+          changedSymbols[index] = {
+            ...existing,
+            isExported: symbol.isExported,
+          };
+      }
     }
   }
 

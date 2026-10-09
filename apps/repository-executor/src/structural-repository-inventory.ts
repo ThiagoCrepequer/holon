@@ -6,6 +6,7 @@ import {
   repositorySearchGlobs,
   selectReviewableFiles,
   splitPullRequestDiff,
+  symbolReferencePattern,
 } from "@holon/repository-analysis";
 
 import { repositoryPath } from "./repository-tools.js";
@@ -18,10 +19,6 @@ const maximumInventoryBytes = 1_000_000;
 export interface StructuralRepositoryInventory {
   readonly files: readonly DownstreamTracerFile[];
   readonly truncated: boolean;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 export async function collectStructuralRepositoryInventory(
@@ -59,9 +56,15 @@ export async function collectStructuralRepositoryInventory(
   );
   const changedPathSet = new Set(prioritizedChanged);
 
+  const headInventory = await readInventoryFiles(
+    sandbox,
+    prioritizedChanged,
+    maximumInventoryBytes,
+  );
+  truncated ||= headInventory.truncated;
   const names = [
     ...new Set(
-      extractChangedSymbols(changedFiles)
+      extractChangedSymbols(changedFiles, headInventory.files)
         .filter(
           (symbol) =>
             symbol.isExported &&
@@ -72,11 +75,11 @@ export async function collectStructuralRepositoryInventory(
   ];
 
   let downstreamPaths: string[] = [];
-  if (names.length > 0) {
+  const pattern = symbolReferencePattern(names);
+  if (pattern !== undefined) {
     if (remainingQuota === 0) {
       truncated = true;
     } else {
-      const pattern = `\\b(?:${names.map(escapeRegex).join("|")})\\b`;
       const globArguments = [
         ...repositorySearchGlobs.flatMap((glob) => ["--glob", glob]),
         ...additionalExcludes.flatMap((glob) => ["--glob", `!${glob}`]),
@@ -120,11 +123,29 @@ export async function collectStructuralRepositoryInventory(
     truncated = true;
   }
 
-  const candidatePaths = [
-    ...prioritizedChanged,
-    ...selectedDownstreamPaths.slice(0, remainingQuota),
-  ];
+  const downstreamInventory = await readInventoryFiles(
+    sandbox,
+    selectedDownstreamPaths.slice(0, remainingQuota),
+    maximumInventoryBytes -
+      headInventory.files.reduce(
+        (bytes, file) =>
+          bytes + new TextEncoder().encode(file.content).byteLength,
+        0,
+      ),
+  );
+  return {
+    files: [...headInventory.files, ...downstreamInventory.files],
+    truncated: truncated || downstreamInventory.truncated,
+  };
+}
 
+/** Validate exact Git entries before any read; share the byte cap across both passes. */
+async function readInventoryFiles(
+  sandbox: SandboxPort,
+  candidatePaths: readonly string[],
+  remainingBytes: number,
+): Promise<StructuralRepositoryInventory> {
+  let truncated = false;
   if (candidatePaths.length === 0) {
     return { files: [], truncated };
   }
@@ -228,7 +249,7 @@ export async function collectStructuralRepositoryInventory(
       continue;
     }
 
-    if (size > maximumFileBytes || totalBytes + size > maximumInventoryBytes) {
+    if (size > maximumFileBytes || totalBytes + size > remainingBytes) {
       truncated = true;
       continue;
     }
@@ -236,10 +257,7 @@ export async function collectStructuralRepositoryInventory(
     try {
       const content = await sandbox.readFile(`${repositoryPath}/${path}`);
       const bytes = new TextEncoder().encode(content).byteLength;
-      if (
-        bytes > maximumFileBytes ||
-        totalBytes + bytes > maximumInventoryBytes
-      ) {
+      if (bytes > maximumFileBytes || totalBytes + bytes > remainingBytes) {
         truncated = true;
         continue;
       }

@@ -165,6 +165,11 @@ export function formatCheckRunOutput(
     if (si.repositoryScanTruncated === true) {
       parts.push("downstream scan partial");
     }
+    const omitted = Object.values(si.omittedSignals ?? {}).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    if (omitted > 0) parts.push(`${omitted} structural signal(s) omitted`);
     if (parts.length > 0) {
       details.push(`- **Structural Impact**: ${parts.join(", ")}`);
     }

@@ -9,6 +9,105 @@ import {
 } from "../src/index.js";
 
 describe("symbol-extractor", () => {
+  it("finds consumers of a public alias when its local implementation changes", () => {
+    const report = analyzeStructuralImpact({
+      changedFiles: [
+        {
+          path: "src/producer.ts",
+          patch:
+            "@@ -1,3 +1,3 @@\n function produce() {\n-  return { id: 'ok' };\n+  return null;\n }",
+        },
+      ],
+      repositoryFiles: [
+        {
+          path: "src/producer.ts",
+          content:
+            "function produce() {\n  return null;\n}\nexport { produce as payload };",
+        },
+        {
+          path: "src/consumer.ts",
+          content: "import { payload } from './producer';\npayload().id;",
+        },
+      ],
+    });
+    expect(report.downstreamReferences).toEqual([
+      {
+        callerLine: 1,
+        callerPath: "src/consumer.ts",
+        excerpt: "import { payload } from './producer';",
+        symbolName: "payload",
+        targetPath: "src/producer.ts",
+      },
+      {
+        callerLine: 2,
+        callerPath: "src/consumer.ts",
+        excerpt: "payload().id;",
+        symbolName: "payload",
+        targetPath: "src/producer.ts",
+      },
+    ]);
+  });
+
+  it("preserves omitted structural signals as incomplete analysis", () => {
+    const report = analyzeStructuralImpact({
+      changedFiles: Array.from({ length: 101 }, (_, index) => ({
+        path: `src/producer-${index}.ts`,
+        patch: `@@ -1 +1 @@\n-export const value${index} = 1;\n+export const value${index} = 2;`,
+      })),
+      repositoryFiles: [],
+    });
+    expect(report.changedSymbols).toHaveLength(100);
+    expect(report.omittedSignals).toEqual({
+      changedSymbols: 1,
+      contractBreaks: 0,
+      downstreamReferences: 0,
+      securitySurfaces: 0,
+    });
+  });
+
+  it("traces consumers when only a function body changes outside its declaration hunk", () => {
+    const content = [
+      "export function produce() {",
+      ...Array.from({ length: 35 }, () => "  // Padding."),
+      "  return null;",
+      "}",
+      "export function untouched() { return 1; }",
+    ].join("\n");
+    const report = analyzeStructuralImpact({
+      changedFiles: [
+        {
+          path: "src/producer.ts",
+          patch:
+            "--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -36,3 +36,3 @@\n   // Padding.\n-  return { id: 'ok' };\n+  return null;\n }",
+        },
+      ],
+      repositoryFiles: [
+        { path: "src/producer.ts", content },
+        {
+          path: "src/consumer.ts",
+          content: "import { produce } from './producer';\nproduce().id;",
+        },
+      ],
+    });
+    expect(report.changedSymbols).toEqual([
+      {
+        change: "modified",
+        isExported: true,
+        kind: "function",
+        line: 1,
+        name: "produce",
+        path: "src/producer.ts",
+      },
+    ]);
+    expect(report.downstreamReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          symbolName: "produce",
+          callerPath: "src/consumer.ts",
+        }),
+      ]),
+    );
+  });
   it("extracts TypeScript / JavaScript added, modified and deleted symbols", () => {
     const patch = [
       "--- a/src/math.ts",
@@ -164,6 +263,59 @@ describe("symbol-extractor", () => {
 });
 
 describe("downstream-tracer", () => {
+  it.each(["$load", "load$", "área", "用户"])(
+    "traces the complete JavaScript identifier %s",
+    (name) => {
+      const result = findDownstreamReferences(
+        [
+          {
+            name,
+            path: "src/producer.ts",
+            line: 1,
+            kind: "function",
+            change: "modified",
+            isExported: true,
+          },
+        ],
+        [{ path: "src/consumer.ts", content: `${name}();` }],
+      );
+      expect(result.totalCount).toBe(1);
+      expect(result.references).toMatchObject([
+        { symbolName: name, callerPath: "src/consumer.ts", callerLine: 1 },
+      ]);
+    },
+  );
+
+  it("does not mistake identifier fragments for downstream references", () => {
+    const result = findDownstreamReferences(
+      [
+        {
+          name: "load",
+          path: "src/producer.ts",
+          line: 1,
+          kind: "function",
+          change: "modified",
+          isExported: true,
+        },
+      ],
+      [
+        {
+          path: "src/consumer.ts",
+          content: [
+            "$load();",
+            "load$();",
+            "préload();",
+            "loadπ();",
+            "load\u200Dextra();",
+            "value\u200Cload();",
+            "load_other();",
+          ].join("\n"),
+        },
+      ],
+    );
+    expect(result).toEqual({ references: [], totalCount: 0 });
+  });
+
   it("traces downstream references across repository files", () => {
     const symbols = [
       {

@@ -1,6 +1,7 @@
 import type {
   CreateCheckRunInput,
   PublishCommentInput,
+  PublicationMarkerLookup,
   ReviewPublisher,
   UpdateCheckRunInput,
 } from "@holon/application";
@@ -79,7 +80,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
   public async findCommentByMarker(
     marker: string,
     kind: "inline" | "summary",
-  ): Promise<number | undefined> {
+  ): Promise<PublicationMarkerLookup> {
     const route =
       kind === "summary"
         ? "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
@@ -99,41 +100,11 @@ export class GitHubReviewPublisher implements ReviewPublisher {
           comment.user.login === this.target.expectedAuthorLogin &&
           comment.body?.includes(marker) === true,
       );
-      if (match !== undefined) return match.id;
-      if (pages >= 20) break;
+      if (match?.body !== undefined)
+        return { status: "found", id: match.id, body: match.body };
+      if (pages >= 20) return { status: "inconclusive", reason: "page_limit" };
     }
-    return undefined;
-  }
-
-  public async findCommentWithBodyByMarker(
-    marker: string,
-    kind: "inline" | "summary",
-  ): Promise<{ readonly body: string; readonly id: number } | undefined> {
-    const route =
-      kind === "summary"
-        ? "GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews"
-        : "GET /repos/{owner}/{repo}/pulls/{pull_number}/comments";
-    const common = {
-      owner: this.target.owner,
-      per_page: 100,
-      pull_number: this.target.pullNumber,
-      repo: this.target.repo,
-    };
-    let pages = 0;
-    for await (const page of this.api.iterate(route, common)) {
-      pages += 1;
-      const match = page.find(
-        (comment) =>
-          comment.user?.type === "Bot" &&
-          comment.user.login === this.target.expectedAuthorLogin &&
-          comment.body?.includes(marker) === true,
-      );
-      if (match !== undefined && match.body !== undefined) {
-        return { body: match.body, id: match.id };
-      }
-      if (pages >= 20) break;
-    }
-    return undefined;
+    return { status: "absent" };
   }
 
   public async findReviewCommentsByMarkers(

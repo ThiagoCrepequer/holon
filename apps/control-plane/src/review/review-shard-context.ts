@@ -25,7 +25,6 @@ export function buildShardReviewContext(
           ["new", "persistent", "reintroduced"].includes(f.status) &&
           shard.files.some((file) => file.path === f.filePath),
       )
-      .slice(0, 8)
       .map(({ fingerprint, diagnostic, filePath, severity }) => ({
         fingerprint,
         diagnostic,
@@ -64,7 +63,11 @@ export function buildShardReviewContext(
           ),
           downstreamReferences: structuralImpact.downstreamReferences.filter(
             (signal) =>
-              shard.files.some((file) => file.path === signal.targetPath),
+              shard.files.some(
+                (file) =>
+                  file.path === signal.targetPath ||
+                  file.path === signal.callerPath,
+              ),
           ),
           securitySurfaces: structuralImpact.securitySurfaces.filter((signal) =>
             shard.files.some((file) => file.path === signal.path),

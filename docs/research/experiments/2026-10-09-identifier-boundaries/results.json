@@ -1,0 +1,95 @@
+{
+  "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+  "results": [
+    {
+      "name": "$load",
+      "sha": "818828c1e3ac5c0657c1091ef5669ebd9c1d5ed2",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "durationMs": 3874.76775
+    },
+    {
+      "name": "load$",
+      "sha": "f93557632889e5770d9edd7a44bd21be4dc00b71",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "durationMs": 2497.339333
+    },
+    {
+      "name": "área",
+      "sha": "4dc3b364ae5e37386fec079884759424338a16a6",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "durationMs": 2509.704458
+    },
+    {
+      "name": "用户",
+      "sha": "841cdb9abc2d3783457402e35d01b6c81dfc5f1e",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "durationMs": 2735.2983750000003
+    },
+    {
+      "name": "load",
+      "sha": "d64c3c3dab2d444222fccc0b44b8f783944a5613",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "durationMs": 2157.4486660000002
+    }
+  ],
+  "verifiedAt": "2026-10-09",
+  "modelCalls": 0,
+  "network": "none",
+  "repositoryMount": "read-only",
+  "sourceDigests": {
+    "packages/repository-analysis/src/downstream-tracer.ts": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99",
+    "apps/repository-executor/src/structural-repository-inventory.ts": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3"
+  },
+  "fixtures": [
+    {
+      "name": "$load",
+      "files": {
+        "src/producer.ts": "export function $load() {\n  return null;\n}",
+        "src/consumer.ts": "import { $load } from './producer.ts';\n$load();",
+        "src/unrelated.ts": "function prefix$loadsuffix() {}\nfunction $$load() {}\nfunction $load$() {}\nfunction $load‍other() {}"
+      },
+      "patch": "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function $load() {\n-  return 1;\n+  return null;\n }"
+    },
+    {
+      "name": "load$",
+      "files": {
+        "src/producer.ts": "export function load$() {\n  return null;\n}",
+        "src/consumer.ts": "import { load$ } from './producer.ts';\nload$();",
+        "src/unrelated.ts": "function prefixload$suffix() {}\nfunction $load$() {}\nfunction load$$() {}\nfunction load$‍other() {}"
+      },
+      "patch": "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function load$() {\n-  return 1;\n+  return null;\n }"
+    },
+    {
+      "name": "área",
+      "files": {
+        "src/producer.ts": "export function área() {\n  return null;\n}",
+        "src/consumer.ts": "import { área } from './producer.ts';\nárea();",
+        "src/unrelated.ts": "function prefixáreasuffix() {}\nfunction $área() {}\nfunction área$() {}\nfunction área‍other() {}"
+      },
+      "patch": "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function área() {\n-  return 1;\n+  return null;\n }"
+    },
+    {
+      "name": "用户",
+      "files": {
+        "src/producer.ts": "export function 用户() {\n  return null;\n}",
+        "src/consumer.ts": "import { 用户 } from './producer.ts';\n用户();",
+        "src/unrelated.ts": "function prefix用户suffix() {}\nfunction $用户() {}\nfunction 用户$() {}\nfunction 用户‍other() {}"
+      },
+      "patch": "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function 用户() {\n-  return 1;\n+  return null;\n }"
+    },
+    {
+      "name": "load",
+      "files": {
+        "src/producer.ts": "export function load() {\n  return null;\n}",
+        "src/consumer.ts": "import { load } from './producer.ts';\nload();",
+        "src/unrelated.ts": "function prefixloadsuffix() {}\nfunction $load() {}\nfunction load$() {}\nfunction load‍other() {}"
+      },
+      "patch": "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function load() {\n-  return 1;\n+  return null;\n }"
+    }
+  ]
+}

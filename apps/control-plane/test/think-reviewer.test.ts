@@ -65,6 +65,7 @@ function reviewerFor(
   };
   const workflow = { get: vi.fn(async () => ({ status, terminate })) };
   const env = {
+    REPOSITORY_EXECUTOR: { getEvidencePack: async () => [] },
     REVIEW_AGENTS: namespace,
     REVIEW_SHARD_WORKFLOW: workflow,
   } as unknown as Cloudflare.Env;
@@ -110,6 +111,8 @@ it("withholds a candidate refuted by the caller's existing null guard", async ()
         assessments: [
           {
             candidateIndex: 0,
+            basis: "patch",
+            evidenceReceiptIds: [],
             outcome: "refuted",
             confidence: 0.98,
             rationale:

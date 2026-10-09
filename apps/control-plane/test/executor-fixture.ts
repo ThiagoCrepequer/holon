@@ -5,6 +5,7 @@ function unexpectedExecutorCall(): never {
 }
 
 export const unconfiguredExecutor: RepositoryExecutorBinding = {
+  getEvidencePack: unexpectedExecutorCall,
   cleanup: unexpectedExecutorCall,
   hasContext: unexpectedExecutorCall,
   discoverProjectMetadata: unexpectedExecutorCall,

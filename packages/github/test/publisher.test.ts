@@ -219,13 +219,21 @@ describe("GitHubReviewPublisher", () => {
 
     await expect(
       publisher.findCommentByMarker("<!-- inline -->", "inline"),
-    ).resolves.toBe(10);
+    ).resolves.toEqual({
+      status: "found",
+      id: 10,
+      body: "body\n<!-- inline -->",
+    });
     await expect(
       publisher.findCommentByMarker("<!-- summary -->", "summary"),
-    ).resolves.toBe(20);
+    ).resolves.toEqual({
+      status: "found",
+      id: 20,
+      body: "body\n<!-- summary -->",
+    });
     await expect(
       publisher.findCommentByMarker("<!-- missing -->", "summary"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ status: "absent" });
   });
 
   it("resolves inline IDs only from the submitted review and its bot", async () => {
@@ -281,7 +289,7 @@ describe("GitHubReviewPublisher", () => {
 
     await expect(
       publisher.findCommentByMarker("<!-- marker -->", "inline"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ status: "absent" });
   });
 
   it("bounds ambiguous reconciliation pagination", async () => {
@@ -297,7 +305,7 @@ describe("GitHubReviewPublisher", () => {
 
     await expect(
       publisher.findCommentByMarker("<!-- missing -->", "inline"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ status: "inconclusive", reason: "page_limit" });
     expect(api.pagesVisited).toBe(20);
   });
 
@@ -505,20 +513,21 @@ describe("GitHubReviewPublisher", () => {
       },
     ];
 
-    const found = await publisher.findCommentWithBodyByMarker(
+    const found = await publisher.findCommentByMarker(
       "<!-- holon:summary -->",
       "summary",
     );
     expect(found).toEqual({
+      status: "found",
       body: "Initial review summary\n\n<!-- holon:summary -->",
       id: 555,
     });
 
-    const notFound = await publisher.findCommentWithBodyByMarker(
+    const notFound = await publisher.findCommentByMarker(
       "<!-- missing -->",
       "summary",
     );
-    expect(notFound).toBeUndefined();
+    expect(notFound).toEqual({ status: "absent" });
 
     await publisher.updateReviewComment(555, "Updated review summary");
     expect(api.requests).toHaveLength(1);

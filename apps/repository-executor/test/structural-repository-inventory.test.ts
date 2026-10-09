@@ -76,6 +76,163 @@ function sandbox(
 }
 
 describe("structural repository inventory", () => {
+  it.each(["$load", "load$", "área", "用户"])(
+    "discovers consumers of %s with an identifier-safe search",
+    async (name) => {
+      const fake = sandbox({ exitCode: 1, stdout: "", truncated: false });
+      fake.readFile.mockImplementation(async (path) =>
+        path.endsWith("consumer.ts")
+          ? `${name}();`
+          : `export function ${name}() {\n  return null;\n}`,
+      );
+      fake.run.mockImplementation(async (args) => {
+        if (args[0] === "git")
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: defaultLsTreeStdout(args.slice(args.indexOf("--") + 1)),
+            truncated: false,
+          };
+        if (args[0] !== "rg") throw new Error("Unexpected inventory operation");
+        const pattern = args[args.indexOf("--") + 1];
+        if (!pattern) throw new Error("Missing inventory pattern");
+        const search = new RegExp(pattern, "u");
+        expect(search.test(`${name}();`)).toBe(true);
+        expect(search.test(`prefix${name}suffix();`)).toBe(false);
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: "src/consumer.ts\n",
+          truncated: false,
+        };
+      });
+      const patch = `diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function ${name}() {\n-  return 1;\n+  return null;\n }`;
+      const result = await collectStructuralRepositoryInventory(
+        fake.port,
+        patch,
+      );
+      expect(result.files.map((file) => file.path)).toEqual([
+        "src/producer.ts",
+        "src/consumer.ts",
+      ]);
+      expect(result.truncated).toBe(false);
+    },
+  );
+
+  it("shares the byte budget between changed files and downstream reads", async () => {
+    const fake = sandbox({
+      exitCode: 0,
+      stdout: "src/consumer.ts\n",
+      truncated: false,
+    });
+    const patch = Array.from({ length: 19 }, (_, index) =>
+      modifiedExportPatch.replaceAll(
+        "src/service.ts",
+        `src/service-${index}.ts`,
+      ),
+    ).join("\n");
+    fake.run.mockImplementation(async (args) => {
+      if (args[0] === "rg")
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: "src/consumer.ts\n",
+          truncated: false,
+          timedOut: false,
+        };
+      const paths = args.slice(args.indexOf("--") + 1);
+      return {
+        exitCode: 0,
+        stderr: "",
+        stdout: paths
+          .map(
+            (path) =>
+              `100644 blob ${"a".repeat(40)} ${path.endsWith("consumer.ts") ? 60000 : 50000}\t${path}\0`,
+          )
+          .join(""),
+        truncated: false,
+        timedOut: false,
+      };
+    });
+    fake.readFile.mockResolvedValue("x".repeat(50_000));
+    const inventory = await collectStructuralRepositoryInventory(
+      fake.port,
+      patch,
+    );
+    expect(inventory.files).toHaveLength(19);
+    expect(inventory.truncated).toBe(true);
+    expect(fake.readFile).not.toHaveBeenCalledWith(
+      "/workspace/repository/src/consumer.ts",
+    );
+  });
+
+  it("retains validated heads but refuses a downstream symlink", async () => {
+    const fake = sandbox({
+      exitCode: 0,
+      stdout: "src/consumer.ts\n",
+      truncated: false,
+    });
+    fake.run.mockImplementation(async (args) => {
+      if (args[0] === "rg")
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: "src/consumer.ts\n",
+          truncated: false,
+          timedOut: false,
+        };
+      const paths = args.slice(args.indexOf("--") + 1);
+      return {
+        exitCode: 0,
+        stderr: "",
+        stdout: paths
+          .map(
+            (path) =>
+              `${path.endsWith("consumer.ts") ? "120000" : "100644"} blob ${"a".repeat(40)} 20\t${path}\0`,
+          )
+          .join(""),
+        truncated: false,
+        timedOut: false,
+      };
+    });
+    const inventory = await collectStructuralRepositoryInventory(
+      fake.port,
+      modifiedExportPatch,
+    );
+    expect(inventory.files.map((file) => file.path)).toEqual([
+      "src/service.ts",
+    ]);
+    expect(inventory.truncated).toBe(true);
+    expect(fake.readFile).not.toHaveBeenCalledWith(
+      "/workspace/repository/src/consumer.ts",
+    );
+  });
+
+  it("discovers downstream paths after validating and reading a changed function body", async () => {
+    const fake = sandbox({
+      exitCode: 0,
+      stdout: "./src/consumer.ts\n",
+      truncated: false,
+    });
+    fake.readFile.mockImplementation(async (path) =>
+      path.endsWith("producer.ts")
+        ? "export function produce() {\n  return null;\n}"
+        : "import { produce } from './producer';\nproduce().id;",
+    );
+    const patch =
+      "diff --git a/src/producer.ts b/src/producer.ts\n--- a/src/producer.ts\n+++ b/src/producer.ts\n@@ -1,3 +1,3 @@\n export function produce() {\n-  return { id: 'ok' };\n+  return null;\n }";
+    const result = await collectStructuralRepositoryInventory(fake.port, patch);
+    expect(result.files.map((file) => file.path)).toEqual([
+      "src/producer.ts",
+      "src/consumer.ts",
+    ]);
+    const search = fake.run.mock.calls.find(([args]) => args[0] === "rg")?.[0];
+    const pattern = search?.[search.indexOf("--") + 1];
+    if (!pattern) throw new Error("Missing downstream search");
+    expect(new RegExp(pattern, "u").test("produce().id;")).toBe(true);
+    expect(new RegExp(pattern, "u").test("producer().id;")).toBe(false);
+    expect(result.truncated).toBe(false);
+  });
   it("loads bounded downstream candidate files from the real checkout", async () => {
     const fake = sandbox({
       exitCode: 0,
@@ -95,11 +252,15 @@ describe("structural repository inventory", () => {
         "--files-with-matches",
         "--no-messages",
         "--",
-        "\\b(?:loadUser)\\b",
         ".",
       ]),
       expect.objectContaining({ cwd: "/workspace/repository" }),
     );
+    const search = fake.run.mock.calls.find(([args]) => args[0] === "rg")?.[0];
+    const pattern = search?.[search.indexOf("--") + 1];
+    if (!pattern) throw new Error("Missing downstream search");
+    expect(new RegExp(pattern, "u").test("loadUser('42');")).toBe(true);
+    expect(new RegExp(pattern, "u").test("$loadUser('42');")).toBe(false);
     expect(inventory).toEqual({
       files: [
         {

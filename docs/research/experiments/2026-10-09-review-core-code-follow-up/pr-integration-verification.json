@@ -1,0 +1,227 @@
+{
+  "verifiedAt": "2026-10-09T15:26:20.613466Z",
+  "integrationBaseSha": "6dcb7e5279a0b413985d401cc90290a62a1f39a9",
+  "command": "pnpm verify",
+  "exitCode": 0,
+  "node": "24.19.0",
+  "pnpm": "11.24.0",
+  "taskCounts": {
+    "typecheck": 21,
+    "coverage": 32,
+    "buildDryRun": 17
+  },
+  "architectureTests": 14,
+  "coreVitestTests": 1493,
+  "coreWorkspaceTests": {
+    "domain": 108,
+    "contracts": 177,
+    "application": 158,
+    "repository-analysis": 217,
+    "model": 48,
+    "repository-config": 13,
+    "project-identification": 63,
+    "github": 114,
+    "evaluation": 68,
+    "repository-executor": 130,
+    "control-plane": 397
+  },
+  "hostNodeTests": 18,
+  "verifyLogSHA256": "53a4880e4879216da942fd4e71644dee2ebcb04e50631d60ef3ee5c9390f3581",
+  "coverage": {
+    "packages/contracts": {
+      "lines": {
+        "total": 490,
+        "covered": 484,
+        "skipped": 0,
+        "pct": 98.77
+      },
+      "statements": {
+        "total": 508,
+        "covered": 496,
+        "skipped": 0,
+        "pct": 97.63
+      },
+      "functions": {
+        "total": 88,
+        "covered": 85,
+        "skipped": 0,
+        "pct": 96.59
+      },
+      "branches": {
+        "total": 266,
+        "covered": 247,
+        "skipped": 0,
+        "pct": 92.85
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    },
+    "packages/application": {
+      "lines": {
+        "total": 684,
+        "covered": 665,
+        "skipped": 0,
+        "pct": 97.22
+      },
+      "statements": {
+        "total": 728,
+        "covered": 699,
+        "skipped": 0,
+        "pct": 96.01
+      },
+      "functions": {
+        "total": 152,
+        "covered": 149,
+        "skipped": 0,
+        "pct": 98.02
+      },
+      "branches": {
+        "total": 740,
+        "covered": 664,
+        "skipped": 0,
+        "pct": 89.72
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "packages/repository-analysis": {
+      "lines": {
+        "total": 799,
+        "covered": 774,
+        "skipped": 0,
+        "pct": 96.87
+      },
+      "statements": {
+        "total": 866,
+        "covered": 835,
+        "skipped": 0,
+        "pct": 96.42
+      },
+      "functions": {
+        "total": 140,
+        "covered": 140,
+        "skipped": 0,
+        "pct": 100
+      },
+      "branches": {
+        "total": 718,
+        "covered": 649,
+        "skipped": 0,
+        "pct": 90.38
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "packages/model": {
+      "lines": {
+        "total": 214,
+        "covered": 210,
+        "skipped": 0,
+        "pct": 98.13
+      },
+      "statements": {
+        "total": 229,
+        "covered": 223,
+        "skipped": 0,
+        "pct": 97.37
+      },
+      "functions": {
+        "total": 58,
+        "covered": 57,
+        "skipped": 0,
+        "pct": 98.27
+      },
+      "branches": {
+        "total": 183,
+        "covered": 170,
+        "skipped": 0,
+        "pct": 92.89
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "apps/repository-executor": {
+      "lines": {
+        "total": 740,
+        "covered": 687,
+        "skipped": 0,
+        "pct": 92.83
+      },
+      "statements": {
+        "total": 771,
+        "covered": 713,
+        "skipped": 0,
+        "pct": 92.47
+      },
+      "functions": {
+        "total": 177,
+        "covered": 165,
+        "skipped": 0,
+        "pct": 93.22
+      },
+      "branches": {
+        "total": 512,
+        "covered": 446,
+        "skipped": 0,
+        "pct": 87.1
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "apps/control-plane": {
+      "lines": {
+        "total": 2727,
+        "covered": 2552,
+        "skipped": 0,
+        "pct": 93.58
+      },
+      "statements": {
+        "total": 2880,
+        "covered": 2660,
+        "skipped": 0,
+        "pct": 92.36
+      },
+      "functions": {
+        "total": 639,
+        "covered": 603,
+        "skipped": 0,
+        "pct": 94.36
+      },
+      "branches": {
+        "total": 1934,
+        "covered": 1680,
+        "skipped": 0,
+        "pct": 86.86
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    }
+  },
+  "localMarkdownLinksChecked": 412,
+  "newPaidRequests": 0,
+  "scope": "Local integration with current main. Controlled external boundaries. Historical synthetic Gemma benchmarks remain tied to their archived sources. No CI, deployment or production proof."
+}

@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-09-03
+last-reviewed: 2026-10-08
 related:
   - ../product/mvp-scope.md
   - ../product/review-quality-contract.md
@@ -18,6 +18,20 @@ related:
 ---
 
 # Roadmap de evolução do core de review
+
+## Atualização de navegação em 2026-10-08
+
+As etapas abaixo preservam o planejamento histórico do motor/corpus anterior.
+Para o estado atual do Think, começar pela
+[auditoria do core](../research/2026-10-08-review-core-audit.md) e pela
+[proposta de melhorias](review-core-improvement-proposal.md). A proposta ordena
+integridade, avaliação, reuso de contexto, verificação, budgets e scheduling,
+com gates específicos. O
+[relatório de implementação](../research/2026-10-08-review-core-implementation.md)
+separa entregas locais de runtime, experimentos e gates ainda não satisfeitos.
+O [guia de qualidade](../engineering/review-core-quality.md) contém os padrões
+esperados e a [comparação externa](../research/2026-10-08-review-system-comparison.md)
+registra as referências críticas.
 
 ## Status e finalidade
 

@@ -1,10 +1,14 @@
 import type { ModelReviewer, ReviewContext } from "@holon/application";
 import {
   applyCausalVerification,
-  verifyFindingsWithCanonicalEvidence,
+  prepareCausalCandidates,
   withholdUnverifiedFindings,
 } from "@holon/application";
-import { modelReviewOutputSchema, type ReviewJob } from "@holon/contracts";
+import {
+  modelReviewOutputSchema,
+  validateReviewEvidencePack,
+  type ReviewJob,
+} from "@holon/contracts";
 import { createPrKey } from "@holon/domain";
 import {
   buildReviewPromptResult,
@@ -52,39 +56,16 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
     const reviewPrompt = `${prompt.prompt}\n${guidance}\n${outputLanguageInstructions(context.repositoryGuidance?.output)}`;
     const deadlineAt = context.deadlineAt ?? Date.now() + 20 * 60_000;
     const boundedContext = { ...context, deadlineAt };
+    const investigation = await this.execute(
+      job,
+      boundedContext,
+      reviewPrompt,
+      "investigation",
+    );
     const draft = modelReviewOutputSchema.parse(
-      redactModelReviewOutput(
-        modelReviewOutputSchema.parse(
-          await this.execute(
-            job,
-            boundedContext,
-            reviewPrompt,
-            "investigation",
-          ),
-        ),
-      ),
+      redactModelReviewOutput(modelReviewOutputSchema.parse(investigation.raw)),
     );
-    const verification = verifyFindingsWithCanonicalEvidence(
-      draft.findings,
-      context,
-    );
-    const candidates = modelReviewOutputSchema.parse({
-      ...draft,
-      findings: draft.findings.filter((finding) =>
-        verification.findings.includes(finding),
-      ),
-      ...(verification.rejections.length
-        ? {
-            isDegraded: true,
-            outputLimitations: [
-              ...new Set([
-                ...(draft.outputLimitations ?? []),
-                "evidence_rejected",
-              ]),
-            ],
-          }
-        : {}),
-    });
+    const { candidates, rejections } = prepareCausalCandidates(draft, context);
     const language = context.repositoryGuidance?.output.language ?? "en";
     let output = candidates;
     if (candidates.findings.length) {
@@ -92,16 +73,27 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
         const raw = await this.execute(
           job,
           boundedContext,
-          buildCausalVerificationPrompt(reviewPrompt, candidates),
+          buildCausalVerificationPrompt(
+            prompt.verificationContext,
+            candidates,
+            investigation.evidence,
+          ),
           "causal_verification",
         );
-        output = applyCausalVerification(candidates, raw, language);
+        output = applyCausalVerification(
+          candidates,
+          raw.raw,
+          language,
+          [...investigation.evidence, ...raw.evidence].map(
+            (item) => item.receipt,
+          ),
+        );
       } catch {
         // A cancelled parent must not persist or publish a degraded result.
         context.abortSignal?.throwIfAborted();
         output = withholdUnverifiedFindings(candidates, language);
       }
-    } else if (verification.rejections.length) {
+    } else if (rejections.length) {
       output = withholdUnverifiedFindings(candidates, language);
     }
     return {
@@ -118,7 +110,7 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
     context: ReviewContext,
     prompt: string,
     phase: "investigation" | "causal_verification",
-  ): Promise<unknown> {
+  ) {
     context.abortSignal?.throwIfAborted();
     const deadlineAt = context.deadlineAt ?? Date.now() + 20 * 60_000;
     if (Date.now() >= deadlineAt)
@@ -150,7 +142,17 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
           const state = await workflow.status();
           context.abortSignal?.throwIfAborted();
           if (state.status === "complete") {
-            return state.output;
+            const evidence =
+              Date.now() >= deadlineAt
+                ? []
+                : await validateReviewEvidencePack(
+                    await this.env.REPOSITORY_EXECUTOR.getEvidencePack(
+                      job.runId,
+                      Math.min(deadlineAt, Date.now() + 90_000),
+                    ),
+                    job.runId,
+                  );
+            return { raw: state.output, evidence };
           }
           if (state.status === "errored" || state.status === "terminated")
             throw new ThinkReviewFailure(

@@ -6,9 +6,46 @@ import {
 import { parseRepositoryConfigurationYaml } from "@holon/repository-config";
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveReviewGuidance } from "../src/review/review-guidance.js";
+import {
+  createReviewGuidanceResolver,
+  resolveReviewGuidance,
+} from "../src/review/review-guidance.js";
 import { configurationReader } from "./configuration-fixtures.js";
 const base = "b".repeat(40);
+it("shares pinned documentation across concurrent shards only within one invocation", async () => {
+  const content = "Node API";
+  const reference = {
+    root: ".",
+    technology: "node",
+    version: "24.0.0",
+    url: "https://nodejs.org/api/",
+    sha256: await configurationDigest(content),
+  };
+  const identification = {
+    projects: [
+      {
+        root: ".",
+        technologies: [
+          { name: "node", declarations: [{ kind: "locked", value: "24.0.0" }] },
+        ],
+      },
+    ],
+  } as never;
+  const fetcher = vi.fn(async () => new Response(content));
+  const resolve = createReviewGuidanceResolver(fetcher);
+  const [first, second] = await Promise.all([
+    resolve([reference], ["a.ts"], identification),
+    resolve([reference], ["b.ts"], identification),
+  ]);
+  expect(first.documentation).toEqual(second.documentation);
+  expect(fetcher).toHaveBeenCalledOnce();
+  await createReviewGuidanceResolver(fetcher)(
+    [reference],
+    ["a.ts"],
+    identification,
+  );
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 async function compile(yaml: string) {
   return compileRepositoryConfiguration(
     {

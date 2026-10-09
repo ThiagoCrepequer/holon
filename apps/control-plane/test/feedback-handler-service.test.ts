@@ -56,7 +56,7 @@ function ledger() {
 
 function publisher(): ReviewPublisher {
   return {
-    findCommentByMarker: vi.fn().mockResolvedValue(undefined),
+    findCommentByMarker: vi.fn().mockResolvedValue({ status: "absent" }),
     publish: vi.fn(),
     replyToComment: vi.fn().mockResolvedValue(999),
     updateCheckRun: vi.fn().mockResolvedValue(undefined),

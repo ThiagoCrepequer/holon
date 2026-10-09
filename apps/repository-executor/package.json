@@ -9,7 +9,7 @@
     "deploy:bootstrap": "wrangler deploy --config wrangler.bootstrap.jsonc",
     "dev": "wrangler dev",
     "test": "vitest run --config vitest.config.ts && vitest run --config vitest.worker.config.ts",
-    "test:coverage": "vitest run --config vitest.config.ts --coverage && vitest run --config vitest.worker.config.ts",
+    "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
     "test:worker": "vitest run --config vitest.worker.config.ts",
     "typecheck": "wrangler types --check && tsc --noEmit -p tsconfig.json"
   },

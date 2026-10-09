@@ -1,0 +1,62 @@
+interface LiveBenchmarkIdentity {
+  readonly profile: string;
+  readonly thinking: boolean;
+  readonly temperature: number | null;
+  readonly partition: string;
+  readonly structuralContext: boolean;
+  readonly costPolicy: Readonly<Record<string, number>>;
+  readonly probe: boolean;
+  readonly limits: Readonly<Record<string, number>>;
+  readonly cases: readonly unknown[];
+  readonly variants: readonly string[];
+  readonly sourceDigests: Readonly<Record<string, string>>;
+  readonly routeDeployment: string | null;
+  readonly imageDigest: string;
+}
+
+/** A continuation never renews caps or replaces the predeclared comparison. */
+export function assertLiveBenchmarkResume(
+  previous: LiveBenchmarkIdentity,
+  current: LiveBenchmarkIdentity,
+): void {
+  const fields: readonly (keyof LiveBenchmarkIdentity)[] = [
+    "profile",
+    "thinking",
+    "temperature",
+    "partition",
+    "structuralContext",
+    "costPolicy",
+    "probe",
+    "limits",
+    "cases",
+    "variants",
+    "sourceDigests",
+    "routeDeployment",
+    "imageDigest",
+  ];
+  if (
+    fields.some(
+      (field) =>
+        JSON.stringify(previous[field]) !== JSON.stringify(current[field]),
+    )
+  )
+    throw new Error(
+      "Resume requires identical limits, profile, cases, model route, image and sources",
+    );
+}
+
+/** Completing the harness alone never turns a quality failure into a green command. */
+export function liveBenchmarkExitCode(
+  harnessExitCode: number | null,
+  results: readonly { readonly key: string; readonly passed: boolean }[],
+  expectedKeys: readonly string[],
+): number {
+  if (harnessExitCode !== 0) return harnessExitCode ?? 1;
+  const keys = new Set(results.map((result) => result.key));
+  return results.length === expectedKeys.length &&
+    keys.size === results.length &&
+    expectedKeys.every((key) => keys.has(key)) &&
+    results.every((result) => result.passed)
+    ? 0
+    : 2;
+}

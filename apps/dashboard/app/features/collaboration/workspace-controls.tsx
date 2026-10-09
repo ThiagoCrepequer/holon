@@ -30,17 +30,18 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [status, setStatus] = useState("idle");
   const [open, setOpen] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   const [teamName, setTeamName] = useState("");
   const pending = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const teamOperation = useRef<string | null>(null);
-  useLayoutEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    setInteractive(true);
+    return () => {
       generation.current++;
       pending.current?.abort();
-    },
-    [],
-  );
+    };
+  }, []);
   function clearScope() {
     setWorkspace(null);
   }
@@ -147,6 +148,7 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
     <section className="holon-collaboration" aria-label={labels.title}>
       <Button
         variant="quiet"
+        disabled={!interactive}
         onClick={() => void loadWorkspaces()}
         busy={status === "loading"}
       >
@@ -156,6 +158,7 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
         confirmationWorkspace &&
         (confirmationAction === "link" || confirmationAction === "unlink") && (
           <Button
+            disabled={!interactive}
             onClick={() =>
               void run(
                 `/api/workspaces/${encodeURIComponent(confirmationWorkspace)}/github/${confirmationAction}`,

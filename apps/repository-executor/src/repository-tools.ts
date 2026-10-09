@@ -163,6 +163,44 @@ function hasStructuralReviewFiles(context: ReviewContext): boolean {
   return context.files.some((file) => file.mode === "structural");
 }
 
+/** Re-evaluate current scope before every reuse; the run identity includes repository/base/head. */
+export async function repositoryToolCacheKey(
+  sandbox: SandboxPort,
+  rawRunId: string,
+  rawCall: RepositoryToolCall,
+): Promise<string> {
+  const runId = runIdSchema.parse(rawRunId);
+  const call = repositoryToolCallSchema.parse(rawCall);
+  const policy = parseReviewScopePolicy(
+    await sandbox.readFile(reviewScopePolicyPath),
+  );
+  for (const path of call.name === "read_file"
+    ? [call.arguments.path]
+    : (call.arguments.paths ?? []))
+    assertReviewScopePathAllowed(policy, path);
+  buildToolExecution(call, repositoryPath);
+  if (call.name === "search_structure") {
+    const context = reviewContextSchema.parse(
+      JSON.parse(await sandbox.readFile(contextPath)) as unknown,
+    );
+    if (!hasStructuralReviewFiles(context))
+      throw new RepositoryQueryError("query_unsupported");
+  }
+  const normalized =
+    call.name === "read_file"
+      ? {
+          name: call.name,
+          arguments: {
+            path: call.arguments.path,
+            startLine: call.arguments.startLine ?? 1,
+            endLine:
+              call.arguments.endLine ?? (call.arguments.startLine ?? 1) + 199,
+          },
+        }
+      : call;
+  return JSON.stringify({ runId, policy, call: normalized });
+}
+
 export async function executeRepositoryTool(
   sandbox: SandboxPort,
   rawRunId: string,

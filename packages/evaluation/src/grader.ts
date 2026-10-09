@@ -7,6 +7,7 @@ import type {
 } from "./contracts.js";
 
 export type EvalFailure =
+  | { readonly kind: "evidence_integrity"; readonly rejectedCount: number }
   | { readonly findingId: string; readonly kind: "missing_finding" }
   | { readonly actualIndex: number; readonly kind: "unexpected_finding" }
   | {

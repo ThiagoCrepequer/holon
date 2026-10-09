@@ -78,7 +78,7 @@ entre shards. Uso desconhecido conserva a reserva máxima. A decisão de
 admissão não mede custo faturado. A [ADR-0049](../decisions/0049-use-cloudflare-think-for-pr-review.md)
 substitui a divisão por shard da ADR-0046.
 
-A primeira recusa também interrompe a admissão de novas ondas, sem renovar saldo
+A primeira recusa também interrompe a admissão de novos shards, sem renovar saldo
 após settlement/retry/eviction. A review publicada informa orçamento esgotado e
 cobertura parcial; uma recusa na última onda pode não emitir
 `review.analysis_budget_stopped` porque não há shards restantes. Consulte
@@ -101,7 +101,7 @@ confundir esse valor com `durationMs` do evento de leitura ou com wall time.
 Uma run pode atravessar várias invocações. Em revisões grandes, confirme também:
 
 - leitura única do snapshot por invocação sem reconstrução;
-- ausência de novos Agents/ondas após a primeira recusa, preservando os peers
+- ausência de novos Agents/shards após a primeira recusa, preservando os peers
   já admitidos e a explicação pública de cobertura parcial;
 - ausência de `exceededCpu`, publicação idempotente e `cleanup_completed`.
 
@@ -123,18 +123,22 @@ Implementação: `apps/control-plane/src/review/review-agent.ts`,
 
 ## Admissão de geração e causas do Think
 
-A [ADR-0053](../decisions/0053-align-review-admission-with-generation-budget.md)
-admite até nove shards antes do despacho, dentro dos tetos agregados. O plano
-estrutural pode ter mais partes; `model_budget` registra a quantidade original e
-a admitida. `executor_budget` continua uma limitação independente de contexto,
-incluindo o teto de 32.000 entradas de linhas alteradas.
+A [ADR-0055](../decisions/0055-fund-large-reviews-with-protected-investigation.md)
+admite até 64 shards e sela perfil, estimativa de entrada e pesos antes do
+despacho. A [ADR-0059](../decisions/0059-compose-stable-review-lanes-with-budget-profiles.md)
+compõe esses limites com lanes estáveis. `contract_checks` registra relações
+que não couberam em partes/janelas canônicas; `executor_budget` continua uma
+limitação independente de contexto, incluindo o teto de 32.000 entradas de
+linhas alteradas. A admissão limitada a nove pela ADR-0053 é histórica.
 
-Cada shard conserva `floor(teto / totalShards)` de chamadas, entrada cumulativa e
-saída. Em `model.budget_rejected`, `rule=shard_calls`, `shard_input_bytes` ou
+Cada shard protege quatro inferências, três tools e uma parcela igual de 70%
+dos bytes/tokens do perfil. O restante é ponderado; sobra de peers concluídos
+só é liberada após persistência do resultado. Em `model.budget_rejected`,
+`rule=shard_calls`, `shard_input_bytes` ou
 `shard_output_tokens` indica a parcela local; `current/requested/limit` são dessa
 parcela. Os campos `callsCurrent/inputBytesCurrent/outputTokensCurrent` continuam
 os totais globais. Recusa local não grava `stop_reason` global e não impede a
-análise de outras partes. Somente recusa de teto agregado para novas ondas.
+análise de outras partes. Somente recusa de teto agregado para novos shards.
 
 Uma falha conhecida fica no estado durável do Agent e chega ao adapter por RPC.
 Os códigos são `model_budget_exhausted`, `model_shard_budget_exhausted`,

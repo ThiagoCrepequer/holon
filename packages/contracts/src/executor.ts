@@ -82,20 +82,7 @@ export const searchTextToolSchema = z.strictObject({
 });
 
 export const searchStructureArgumentsSchema = z.strictObject({
-  language: z.enum([
-    "typescript",
-    "tsx",
-    "javascript",
-    "jsx",
-    "python",
-    "go",
-    "rust",
-    "java",
-    "csharp",
-    "ruby",
-    "php",
-    "kotlin",
-  ]),
+  language: z.enum(["typescript", "tsx", "javascript", "jsx"]),
   maxResults: maxResultsSchema,
   paths: z.array(repositoryPathSchema).max(20).optional(),
   pattern: z.string().min(2).max(1_000),

@@ -20,6 +20,7 @@ import type {
   FeedbackLedger,
   ReviewPublisher,
 } from "./ports.js";
+import { requireConclusivePublicationLookup } from "./publication-lookup.js";
 
 export interface ProcessFeedbackCommentInput {
   readonly authorAssociation?: string | undefined;
@@ -112,12 +113,15 @@ async function publishReplyOnce(
   if (publisher.replyToComment === undefined) return false;
 
   const marker = `<!-- holon;feedback=${encodeURIComponent(deliveryId)} -->`;
-  const existing = await publisher.findCommentByMarker(marker, "inline");
+  const existing = requireConclusivePublicationLookup(
+    await publisher.findCommentByMarker(marker, "inline"),
+  );
   const replyCommentId =
-    existing ??
-    (await publisher.replyToComment(targetCommentId, `${body}\n\n${marker}`));
+    existing.status === "found"
+      ? existing.id
+      : await publisher.replyToComment(targetCommentId, `${body}\n\n${marker}`);
   await ledger.completeFeedbackReply(deliveryId, replyCommentId);
-  return existing === undefined;
+  return existing.status === "absent";
 }
 
 async function recalculateVerdict(

@@ -22,13 +22,31 @@ export default defineConfig({
             modules: true,
             name: "repository-executor-current",
             script: `
-              import { WorkerEntrypoint } from "cloudflare:workers";
+              import { WorkerEntrypoint, RpcTarget } from "cloudflare:workers";
+              const reads = new Map();
+              const content = "if (value !== null) return value.id;";
+              class ReadOperation extends RpcTarget {
+                result() { return { content, truncated: false }; }
+                cancel() {}
+                [Symbol.dispose]() {}
+              }
               export default class RepositoryExecutorCurrent extends WorkerEntrypoint {
                 cleanup() {}
                 hasContext() { return false; }
                 loadContext() { throw new Error("unused"); }
                 prepareRepository() { throw new Error("unused"); }
                 runTool() { throw new Error("unused"); }
+                startTool(runId, call) {
+                  if (call.name !== "read_file" || call.arguments.path !== "src/caller.ts") throw new Error("Unexpected test executor operation");
+                  reads.set(runId, true);
+                  return new ReadOperation();
+                }
+                async getEvidencePack(runId) {
+                  if (!reads.has(runId)) return [];
+                  const hash = async text => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), byte => byte.toString(16).padStart(2,"0")).join("");
+                  const identity = { digest: await hash(content), runId, headSha: runId.split(":head:")[1].split(":base:")[0], path: "src/caller.ts", startLine: 1, endLine: 1, truncated: false };
+                  return [{ receipt: { ...identity, id: await hash(JSON.stringify(identity)) }, content }];
+                }
               }
             `,
           },
@@ -38,9 +56,11 @@ export default defineConfig({
     }),
   ],
   test: {
+    include: ["test/**/*.test.ts"],
     clearMocks: true,
     fileParallelism: false,
     coverage: {
+      include: ["src/**/*.{ts,tsx}"],
       provider: "istanbul",
       reporter: ["text", "json-summary", "html", "lcov"],
       thresholds: { branches: 85, functions: 90, lines: 90, statements: 90 },

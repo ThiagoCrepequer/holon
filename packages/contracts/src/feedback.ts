@@ -50,22 +50,28 @@ export const parsedFeedbackCommandSchema: z.ZodType<ParsedFeedbackCommand> =
   });
 
 export interface CalibrationMetrics {
+  readonly adjudicatedFindings: number;
+  readonly conflictedFindings: number;
+  readonly resolvedFindings: number;
   readonly falsePositiveCount: number;
-  readonly falsePositiveRate: number;
+  readonly falsePositiveRate: number | null;
   readonly helpfulCount: number;
   readonly totalFeedbacks: number;
   readonly totalReviewedFindings: number;
-  readonly utilityRate: number;
+  readonly utilityRate: number | null;
   readonly wrongSeverityCount: number;
 }
 
 export const calibrationMetricsSchema: z.ZodType<CalibrationMetrics> =
   z.strictObject({
+    adjudicatedFindings: z.number().int().nonnegative(),
+    conflictedFindings: z.number().int().nonnegative(),
+    resolvedFindings: z.number().int().nonnegative(),
     falsePositiveCount: z.number().int().nonnegative(),
-    falsePositiveRate: z.number().min(0).max(1),
+    falsePositiveRate: z.number().min(0).max(1).nullable(),
     helpfulCount: z.number().int().nonnegative(),
     totalFeedbacks: z.number().int().nonnegative(),
     totalReviewedFindings: z.number().int().nonnegative(),
-    utilityRate: z.number().min(0).max(1),
+    utilityRate: z.number().min(0).max(1).nullable(),
     wrongSeverityCount: z.number().int().nonnegative(),
   });

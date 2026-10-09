@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-08
 ---
 
 # Guia de engenharia do Holon
@@ -63,6 +63,21 @@ interna resolveria.
 | Testes, avaliação ou entrega                       | [Testes e evidência](testing-and-evidence.md)                                                                                             | Scripts afetados, [desenvolvimento local](../operations/local-development.md) e runbook remoto.     |
 | Secrets, GitHub App ou deploy                      | [Operação](../operations/README.md) e [segurança](../architecture/security-and-trust-boundaries.md)                                       | Ambiente, artefato, permissões, rotação e autorização antes do efeito remoto.                       |
 | Incidente ou comportamento histórico               | [Pesquisas](../research/README.md)                                                                                                        | Código/configuração atuais e ADR que governa o estado presente.                                     |
+
+## Core de revisão: critérios de qualidade
+
+Para mudanças em evidência, shards, tools, verificação, budgets ou publicação,
+use [qualidade e organização do core](review-core-quality.md). O guia define
+identidade canônica, completude derivada de fatos, omissões explícitas, resultados
+de busca inconclusivos, organização por regras e provas de composição.
+São padrões esperados; não significam que toda a implementação já os satisfaz.
+
+A [auditoria de 2026-10-08](../research/2026-10-08-review-core-audit.md) registra
+defeitos reproduzidos, cobertura e lacunas. A
+[comparação externa](../research/2026-10-08-review-system-comparison.md) distingue
+mecanismos observáveis de alegações comerciais. O
+[plano de melhorias](../planning/review-core-improvement-proposal.md) permanece
+proposto e liga cada alternativa a testes e critérios de aceitação.
 
 ## Referência para o dashboard dos usuários
 

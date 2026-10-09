@@ -31,3 +31,5 @@ export * from "./model-generation-budget.js";
 export * from "./repository-memory.js";
 
 export * from "./finding-clarification.js";
+
+export * from "./review-evidence.js";

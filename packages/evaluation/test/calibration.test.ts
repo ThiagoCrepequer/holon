@@ -12,6 +12,53 @@ const fp2 =
   "fp:2222222222222222222222222222222222222222222222222222222222222222";
 
 describe("calibration metrics", () => {
+  it("does not count resolution as rejection or infer an unreviewed PR verdict", () => {
+    const feedback: FindingFeedbackRecord = {
+      authorLogin: "alice",
+      createdAt: "2026-10-08T10:00:00Z",
+      fingerprint: fp1,
+      label: "thread_resolved",
+      prKey: "github:42:pr:7",
+    };
+    expect(computeCalibrationMetrics([feedback], 1).falsePositiveCount).toBe(0);
+    expect(promoteFeedbackToCalibrationCase(feedback)).not.toHaveProperty(
+      "expectedVerdict",
+    );
+  });
+  it("counts one finding once and excludes contradictory labels from adjudicated rates", () => {
+    const feedback: FindingFeedbackRecord = {
+      authorLogin: "alice",
+      createdAt: "2026-10-08T10:00:00Z",
+      fingerprint: fp1,
+      label: "false_positive",
+      prKey: "github:42:pr:7",
+    };
+    expect(computeCalibrationMetrics([feedback, feedback], 1)).toMatchObject({
+      falsePositiveCount: 1,
+      totalReviewedFindings: 1,
+      adjudicatedFindings: 1,
+    });
+    expect(
+      computeCalibrationMetrics(
+        [feedback, { ...feedback, label: "helpful" }],
+        1,
+      ),
+    ).toMatchObject({
+      falsePositiveCount: 0,
+      conflictedFindings: 1,
+      falsePositiveRate: null,
+    });
+  });
+  it("rejects a supplied denominator smaller than unique findings instead of changing it", () => {
+    const feedback: FindingFeedbackRecord = {
+      authorLogin: "alice",
+      createdAt: "2026-10-08T10:00:00Z",
+      fingerprint: fp1,
+      label: "helpful",
+      prKey: "github:42:pr:7",
+    };
+    expect(() => computeCalibrationMetrics([feedback], 0)).toThrow(/reviewed/u);
+  });
   it("computes false positive rates and utility rates accurately", () => {
     const feedbacks: FindingFeedbackRecord[] = [
       {
@@ -48,20 +95,20 @@ describe("calibration metrics", () => {
 
     const metrics = computeCalibrationMetrics(feedbacks, 10);
     expect(metrics.totalFeedbacks).toBe(4);
-    expect(metrics.falsePositiveCount).toBe(2);
+    expect(metrics.falsePositiveCount).toBe(1);
     expect(metrics.helpfulCount).toBe(1);
     expect(metrics.wrongSeverityCount).toBe(1);
     expect(metrics.totalReviewedFindings).toBe(10);
-    expect(metrics.falsePositiveRate).toBe(0.2);
-    expect(metrics.utilityRate).toBe(0.25);
+    expect(metrics.falsePositiveRate).toBe(0.5);
+    expect(metrics.utilityRate).toBe(0.5);
   });
 
   it("handles empty feedback sets without zero-division", () => {
     const metrics = computeCalibrationMetrics([], 0);
     expect(metrics.falsePositiveCount).toBe(0);
-    expect(metrics.falsePositiveRate).toBe(0);
+    expect(metrics.falsePositiveRate).toBeNull();
     expect(metrics.helpfulCount).toBe(0);
-    expect(metrics.utilityRate).toBe(0);
+    expect(metrics.utilityRate).toBeNull();
     expect(metrics.totalFeedbacks).toBe(0);
   });
 
@@ -93,7 +140,7 @@ describe("calibration metrics", () => {
     };
 
     const candidate = promoteFeedbackToCalibrationCase(fb, finding);
-    expect(candidate.expectedVerdict).toBe("APPROVE");
+    expect(candidate.requiresAdjudication).toBe(true);
     expect(candidate.feedbackLabel).toBe("false_positive");
     expect(candidate.filePath).toBe("src/database.ts");
     expect(candidate.reason).toBe(

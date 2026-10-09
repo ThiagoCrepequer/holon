@@ -215,3 +215,47 @@ it("allows the last shard of a 64-part plan to spend the shared budget", async (
     );
   });
 });
+
+it("protects peer tools transactionally across dominant reservations and eviction", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await ledger.claimRun(
+    {
+      causalVersion: new Date().toISOString(),
+      id: runId,
+      prKey: "github:42:pr:7",
+      createdAt: new Date().toISOString(),
+      state: "queued",
+      attempt: 0,
+    },
+    "fair-tools",
+  );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "fair-tools:start",
+  );
+  const dominant = await Promise.all(
+    Array.from({ length: 97 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 0, 9),
+    ),
+  );
+  expect(dominant.filter(Boolean)).toHaveLength(10);
+  await evictDurableObject(ledger);
+  const peers = await Promise.all(
+    Array.from({ length: 8 }, async (_, index) => {
+      for (let call = 0; call < 10; call++)
+        expect(await ledger.reserveAnalysisToolCall(runId, index + 1, 9)).toBe(
+          true,
+        );
+    }),
+  );
+  expect(peers).toHaveLength(8);
+  expect(await ledger.reserveAnalysisToolCall(runId, 1, 9)).toBe(false);
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.reserveAnalysisToolCall(runId, 0, 8)).toThrow(
+      "plan changed",
+    );
+  });
+});

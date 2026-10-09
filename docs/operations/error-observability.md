@@ -196,9 +196,9 @@ chamadas distintas e tempo restante. Compare-o aos eventos de fase para distingu
 limite de chamadas, rodadas e tempo; `investigation_incomplete` sozinho não prova
 timeout. Eventos não contêm prompts, argumentos das tools, caminhos ou código.
 
-Ondas aparecem como `analysis-wave-N` nos checkpoints, e partes mantêm
-`analyze-shard-N`. O teto de 64 partes é admissão de trabalho; cinco é concorrência.
-Não confundir limite de contexto global com truncamento de todos os prompts.
+No motor anterior, ondas apareciam como `analysis-wave-N`; essa orientação foi
+substituída pela seção do core vigente abaixo. Não confundir limite de contexto
+global com truncamento de todos os prompts.
 
 A partir da ADR-0043, `model.phase_failed` inclui `roundDurationMs` e
 `timeoutScope` (`generation_step` ou `phase`). `durationMs` continua medindo a
@@ -230,3 +230,43 @@ não há coleta da mensagem/body original. `model_budget_exhausted` significa
 recusa de admissão antes da chamada, por limite agregado durável. Não reinicie
 repetidamente para contornar esse limite: compare cobertura, consultas e usage
 da execução. A ausência de status HTTP não demonstra sucesso do provider.
+
+## Core vigente: checkpoints, tools e cleanup (2026-10-09)
+
+Os eventos de investigação/rodadas das ADRs 0043–0046 descritos acima são históricos.
+O Think vigente usa `model.step_finished`; não esperar o protocolo do gerador
+retirado. A admissão efetiva é até 64 shards e a concorrência é três. A ADR-0055
+sela perfis de orçamento e pesos; a ADR-0059 os compõe com lanes estáveis. O
+planejamento conserva lanes estáveis; `admit-shard-N` registra admissão/deadline e
+`analyze-shard-N` registra o resultado. Não há `analysis-wave-N` no caminho atual.
+
+`review.checkpoint_finished` mede callbacks realmente executados de configuração,
+preparação, identificação, análise e publicação. `review.phase_finished` detalha
+etapas internas da análise. Resultados restaurados do checkpoint não repetem o
+callback nem produzem um timing inventado. Os campos são nome de step conhecido,
+fase, resultado e duração; nenhum prompt, diff ou exceção livre foi acrescentado.
+
+`repository.tool_read` distingue execução física de reuso por `reused`, bytes,
+truncamento e duração. `repository.tool_operation` inclui a espera RPC `tool_read`
+e a verificação de lease. Hit continua consumindo quota lógica do ledger;
+`shard_calls` é recusa por allocation/proteção de peers, `run_calls` é teto
+agregado do perfil. `peer_protection` pertence à política histórica anterior.
+Não somar hits com execuções físicas como se fossem processos novos.
+`repository.cleanup_finished` mede a tentativa de cleanup; falha conserva a
+obrigação durável e não autoriza reset manual do consumo.
+
+## Reconciliação inconclusiva de publicação
+
+Após resposta externa perdida, a claim `publishing` precisa reconciliar o marcador.
+`found` conclui com o ID existente; `absent` só existe se a paginação terminou.
+Vinte páginas sem match retornam `inconclusive`, conservando a claim e impedindo
+novo POST. Isso pode exigir intervenção: não zerar a claim, criar novo marcador
+ou reiniciar repetidamente para forçar republicação.
+
+O operador autorizado deve inspecionar o PR, o autor Bot e o marcador exato no
+ambiente correspondente. Um ID encontrado pode orientar reconciliação específica
+sob autoridade da run atual; não há comando de bypass nem cursor durável nesta
+entrega. Se a run perdeu autoridade, manter o efeito histórico e terminalizar/
+limpar conforme o protocolo vigente. Registrar a evidência de reconciliação sem
+capturar body privado em logs. Os testes incluem marcador na página 21 e apenas
+um POST após resposta perdida, mas não provam reconciliação automática além do cap.

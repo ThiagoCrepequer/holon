@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-09
 ---
 
 # Mapa da documentacao
@@ -40,6 +40,21 @@ um dashboard publicado.
 | Entender a retirada do admin                 | [ADR-0040](decisions/0040-retire-admin-and-analytical-storage.md)                 | [Retirada operacional](operations/admin-retirement.md)                                                                                                                                |
 
 Plano de funcionalidade proposto: [Identificação de tecnologias e versões por projeto](planning/project-version-identification-plan.md), com monorepos, inferência assistida, cache e integração ao workflow.
+
+Para o core de revisão, a [auditoria de 2026-10-08](research/2026-10-08-review-core-audit.md)
+registra defeitos reproduzidos e limites dos testes. O
+[guia de qualidade](engineering/review-core-quality.md) define práticas esperadas;
+a [comparação externa](research/2026-10-08-review-system-comparison.md) e o
+[plano de melhorias](planning/review-core-improvement-proposal.md) fundamentam
+evoluções de precisão, uso de tools e velocidade. O
+[relatório de implementação](research/2026-10-08-review-core-implementation.md)
+liga cada entrega aos testes, benchmarks e gates ainda abertos; a
+[ADR-0056](decisions/0056-preserve-review-evidence-and-schedule-stable-lanes.md)
+registra o runtime resultante.
+
+A [continuação de 2026-10-09](research/2026-10-09-review-core-code-follow-up.md)
+separa novos defeitos corrigidos no código/benchmark das hipóteses sobre a
+capacidade do Gemma e registra as provas correspondentes.
 
 A verificação de candidatos antes da publicação segue a
 [ADR-0050](decisions/0050-verify-finding-causality-before-publication.md), o
@@ -127,6 +142,8 @@ Não representa encerramento integral de M1/M2 nem operação remota.
 A [revisão final de M1](research/2026-10-07-dashboard-milestone-one-final-review.md)
 rastreia #132–#138 e a separação autorizada dos gates de integração nas issues
 donas, com limites entre prova local e validação remota.
+
+A [continuação do benchmark real](research/2026-10-08-review-core-live-benchmark.md) registra o orçamento de US$ 0,50, correções do inventário/contrato causal e gates ainda abertos após repetição e falso positivo.
 
 Os [resultados M3](research/2026-10-08-dashboard-milestone-three-results.md)
 rastreiam #145–#149: credenciais/refresh, dupla autoridade GitHub, grants e

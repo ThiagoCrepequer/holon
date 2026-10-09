@@ -37,6 +37,8 @@ export type EvalCaseRun =
   | {
       readonly caseId: string;
       readonly grade: EvalGrade;
+      readonly rawGrade: EvalGrade;
+      readonly rawCandidates: number;
       readonly outcome: "completed";
       readonly rejectedFindings: number;
       readonly telemetry?: EvalSubjectTelemetry;
@@ -60,6 +62,11 @@ export interface EvalSuiteResult {
     readonly matchedFindings: number;
     readonly precision: number | null;
     readonly recall: number | null;
+    readonly rawCandidates: number;
+    readonly rawPrecision: number | null;
+    readonly rawRecall: number | null;
+    readonly publishedPrecision: number | null;
+    readonly completedRecall: number | null;
     readonly rejectedFindings: number;
     readonly severityMatches: number;
     readonly unexpectedFindings: number;
@@ -111,14 +118,29 @@ async function runCase(
     ...parsed.data.output,
     findings: validFindings,
   });
+  const rejectedFindings =
+    parsed.data.output.findings.length - validFindings.length;
+  const grade = gradeEvaluationCase(evalCase, {
+    ...parsed.data,
+    output: validatedOutput,
+  });
   return {
     caseId: evalCase.id,
-    grade: gradeEvaluationCase(evalCase, {
-      ...parsed.data,
-      output: validatedOutput,
-    }),
+    grade:
+      rejectedFindings === 0
+        ? grade
+        : {
+            ...grade,
+            passed: false,
+            failures: [
+              ...grade.failures,
+              { kind: "evidence_integrity", rejectedCount: rejectedFindings },
+            ],
+          },
+    rawGrade: gradeEvaluationCase(evalCase, parsed.data),
+    rawCandidates: parsed.data.output.findings.length,
     outcome: "completed",
-    rejectedFindings: parsed.data.output.findings.length - validFindings.length,
+    rejectedFindings,
     ...(parsed.data.telemetry === undefined
       ? {}
       : { telemetry: parsed.data.telemetry }),
@@ -168,6 +190,20 @@ export async function runEvaluationSuite(
       unexpectedFindings: 0,
     },
   );
+  const expectedFindings = validatedCases.reduce(
+    (count, item) => count + item.expected.findings.length,
+    0,
+  );
+  const rawCandidates = completed.reduce(
+    (count, item) => count + item.rawCandidates,
+    0,
+  );
+  const rawMatches = completed.reduce(
+    (count, item) => count + item.rawGrade.metrics.matchedFindings,
+    0,
+  );
+  const precision = (matches: number, count: number): number | null =>
+    completed.length === 0 ? null : count === 0 ? 1 : matches / count;
   return {
     caseRuns,
     completedCases: completed.length,
@@ -179,18 +215,23 @@ export async function runEvaluationSuite(
     ).length,
     metrics: {
       ...metrics,
-      precision:
-        completed.length === 0
-          ? null
-          : metrics.actualFindings === 0
-            ? 1
-            : metrics.matchedFindings / metrics.actualFindings,
-      recall:
+      expectedFindings,
+      rawCandidates,
+      precision: precision(metrics.matchedFindings, rawCandidates),
+      publishedPrecision: precision(
+        metrics.matchedFindings,
+        metrics.actualFindings,
+      ),
+      rawPrecision: precision(rawMatches, rawCandidates),
+      rawRecall: expectedFindings === 0 ? 1 : rawMatches / expectedFindings,
+      completedRecall:
         completed.length === 0
           ? null
           : metrics.expectedFindings === 0
             ? 1
             : metrics.matchedFindings / metrics.expectedFindings,
+      recall:
+        expectedFindings === 0 ? 1 : metrics.matchedFindings / expectedFindings,
     },
     passedCases,
     subjectErrors: caseRuns.filter(

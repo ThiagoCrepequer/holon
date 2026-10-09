@@ -9,6 +9,15 @@ export interface DownstreamTracerOptions {
   readonly maxReferences?: number;
 }
 
+/** Shared by JavaScript tracing and rg inventory discovery; no lookaround required. */
+export function symbolReferencePattern(
+  names: readonly string[],
+): string | undefined {
+  if (names.length === 0) return undefined;
+  const continuation = "\\p{ID_Continue}$\\p{Join_Control}";
+  return `(?:^|[^${continuation}])(?:${names.map(escapeRegExp).join("|")})(?:$|[^${continuation}])`;
+}
+
 export function findDownstreamReferences(
   symbols: readonly ChangedSymbol[],
   files: readonly DownstreamTracerFile[],
@@ -31,11 +40,9 @@ export function findDownstreamReferences(
   let totalCount = 0;
 
   for (const symbol of targetSymbols) {
-    // Regex matching the symbol identifier as a whole word, optionally followed by call or access
-    const identifierRegex = new RegExp(
-      `\\b${escapeRegExp(symbol.name)}\\b`,
-      "u",
-    );
+    const pattern = symbolReferencePattern([symbol.name]);
+    if (pattern === undefined) continue;
+    const identifierRegex = new RegExp(pattern, "u");
 
     for (const file of files) {
       if (file.path === symbol.path) continue; // Skip the declaring file itself

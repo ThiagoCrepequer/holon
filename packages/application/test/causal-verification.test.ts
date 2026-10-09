@@ -27,6 +27,8 @@ const draft = modelReviewOutputSchema.parse({
   summary: "The caller will crash on null.",
 });
 const assessment = {
+  basis: "patch" as const,
+  evidenceReceiptIds: [],
   candidateIndex: 0,
   outcome: "confirmed" as const,
   confidence: 0.9,
@@ -199,4 +201,75 @@ it("cannot approve a complete diff with zero findings when causal verification i
   expect(aggregated.omissionReasons.join(" ")).toContain(
     "causal_verification_incomplete",
   );
+});
+
+const receipt = {
+  id: "a".repeat(64),
+  digest: "c".repeat(64),
+  runId: `github:42:pr:7:head:${"d".repeat(40)}:base:${"e".repeat(40)}`,
+  headSha: "d".repeat(40),
+  path: "src/caller.ts",
+  startLine: 1,
+  endLine: 2,
+  truncated: false,
+};
+const repositoryAnswer = {
+  assessments: [
+    { ...assessment, basis: "repository", evidenceReceiptIds: [receipt.id] },
+  ],
+  summary: "Inspected the caller.",
+};
+it("withholds a repository claim whose receipt was never inspected", () => {
+  expect(applyCausalVerification(draft, repositoryAnswer).findings).toEqual([]);
+  expect(
+    applyCausalVerification(
+      draft,
+      {
+        ...repositoryAnswer,
+        assessments: [
+          {
+            ...repositoryAnswer.assessments[0],
+            evidenceReceiptIds: ["b".repeat(64)],
+          },
+        ],
+      },
+      "en",
+      [receipt],
+    ).findings,
+  ).toEqual([]);
+});
+it.each([
+  { digest: "invalid" },
+  { headSha: "invalid" },
+  { path: "../outside.ts" },
+  { startLine: 0 },
+  { startLine: 2, endLine: 1 },
+  { truncated: true },
+])(
+  "rejects selected receipts with invalid or incomplete host metadata: %j",
+  (invalid) => {
+    const result = applyCausalVerification(draft, repositoryAnswer, "en", [
+      { ...receipt, ...invalid },
+    ]);
+    expect(result.findings).toEqual([]);
+    expect(result.isDegraded).toBe(true);
+  },
+);
+it("resolves the entire inspected window and shares one receipt across candidates", () => {
+  const candidates = { ...draft, findings: [finding, finding] };
+  const raw = {
+    assessments: [0, 1].map((candidateIndex) => ({
+      ...repositoryAnswer.assessments[0],
+      candidateIndex,
+    })),
+    summary: "Both callers dereference the return without a guard.",
+  };
+  expect(
+    applyCausalVerification(candidates, raw, "en", [receipt]).findings,
+  ).toHaveLength(2);
+  expect(
+    applyCausalVerification(candidates, raw, "en", [
+      { ...receipt, truncated: true },
+    ]).isDegraded,
+  ).toBe(true);
 });

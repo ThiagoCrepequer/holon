@@ -4,7 +4,7 @@ import type {
   RepositoryPolicy,
   ReviewJob,
 } from "@holon/contracts";
-import type { WorkflowStep } from "cloudflare:workers";
+import type { WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 
 import type { ReviewServices } from "./review-services.js";
 import { modelStep, repositoryStep, stateStep } from "./workflow-policy.js";
@@ -22,7 +22,14 @@ interface ProjectIdentificationPhase {
       "loadRunConfiguration" | "saveProjectIdentification"
     >;
   };
-  step: WorkflowStep;
+  step: {
+    sleep: WorkflowStep["sleep"];
+    do<R extends Rpc.Serializable<R>>(
+      name: string,
+      options: WorkflowStepConfig,
+      callback: () => Promise<R>,
+    ): Promise<R>;
+  };
   emit: (
     event: string,
     fields: Readonly<Record<string, boolean | number | string | undefined>>,

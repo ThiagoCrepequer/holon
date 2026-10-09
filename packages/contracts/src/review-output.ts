@@ -229,34 +229,65 @@ const reviewTransportFields = z
  * structurally permissive here so the host can reject unevidenced candidates
  * individually instead of aborting Think's entire prompt workflow. */
 export const modelReviewPromptSchema = z.object({
-  investigations: z.array(investigationObservationSchema).max(4),
-  findings: z.array(
-    z.object({
-      confidence: z.number(),
-      diagnostic: z.string(),
-      evidence: z
-        .array(
-          z.object({
-            endLine: z.number().int().nullable(),
-            excerpt: z.string(),
-            path: z.string(),
-            reason: z.string(),
-            startLine: z.number().int(),
-          }),
-        )
-        .describe(
-          "Provide at least one source excerpt supporting this candidate. Candidates without valid evidence are rejected and make the review partial.",
-        ),
-      location: z.object({
-        line: z.number().int(),
-        path: z.string(),
-        side: z.literal("RIGHT"),
-        startLine: z.number().int().nullable(),
+  findings: z
+    .array(
+      z.object({
+        confidence: z.number(),
+        diagnostic: z
+          .string()
+          .describe(
+            "Name the concrete failing consumer or operation and explain how the changed code causes that failure.",
+          ),
+        evidence: z
+          .array(
+            z.object({
+              endLine: z.number().int().nullable(),
+              excerpt: z.string(),
+              path: z.string(),
+              reason: z.string(),
+              startLine: z.number().int(),
+            }),
+          )
+          .describe(
+            "Copy at least one excerpt verbatim from the supplied canonical patch at its exact RIGHT-side coordinates. Repository tool reads demonstrate impact but are not publishable patch evidence. Candidates without valid evidence are rejected and make the review partial.",
+          ),
+        location: z.object({
+          line: z
+            .number()
+            .int()
+            .describe(
+              "A supplied RIGHT-side changed line in the canonical patch.",
+            ),
+          path: z
+            .string()
+            .describe(
+              "The changed producer file from the supplied patch, including when its defect manifests in an unchanged consumer.",
+            ),
+          side: z
+            .literal("RIGHT")
+            .describe(
+              'Use exactly "RIGHT" in uppercase; it identifies the changed HEAD line, never a consumer or base line.',
+            ),
+          startLine: z.number().int().nullable(),
+        }),
+        severity: z.enum(["critical", "high", "medium", "low"]),
+        suggestion: z
+          .string()
+          .nullable()
+          .describe(
+            "A plain text repair suggestion, or null when absent. Never return an object, array or code-edit structure.",
+          ),
       }),
-      severity: z.enum(["critical", "high", "medium", "low"]),
-      suggestion: z.string().nullable(),
-    }),
-  ),
+    )
+    .describe(
+      "Record confirmed defects here, even when also described in investigations or the summary. Use an empty array only when no concrete defect was demonstrated.",
+    ),
+  investigations: z
+    .array(investigationObservationSchema)
+    .max(4)
+    .describe(
+      "Required array of factual observations for revalidation; return [] when there are none. An observation never replaces a finding for a confirmed defect.",
+    ),
   isDegraded: z.boolean(),
   outputLimitations: z.array(z.enum(reviewOutputLimitationCodes)),
   resolutions: z.array(

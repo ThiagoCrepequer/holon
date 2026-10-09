@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 ---
 
 # Investigacoes
@@ -14,6 +14,14 @@ data de corte, quais afirmacoes foram corrigidas e quais duvidas permaneceram.
 Nao criam uma decisao por si so.
 
 ## Relatorios
+
+- [Continuação do core: defeitos de código e limites do Gemma](2026-10-09-review-core-code-follow-up.md)
+- [Preservação das evidências e redução do diff do PR #182](2026-10-09-pr-evidence-packaging.md)
+
+- [Implementação do core: correções, gates e benchmarks](2026-10-08-review-core-implementation.md)
+
+- [Auditoria do core: defeitos, cobertura, testes e organização](2026-10-08-review-core-audit.md)
+- [Sistemas de revisão: comparação crítica de mecanismos e oportunidades](2026-10-08-review-system-comparison.md)
 
 - [PR #171: CPU do coordenador e admissão após recusa de orçamento](2026-10-07-pr171-cpu-and-budget-exhaustion.md)
 
@@ -69,3 +77,5 @@ ajustes de robustez atuais delimitam o que está comprovado e o que ainda é gat
   reproduziveis.
 
 - [Revisão final M1 e reconciliação dos gates de integração](2026-10-07-dashboard-milestone-one-final-review.md)
+
+A [continuação do benchmark real](2026-10-08-review-core-live-benchmark.md) registra o orçamento de US$ 0,50, correções do inventário/contrato causal e gates ainda abertos após repetição e falso positivo.

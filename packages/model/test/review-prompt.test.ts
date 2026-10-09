@@ -31,6 +31,66 @@ const job = reviewJobSchema.parse({
 });
 
 describe("Think review prompt boundary", () => {
+  it("presents exact producer excerpts with coordinates separately from downstream leads", () => {
+    const result = buildReviewPromptResult(job, {
+      changedLines: [{ path: "src/value.ts", line: 2, side: "RIGHT" }],
+      files: [
+        {
+          path: "src/value.ts",
+          mode: "structural",
+          patch:
+            "@@ -1,3 +1,3 @@\n export function value() {\n-  return 1;\n+  return 2;\n }",
+        },
+      ],
+      truncated: false,
+    });
+    expect(result.prompt).toContain('"excerpt":"  return 2;"');
+    expect(result.prompt).toContain('"startLine":2');
+    expect(result.prompt).toContain("Canonical changed-line evidence");
+    expect(result.prompt).not.toContain('"excerpt":"+  return 2;"');
+  });
+  it("distinguishes a changed producer anchor from an unchanged consumer used to prove impact", () => {
+    expect(reviewInstructions).toContain(
+      "anchor the finding on the changed producer",
+    );
+    expect(reviewInstructions).toContain(
+      "unchanged consumer in the diagnostic",
+    );
+  });
+  it("retains the ninth prior finding when the byte budget admits the complete baseline", () => {
+    const priorFindings = Array.from({ length: 9 }, (_, index) => ({
+      fingerprint: `fp:${index.toString(16).padStart(64, "0")}` as const,
+      diagnostic: `Prior defect ${index}`,
+      filePath: "src/index.ts",
+      severity: "high" as const,
+    }));
+    const result = buildReviewPromptResult(job, {
+      files: [],
+      changedLines: [],
+      truncated: false,
+      priorFindings,
+    });
+    for (const finding of priorFindings)
+      expect(result.prompt).toContain(finding.diagnostic);
+    expect(result.truncated).toBe(false);
+    expect(result.omittedSections).not.toContain("priorFindings");
+  });
+  it("does not silently discard hints before the byte budget is reached", () => {
+    const result = buildReviewPromptResult(job, {
+      files: [],
+      changedLines: [],
+      truncated: false,
+      surface: Array.from({ length: 21 }, (_, index) => ({
+        path: `src/lead-${index}.ts`,
+        excerpt: "after()",
+        kind: "contract" as const,
+        change: "added" as const,
+        line: index + 1,
+      })),
+    });
+    expect(result.prompt).toContain("src/lead-20.ts");
+    expect(result.truncated).toBe(false);
+  });
   it("requires a demonstrated broken caller before reporting contract concerns", () => {
     expect(reviewInstructions).toContain(
       "Name the affected consumer or operation and the behavior that fails",
