@@ -41,8 +41,14 @@ Email usa Queue/DLQ reais, sender permitido e transporte habilitado: dois
 recebimentos bilíngues foram confirmados pelo operador. O login humano retornou
 ao dashboard com sessão autenticada; a matriz privada/org/revogação não está
 completa. O rollback do Worker e Time Travel limitado aos dois D1 vazios foram
-executados; a recuperação coordenada com core/DO/efeitos externos e alertas
-remotos permanece pendente.
+executados. Cinco alertas remotos estão ativos; o ensaio DLQ confirmou envio,
+recebimento e recuperação do sinal numérico. A recuperação coordenada com
+core/DO/efeitos externos e a qualificação dos demais alertas permanecem pendentes.
+O primeiro aceite humano identificou ausência de `GITHUB_APP_ID` no dashboard;
+o manifest foi corrigido com o ID da App confirmado pelo operador, publicado e
+conferido na versão ativa. O aceite posterior criou uma única membership do
+destinatário e preservou o receipt de envio; as fixtures do ensaio foram limpas.
+OAuth bem-sucedido não demonstra sozinho prontidão de toda a colaboração.
 
 A [evidência de M6](../planning/dashboard-milestone-six-evidence.md#qualificação-em-produção-executada-em-2026-10-09)
 registra SHA/hash, versões, horários, benchmarks e limites dessa operação.

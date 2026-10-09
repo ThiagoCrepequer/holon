@@ -273,7 +273,9 @@ prometer detecção em cinco minutos nem ausência de incidente por zero amostra
 O ensaio de DLQ e suas limitações estão na
 [evidência M6](../planning/dashboard-milestone-six-evidence.md). Esses sete sinais
 não comprovam outage real de cron/D1/Queue/provider; #166 permanece aberta para
-os cenários faltantes, disparo/recuperação e recuperação coordenada.
+os cenários faltantes, qualificação das demais políticas e recuperação coordenada.
+A política DLQ já tem envio e recebimento do alerta inicial, recuperação do
+sinal e receipt de envio da resolução na mesma política, sem novo envio do convite.
 
 Fontes primárias verificadas em 2026-10-09:
 [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)

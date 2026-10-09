@@ -33,18 +33,18 @@ operação distingue as amostras executadas na conta Cloudflare real.
 
 ## Matriz de requisitos
 
-| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                      |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                 |
-| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                         |
-| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                            |
-| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                 |
-| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue        |
-| #164  | budgets e browser local; adapter real no D1 produtivo com 20k linhas, região/colo, SQL p50/p95 e rows_read; paginação e recuperação de escopo remotas                                                       | CPU do Worker, lag de publicação real e CWV de campo; latência REST não mede essas grandezas             |
-| #165  | manifests/grafo/gates; inventário produtivo, artefato congelado, quatro Workers publicados, Sandbox por digest existente, migrations e rollback real da mesma versão                                        | Conferir CI e manter escopo/autorização dos testes; integração OAuth pertence à #167                     |
-| #166  | hold/DO/alarm locais; Time Travel real dos dois D1 vazios; recuperação scoped da projeção; cinco alertas ativos, responsável/canal confirmados, envio do alerta DLQ e recuperação do sinal 1→0              | PITR coordenado com ledgers/obrigações externas, demais cenários de outage e qualificação dos alertas    |
-| #167  | artefato produtivo publicado; OAuth humano; cron/Queue/RPC/provider reais, recebimento bilíngue confirmado, duplicatas/DLQ sem novo envio e cancelamento/expiração sem tentativa                            | GitHub privado/org/revoke, criação/aceite de convite pela jornada autenticada e demais gates de promoção |
-| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                              |
+| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                                 |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                            |
+| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                                    |
+| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                                       |
+| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                            |
+| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue                   |
+| #164  | budgets e browser local; adapter real no D1 produtivo com 20k linhas, região/colo, SQL p50/p95 e rows_read; paginação e recuperação de escopo remotas                                                       | CPU do Worker, lag de publicação real e CWV de campo; latência REST não mede essas grandezas                        |
+| #165  | manifests/grafo/gates; inventário produtivo, artefato congelado, quatro Workers publicados, Sandbox por digest existente, migrations e rollback real da mesma versão                                        | Conferir CI e manter escopo/autorização dos testes; integração OAuth pertence à #167                                |
+| #166  | hold/DO/alarm locais; Time Travel real dos dois D1 vazios; recuperação scoped da projeção; cinco alertas ativos, responsável/canal confirmados, envio do alerta DLQ e recuperação do sinal 1→0              | PITR coordenado com ledgers/obrigações externas, demais cenários de outage e qualificação dos alertas               |
+| #167  | artefato produtivo publicado; OAuth humano; cron/Queue/RPC/provider reais, recebimento bilíngue confirmado, duplicatas/DLQ sem novo envio; aceite humano e membership única no D1                           | GitHub privado/org/revoke, criação de convite pela UI, replay após remoção de membership e demais gates de promoção |
+| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                                         |
 
 Após o gate completo, #159–#162 podem usar `Closes`: os gates reais pertencem
 às issues #163–#167, que permanecem abertas junto de #127. Não usar `Closes`
@@ -217,6 +217,10 @@ executor e builds produtivos. Esses comandos não representam CI remota.
 
 ### Versões da primeira implantação e superfície
 
+Inventário da primeira implantação. A atualização posterior do dashboard para
+configurar a App está registrada abaixo; os outros três Workers conservam as
+versões desta tabela.
+
 | Worker                      | Versão com 100% de tráfego             | Publicação/reativação UTC |
 | --------------------------- | -------------------------------------- | ------------------------- |
 | `holon-dashboard`           | `cb0c869e-8937-40e5-9a4f-f4eb0b4be858` | `2026-10-09T22:45:17Z`    |
@@ -298,7 +302,12 @@ hífens, diferente do ID da política; a correlação normalizou essa representa
 com uma tentativa/um accepted. Isso comprova disparo do alerta e recuperação do
 sinal, sem reenvio do convite. Nessa observação havia um único registro de envio,
 sem mensagem de recuperação. O operador confirmou recebimento do alerta por
-email; resolução notificada não deve ser inferida desse recebimento. Outros cenários de outage, as demais políticas
+email. A observação posterior encontrou envio de resolução em `23:35:42Z`,
+correlacionado à mesma política, com `state_event=ALERT_STATE_EVENT_END`; o envio
+inicial tem `ALERT_STATE_EVENT_START`. Assim, a política DLQ tem prova de disparo,
+recebimento do alerta inicial, recuperação do sinal e envio da resolução. Não
+inferir chegada da resolução à caixa de entrada somente pelo receipt de envio.
+Outros cenários de outage, as demais políticas
 e o PITR coordenado continuam pendentes.
 
 A CI de `03676fd` falhou ao conferir os tipos gerados de email-delivery após
@@ -373,6 +382,34 @@ linhas 99,29%, branches 94,55% e funções 94,81%; 21 tasks de tipos (20 em cach
 32 de cobertura (30 em cache), 17 de build (16 em cache) e 97 jornadas nativas
 sem falhas, com os mesmos dois labs CDP ignorados em Firefox/WebKit. Nenhum
 threshold foi alterado. Esse resultado ainda não é o da CI remota do novo HEAD.
+
+O candidato corrigido foi congelado em checkout limpo de
+`f6ac2885d02b6417e09db0c4f698032679f902ef`: 71 arquivos, manifest SHA-256
+`fdd92fa52e973b7822dccab189fc07ab9aa526060fd7161c43b157b00dff68c6`.
+Os 33 arquivos JavaScript do dashboard são byte-idênticos ao candidato inicial;
+a configuração acrescenta o App ID. Secrets por nome, D1 e entrypoints RPC foram
+conferidos no upload, antes da ativação. A versão
+`027d7ee9-41af-435d-ac5f-18dfbb604ddb` recebeu 100% do tráfego em
+`2026-10-09T23:42:00Z`; a API confirmou a seleção. O smoke HTTPS e os três hashes
+de assets passaram novamente. A fila de reviews permanece ativa e os outros
+Workers não precisaram de nova troca para essa correção de configuração.
+
+Após a correção, o operador confirmou a mensagem de convite aceito na jornada
+autenticada. Leituras do D1 em `23:43:26Z` e `23:44:17Z` encontraram estado
+accepted, duas memberships no workspace (owner sintético e um destinatário),
+um owner e exatamente uma membership para o accepted_by. O transporte conservou
+completed, uma tentativa e um accepted do provider. A mensagem e o estado são
+provas do aceite real; não demonstram criação pela UI, todos os perfis GitHub nem
+replay depois de remover a membership.
+
+Às `2026-10-09T23:45:05Z`, a limpeza removeu somente as quatro fixtures de
+convite/intents/attempts, o workspace sintético e seu owner sem OAuth/sessões.
+Pré-flight confirmou os quatro IDs nesse workspace, nenhuma entrega pending e
+nenhuma outra membership do owner. Após a batch, workspace/owner/convites/
+memberships desse escopo tinham contagem zero e foreign_key_check vazio. As
+contas, sessões e workspaces reais não eram alvos das queries. Os receipts do
+ensaio foram preservados no registro operacional restrito; os links de teste
+não representam convites ativos após essa limpeza.
 
 O adapter real `createProjectionPersistence` foi executado via batch REST no D1
 produtivo, usando somente dois repositórios sintéticos com 10k registros cada,
