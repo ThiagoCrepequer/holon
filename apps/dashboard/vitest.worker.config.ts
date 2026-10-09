@@ -24,6 +24,7 @@ export default defineConfig(async () => ({
       "test/viewer.test.ts",
       "test/http-collaboration.test.ts",
       "test/collaboration-composition.worker.ts",
+      "test/email-publisher.worker.ts",
     ],
     fileParallelism: false,
     coverage: {

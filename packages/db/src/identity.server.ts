@@ -81,3 +81,5 @@ export {
   createGrantPersistence,
   type GrantIdentity,
 } from "./github-grants.server.js";
+
+export { createEmailDeliveryPersistence } from "./email-delivery.server.js";

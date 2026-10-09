@@ -29,7 +29,11 @@ interface InvitationRow {
   state: "pending" | "accepted" | "canceled" | "expired";
   expires_at: number;
   accepted_by: string | null;
+  delivery_state: string | null;
+  accepted_at: number | null;
+  last_outcome: string | null;
 }
+const invitationSelect = `SELECT i.*,(SELECT state FROM invitation_delivery_intent WHERE id=i.id) AS delivery_state,(SELECT accepted_at FROM invitation_delivery_intent WHERE id=i.id) AS accepted_at,(SELECT last_outcome FROM invitation_delivery_intent WHERE id=i.id) AS last_outcome FROM workspace_invitation i`;
 const nowSql = "CAST(unixepoch('subsec')*1000 AS INTEGER)";
 function dto(row: InvitationRow): InvitationDto {
   return invitationDtoSchema.parse({
@@ -41,13 +45,22 @@ function dto(row: InvitationRow): InvitationDto {
         ? "expired"
         : row.state,
     expiresAt: new Date(row.expires_at).toISOString(),
-    delivery: "intent_recorded",
+    delivery:
+      row.accepted_at !== null && row.accepted_at !== undefined
+        ? "provider_accepted"
+        : row.delivery_state === "failed"
+          ? "failed"
+          : row.delivery_state === "canceled"
+            ? "delivery_canceled"
+            : row.last_outcome === "unknown"
+              ? "result_unknown"
+              : "intent_recorded",
   });
 }
 export function createInvitationPersistence(database: D1Database) {
   async function read(id: string) {
     return database
-      .prepare("SELECT * FROM workspace_invitation WHERE id=?")
+      .prepare(`${invitationSelect} WHERE i.id=?`)
       .bind(id)
       .first<InvitationRow>();
   }
@@ -68,9 +81,7 @@ export function createInvitationPersistence(database: D1Database) {
       const input = createInvitationSchema.parse(raw);
       await assertWorkspaceActor(database, actor, workspaceId, true, true);
       const previous = await database
-        .prepare(
-          "SELECT * FROM workspace_invitation WHERE created_by=? AND operation_id=?",
-        )
+        .prepare(`${invitationSelect} WHERE created_by=? AND operation_id=?`)
         .bind(actor.id, input.operationId)
         .first<InvitationRow>();
       if (previous) {
@@ -134,9 +145,7 @@ export function createInvitationPersistence(database: D1Database) {
           .bind(attempt),
       ]);
       const row = await database
-        .prepare(
-          "SELECT * FROM workspace_invitation WHERE created_by=? AND operation_id=?",
-        )
+        .prepare(`${invitationSelect} WHERE created_by=? AND operation_id=?`)
         .bind(actor.id, input.operationId)
         .first<InvitationRow>();
       if (!row) {
@@ -160,7 +169,7 @@ export function createInvitationPersistence(database: D1Database) {
       await assertWorkspaceActor(database, actor, workspaceId, true, true);
       const result = await database
         .prepare(
-          `SELECT i.* FROM workspace_invitation i WHERE workspace_id=? AND ${currentActorSql} AND ${ownerSql} ORDER BY created_at DESC,id LIMIT 100`,
+          `${invitationSelect} WHERE workspace_id=? AND ${currentActorSql} AND ${ownerSql} ORDER BY created_at DESC,id LIMIT 100`,
         )
         .bind(workspaceId, ...actorBindings(actor), actor.id, workspaceId)
         .all<InvitationRow>();

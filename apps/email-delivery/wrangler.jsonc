@@ -5,12 +5,86 @@
   "compatibility_date": "2026-08-29",
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "APP_ORIGIN": "https://dashboard.example.invalid",
+    "EMAIL_FROM": "noreply@example.invalid",
+    "EMAIL_SEND_ENABLED": "false",
+  },
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@example.invalid"],
+    },
+  ],
+  "services": [
+    {
+      "binding": "EMAIL_AUTHORITY",
+      "service": "holon-dashboard-local",
+      "entrypoint": "EmailDeliveryAuthority",
+    },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "EMAIL_JOBS", "queue": "holon-email-jobs-local" },
+    ],
+    "consumers": [
+      {
+        "queue": "holon-email-jobs-local",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "retry_delay": 60,
+        "dead_letter_queue": "holon-email-dlq-local",
+      },
+      {
+        "queue": "holon-email-dlq-local",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "retry_delay": 60,
+      },
+    ],
+  },
   "observability": {
     "enabled": false,
   },
   "env": {
     "production": {
       "name": "holon-email-delivery",
+      "vars": {
+        "APP_ORIGIN": "https://holon-dashboard.thiago-crepequer.workers.dev",
+        "EMAIL_FROM": "noreply@example.invalid",
+        "EMAIL_SEND_ENABLED": "false",
+      },
+      "send_email": [
+        {
+          "name": "EMAIL",
+          "allowed_sender_addresses": ["noreply@example.invalid"],
+        },
+      ],
+      "services": [
+        {
+          "binding": "EMAIL_AUTHORITY",
+          "service": "holon-dashboard",
+          "entrypoint": "EmailDeliveryAuthority",
+        },
+      ],
+      "queues": {
+        "producers": [{ "binding": "EMAIL_JOBS", "queue": "holon-email-jobs" }],
+        "consumers": [
+          {
+            "queue": "holon-email-jobs",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "retry_delay": 60,
+            "dead_letter_queue": "holon-email-dlq",
+          },
+          {
+            "queue": "holon-email-dlq",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "retry_delay": 60,
+          },
+        ],
+      },
       "workers_dev": false,
       "preview_urls": false,
       "observability": {

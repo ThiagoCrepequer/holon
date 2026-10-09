@@ -179,6 +179,18 @@ const runtime = new Miniflare(
         },
         script: `export default {async fetch(request,env){await env.ACCESS.applyEvent(await request.json());return Response.json({ok:true});}}`,
       },
+      {
+        name: "email-authority-bridge",
+        compatibilityDate: config.compatibility_date,
+        modules: true,
+        serviceBindings: {
+          AUTHORITY: {
+            name: "native-browser",
+            entrypoint: "EmailDeliveryAuthority",
+          },
+        },
+        script: `export default {async fetch(request,env){const input=await request.json();const claim=await env.AUTHORITY.claim({jobId:input.jobId});if(!claim)return Response.json({started:false});const attempt={jobId:claim.jobId,attemptId:claim.attemptId,generation:claim.generation};if(!await env.AUTHORITY.start(attempt))return Response.json({started:false});return Response.json(await env.AUTHORITY.record({...attempt,outcome:input.outcome}));}}`,
+      },
       ...misconfigured.map((worker) => ({ ...source, ...worker })),
     ],
   }),
@@ -204,6 +216,8 @@ for (const [binding, authority] of [
 
 async function control(request) {
   const url = new URL(request.url);
+  if (url.pathname === "/__test/email" && request.method === "POST")
+    return (await runtime.getWorker("email-authority-bridge")).fetch(request);
   if (url.pathname === "/__test/access-event" && request.method === "POST")
     return (await runtime.getWorker("access-event-bridge")).fetch(request);
   if (url.pathname === "/__test/invitation/proof" && request.method === "GET") {

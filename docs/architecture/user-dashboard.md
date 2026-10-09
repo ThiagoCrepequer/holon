@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - ../decisions/0054-establish-user-dashboard-foundations.md
   - ../engineering/frontend-application-structure.md
@@ -22,8 +22,8 @@ as fronteiras aprovadas. M1 materializa dois Workers, `packages/ui`,
 preferências de apresentação e liveness em `/api/health`. O primeiro recorte M2
 acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
 no D1 de identidade. M3 acrescenta credenciais coordenadas, conexões GitHub, grants limitados e
-convites com intenção durável. Dataset privado e envio continuam em M5 e M4,
-respectivamente. O complemento M2 acrescenta sessões/dispositivos,
+convites com intenção durável. M4 materializa entrega recuperável, autoridade RPC
+privada, publisher/vigília e Queue/DLQ. Dataset privado continua em M5. O complemento M2 acrescenta sessões/dispositivos,
 revogação atual/global e preferências pessoais persistidas, consumidas pelo SSR
 e pelos controles mínimos da página de fundação.
 Os manifests mantêm o ambiente local e acrescentam produção com dois D1
@@ -33,7 +33,8 @@ continuam indisponíveis. Após o responsável configurar os secrets, o manifest
 de produção usa `AUTH_ENABLED=true` e exige a composição completa; uma leitura
 anônima de sessão 200 não representa validação do OAuth real. A composição passa ambiente e origens homologadas para
 `packages/auth`; não os infere de Host ou de `APP_ORIGIN`. O email Worker é privado
-e mantém o contrato de bootstrap. A provisão M1/M2 não alterou os Workers do core. M3 acrescenta no manifest do
+e implementa transporte/template sem binding D1; efeitos ficam desabilitados
+até ativação autorizada. A provisão M1/M2 não alterou os Workers do core. M3 acrescenta no manifest do
 control-plane um binding privado para invalidação de acesso; sua publicação
 continua dependente de operação autorizada.
 
@@ -49,6 +50,7 @@ flowchart TD
   P[D1 projeção funcional]
   E[Email delivery: Worker privado]
   Q[Queue de email e DLQ: M4]
+  S[Email Sending: binding privado]
   L[Core: ledger autoritativo e alarm]
   B -->|documento e navegação| D
   D --> U
@@ -58,10 +60,11 @@ flowchart TD
   D -->|tenancy M2| DB
   DB --> I
   DB --> P
-  D -. wake privado M4 .-> E
-  E -. referência à intenção durável M4 .-> Q
-  Q -. consumer e confirmação M4 .-> E
-  E -. claim/resultado M4 .-> I
+  D -->|wake privado M4| E
+  E -->|referência opaca M4| Q
+  Q -->|consumer e ack individual M4| E
+  E -->|RPC privado claim/start/record M4| D
+  E -->|envio autorizado M4| S
   L -. snapshot monotônico por obrigação e alarm M5 .-> P
   D -. detalhe agregado e autorizado M5 .-> L
 ```
@@ -75,6 +78,9 @@ sem quota comercial nem nova autoridade de negócio.
 Projeção funcional ainda não contém dados de reviews.
 A composição não autoriza acesso ou cria estado de negócio por mostrar um banco
 no diagrama. A fila de email não é uma nova fila de projeção.
+O sender acessa a autoridade do dashboard por RPC, nunca o D1 diretamente.
+O binding Email Sending está composto, com efeitos desabilitados até ativação
+autorizada; linhas contínuas não representam prova de envio real.
 
 ## SSR e API
 
@@ -118,20 +124,20 @@ assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 
 ## Autoridades e interfaces
 
-| Capacidade                                 | Dono da implementação                                                     | Contrato/consumidor                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                      | `AuthService`; DTO sem segredo de sessão/OAuth                             |
-| Preferências pessoais                      | porta `PersonalPreferencesPort` + adapter de identidade, M2               | `dashboard-preferences`; locale/fuso validados, sem configuração de equipe |
-| Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                         | `WorkspaceTenancyPort`; não concede grant GitHub                           |
-| Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`               | mutação condicional por ator/estado/operação nas issues donas              |
-| Reserva de authorization code              | adapter de identidade em `packages/db`                                    | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação |
-| Lista de metadados                         | D1 projeção funcional, migrations `packages/db/migrations/projection`, M5 | `ReviewReadPort`, `ReviewPage`; scope autorizado construído no servidor    |
-| Detalhe e revisão funcional                | ledger/core por PR                                                        | agregado restrito de leitura em M5; sem SQL/RPC genérico                   |
-| Entrega                                    | email Worker privado + Queue/DLQ, M4                                      | `EmailDeliveryPort.wake(operationId)`; bootstrap responde unavailable      |
+| Capacidade                                 | Dono da implementação                                                     | Contrato/consumidor                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                      | `AuthService`; DTO sem segredo de sessão/OAuth                                        |
+| Preferências pessoais                      | porta `PersonalPreferencesPort` + adapter de identidade, M2               | `dashboard-preferences`; locale/fuso validados, sem configuração de equipe            |
+| Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                         | `WorkspaceTenancyPort`; não concede grant GitHub                                      |
+| Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`               | mutação condicional por ator/estado/operação nas issues donas                         |
+| Reserva de authorization code              | adapter de identidade em `packages/db`                                    | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação            |
+| Lista de metadados                         | D1 projeção funcional, migrations `packages/db/migrations/projection`, M5 | `ReviewReadPort`, `ReviewPage`; scope autorizado construído no servidor               |
+| Detalhe e revisão funcional                | ledger/core por PR                                                        | agregado restrito de leitura em M5; sem SQL/RPC genérico                              |
+| Entrega                                    | email Worker privado + Queue/DLQ, M4                                      | `wake` publica referência opaca; `EmailDeliveryAuthority` autoriza claim/start/record |
 
 Não existe transação entre os dois D1 ou entre D1, Queue e provider. Convite e
-intenção durável são persistidos juntos no recorte M3; publisher/reconciliação e consumer
-condicionais serão materializados em M4 para recuperar entregas. Retry de resultado ambíguo pode repetir **o mesmo
+intenção durável são persistidos juntos no recorte M3; M4 implementa publisher,
+reconciliação e consumer condicionais para recuperar entregas. Retry de resultado ambíguo pode repetir **o mesmo
 convite**, como Q37 autorizou; não cria outro token ou membership. Email Worker
 usa adapter específico de intenção/claim/resultado, sem exportar ORM ou auth.
 
@@ -357,12 +363,12 @@ removida. Apenas owner admitido lista/cancela e vê o destinatário no DTO de ge
 Aceite não serializa email/workspace. Normalização limita-se a trim/lowercase.
 
 TTL é 7 dias; job usa o mesmo ID, deadline igual à expiração, `next_action_at`
-inicial na criação e orçamento total de 5 tentativas. M4 deve consumir esses
+inicial na criação e orçamento total de 5 tentativas. M4 consome esses
 campos sem reiniciar contadores. Criação usa budgets D1 de 10/min por ator/equipe
 e 30/min por equipe, além da fronteira HTTP. Terminalização cancela intenção
-pendente na mesma transação; cron a cada 15 min processa até 100 expirados por
+pendente na mesma transação; cron a cada minuto processa até 100 expirados por
 invocação. Aceite verifica prazo no relógio SQLite sem depender do cron; sender
-M4 também deve verificá-lo antes de cada tentativa. A gestão lista os 100 registros
+M4 também verifica o estado antes de claim e start. A gestão lista os 100 registros
 mais recentes. A UI informa que cancelar bloqueia envios futuros, sem recolher
 mensagem já em voo; M3 não envia nem afirma entrega.
 
@@ -370,3 +376,13 @@ Migrations aditivas `0010`/`0011` preservam os dados/provas M2. A segunda recria
 tabela de intenções com cópia integral para estender o CHECK a link/unlink;
 nenhuma migration aplicada é reescrita. [Resultados e rastreabilidade](../research/2026-10-08-dashboard-milestone-three-results.md)
 separam prova local, dry-run e pendências remotas.
+
+### Protocolo de entrega de Dashboard 4 — 2026-10-09
+
+Claim incrementa budget global e cria tentativa causal; start de uso único
+revalida estado/prazo/lease e libera contexto mínimo. Resultados antigos não
+alteram lease nova; aceitação conhecida bloqueia novos starts. Lease expirada
+exige reconciliação/backoff antes de outro claim, inclusive para mensagem
+duplicada. O cron acompanha todo não terminal até deadline/budget, independentemente
+de retenção Queue/DLQ ou tráfego. O [runbook](../operations/dashboard-email-delivery.md)
+é dono dos limites, diagnóstico, templates e gates de ativação remota.

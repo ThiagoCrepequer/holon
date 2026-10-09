@@ -6,8 +6,9 @@
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
     "typecheck": "wrangler types --check && tsc --noEmit",
-    "test": "pnpm build && vitest run --config vitest.config.ts",
-    "test:coverage": "pnpm build && vitest run --config vitest.config.ts --coverage"
+    "test": "pnpm build && pnpm build:test-authority && vitest run --config vitest.config.ts",
+    "test:coverage": "pnpm build && pnpm build:test-authority && vitest run --config vitest.config.ts --coverage",
+    "build:test-authority": "wrangler deploy --dry-run --config test/authority.wrangler.jsonc --outdir ../dist/authority"
   },
   "dependencies": {
     "@holon/contracts": "workspace:*"

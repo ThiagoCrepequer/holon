@@ -342,12 +342,12 @@ revalidar sessão/membership na próxima request, sem cookie cache de sessão;
 grants GitHub têm cache de até 60 s e invalidação por eventos recebidos.
 A política de produto é compartilhada entre SSR e API, sem duas ACLs distintas.
 
-## Fronteira proposta de entrega de emails
+## Fronteira de entrega de emails
 
 Q35 confirmou `apps/email-delivery` separado/privado e Q36 escolheu fila com
 retries duráveis desde a primeira entrega. A proposta anterior de chamada
-aguardada sem Queue foi superada. A direção está acordada; contratos, jobs e
-bindings ainda não foram implementados.
+aguardada sem Queue foi superada. M4 (2026-10-09) implementa os contratos, jobs, bindings e
+provas locais dessa direção; recursos e envio reais têm gates separados.
 
 | Responsável            | Capacidade                                                                                                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -356,9 +356,9 @@ bindings ainda não foram implementados.
 | Worker de email        | Consumir/validar referência, obter claim/contexto por RPC privado, renderizar template pt-BR/en, enviar e persistir resultado antes de ack individual                                                        |
 | Packages               | Auth identifica usuário/sessão; application define política e portas; db implementa persistência; contracts valida Queue/RPC; templates ficam internos ao Worker enquanto não houver consumidor independente |
 
-**Composição proposta:** convite+outbox no mesmo D1 → publisher recuperável →
+**Composição implementada em M4 (2026-10-09):** convite+outbox no mesmo D1 → publisher recuperável →
 Queue → email-delivery → Email Sending. Worker usa capability estreita no
-dashboard para claim/contexto/resultado; proposta sem acesso ORM/D1 amplo no
+dashboard para claim/start/resultado; sem acesso ORM/D1 no
 sender. Payload da Queue é referência, sem email, corpo ou token/link.
 Não expor endpoint público de envio nem aceitar HTML/remetente/URL arbitrários.
 
@@ -375,7 +375,8 @@ A [investigação de entrega](../research/2026-10-04-dashboard-email-delivery-in
 detalha falhas, leases, retries, DLQ, privacidade/preview e provas. Queue e
 Worker email são capacidades necessárias acordadas; não adicionar outros canais,
 scheduler de notificações, digest ou novas funcionalidades por disponibilidade.
-Nenhum recurso foi criado. O [estado de referência](../planning/dashboard-engineering-decision-review.md)
+Esta implementação não criou recursos remotos. O [runbook de email](../operations/dashboard-email-delivery.md)
+descreve o protocolo e a ativação autorizada. O [estado de referência](../planning/dashboard-engineering-decision-review.md)
 separa política acordada, desenho técnico e provas restantes.
 
 ## Internacionalização desde a primeira entrega
