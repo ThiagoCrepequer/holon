@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - typescript-and-module-design.md
   - ../research/2026-10-04-dashboard-library-landscape.md
@@ -48,7 +48,14 @@ em 2026-10-04, o responsável confirmou:
 
 SSR inicia a página e API atende interações; ambos usam os mesmos contratos
 e capacidades autorizadas. Não duplicar regras de produto entre loader e
-handler. A rodada 2 definiu inicialmente lista por projeção D1 e detalhe
+handler. Controles cujo efeito depende de handlers React precisam permanecer
+desabilitados no SSR até a hidratação instalar esses handlers. Visibilidade
+não comprova interatividade: um clique precoce não pode ser aceito e perdido.
+Comprove a transição com JavaScript bloqueado/liberado e a primeira interação
+real, sem sleeps ou aumento de retries. `WorkspaceControls` aplica essa regra
+aos gatilhos de gestão e confirmação de conexão.
+
+A rodada 2 definiu inicialmente lista por projeção D1 e detalhe
 agregado pelo core, sem histórico/backfill. Interfaces/projeção durável e
 integração de autenticação precisam de desenho/prova técnica. Essa confirmação
 não adiciona bindings,

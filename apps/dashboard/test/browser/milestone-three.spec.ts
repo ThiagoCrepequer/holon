@@ -1,6 +1,33 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 const origin = "https://127.0.0.1:8795";
+test("workspace controls wait for hydration before accepting the first click", async ({
+  page,
+}, info) => {
+  const subject =
+    84001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
+  await signIn(page, subject);
+  const scripts = Promise.withResolvers<void>();
+  await page.route("**/assets/*.js", async (route) => {
+    await scripts.promise;
+    await route.continue();
+  });
+  try {
+    await page.reload({ waitUntil: "commit" });
+    const manage = page.getByRole("button", {
+      name: "Manage workspaces",
+      exact: true,
+    });
+    await expect(manage).toBeVisible();
+    await expect(manage).toBeDisabled();
+    scripts.resolve();
+    await expect(manage).toBeEnabled();
+    await manage.click();
+    await expect(page.getByLabel("Team name")).toBeVisible();
+  } finally {
+    scripts.resolve();
+  }
+});
 async function signIn(page: Page, subject: number, locale = "en") {
   let flows = 0;
   await page
