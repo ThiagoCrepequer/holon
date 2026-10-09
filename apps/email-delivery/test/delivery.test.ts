@@ -302,23 +302,30 @@ it("a short persistence outage retries the same known result without another pro
   expect(send).toHaveBeenCalledTimes(1);
   expect(writes).toBe(2);
 });
-it("DLQ replay remains terminal and logs only a bounded signal", async () => {
-  const i = await invite();
-  await createInvitationPersistence(db).cancel(owner, "team", i.id);
-  const send = vi.fn(async () => ({ messageId: "synthetic" }));
-  const { sender, ctx } = worker(send);
-  const signal = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const messages = createMessageBatch("holon-email-dlq", [
-    { id: "dlq", timestamp: new Date(), attempts: 99, body: { jobId: i.id } },
-  ]);
-  await sender.queue(messages);
-  expect((await getQueueResult(messages, ctx)).explicitAcks).toEqual(["dlq"]);
-  expect(send).not.toHaveBeenCalled();
-  expect(signal).toHaveBeenCalledWith(
-    JSON.stringify({ event: "email_dlq", messages: 1 }),
-  );
-  signal.mockRestore();
-});
+it.each([
+  "holon-email-dlq",
+  "holon-email-dlq-local",
+  "holon-email-dlq-preview",
+])(
+  "%s replay remains terminal and logs only a bounded signal",
+  async (queue) => {
+    const i = await invite();
+    await createInvitationPersistence(db).cancel(owner, "team", i.id);
+    const send = vi.fn(async () => ({ messageId: "synthetic" }));
+    const { sender, ctx } = worker(send);
+    const signal = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const messages = createMessageBatch(queue, [
+      { id: "dlq", timestamp: new Date(), attempts: 99, body: { jobId: i.id } },
+    ]);
+    await sender.queue(messages);
+    expect((await getQueueResult(messages, ctx)).explicitAcks).toEqual(["dlq"]);
+    expect(send).not.toHaveBeenCalled();
+    expect(signal).toHaveBeenCalledWith(
+      JSON.stringify({ event: "email_dlq", messages: 1 }),
+    );
+    signal.mockRestore();
+  },
+);
 it("mixed batch acknowledges only individual durable results and invalid payloads", async () => {
   const success = await invite();
   const missing = await createInvitationPersistence(db).create(owner, "team", {

@@ -9,7 +9,7 @@ import {
   type D1Migration,
 } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const metadata = {
   installationId: 1,
   repositoryId: 42,
@@ -405,6 +405,7 @@ it("rolls back the first metadata/revision/task if alarm creation fails", async 
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
   await runInDurableObject(ledger, async (object, state) => {
     const original = state.storage.setAlarm.bind(state.storage);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     state.storage.setAlarm = () =>
       Promise.reject(new Error("synthetic alarm failure"));
     try {
@@ -423,6 +424,22 @@ it("rolls back the first metadata/revision/task if alarm creation fails", async 
     expect(
       state.storage.sql.exec("SELECT * FROM review_projection_task").toArray(),
     ).toHaveLength(0);
+    await object.observePullRequest(metadata);
+    const signals = log.mock.calls
+      .map(([line]) => JSON.parse(String(line)))
+      .filter((event) => event.event === "dashboard.alarm_health");
+    log.mockRestore();
+    expect(signals).toContainEqual({
+      event: "dashboard.alarm_health",
+      code: 1,
+    });
+    expect(signals).toContainEqual({
+      event: "dashboard.alarm_health",
+      code: 0,
+    });
+    expect(signals.every((event) => Object.keys(event).length === 2)).toBe(
+      true,
+    );
   });
   await ledger.observePullRequest(metadata);
   await evictDurableObject(ledger);

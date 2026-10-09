@@ -158,9 +158,16 @@ export function createEmailDeliveryPersistence(db: D1Database) {
     async metrics() {
       return db
         .prepare(
-          `SELECT COUNT(*) AS pending,COALESCE(SUM(CASE WHEN next_action_at<=${now} THEN 1 ELSE 0 END),0) AS due,COALESCE(MIN(next_action_at),0) AS oldest_due_at FROM invitation_delivery_intent WHERE state='pending'`,
+          `SELECT COUNT(*) AS pending,COALESCE(SUM(CASE WHEN next_action_at<=${now} THEN 1 ELSE 0 END),0) AS due,COALESCE(MIN(next_action_at),0) AS oldest_due_at,COALESCE(SUM(attempts),0) AS attempts,COALESCE(SUM(last_outcome='unknown'),0) AS unknown,COALESCE(MAX(MAX(0,${now}-next_action_at)),0) AS overdue_ms FROM invitation_delivery_intent WHERE state='pending'`,
         )
-        .first<{ pending: number; due: number; oldest_due_at: number }>();
+        .first<{
+          pending: number;
+          due: number;
+          oldest_due_at: number;
+          attempts: number;
+          unknown: number;
+          overdue_ms: number;
+        }>();
     },
   };
 }

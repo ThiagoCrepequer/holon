@@ -95,6 +95,7 @@ function fakeD1(): D1Database {
 describe("Dashboard Worker composition", () => {
   it("serves HTTPS production with full synthetic credentials and homologated origins", async () => {
     const env: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -115,6 +116,7 @@ describe("Dashboard Worker composition", () => {
   it("fails closed (503) when production origin is not homologated", async () => {
     const unhomologatedOrigin = "https://unhomologated.example.invalid";
     const env: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: unhomologatedOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -135,6 +137,7 @@ describe("Dashboard Worker composition", () => {
 
   it("handles explicit bootstrap mode with AUTH_ENABLED='false' and only AUTH_SECRET", async () => {
     const env: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -176,6 +179,7 @@ describe("Dashboard Worker composition", () => {
   it("fails closed on invalid remote configuration", async () => {
     // Invalid JSON for AUTH_REGISTERED_ORIGINS
     const badJsonEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: "invalid-json",
@@ -189,6 +193,7 @@ describe("Dashboard Worker composition", () => {
 
     // Invalid schema for AUTH_REGISTERED_ORIGINS
     const badSchemaEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: JSON.stringify({ preview: "not-an-array" }),
@@ -202,6 +207,7 @@ describe("Dashboard Worker composition", () => {
 
     // Invalid AUTH_ENVIRONMENT enum
     const badEnvEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "staging",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -215,6 +221,7 @@ describe("Dashboard Worker composition", () => {
 
     // Invalid AUTH_ENABLED value
     const badEnabledEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENABLED: "yes",
     };
@@ -228,6 +235,7 @@ describe("Dashboard Worker composition", () => {
   it("fails closed when AUTH_ENABLED='true' but trio or D1 is missing", async () => {
     // Missing client secret and D1
     const missingSecretEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -245,6 +253,7 @@ describe("Dashboard Worker composition", () => {
 
     // Missing D1
     const missingD1Env: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: prodOrigin,
       AUTH_ENVIRONMENT: "production",
       AUTH_REGISTERED_ORIGINS: registeredOriginsJson,
@@ -266,6 +275,7 @@ describe("Dashboard Worker composition", () => {
 
     // No secrets: static works, auth 404
     const noSecretsEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: localOrigin,
     };
     const staticRes = await worker.fetch(
@@ -282,6 +292,7 @@ describe("Dashboard Worker composition", () => {
 
     // Partial secrets: 503
     const partialEnv: DashboardWorkerBindings = {
+      DASHBOARD_RECOVERY_MODE: "active",
       APP_ORIGIN: localOrigin,
       AUTH_SECRET: testAuthSecret,
     };
@@ -291,4 +302,24 @@ describe("Dashboard Worker composition", () => {
     );
     expect(partialRes.status).toBe(503);
   });
+});
+
+it("recovery hold survives identity restore and fails closed before auth or D1 access", async () => {
+  for (const mode of [undefined, "closed", "rebuilding", "invalid"]) {
+    const prepare = vi.fn(() => {
+      throw new Error("must not touch restored identity");
+    });
+    const env = {
+      APP_ORIGIN: prodOrigin,
+      AUTH_ENABLED: "false",
+      IDENTITY_DB: { prepare },
+      ...(mode === undefined ? {} : { DASHBOARD_RECOVERY_MODE: mode }),
+    };
+    const response = await worker.fetch(
+      new Request(prodOrigin + "/"),
+      env as unknown as Env,
+    );
+    expect(response.status).toBe(503);
+    expect(prepare).not.toHaveBeenCalled();
+  }
 });

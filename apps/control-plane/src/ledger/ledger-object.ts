@@ -289,6 +289,14 @@ export class ReviewLedgerObject
       return result;
     });
     if (!claim) return;
+    const startedAt = Date.now();
+    consoleLogger.emit("dashboard.projection_attempt", {
+      attempt: claim.attempt,
+      source_age_ms: Math.max(
+        0,
+        startedAt - Date.parse(claim.input.snapshot.observedAt),
+      ),
+    });
     try {
       const writer = (
         this.env as unknown as {
@@ -312,6 +320,13 @@ export class ReviewLedgerObject
         if (timeout !== undefined) clearTimeout(timeout);
       }
       const result = projectionWriteResultSchema.parse(reply);
+      consoleLogger.emit("dashboard.projection_result", {
+        duration_ms: Date.now() - startedAt,
+        result,
+      });
+      consoleLogger.emit("dashboard.projection_health", {
+        code: result === "applied" || result === "duplicate" ? 0 : 1,
+      });
       if (result === "applied" || result === "duplicate") {
         await this.ctx.storage.transaction(async () => {
           new ReviewReadModel(this.ctx.storage).acknowledge(
@@ -327,10 +342,11 @@ export class ReviewLedgerObject
           revision: claim.input.snapshot.snapshotRevision,
           result,
         });
-    } catch (error) {
+    } catch {
       consoleLogger.emit("dashboard.projection_retry", {
         attempt: claim.attempt,
-        errorKind: errorKind(error),
+        duration_ms: Date.now() - startedAt,
+        code: claim.attempt >= 6 ? 2 : 1,
       });
     }
   }
@@ -1063,9 +1079,15 @@ export class ReviewLedgerObject
   private async ensureMaintenanceAlarm(): Promise<void> {
     const next = this.nextMaintenanceAt();
     if (next === undefined) return;
-    const scheduled = await this.ctx.storage.getAlarm();
-    if (scheduled === null || scheduled > next) {
-      await this.ctx.storage.setAlarm(next);
+    try {
+      const scheduled = await this.ctx.storage.getAlarm();
+      if (scheduled === null || scheduled > next) {
+        await this.ctx.storage.setAlarm(next);
+      }
+      consoleLogger.emit("dashboard.alarm_health", { code: 0 });
+    } catch (error) {
+      consoleLogger.emit("dashboard.alarm_health", { code: 1 });
+      throw error;
     }
   }
 

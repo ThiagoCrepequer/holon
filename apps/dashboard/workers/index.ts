@@ -38,8 +38,10 @@ import {
   nonce,
   secureResponse,
 } from "../app/server/http-security.server.js";
+import { recoveryMode } from "./recovery-mode.js";
 
 export interface DashboardWorkerBindings {
+  readonly DASHBOARD_RECOVERY_MODE?: string | undefined;
   readonly REVIEW_CORE?: PrivateReviewCorePort | undefined;
   readonly EMAIL_DELIVERY?: EmailDeliveryPort | undefined;
   readonly APP_ORIGIN?: string | undefined;
@@ -90,6 +92,7 @@ export default {
     environment: Env,
   ): Promise<void> {
     const env = environment as unknown as DashboardWorkerBindings;
+    if (recoveryMode(env.DASHBOARD_RECOVERY_MODE) !== "active") return;
     if (env.IDENTITY_DB)
       await createInvitationPersistence(env.IDENTITY_DB).expireDue();
     if (env.IDENTITY_DB && env.EMAIL_DELIVERY)
@@ -99,6 +102,8 @@ export default {
     const requestNonce = nonce();
     try {
       const env = environment as unknown as DashboardWorkerBindings;
+      if (recoveryMode(env.DASHBOARD_RECOVERY_MODE) !== "active")
+        throw new HttpBoundaryError("unavailable", 503);
 
       if (!env.APP_ORIGIN || typeof env.APP_ORIGIN !== "string") {
         throw new HttpBoundaryError("unavailable", 503);

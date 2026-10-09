@@ -6,7 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   // Active CPU across a live invocation, including consecutive Workflow steps.
   // Bounded headroom above the PR #171 invocation that exhausted the 30s default.
-  "limits": { "cpu_ms": 60000 },
+  "limits": {
+    "cpu_ms": 60000,
+  },
   "vars": {
     "PROJECT_IDENTIFICATION_MODE": "observe",
     "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
@@ -14,7 +16,10 @@
   },
   "durable_objects": {
     "bindings": [
-      { "name": "REPOSITORY_MEMORIES", "class_name": "RepositoryMemoryObject" },
+      {
+        "name": "REPOSITORY_MEMORIES",
+        "class_name": "RepositoryMemoryObject",
+      },
       {
         "name": "PROJECT_IDENTIFICATION_REGISTRY",
         "class_name": "ProjectIdentificationRegistryObject",
@@ -123,4 +128,106 @@
       "head_sampling_rate": 1,
     },
   },
+  "env": {
+    "preview": {
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "REPOSITORY_MEMORIES",
+            "class_name": "RepositoryMemoryObject",
+          },
+          {
+            "name": "PROJECT_IDENTIFICATION_REGISTRY",
+            "class_name": "ProjectIdentificationRegistryObject",
+          },
+          {
+            "name": "PROJECT_IDENTIFICATION_CACHE",
+            "class_name": "ProjectIdentificationCacheObject",
+          },
+          {
+            "name": "REVIEW_LEDGERS",
+            "class_name": "ReviewLedgerObject",
+          },
+          {
+            "name": "REVIEW_AGENTS",
+            "class_name": "ReviewAgent",
+          },
+          {
+            "name": "FINDING_CLARIFICATION_AGENTS",
+            "class_name": "FindingClarificationAgent",
+          },
+        ],
+      },
+      "vars": {
+        "PROJECT_IDENTIFICATION_MODE": "observe",
+        "PROJECT_IDENTIFICATION_PROFILE": "identification-v1",
+        "AGENT_TRACE_PAYLOADS": "disabled",
+      },
+      "services": [
+        {
+          "binding": "REVIEW_PROJECTION",
+          "service": "holon-dashboard-preview",
+          "entrypoint": "ReviewProjectionWriter",
+        },
+        {
+          "binding": "DASHBOARD_ACCESS_EVENTS",
+          "service": "holon-dashboard-preview",
+          "entrypoint": "GitHubAccessEvents",
+        },
+        {
+          "binding": "REPOSITORY_EXECUTOR",
+          "service": "holon-repository-executor-preview",
+        },
+      ],
+      "workflows": [
+        {
+          "name": "holon-review-workflow-preview",
+          "binding": "REVIEW_WORKFLOW",
+          "class_name": "ReviewWorkflow",
+        },
+        {
+          "name": "holon-review-shard-workflow-preview",
+          "binding": "REVIEW_SHARD_WORKFLOW",
+          "class_name": "ReviewShardWorkflow",
+        },
+        {
+          "name": "holon-finding-clarification-workflow-preview",
+          "binding": "FINDING_CLARIFICATION_WORKFLOW",
+          "class_name": "FindingClarificationWorkflow",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "REVIEW_QUEUE",
+            "queue": "holon-review-jobs-preview",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "holon-review-jobs-preview",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "holon-review-jobs-dlq-preview",
+          },
+        ],
+      },
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false,
+        },
+      },
+      "limits": {
+        "cpu_ms": 60000,
+      },
+      "name": "holon-control-plane-preview",
+      "workers_dev": false,
+      "preview_urls": false,
+    },
+  },
+  "preview_urls": false,
+  "workers_dev": true,
 }

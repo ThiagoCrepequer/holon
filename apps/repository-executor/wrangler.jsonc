@@ -41,4 +41,43 @@
       "head_sampling_rate": 1,
     },
   },
+  "env": {
+    "preview": {
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "SANDBOXES",
+            "class_name": "HolonSandbox",
+          },
+        ],
+      },
+      "services": [
+        {
+          "binding": "GITHUB_CREDENTIAL_BROKER",
+          "service": "holon-control-plane-preview",
+          "entrypoint": "GitHubCredentialBrokerEntrypoint",
+        },
+      ],
+      "containers": [
+        {
+          "class_name": "HolonSandbox",
+          "image": "./Dockerfile",
+          "instance_type": "lite",
+          "max_instances": 10,
+        },
+      ],
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false,
+        },
+      },
+      "name": "holon-repository-executor-preview",
+      "workers_dev": false,
+      "preview_urls": false,
+    },
+  },
+  "preview_urls": false,
+  "workers_dev": false,
 }

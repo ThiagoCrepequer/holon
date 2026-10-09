@@ -52,6 +52,9 @@ jobs:
       - name: Verify formatting, lint, types, coverage and bundles
         run: pnpm verify
 
+      - name: Freeze the verified local artifact by SHA
+        run: node tooling/deploy/dashboard-artifact-cli.mjs "$(git rev-parse HEAD)" local proof-results/release-artifact
+
       - name: Upload test and coverage artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

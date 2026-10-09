@@ -26,6 +26,7 @@ export default defineConfig(async () => ({
             compatibilityDate: "2026-08-29",
             modules: true,
             scriptPath: "./dist/projection/projection-worker.js",
+            bindings: { DASHBOARD_RECOVERY_MODE: "active" },
             d1Databases: { PROJECTION_DB: "core-projection-test" },
           },
           {

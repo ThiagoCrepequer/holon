@@ -18,6 +18,7 @@ export default defineConfig(async () => ({
         workers: [
           {
             name: "email-authority-test",
+            bindings: { DASHBOARD_RECOVERY_MODE: "active" },
             compatibilityDate: "2026-08-29",
             modules: true,
             scriptPath: "./dist/authority/authority.js",

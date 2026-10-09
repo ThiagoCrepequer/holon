@@ -8,6 +8,7 @@
   "preview_urls": false,
   "vars": {
     "APP_ORIGIN": "http://127.0.0.1:8794",
+    "DASHBOARD_RECOVERY_MODE": "active",
   },
   "services": [
     {
@@ -15,9 +16,14 @@
       "service": "holon-control-plane",
       "entrypoint": "DashboardReviewReader",
     },
-    { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery-local" },
+    {
+      "binding": "EMAIL_DELIVERY",
+      "service": "holon-email-delivery-local",
+    },
   ],
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
   "observability": {
     "enabled": false,
   },
@@ -46,7 +52,10 @@
           "service": "holon-control-plane",
           "entrypoint": "DashboardReviewReader",
         },
-        { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery" },
+        {
+          "binding": "EMAIL_DELIVERY",
+          "service": "holon-email-delivery",
+        },
       ],
       "workers_dev": true,
       "preview_urls": false,
@@ -62,6 +71,7 @@
         "AUTH_ENVIRONMENT": "production",
         "AUTH_REGISTERED_ORIGINS": "{\"preview\":[],\"production\":[\"https://holon-dashboard.thiago-crepequer.workers.dev\"]}",
         "AUTH_ENABLED": "true",
+        "DASHBOARD_RECOVERY_MODE": "active",
       },
       "d1_databases": [
         {
@@ -74,6 +84,50 @@
           "binding": "PROJECTION_DB",
           "database_name": "holon-projection",
           "database_id": "af121530-2f99-4d01-8155-c20efc040a3b",
+          "migrations_dir": "../../packages/db/migrations/projection",
+        },
+      ],
+    },
+    "preview": {
+      "name": "holon-dashboard-preview",
+      "services": [
+        {
+          "binding": "REVIEW_CORE",
+          "service": "holon-control-plane-preview",
+          "entrypoint": "DashboardReviewReader",
+        },
+        {
+          "binding": "EMAIL_DELIVERY",
+          "service": "holon-email-delivery-preview",
+        },
+      ],
+      "workers_dev": false,
+      "preview_urls": false,
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false,
+        },
+      },
+      "vars": {
+        "APP_ORIGIN": "https://dashboard-preview.example.invalid",
+        "AUTH_ENVIRONMENT": "preview",
+        "AUTH_REGISTERED_ORIGINS": "{\"preview\":[\"https://dashboard-preview.example.invalid\"],\"production\":[]}",
+        "AUTH_ENABLED": "false",
+        "DASHBOARD_RECOVERY_MODE": "closed",
+      },
+      "d1_databases": [
+        {
+          "binding": "IDENTITY_DB",
+          "database_name": "holon-identity-preview",
+          "database_id": "00000000-0000-4000-8000-000000000011",
+          "migrations_dir": "../../packages/db/migrations/identity",
+        },
+        {
+          "binding": "PROJECTION_DB",
+          "database_name": "holon-projection-preview",
+          "database_id": "00000000-0000-4000-8000-000000000012",
           "migrations_dir": "../../packages/db/migrations/projection",
         },
       ],

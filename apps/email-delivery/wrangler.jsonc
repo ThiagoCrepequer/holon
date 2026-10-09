@@ -25,7 +25,10 @@
   ],
   "queues": {
     "producers": [
-      { "binding": "EMAIL_JOBS", "queue": "holon-email-jobs-local" },
+      {
+        "binding": "EMAIL_JOBS",
+        "queue": "holon-email-jobs-local",
+      },
     ],
     "consumers": [
       {
@@ -68,7 +71,12 @@
         },
       ],
       "queues": {
-        "producers": [{ "binding": "EMAIL_JOBS", "queue": "holon-email-jobs" }],
+        "producers": [
+          {
+            "binding": "EMAIL_JOBS",
+            "queue": "holon-email-jobs",
+          },
+        ],
         "consumers": [
           {
             "queue": "holon-email-jobs",
@@ -79,6 +87,59 @@
           },
           {
             "queue": "holon-email-dlq",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "retry_delay": 60,
+          },
+        ],
+      },
+      "workers_dev": false,
+      "preview_urls": false,
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "invocation_logs": false,
+        },
+      },
+    },
+    "preview": {
+      "name": "holon-email-delivery-preview",
+      "vars": {
+        "APP_ORIGIN": "https://dashboard-preview.example.invalid",
+        "EMAIL_FROM": "noreply@example.invalid",
+        "EMAIL_SEND_ENABLED": "false",
+      },
+      "send_email": [
+        {
+          "name": "EMAIL",
+          "allowed_sender_addresses": ["noreply@example.invalid"],
+        },
+      ],
+      "services": [
+        {
+          "binding": "EMAIL_AUTHORITY",
+          "service": "holon-dashboard-preview",
+          "entrypoint": "EmailDeliveryAuthority",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "EMAIL_JOBS",
+            "queue": "holon-email-jobs-preview",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "holon-email-jobs-preview",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "retry_delay": 60,
+            "dead_letter_queue": "holon-email-dlq-preview",
+          },
+          {
+            "queue": "holon-email-dlq-preview",
             "max_batch_size": 10,
             "max_retries": 3,
             "retry_delay": 60,
