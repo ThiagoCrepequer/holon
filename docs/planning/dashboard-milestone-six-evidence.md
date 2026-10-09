@@ -27,7 +27,7 @@ conteúdo de repositórios ou destinatários produtivos.
 
 | Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                   |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos; encerrável após o gate completo                                            |
+| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                              |
 | #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                      |
 | #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                         |
 | #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                              |
@@ -125,7 +125,8 @@ interno; o texto literal longo faz reflow sem esconder conteúdo.
 - Comando de workspace: o gate nativo encontrou clique descartado durante
   GET pendente. A regressão com resposta retida ficou vermelha nos seis pares
   locale/engine; personal e confirmação agora ficam desabilitados durante a
-  leitura. A variante cancelada conserva o próximo comando e os fences de
+  leitura. A variante cancelada também ficou vermelha pela ausência do POST; considerar
+  somente o controller ativo libera o próximo comando e conserva os fences de
   geração. O teste de retorno à conta aguarda URL e título da nova rota antes
   de acionar seu link, evitando clicar no link homônimo da tela anterior.
 
@@ -146,6 +147,47 @@ controle estão em test/support e não são bundles de produção. Artefatos bro
 JUnit/coverage e `performance-lab.json` são anexados pela CI por sete dias. A
 primeira falha é visível, sem retries. Um resultado local não prova CI remota.
 
+## Resultado local executado em 2026-10-09
+
+O main `cf914e8f6762e766409c3b98b54fa46ff329f6a9` foi incorporado por merge
+`fd4ffbb`, preservando os ADRs-0060/0061 e ambos os históricos. O único conflito,
+na identidade gerada do compilador, foi resolvido por
+`pnpm config:schema:generate` sobre o lockfile combinado. A instalação
+`pnpm install --frozen-lockfile` passou a política de supply-chain; a tentativa
+offline anterior não possuía toda a metadata exigida e não qualificou instalação.
+
+| Comando/composição                   | Resultado local                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| `pnpm verify`                        | aprovado: brand/schema/config, formato/lint, tipos, cobertura e build/dry-runs |
+| `pnpm typecheck` dentro do gate      | 21/21 tasks; três reaproveitadas pelo Turbo                                    |
+| Arquitetura / deploy                 | 14/14 e 72/72 testes; inclui filesystem, bytes e gates negativos de promoção   |
+| UI / D1                              | seis testes UI e 169 testes D1; nenhum threshold alterado                      |
+| Dashboard DOM / Workers              | 163 testes em 16 arquivos e 101 testes em oito arquivos                        |
+| Browser proof / browser do dashboard | 60/60 e 12/12                                                                  |
+| Jornadas nativas                     | 97 aprovadas, zero falhas; dois labs CDP ignorados somente em Firefox/WebKit   |
+| Core integrado                       | 417 testes em 51 arquivos; cobertura aprovada                                  |
+| `pnpm build` dentro do gate          | 17/17 tasks; Docker/Sandbox e dry-run, sem publicação                          |
+
+A fase de cobertura completou 32/32 tasks em 7m28s, com 14 resultados
+reaproveitados pelo Turbo. A matriz browser usa cache bypass e retries=0. Esses
+números descrevem esta execução local e não afirmam resultado de CI remota.
+As capturas de conta/lista/detalhe e 320px/zoom200 foram inspecionadas em
+Chromium/WebKit; as asserções de reflow, teclado, foco e axe abrangem os três
+engines. As fontes originais privadas do produto foram substituídas por fixtures
+sintéticas nestas provas.
+
+Os oito dry-runs adicionais passaram: dashboard, email-delivery, control-plane
+e repository-executor em preview e produção. O dashboard foi construído com
+`CLOUDFLARE_ENV=preview|production`; os demais usaram `wrangler deploy --dry-run`
+e o `--env` correspondente, com default para core/executor produtivos. Os
+outputs foram separados em diretórios temporários. A configuração compilada
+preview conservou seus próprios serviços, auth off, ingress off e hold fechado.
+Nenhum recurso remoto foi criado, banco migrado ou email enviado. Dockerfile
+continua reconstruível: isso verifica build, não imagem imutável publicada nem
+prontidão de promoção. O build local final é reconstruído em checkout limpo
+antes de congelar o artefato por SHA; seu recibo/manifest é prova anexada ao PR,
+não um SHA autorreferente dentro deste documento.
+
 ## Protocolo de desempenho
 
 O lab usa Chromium 153.0.8010.12, macOS ARM64/Apple M4, CDP CPU4x, loopback sem
@@ -160,8 +202,9 @@ Os ceilings são JS gzip 210000, CSS gzip 12000, WOFF 160000; lab SSR p95 1500ms
 filter/refresh p95 500ms, DOM1200, LCP p75 2500ms, CLS p75 0.1 e INP200ms.
 Derivam do build/browser medido, com margem de CI e testes de violação
 independente; o limite de JS foi mantido após trocar a implementação de Markdown
-para caber nele. A amostra desktop de 2026-10-09 mediu JS193598/CSS5503/font159732,
-SSR detalhe cold p95 1119ms. Os relatórios anexados são a fonte dos números da
+para caber nele. A amostra local de 2026-10-09T21:43:59Z mediu JS195256/CSS5553/font159732,
+SSR detalhe cold p95 447ms no desktop e 486ms no viewport móvel; warm p95
+319/326ms, filtro p95 95ms, refresh p95 62ms e INP sintético 16ms. Os relatórios anexados são a fonte dos números da
 execução correspondente. INP do lab é de uma navegação/interações sintéticas,
 não p75 de usuários. LCP/CLS de dez navegações locais também não são CWV de campo.
 
