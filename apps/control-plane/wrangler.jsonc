@@ -98,6 +98,11 @@
   ],
   "services": [
     {
+      "binding": "DASHBOARD_ACCESS_EVENTS",
+      "service": "holon-dashboard",
+      "entrypoint": "GitHubAccessEvents",
+    },
+    {
       "binding": "REPOSITORY_EXECUTOR",
       "service": "holon-repository-executor",
     },

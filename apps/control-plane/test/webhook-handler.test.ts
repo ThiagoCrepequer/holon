@@ -1,6 +1,6 @@
 import type { HealthCheckReport } from "@holon/contracts";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createWebhookApp,
@@ -42,6 +42,7 @@ async function request(
   body: string,
   overrides: Record<string, string> = {},
   queueError?: Error,
+  environmentOverrides: Record<string, unknown> = {},
 ) {
   const sent: unknown[] = [];
   const signature = await sign("secret", body);
@@ -64,6 +65,7 @@ async function request(
       GITHUB_APP_PRIVATE_KEY_CURRENT: "fake-key",
       GITHUB_APP_SLUG: "holon-reviewer",
       GITHUB_WEBHOOK_SECRET: "secret",
+      DASHBOARD_ACCESS_EVENTS: env.DASHBOARD_ACCESS_EVENTS,
       REVIEW_QUEUE: {
         send: (message: unknown) => {
           if (queueError !== undefined) return Promise.reject(queueError);
@@ -71,6 +73,7 @@ async function request(
           return Promise.resolve();
         },
       },
+      ...environmentOverrides,
     },
   );
   return { response, sent };
@@ -374,3 +377,60 @@ it("revokes only removed repositories and validates signed revocation payloads",
     ).response.status,
   ).toBe(202);
 }, 15_000);
+
+it("signed user revocation enters the durable access queue before acknowledgement", async () => {
+  const body = JSON.stringify({ action: "revoked", sender: { id: 1001 } });
+  const result = await request(body, {
+    "x-github-event": "github_app_authorization",
+  });
+  expect(result.response.status).toBe(202);
+  expect(result.sent).toEqual([
+    {
+      event: "github_access",
+      access: {
+        deliveryId: "delivery-123",
+        action: "user_revoked",
+        githubAccountId: "1001",
+      },
+    },
+  ]);
+  expect(
+    (await request("{}", { "x-github-event": "github_app_authorization" }))
+      .response.status,
+  ).toBe(400);
+  expect(
+    (await request("{", { "x-github-event": "github_app_authorization" }))
+      .response.status,
+  ).toBe(400);
+  expect(
+    (
+      await request(body, {
+        "x-github-event": "github_app_authorization",
+        "x-hub-signature-256": "invalid",
+      })
+    ).response.status,
+  ).toBe(401);
+});
+
+it("dashboard RPC failure does not block the existing core installation revocation", async () => {
+  const revoke = vi.fn(async () => {});
+  const restore = vi.fn(async () => {});
+  const result = await request(
+    JSON.stringify({ action: "suspend", installation: { id: 99 } }),
+    { "x-github-event": "installation" },
+    undefined,
+    {
+      DASHBOARD_ACCESS_EVENTS: {
+        applyEvent: async () => {
+          throw new Error("synthetic outage");
+        },
+      },
+      PROJECT_IDENTIFICATION_REGISTRY: {
+        getByName: () => ({ revoke, restore }),
+      },
+    },
+  );
+  expect(result.response.status).toBe(500);
+  expect(result.sent).toHaveLength(1);
+  expect(revoke).toHaveBeenCalledWith(99, null);
+});

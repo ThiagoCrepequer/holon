@@ -68,11 +68,38 @@ async function provider(request) {
         email: null,
         avatar_url: null,
       });
+    if (url.pathname === "/user/installations")
+      return Response.json({
+        total_count: 1,
+        installations: [
+          {
+            id: grant.subject + 100000,
+            app_id: 77,
+            account: {
+              id: grant.subject,
+              type: "User",
+              login: `synthetic_${grant.subject}`,
+            },
+            suspended_at: null,
+          },
+        ],
+      });
+    if (/^\/user\/installations\/\d+\/repositories$/.test(url.pathname))
+      return Response.json({
+        total_count: 1,
+        repositories: [{ id: grant.subject + 200000 }],
+      });
     if (url.pathname === "/user/emails")
       return Response.json([
         {
           email: `browser-${grant.subject}@example.invalid`,
           primary: true,
+          verified: true,
+          visibility: "private",
+        },
+        {
+          email: `alias-${grant.subject}@example.invalid`,
+          primary: false,
           verified: true,
           visibility: "private",
         },
@@ -109,6 +136,7 @@ const source = {
 const authBindings = {
   APP_ORIGIN: origin,
   AUTH_SECRET: "synthetic-browser-auth-secret-at-least-32-chars",
+  GITHUB_APP_ID: "77",
   GITHUB_APP_CLIENT_ID: clientId,
   GITHUB_APP_CLIENT_SECRET: clientSecret,
 };
@@ -142,6 +170,15 @@ const runtime = new Miniflare(
           ...(config.assets.binding ? { binding: config.assets.binding } : {}),
         },
       },
+      {
+        name: "access-event-bridge",
+        compatibilityDate: config.compatibility_date,
+        modules: true,
+        serviceBindings: {
+          ACCESS: { name: "native-browser", entrypoint: "GitHubAccessEvents" },
+        },
+        script: `export default {async fetch(request,env){await env.ACCESS.applyEvent(await request.json());return Response.json({ok:true});}}`,
+      },
       ...misconfigured.map((worker) => ({ ...source, ...worker })),
     ],
   }),
@@ -167,6 +204,27 @@ for (const [binding, authority] of [
 
 async function control(request) {
   const url = new URL(request.url);
+  if (url.pathname === "/__test/access-event" && request.method === "POST")
+    return (await runtime.getWorker("access-event-bridge")).fetch(request);
+  if (url.pathname === "/__test/invitation/proof" && request.method === "GET") {
+    const database = await runtime.getD1Database("IDENTITY_DB");
+    const id = url.searchParams.get("id");
+    return Response.json({
+      invitation: await database
+        .prepare(
+          "SELECT state,accepted_by FROM workspace_invitation WHERE id=?",
+        )
+        .bind(id)
+        .first(),
+      intent: await database
+        .prepare(
+          "SELECT state,attempts FROM invitation_delivery_intent WHERE id=?",
+        )
+        .bind(id)
+        .first(),
+    });
+  }
+
   if (
     url.pathname === "/__test/provider/authorize" &&
     request.method === "POST"

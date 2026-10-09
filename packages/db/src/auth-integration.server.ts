@@ -9,3 +9,9 @@ export {
   account,
   verification,
 } from "./schema.server.js";
+
+export {
+  createCredentialPersistence,
+  type CredentialRecord,
+  type RefreshClaim,
+} from "./github-credentials.server.js";

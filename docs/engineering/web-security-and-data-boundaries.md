@@ -307,7 +307,7 @@ prova remota estão no relatório.
 
 ## Convites sem credencial de ingresso na URL
 
-A proposta coerente com Q28/Q32 é um **ID aleatório opaco de convite**, não
+A implementação M3 coerente com Q28/Q32 usa um **ID aleatório opaco de convite**, não
 bearer token que concede membership. GET mostra login genérico sem revelar
 destinatário/equipe/membros até confirmação do alvo. Aceite é POST protegido;
 exige a identidade GitHub vinculada e confirmação atual do email destinatário
@@ -315,8 +315,9 @@ verificado no provider, além de convite vigente/workspace correto. Não exigir
 email primário se outro endereço estiver verificado; não deduzir equivalência
 por pontos, plus-addressing ou domínio. Email não funde usuários.
 
-Evidência do provider pertence à request: account ID, email verificado e
-`checkedAt`. O batch usa essa identidade e o mesmo convite/estado esperado.
+Evidência do provider pertence à request: account ID, geração da credencial e
+lista atual de emails verificados. O batch usa essa identidade/geração e o
+mesmo convite/estado esperado.
 Isso evita usar `User.emailVerified` antigo como prova atual. A consulta externa
 não pode ser atômica com mudança posterior no GitHub; não prometer linearização
 entre provider e D1. Falha de confirmação deixa aceite negado e recuperável.
@@ -330,8 +331,9 @@ não recria membership posteriormente removida nem reativa acesso.
 
 Esse desenho evita armazenar um token bruto recuperável para retries de email
 ou inventar assinatura/criptografia de links. Queue leva referência, sender
-obtém contexto mínimo por RPC, e Q37 repete a mesma intenção vigente. Ainda
-exige testes de enumeração, replay, troca de email, alvo errado e scanners.
+obtém contexto mínimo por RPC, e Q37 repete a mesma intenção vigente. M3
+prova enumeração genérica, replay, troca de email, alvo errado e scanners em
+HTTP/Workerd/browser; a entrega efetiva continua em M4.
 
 ## Conteúdo externo, HTML e headers
 
@@ -376,3 +378,19 @@ Fontes primárias verificadas em **2026-10-04**: [OWASP sessão](https://cheatsh
 e [headers React Router](https://reactrouter.com/how-to/headers).
 As escolhas específicas de superfície, convites e cache são propostas Holon
 derivadas das políticas acordadas, não recomendações copiadas como implementação.
+
+## Gates M3 implementados em 2026-10-08
+
+Sessão/membership/account são autoridade D1 atual, sem cache cookie para ACL.
+Grants positivos/negativos vencem em até 60 s do início da consulta, com todas
+as páginas externas antes da paginação interna e invalidação por gerações/eventos.
+Captura tardia de grant não passa a guarda final após revogação. Falha, dados
+externos inválidos, paginação incompleta e refresh incerto fecham o acesso.
+
+POST de convite exige owner de equipe, email até 254 caracteres, body HTTP
+limitado e budgets atômicos por ator/equipe e equipe; negação não deixa intenção
+órfã. GET/HEAD de convite não consulta existência nem muda estado. O destinatário
+é visível apenas na gestão pelo owner, não em links, aceitações ou erros. Os
+[resultados M3](../research/2026-10-08-dashboard-milestone-three-results.md)
+ligam cada invariante aos seus testes. SSR de conteúdo privado e Markdown
+continuam gates M5/M6, sem inferir implementação a partir dessa porta.

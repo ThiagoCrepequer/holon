@@ -38,6 +38,12 @@ export function createReauthPlugin(options: {
               ? provider
               : {
                   ...provider,
+                  async refreshAccessToken() {
+                    // Native token endpoints are private and refresh writes cannot bypass CAS.
+                    throw new APIError("FORBIDDEN", {
+                      message: "Use coordinated GitHub credentials",
+                    });
+                  },
                   async getUserInfo(tokens) {
                     const state = await getOAuthState();
                     const serverContext = state?.serverContext as
@@ -49,7 +55,7 @@ export function createReauthPlugin(options: {
                         }
                       | undefined;
                     const result = await provider.getUserInfo(tokens);
-                    if (serverContext?.reauthIntentId) {
+                    if (serverContext?.expectedAccountId) {
                       if (
                         serverContext.originalSessionId &&
                         serverContext.userId
@@ -84,8 +90,7 @@ export function createReauthPlugin(options: {
                           : "";
                       if (
                         !githubSubject ||
-                        githubSubject !==
-                          String(serverContext.expectedAccountId)
+                        githubSubject !== serverContext.expectedAccountId
                       ) {
                         return null;
                       }
@@ -111,6 +116,27 @@ export function createReauthPlugin(options: {
                 }
               | undefined;
             const reauthIntentId = body?.additionalData?.reauthIntentId;
+            if (body?.provider === "github" && !reauthIntentId) {
+              const caller = await getSessionFromCtx(c, {
+                disableCookieCache: true,
+                disableRefresh: true,
+              });
+              if (caller?.session && caller.user) {
+                const linked = await database
+                  .prepare(
+                    "SELECT accountId FROM account WHERE userId=? AND providerId='github'",
+                  )
+                  .bind(caller.user.id)
+                  .first<{ accountId: string }>();
+                if (linked)
+                  await addOAuthServerContext({
+                    expectedAccountId: linked.accountId,
+                    originalSessionId: caller.session.id,
+                    userId: caller.user.id,
+                  });
+              }
+            }
+
             if (body?.provider === "github" && reauthIntentId) {
               const callerSession = await getSessionFromCtx(c, {
                 disableCookieCache: true,

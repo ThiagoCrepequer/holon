@@ -181,3 +181,32 @@ Prefetch adicional, ponderação de geração, skipping incremental e especialis
 continuam propostas condicionais R05/R07/R09/R10, sem ativação. Não são falhas
 ativas de código a corrigir por meio de recursos novos. CI, GitHub App privada,
 produção e integração Cloudflare remota não são demonstradas por este recorte.
+
+## Integração para o PR — 2026-10-09
+
+A preparação do PR incorporou a `main` em
+`6dcb7e5279a0b413985d401cc90290a62a1f39a9`, incluindo os perfis de orçamento
+da ADR-0055 e as entregas do dashboard. Os ADRs locais foram renumerados para
+0056–0058, preservando conteúdo e referências; a
+[ADR-0059](../decisions/0059-compose-stable-review-lanes-with-budget-profiles.md)
+substitui explicitamente as regras concorrentes de admissão/quota, sem reescrever
+decisões aceitas nem zerar dívida. Lanes e liberação de saldo conservam a ordem
+resultado persistido → conclusão idempotente → próxima parte.
+
+O gate completo passou novamente nessa composição, com 21 tarefas de typecheck,
+32 de cobertura e 17 de build/dry-run. Os onze workspaces de core somam 1.493
+testes Vitest e o harness mantém 18 testes Node (1.511 no recorte). A retirada
+dos quatro testes de `review-admission` vem da substituição dessa política na
+main, com testes dos perfis atuais preservados; não foi redução de cobertura
+para aprovar o gate. Os thresholds permanecem iguais. Os 412 links locais
+conferidos estavam válidos. Metadados e cobertura atuais estão em
+[pr-integration-verification.json](experiments/2026-10-09-review-core-code-follow-up/pr-integration-verification.json).
+
+Nenhuma chamada paga foi feita nessa preparação. A reconciliação offline
+reconfirmou 253 requests históricos, US$ 0,062482311 informados e exposição
+conservadora de US$ 0,180025698 no teto de US$ 0,50. Snapshots `.source`, planos
+e resultados permaneceram intactos. A ponderação de geração antes condicional
+foi incorporada pela ADR-0055 da main; o benchmark antigo não comprova sua
+qualidade real. Precisão/estabilidade do Gemma e avaliação dos perfis maiores
+continuam abertas; as provas locais desta composição não equivalem a CI ou
+produção.
