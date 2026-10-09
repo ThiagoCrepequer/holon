@@ -23,14 +23,30 @@ A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada 
 bootstrap publicou a fundação estática com autenticação desabilitada. A ativação
 posterior pelo responsável cadastrou os secrets GitHub e habilitou auth; o
 manifest de produção acompanha esse estado com `AUTH_ENABLED=true`. O OAuth
-real ainda não foi validado. M6 materializa configs preview fechadas e o preflight de artefato; seus recursos,
-proteção de domínio e recuperação remota continuam não executados. Consulte
+real ainda não estava validado nesse bootstrap. M6 materializa configs preview
+fechadas e o preflight de artefato; preview separado não foi provisionado. Consulte
 [promoção M6](dashboard-promotion.md) para o contrato atual e gates restantes. O pipeline automático do core não publica esses apps.
 
 Em 2026-10-09, o responsável dispensou preview separado e autorizou deploys e
 validações em produção. A #165 passa a exigir o inventário e os ensaios nesse
 ambiente; isolamento continua obrigatório se um preview for provisionado.
 Consultar o runbook de promoção para escopo de teste, manutenção e evidências.
+
+### Estado após a qualificação produtiva de 2026-10-09
+
+Os quatro Workers foram publicados do artefato produtivo identificado, sem
+reconstruir a imagem do executor. Identity tem receipts `0001`–`0012` e
+projection `0001`–`0002`; integridade e bindings efetivos foram conferidos.
+Email usa Queue/DLQ reais, sender permitido e transporte habilitado: dois
+recebimentos bilíngues foram confirmados pelo operador. O login humano retornou
+ao dashboard com sessão autenticada; a matriz privada/org/revogação não está
+completa. O rollback do Worker e Time Travel limitado aos dois D1 vazios foram
+executados; a recuperação coordenada com core/DO/efeitos externos e alertas
+remotos permanece pendente.
+
+A [evidência de M6](../planning/dashboard-milestone-six-evidence.md#qualificação-em-produção-executada-em-2026-10-09)
+registra SHA/hash, versões, horários, benchmarks e limites dessa operação.
+As tabelas de bootstrap abaixo descrevem a publicação inicial de 2026-10-08.
 
 ## Bootstrap de produção
 
@@ -397,6 +413,8 @@ resultado. Não incluir email, título/autor, conteúdo de PR, token/link, corpo
 provider ou erro arbitrário. Também revisar invocation URLs/query strings e
 logging nativo; logger sanitizado no app não sanitiza automaticamente a plataforma.
 Email preview de produção deve estar desligado/conferido conforme pesquisa.
+Exceção operacional de 2026-10-09: o responsável autorizou mantê-lo habilitado
+temporariamente durante os testes de entrega; essa configuração não foi alterada.
 
 Alertas e prazo de intervenção não podem ficar sem dono. Antes de publicar,
 fixar responsável, latência/deadline de entrega, limite de lag, retenção e prazo

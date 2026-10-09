@@ -13,8 +13,10 @@ last-reviewed: 2026-10-09
 
 Ainda não. O código implementa a experiência e preparação de promoção do
 milestone GitHub #7, **Dashboard 6 · Experiência e promoção do MVP**. #163 exige
-duas versões estáveis reais e aparelhos físicos; #164/#157 exigem benchmark D1
-remoto; #165–#167 exigem ensaio/monitor/promoção operacional autorizados. O PR
+duas versões estáveis reais e aparelhos físicos. A operação abaixo comprovou
+SQL D1 remoto, publicação, rollback e transporte de email; #164/#157 ainda exigem
+CPU do Worker, lag real e CWV de campo; #166/#167 conservam os gates de
+recuperação coordenada, alertas e OAuth/GitHub. O PR
 deve permanecer draft até esses gates; seu merge sozinho não fecha #127 nem
 autoriza operação. SSE #168 continua fora deste escopo.
 
@@ -25,23 +27,24 @@ autorizados. A autorização não é evidência de execução nem encerra outras
 
 Base de implementação: PR #184 aceito, merge
 `929ed5b8eaed671f7c6d5da3e8cdb1a117ba5ce0`. Os comandos abaixo são locais, com
-Node 24.11.0 / pnpm 11.24.0 e dependências fixadas. Os testes não usam usuários,
-conteúdo de repositórios ou destinatários produtivos.
+Node 24.11.0 / pnpm 11.24.0 e dependências fixadas. As provas locais não usam
+usuários, conteúdo de repositórios ou destinatários produtivos. A seção de
+operação distingue as amostras executadas na conta Cloudflare real.
 
 ## Matriz de requisitos
 
-| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                           |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                      |
-| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                              |
-| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                                 |
-| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                      |
-| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue             |
-| #164  | bytes comprimidos reais por rota, fontes, cold/warm desktop/mobile CPU4x, SSR/filter/refresh p50/p95, SDK Web Vitals de teste, DOM limitado, budget negativo; D1 local 10k/2repos/raro/vazio/combinado      | Região/CPU/rows_read/D1 remoto, lag/publicação real e CWV de campo; não há p75 de campo local                 |
-| #165  | quatro manifests por ambiente, preview opcional fechado, sender off, grafo estrito, artefato SHA/hash/schema/rollback, preflight negativo e CI sem deploy; gate de acesso do próprio ambiente               | Inventário real de produção, imagem por digest, acesso/escopo de teste e ensaio de deploy/rollback autorizado |
-| #166  | hold independente, email/projeção/identidade integrados em D1, DO/alarm/core em testes reais locais, sinais numéricos e runbook/limites/owners                                                              | PITR coordenado das quatro autoridades e alertas remotos com disparo/recuperação e owner nominal              |
-| #167  | sequência/gates de promoção explícitos, recusa de placeholders, schema divergente, imagem reconstruível e prova ausente/stale                                                                               | Publicação real do mesmo artefato, OAuth/GitHub privado/org/revoke e email/Queue real sob autorização         |
-| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                                   |
+| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                                    |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                               |
+| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                                       |
+| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                                          |
+| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                               |
+| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue                      |
+| #164  | budgets e browser local; adapter real no D1 produtivo com 20k linhas, região/colo, SQL p50/p95 e rows_read; paginação e recuperação de escopo remotas                                                       | CPU do Worker, lag de publicação real e CWV de campo; latência REST não mede essas grandezas                           |
+| #165  | manifests/grafo/gates; inventário produtivo, artefato congelado, quatro Workers publicados, Sandbox por digest existente, migrations e rollback real da mesma versão                                        | Conferir CI e manter escopo/autorização dos testes; integração OAuth pertence à #167                                   |
+| #166  | hold/DO/alarm locais; Time Travel real dos dois D1 vazios, preservando schema/contagens e barreira; recuperação scoped da projeção                                                                          | PITR coordenado com ledgers/obrigações externas e alertas remotos com disparo/recuperação e canal nominal              |
+| #167  | artefato produtivo publicado; cron/Queue/RPC/provider reais, recebimento bilíngue confirmado, duplicatas/DLQ sem novo envio e cancelamento/expiração sem tentativa                                          | OAuth humano, GitHub privado/org/revoke, criação/aceite de convite pela jornada autenticada e demais gates de promoção |
+| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                                            |
 
 Após o gate completo, #159–#162 podem usar `Closes`: os gates reais pertencem
 às issues #163–#167, que permanecem abertas junto de #127. Não usar `Closes`
@@ -192,6 +195,145 @@ continua reconstruível: isso verifica build, não imagem imutável publicada ne
 prontidão de promoção. O build local final é reconstruído em checkout limpo
 antes de congelar o artefato por SHA; seu recibo/manifest é prova anexada ao PR,
 não um SHA autorreferente dentro deste documento.
+
+## Qualificação em produção executada em 2026-10-09
+
+O operador autorizou o uso dos recursos produtivos existentes, do destinatário
+de teste e da conta GitHub sob seu controle. A #165 foi alterada no GitHub para
+**DASH-38 · Validar produção, CI e publicação por artefato**. Não foi criado
+preview nem Worker duplicado. Os receipts locais da operação conservam UUIDs de
+fixtures e resultados técnicos; links de convite, endereços pessoais, tokens e
+conteúdo privado não entram nesta evidência versionada.
+
+Artefato produtivo congelado de
+`b7dd6b43ba0118b1989f3b44b7d4700412170258`: 71 arquivos, manifest SHA-256
+`45ca301006a5b2982b636db09e1ecf3618eed6221e66a59ed9b22e05de9430e4`.
+Os quatro builds produtivos passaram antes do congelamento em checkout limpo;
+uploads usaram os módulos compilados com `--no-bundle`. Os mapas e bundles do
+harness não foram publicados. `pnpm verify` passou; depois do alinhamento dos
+manifests, `pnpm test:deploy:coverage` passou 73 testes, com cobertura de linhas
+99,29%, branches 94,48% e funções 94,81%, além de formato, lint focado, tipos do
+executor e builds produtivos. Esses comandos não representam CI remota.
+
+### Versões efetivas e superfície
+
+| Worker                      | Versão com 100% de tráfego             | Publicação/reativação UTC |
+| --------------------------- | -------------------------------------- | ------------------------- |
+| `holon-dashboard`           | `cb0c869e-8937-40e5-9a4f-f4eb0b4be858` | `2026-10-09T22:45:17Z`    |
+| `holon-email-delivery`      | `c20b50e2-1681-4037-9f80-82e44a11d715` | `2026-10-09T22:36:03Z`    |
+| `holon-control-plane`       | `0837989c-47f8-405b-8451-828d7fc3b5b5` | `2026-10-09T22:44:45Z`    |
+| `holon-repository-executor` | `cd975578-ca99-447e-8c41-9f2e9b66501e` | `2026-10-09T22:49:48Z`    |
+
+A API de deployments confirmou essas versões e as annotations do SHA. Os
+bindings foram lidos da **versão efetivamente implantada**: `/settings` pode
+refletir o upload mais recente, inclusive uma versão de manutenção que já não
+recebe tráfego. Os D1, entrypoints RPC e nomes de secrets existentes foram
+preservados, sem recuperar valores nem rotacionar credenciais. Dashboard/core
+mantêm workers.dev; email/executor estão privados; previews estão desligados
+nos quatro. Os URLs do executor/core foram alinhados ao manifest antes do deploy.
+
+A imagem existente do Sandbox foi fixada no manifest por
+`sha256:e2fed19a256a14d9b60f3c2d061a87584019fd0e18b0f3a8a8834a8eeed621a1`.
+O application permaneceu na versão 91, com o mesmo namespace e limite de dez
+instâncias: o Wrangler confirmou ausência de mudanças, sem build/push/rollout
+de imagem nova. A primeira publicação do executor ativou o Worker, mas falhou
+depois ao consultar o Keychain na etapa Containers. A repetição do upload
+congelado com diretório temporário de configuração do CLI e token da conta
+correta concluiu o deploy, sem alterar o Keychain ou credenciais armazenadas.
+
+A fila de revisões foi pausada durante a troca de core/executor. O inventário
+paginado encontrou zero Workflows não terminais: review 6 complete/6 errored,
+shards 328 complete/89 errored, clarification vazio. A ausência de cleanup e
+supersession nos ledgers foi uma **premissa explícita do operador**, que orientou
+considerar inexistentes tarefas pendentes; não foi medida por uma consulta
+global aos ledgers. Estados terminais de Workflow não demonstram essa ausência.
+A fila original foi retomada após a conferência dos deploys; a API confirmou
+`delivery_paused=false` em `2026-10-09T22:54:06Z`, sem purge ou reset de estado.
+
+### Schema, rollback e recuperação limitada
+
+Identity recebeu `0006`–`0012`, preservando `0001`–`0005`; projection recebeu
+`0002`, preservando `0001`. Receipts finais 12/2 e `foreign_key_check` vazio nos
+dois bancos. A importação oficial SQL foi usada para conservar os triggers:
+o primeiro comando Wrangler falhou com `incomplete input` antes de registrar
+`0006`; seu estado foi conferido antes da importação. Nenhuma migration aplicada
+foi editada, nenhum banco foi resetado.
+
+Antes de criar fixtures de email ou permitir login, os dois D1 não continham
+dados de aplicação. Com o dashboard em manutenção, foram registrados bookmarks
+posteriores às migrations, inseridos marcadores próprios e executado Time
+Travel real para esses bookmarks. Os dois restores conservaram hash de schema,
+receipts, contagens e integridade; removeram somente os marcadores posteriores.
+A barreira independente continuou respondendo 503. **Esses bookmarks não podem
+ser reutilizados agora:** há efeitos de email e identidade posteriores ao ensaio.
+O drill não demonstra restore coordenado de core/DO nem reconciliação de efeitos
+externos, leases e alarms pendentes.
+
+O rollback de Worker selecionou a versão de manutenção
+`8ce890c0-9b48-46ad-87e3-88c2414a05d3`, do mesmo bundle, e confirmou HTTP 503.
+A reativação selecionou a versão exata `cb0c869e-8937-40e5-9a4f-f4eb0b4be858`
+sem rebuild/upload; o dashboard voltou a HTTP 200. A prova de bindings usou cada
+versão selecionada, sem confundir `/settings` com o tráfego ativo.
+
+### Transporte e recebimento de email
+
+Domínio e DNS de Email Sending foram conferidos, e o sender produtivo foi
+habilitado com allowlist. Conforme exceção explícita do operador, `Email content
+preview` permanece habilitado; desativação posterior ainda não executada.
+
+Quatro convites/intents sintéticos foram inseridos para exercitar o transporte;
+o owner sintético não tinha conta OAuth nem sessão. Cron → wake/RPC → Queue →
+claim/start → provider → receipt funcionou: pt-BR e en terminaram completed,
+uma tentativa e accepted cada. O operador encaminhou os dois emails recebidos,
+confirmando também a chegada à caixa de entrada. Cancelado e expirado ficaram
+canceled, com zero tentativas e nenhum envio.
+
+Uma duplicata do job completed foi entregue na fila principal e na DLQ; uma
+mensagem inválida foi entregue na principal. Tail confirmou dois batches com
+outcome ok, sem exceções, e sinal numérico `email_dlq`. Após o consumo, os jobs
+aceitos mantiveram uma tentativa/um receipt cada: não houve novo envio.
+O Tail foi encerrado. Isso não prova resultado desconhecido do provider,
+falha transitória real nem disparo de um alerta remoto. Fixtures de transporte
+não substituem criação de convite pela UI, email verificado e aceite único na
+jornada OAuth.
+
+### Smoke HTTPS e benchmark remoto
+
+Smoke anônimo confirmou `/` e `/account` 200, `/api/health` 200, sessão 200/null,
+`/api/workspaces` 403, `/login` 404 conforme as rotas existentes e POST de origem
+não confiável 403. CSP nonce, nosniff, no-referrer e no-store estavam presentes.
+Três assets remotos tiveram bytes decodificados e SHA-256 idênticos ao artefato.
+O login humano no Chrome retornou à conta com os controles autenticados de
+workspace/sessões; isso comprova essa entrada OAuth, não toda a matriz de
+instalações, organizações e revogações.
+
+O adapter real `createProjectionPersistence` foi executado via batch REST no D1
+produtivo, usando somente dois repositórios sintéticos com 10k registros cada,
+dez amostras por caso, região ENAM/colo MIA. Tempos abaixo são a soma das
+durações SQL retornadas pelo D1; latência REST do host foi medida separadamente.
+
+| Caso                             | SQL p50 (ms) | SQL p95 (ms) | Máximo rows_read |
+| -------------------------------- | -----------: | -----------: | ---------------: |
+| Primeira página                  |       2,6417 |       4,4478 |            10054 |
+| Raro tardio                      |      19,1166 |      24,6148 |            20004 |
+| Sem resultado                    |      19,5129 |      23,3198 |            20004 |
+| Termo comum                      |      10,4649 |      15,6624 |            10054 |
+| Filtros combinados sem resultado |      16,7412 |      18,5659 |            20004 |
+| Raro no segundo repositório      |      20,7289 |      25,3417 |            20002 |
+
+Paginação keyset retornou cem itens únicos em duas páginas. Recuperação scoped
+1→2 ocultou a leitura enquanto rebuilding, rejeitou write antigo e ativação
+incompleta, depois ativou a geração reconciliada. As 20k fixtures e scopes foram
+removidos e a ausência conferida. A amostra não mede CPU de Workerd, ACL HTTP,
+lag causal de publicação real ou CWV de campo. #164/#157 conservam esses limites.
+
+Fontes primárias operacionais verificadas em 2026-10-09:
+[deployments e versões](https://developers.cloudflare.com/workers/versions-and-deployments/),
+[importação D1](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/import/),
+[batch e duração SQL D1](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/query/),
+[Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/),
+[Email Sending](https://developers.cloudflare.com/email-service/configuration/send-bindings/) e
+[mensagens Queue](https://developers.cloudflare.com/api/resources/queues/subresources/messages/methods/push/).
 
 ## Protocolo de desempenho
 

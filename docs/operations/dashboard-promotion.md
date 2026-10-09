@@ -57,6 +57,10 @@ do remetente e envio habilitado; local/preview continuam sem provider real.
 Antes de enviar convites, conferir DNS e manter a visualização do conteúdo
 dos emails desativada no domínio, pois o corpo contém links privados.
 Configuração e domínio habilitado não demonstram entrega ou recebimento.
+Na qualificação de 2026-10-09, o responsável autorizou explicitamente conservar
+`Email content preview` habilitado temporariamente. Os envios de teste foram
+executados sob essa exceção; a configuração permanece habilitada e sua
+desativação posterior não foi executada. Isso não altera o padrão do runbook.
 Preview exige inventário dos dois UUIDs produtivos para rejeitar também a
 reutilização de um ID sob nome diferente.
 
