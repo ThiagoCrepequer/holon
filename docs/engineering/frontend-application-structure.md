@@ -21,8 +21,8 @@ A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) material
 as fundações locais de `apps/dashboard`, `apps/email-delivery`, `packages/ui` e
 `packages/db`. A [arquitetura do dashboard](../architecture/user-dashboard.md)
 descreve arquivos/interfaces concretos. Exemplos de review/auth/queries abaixo
-incluem a integração M2 de sessão/preferências; os exemplos de reviews/queries
-continuam desenhos para M5–M6, sem pastas vazias ou comportamento simulado.
+incluem M2 e a implementação M5 de reviews/queries. A feature `reviews` mantém
+cliente/keys/transporte; loader e Hono compartilham o caso servidor, sem self-HTTP.
 A ADR-0040 permanece vigente para o admin retirado.
 O [guia TypeScript](typescript-and-module-design.md) continua valendo para
 imports, tipos, módulos e contratos de todo o Holon.
@@ -544,3 +544,14 @@ conteúdo privado seguem #159 e suas dependências.
 Cada feature expõe somente seus controles de apresentação por `public.ts`;
 a rota não importa transporte ou outros módulos privados. O gate de imports
 confere essas interfaces no código materializado.
+
+## Integração de leitura privada materializada em M5
+
+`app/features/reviews/public.ts` expõe somente as capacidades usadas pelo app.
+`review-client` compõe Query desabilitada, ownership por sessão/escopo e intents,
+AbortSignal e invalidação causal; `review-parameters` valida URL/keys;
+`review-messages` concentra estados bilíngues. O root compõe provider e a rota
+`reviews` compõe dehydrate/hidratação. O adapter servidor usa o caso de aplicação
+`createPrivateReviewReads`, D1 e RPC privados; nenhuma política SQL ou grant
+é repetida no loader/client. O [runbook](../operations/dashboard-review-projection.md)
+e a [matriz](../planning/dashboard-milestone-five-evidence.md) delimitam as provas.

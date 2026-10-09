@@ -169,7 +169,11 @@ test("connection requires native reauth, shows live state and receives private R
     `/api/workspaces/${workspace}/github/repositories`,
   );
   expect(scope.status()).toBe(200);
-  expect(await scope.json()).toEqual({ repositoryIds: [subject + 200000] });
+  expect(await scope.json()).toEqual({
+    repositories: [
+      { installationId: subject + 100000, repositoryId: subject + 200000 },
+    ],
+  });
   expect(
     (
       await page.request.post("/__test/access-event", {
@@ -187,7 +191,7 @@ test("connection requires native reauth, shows live state and receives private R
     await (
       await page.request.get(`/api/workspaces/${workspace}/github/repositories`)
     ).json(),
-  ).toEqual({ repositoryIds: [] });
+  ).toEqual({ repositories: [] });
 });
 test("Portuguese controls are accessible at 320px and scanners cannot accept or expose invitations", async ({
   page,

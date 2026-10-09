@@ -110,7 +110,7 @@ export function registerCollaborationRoutes(
       readPathId(c.req.param("id")),
     );
     return respondWithCookies(
-      { repositoryIds: scope.repositoryIds },
+      { repositories: scope.repositories },
       c.env.sessionCookies,
     );
   });

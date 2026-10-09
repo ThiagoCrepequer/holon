@@ -23,7 +23,7 @@ preferências de apresentação e liveness em `/api/health`. O primeiro recorte 
 acrescenta `packages/auth`, login/logout GitHub restritos e tenancy pessoal/equipe
 no D1 de identidade. M3 acrescenta credenciais coordenadas, conexões GitHub, grants limitados e
 convites com intenção durável. M4 materializa entrega recuperável, autoridade RPC
-privada, publisher/vigília e Queue/DLQ. Dataset privado continua em M5. O complemento M2 acrescenta sessões/dispositivos,
+privada, publisher/vigília e Queue/DLQ. M5 materializa projeção e leitura privada conforme a matriz de evidência. O complemento M2 acrescenta sessões/dispositivos,
 revogação atual/global e preferências pessoais persistidas, consumidas pelo SSR
 e pelos controles mínimos da página de fundação.
 Os manifests mantêm o ambiente local e acrescentam produção com dois D1
@@ -65,17 +65,18 @@ flowchart TD
   Q -->|consumer e ack individual M4| E
   E -->|RPC privado claim/start/record M4| D
   E -->|envio autorizado M4| S
-  L -. snapshot monotônico por obrigação e alarm M5 .-> P
-  D -. detalhe agregado e autorizado M5 .-> L
+  L -->|snapshot monotônico por obrigação e alarm| P
+  D -->|detalhe agregado e autorizado| L
 ```
 
-Linhas contínuas representam interfaces/bases locais; pontilhadas marcam
-integrações ainda não implementadas. Os D1 têm migrations separadas e somente
-uma sentinela de autoridade. Identidade possui a reserva OAuth aprovada, tabelas
+Linhas contínuas representam interfaces implementadas localmente. Os D1 têm
+migrations separadas e uma sentinela de autoridade em cada banco.
+Identidade possui a reserva OAuth aprovada, tabelas
 nativas User/Account/Session/Verification e Workspace/Membership/receipt de criação.
 A #137 acrescenta armazenamento técnico durável de rate limits na mesma autoridade,
 sem quota comercial nem nova autoridade de negócio.
-Projeção funcional ainda não contém dados de reviews.
+A projeção contém resumos de reviews, índices de leitura e a geração por
+installation/repositório; os detalhes permanecem no ledger por PR.
 A composição não autoriza acesso ou cria estado de negócio por mostrar um banco
 no diagrama. A fila de email não é uma nova fila de projeção.
 O sender acessa a autoridade do dashboard por RPC, nunca o D1 diretamente.
@@ -124,16 +125,16 @@ assets com hash sob `/assets/` têm cache público imutável via `_headers`.
 
 ## Autoridades e interfaces
 
-| Capacidade                                 | Dono da implementação                                                     | Contrato/consumidor                                                                   |
-| ------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                      | `AuthService`; DTO sem segredo de sessão/OAuth                                        |
-| Preferências pessoais                      | porta `PersonalPreferencesPort` + adapter de identidade, M2               | `dashboard-preferences`; locale/fuso validados, sem configuração de equipe            |
-| Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                         | `WorkspaceTenancyPort`; não concede grant GitHub                                      |
-| Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`               | mutação condicional por ator/estado/operação nas issues donas                         |
-| Reserva de authorization code              | adapter de identidade em `packages/db`                                    | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação            |
-| Lista de metadados                         | D1 projeção funcional, migrations `packages/db/migrations/projection`, M5 | `ReviewReadPort`, `ReviewPage`; scope autorizado construído no servidor               |
-| Detalhe e revisão funcional                | ledger/core por PR                                                        | agregado restrito de leitura em M5; sem SQL/RPC genérico                              |
-| Entrega                                    | email Worker privado + Queue/DLQ, M4                                      | `wake` publica referência opaca; `EmailDeliveryAuthority` autoriza claim/start/record |
+| Capacidade                                 | Dono da implementação                                                 | Contrato/consumidor                                                                      |
+| ------------------------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Sessão, cookies e OAuth                    | `packages/auth`, primeiro recorte M2                                  | `AuthService`; DTO sem segredo de sessão/OAuth                                           |
+| Preferências pessoais                      | porta `PersonalPreferencesPort` + adapter de identidade, M2           | `dashboard-preferences`; locale/fuso validados, sem configuração de equipe               |
+| Membership e papel                         | porta da aplicação + adapter de identidade, M2/M3                     | `WorkspaceTenancyPort`; não concede grant GitHub                                         |
+| Perfil, tenancy, convite e intenção/outbox | D1 identidade, migrations `packages/db/migrations/identity`           | mutação condicional por ator/estado/operação nas issues donas                            |
+| Reserva de authorization code              | adapter de identidade em `packages/db`                                | fingerprint SHA-256, batch D1 atômico; plugin M0 usa a mesma implementação               |
+| Lista de metadados                         | D1 projeção funcional, migrations `packages/db/migrations/projection` | `createPrivateReviewReads`, DTOs strict e scope installation/repo construído no servidor |
+| Detalhe e revisão funcional                | ledger/core por PR                                                    | `DashboardReviewReader.detail`, allowlist e cursor por revisão; sem SQL/RPC genérico     |
+| Entrega                                    | email Worker privado + Queue/DLQ, M4                                  | `wake` publica referência opaca; `EmailDeliveryAuthority` autoriza claim/start/record    |
 
 Não existe transação entre os dois D1 ou entre D1, Queue e provider. Convite e
 intenção durável são persistidos juntos no recorte M3; M4 implementa publisher,
@@ -142,9 +143,9 @@ convite**, como Q37 autorizou; não cria outro token ou membership. Email Worker
 usa adapter específico de intenção/claim/resultado, sem exportar ORM ou auth.
 
 DTOs runtime strict rejeitam propriedades extras, IDs inválidos, states externos
-e páginas acima de 50 itens; não devolvem rows ORM. `ReviewPage` é metadata inicial,
-não o contrato completo de detalhe nem uma autorização baseada em IDs. M5 evolui
-produtores/consumidores juntos ao implementar filtros e projeção reais.
+e páginas acima de 50 itens; não devolvem rows ORM. `dashboard-reviews` define cabeçalho, lista e detalhe atuais, incluindo geração/revisão.
+IDs não concedem acesso. M5 remove o DTO inicial sem produtores/consumidores
+ativos e integra contratos de leitura/projeção strict.
 
 ### Identidade e tenancy no primeiro recorte M2
 
@@ -386,3 +387,23 @@ exige reconciliação/backoff antes de outro claim, inclusive para mensagem
 duplicada. O cron acompanha todo não terminal até deadline/budget, independentemente
 de retenção Queue/DLQ ou tráfego. O [runbook](../operations/dashboard-email-delivery.md)
 é dono dos limites, diagnóstico, templates e gates de ativação remota.
+
+## Projeção e leitura privada M5 — 2026-10-09
+
+Core preserva a autoridade do ledger e projeta somente metadata atual por
+obrigação/alarm durável. O dashboard possui D1 derivado e writer privado; recebe
+header por `REVIEW_PROJECTION` e consulta detalhe por `REVIEW_CORE`. Os bindings
+não possuem handlers de escrita/recovery na API pública. Ledger acrescenta
+migration 24; projeção D1 acrescenta 0002. Não existe nova Queue de projeção.
+
+`readPrivateReviews` compõe sessão e política de grants M3 antes/após I/O,
+confere geração de recuperação e serve API Hono e loader SSR sem auto-HTTP.
+A feature `reviews` mantém keys, transporte, cancelamento e cache Query;
+QueryClient SSR é por request. Navegação cliente não repete o dataset pelo
+serverLoader e a hidratação não faz leitura. Lista é uma observação atual por
+repo; detalhe restringe agregado coerente a dez achados por resposta, com
+continuação da mesma revisão. Texto GitHub/modelo é escapado como dado.
+
+O [runbook de projeção](../operations/dashboard-review-projection.md) define
+barreira/geração e rollout coordenado. A [matriz M5](../planning/dashboard-milestone-five-evidence.md)
+separa provas locais e benchmark/PITR remotos ainda dependentes de autorização.

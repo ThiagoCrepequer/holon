@@ -11,6 +11,8 @@ export const pullRequestActions = [
   "opened",
   "reopened",
   "synchronize",
+  "edited",
+  "closed",
 ] as const;
 
 const actionSchema = z.enum(pullRequestActions);
@@ -51,6 +53,9 @@ export const webhookEnvelopeSchema = z.strictObject({
     baseSha: gitShaSchema,
     headSha: gitShaSchema,
     number: positiveIntegerSchema,
+    title: z.string().max(1024),
+    author: z.string().min(1).max(100),
+    state: z.enum(["open", "closed", "merged"]),
     updatedAt: z.iso.datetime({ offset: true }),
   }),
 });

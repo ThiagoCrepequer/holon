@@ -1,0 +1,12 @@
+{
+  "name": "holon-projection-test",
+  "main": "projection-worker.ts",
+  "compatibility_date": "2026-08-29",
+  "d1_databases": [
+    {
+      "binding": "PROJECTION_DB",
+      "database_name": "projection-test",
+      "database_id": "00000000-0000-4000-8000-000000000002",
+    },
+  ],
+}

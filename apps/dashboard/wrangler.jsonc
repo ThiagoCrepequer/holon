@@ -10,6 +10,11 @@
     "APP_ORIGIN": "http://127.0.0.1:8794",
   },
   "services": [
+    {
+      "binding": "REVIEW_CORE",
+      "service": "holon-control-plane",
+      "entrypoint": "DashboardReviewReader",
+    },
     { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery-local" },
   ],
   "triggers": { "crons": ["* * * * *"] },
@@ -36,6 +41,11 @@
     "production": {
       "name": "holon-dashboard",
       "services": [
+        {
+          "binding": "REVIEW_CORE",
+          "service": "holon-control-plane",
+          "entrypoint": "DashboardReviewReader",
+        },
         { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery" },
       ],
       "workers_dev": true,

@@ -128,6 +128,11 @@ if (expectedEnv === "production") {
 }
 assert.deepEqual(config.services, [
   {
+    binding: "REVIEW_CORE",
+    service: "holon-control-plane",
+    entrypoint: "DashboardReviewReader",
+  },
+  {
     binding: "EMAIL_DELIVERY",
     service:
       targetEnv === "production"

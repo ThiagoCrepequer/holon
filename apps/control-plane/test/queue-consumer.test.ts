@@ -15,6 +15,9 @@ const envelope = {
     baseSha: "b".repeat(40),
     headSha: "a".repeat(40),
     number: 7,
+    title: "Synthetic pull request",
+    author: "synthetic",
+    state: "open",
     updatedAt: "2026-08-29T12:00:00.000Z",
   },
   receivedAt: "2026-08-29T12:00:00.000Z",
@@ -184,6 +187,9 @@ describe("queue consumer", () => {
     await worker.queue(
       { messages: [queued.value] } as unknown as MessageBatch,
       {
+        REVIEW_LEDGERS: {
+          getByName: () => ({ observePullRequest: async () => "applied" }),
+        },
         REVIEW_WORKFLOW: {
           createBatch: (batch: unknown[]) =>
             Promise.resolve(jobs.push(...batch)),

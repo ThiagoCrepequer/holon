@@ -90,3 +90,49 @@
 .holon-invitation {
   padding-top: var(--holon-space-8);
 }
+
+.holon-reviews {
+  max-width: var(--holon-layout-content);
+  margin-inline: auto;
+}
+.holon-reviews h1 {
+  font-size: var(--holon-type-display-sm);
+  margin-block: var(--holon-space-6);
+}
+.holon-reviews form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--holon-space-4);
+  align-items: end;
+  margin-block: var(--holon-space-6);
+}
+.holon-reviews label {
+  display: grid;
+  gap: var(--holon-space-2);
+}
+.holon-reviews input,
+.holon-reviews select {
+  padding: var(--holon-space-3);
+  background: var(--holon-bg-surface);
+  color: var(--holon-text-primary);
+  border: var(--holon-border-thin) solid var(--holon-border-subtle);
+  border-radius: var(--holon-radius-control);
+}
+.holon-reviews li {
+  padding-block: var(--holon-space-4);
+  border-bottom: var(--holon-border-thin) solid var(--holon-border-subtle);
+  overflow-wrap: anywhere;
+}
+.holon-reviews pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: var(--holon-space-4);
+  background: var(--holon-bg-surface);
+  font-family: var(--holon-font-mono);
+}
+.holon-reviews a:focus-visible,
+.holon-reviews input:focus-visible,
+.holon-reviews select:focus-visible {
+  outline: 2px solid var(--holon-focus-ring);
+  outline-offset: 2px;
+}

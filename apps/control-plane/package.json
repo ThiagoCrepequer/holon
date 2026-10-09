@@ -7,11 +7,12 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "test": "pnpm test:benchmark-host && vitest run --config vitest.config.ts",
+    "test": "pnpm test:benchmark-host && pnpm build:test-projection && vitest run --config vitest.config.ts",
     "benchmark:live": "node --import tsx evaluation/live-benchmark.mts",
-    "test:coverage": "pnpm test:benchmark-host && vitest run --config vitest.config.ts --coverage",
+    "test:coverage": "pnpm test:benchmark-host && pnpm build:test-projection && vitest run --config vitest.config.ts --coverage",
     "typecheck": "wrangler types --check && tsc --noEmit -p tsconfig.json",
-    "test:benchmark-host": "node --import tsx --test evaluation/test/*.test.mts"
+    "test:benchmark-host": "node --import tsx --test evaluation/test/*.test.mts",
+    "build:test-projection": "wrangler deploy --dry-run --config test/support/projection.wrangler.jsonc --outdir ../../dist/projection"
   },
   "dependencies": {
     "@cloudflare/think": "0.20.0",

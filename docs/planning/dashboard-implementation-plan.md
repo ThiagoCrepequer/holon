@@ -182,3 +182,12 @@ provider Cloudflare, HTML/texto pt-BR/en e estados de entrega no owner.
 O [runbook](../operations/dashboard-email-delivery.md) descreve limites e gates de
 ativação. A [matriz de aceite](dashboard-milestone-four-evidence.md) liga cada
 critério à prova local e separa configuração remota pendente.
+
+## Dashboard 5 implementado — 2026-10-09
+
+Milestone GitHub #6, issues #154–#158: metadata causal, revisão monotônica,
+projeção DO→D1 recuperável e agregados privados coerentes; consulta autorizada
+antes de paginação, contains literal e SSR/API compartilhados. A
+[matriz M5](dashboard-milestone-five-evidence.md) rastreia código/testes e mantém
+benchmark remoto/CPU como gate pendente. O [runbook](../operations/dashboard-review-projection.md)
+define geração, reconstrução e rollout coordenado, sem presumir operação remota.

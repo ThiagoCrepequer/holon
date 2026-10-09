@@ -22,6 +22,9 @@ vi.mock("../workers/github-access-events.js", () => ({
 vi.mock("../workers/email-delivery-authority.js", () => ({
   EmailDeliveryAuthority: class {},
 }));
+vi.mock("../workers/review-projection-writer.js", () => ({
+  ReviewProjectionWriter: class {},
+}));
 
 import worker, { type DashboardWorkerBindings } from "../workers/index.js";
 
