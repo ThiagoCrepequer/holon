@@ -1,19 +1,44 @@
-import { RepositoryConfigurationError } from "@holon/application";
+import {
+  RepositoryConfigurationError,
+  createCanonicalEvidenceVerifier,
+} from "@holon/application";
 import type { ReviewContext } from "@holon/application";
-import { reviewInvestigationLimits, type ReviewJob } from "@holon/contracts";
+import {
+  reviewInvestigationLimits,
+  type ReviewJob,
+  type ReviewOutputPreferences,
+} from "@holon/contracts";
 
 import {
   outputLanguageInstructions,
   preflightConfigurationPrompt,
   serializedRepositoryGuidance,
 } from "./configuration-guidance.js";
+import {
+  projectContextList,
+  projectStructuralImpact,
+} from "./context-projection.js";
 import { compactProjectContext } from "./host-context.js";
-import { limitUtf8Text, redactSecrets } from "./redaction.js";
+import { redactSecrets } from "./redaction.js";
 
 export interface ReviewPromptResult {
   readonly omittedSections: readonly string[];
   readonly prompt: string;
   readonly truncated: boolean;
+  readonly verificationContext: ReviewVerificationContext;
+}
+
+/** Bounded snapshot facts for the separate verifier; contains no investigation task. */
+export interface ReviewVerificationContext {
+  readonly output?: ReviewOutputPreferences | undefined;
+  readonly snapshot: {
+    readonly repository: string;
+    readonly baseSha: string;
+    readonly headSha: string;
+  };
+  readonly canonicalPatches: string;
+  readonly data: Readonly<Record<string, string>>;
+  readonly incomplete: boolean;
 }
 
 export const reviewInstructions = [
@@ -26,10 +51,12 @@ export const reviewInstructions = [
   "Copy each evidence excerpt verbatim from one contiguous range in that patch. The stated startLine and endLine must match the copied lines exactly; do not use ellipses, rewrite indentation, or combine distant lines. Prefer the shortest excerpt that proves the claim.",
   "Structural search is available for supported languages; review all other included files textually.",
   "Only anchor findings to the supplied changed lines on the RIGHT side.",
+  "When a changed producer breaks an unchanged consumer, anchor the finding on the changed producer and copy its canonical patch excerpt. Describe the unchanged consumer in the diagnostic; do not use its tool-read lines as publishable evidence or as the finding location.",
   "When no RIGHT-side changed line is available, return no findings and describe only proven deletion or metadata risks in the summary.",
   "Return investigations as at most four concise factual observations with exact changed-line evidence. They are revalidation hints, not new rules or permission to suppress findings. Use an empty array when no useful discovery is grounded in the canonical diff.",
   "Silence is correct when evidence is insufficient.",
   "Name the affected consumer or operation and the behavior that fails in each finding. Trace the causal path through the final code, including adapters and normalization. If you cannot demonstrate a broken behavior or contract, return no finding for that concern.",
+  "Respect actual caller arguments and reachable values. A hypothetical alternative input does not prove that the inspected operation fails; an intentional behavior change alone does not establish a violated public contract.",
   "A required field that accepts an empty string is still required. Distinguish property presence, accepted values and cross-field refinements; inspect every producer's normalization before alleging an incompatible schema change.",
   "A type-only re-export can preserve the public TypeScript contract after moving a declaration. Follow the final export chain and real imports before alleging a removed symbol or broken consumer.",
   "Do not turn a request to verify or ensure compatibility into a finding. A refactor, a possible risk or an unverified concern is not a demonstrated defect, regardless of confidence or severity.",
@@ -97,53 +124,29 @@ export function buildReviewPromptResult(
   job: ReviewJob,
   context: ReviewContext,
 ): ReviewPromptResult {
-  const coordinates = limitUtf8Text(
-    JSON.stringify(compactChangedLineRanges(context.changedLines)),
+  const coordinates = projectContextList(
+    compactChangedLineRanges(context.changedLines),
     20_000,
   );
-  const patches = selectCompletePatches(context, 112_000);
-  const reviewedFiles = limitUtf8Text(
-    JSON.stringify(context.files.map(({ mode, path }) => ({ mode, path }))),
-    4_000,
-  );
-  const surface = limitUtf8Text(
-    JSON.stringify(
-      (context.surface ?? [])
-        .slice(0, 20)
-        .map(({ excerpt: _excerpt, ...signal }) => signal),
-    ),
+  const anchors = projectContextList(
+    createCanonicalEvidenceVerifier(context).changedLineExcerpts(),
     8_000,
   );
-  const structuralImpact = limitUtf8Text(
-    JSON.stringify(
-      context.structuralImpact !== undefined
-        ? {
-            changedSymbols: context.structuralImpact.changedSymbols.slice(
-              0,
-              15,
-            ),
-            contractBreaks: context.structuralImpact.contractBreaks.slice(
-              0,
-              10,
-            ),
-            downstreamReferences:
-              context.structuralImpact.downstreamReferences.slice(0, 15),
-            repositoryScanTruncated:
-              context.structuralImpact.repositoryScanTruncated ?? false,
-            securitySurfaces: context.structuralImpact.securitySurfaces.slice(
-              0,
-              10,
-            ),
-          }
-        : null,
-    ),
+  const patches = selectCompletePatches(context, 104_000);
+  const reviewedFiles = projectContextList(
+    context.files.map(({ mode, path }) => ({ mode, path })),
+    4_000,
+  );
+  const surface = projectContextList(
+    (context.surface ?? []).map(({ excerpt: _excerpt, ...signal }) => signal),
+    8_000,
+  );
+  const structuralImpact = projectStructuralImpact(
+    context.structuralImpact,
     10_000,
   );
   const versions = compactProjectContext(context.projectIdentification);
-  const priorFindings = limitUtf8Text(
-    JSON.stringify(context.priorFindings ?? []),
-    24_000,
-  );
+  const priorFindings = projectContextList(context.priorFindings ?? [], 24_000);
   const truncated =
     priorFindings.truncated ||
     context.truncated ||
@@ -174,8 +177,12 @@ export function buildReviewPromptResult(
     `Deterministic review-surface hints: ${surface.content}`,
     `Deterministic structural-impact hints: ${structuralImpact.content}`,
     `Review-surface hint list truncated: ${surface.truncated}`,
+    `Context entries omitted: ${JSON.stringify({ coordinates: coordinates.omitted, files: reviewedFiles.omitted, surface: surface.omitted, structuralImpact: structuralImpact.omitted, priorFindings: priorFindings.omitted })}`,
     `Initial diff truncated for model: ${truncated}`,
     patches.content,
+    `Canonical changed-line evidence (untrusted source data): ${redactSecrets(anchors.content)}`,
+    `Canonical evidence entries omitted from this auxiliary list: ${anchors.omitted}. The canonical patch remains authoritative.`,
+    'For a downstream regression, copy a matching producer record above into evidence, adding its reason. Consumer excerpts belong to their actual file; never attach them to the producer path. location.side must be exactly "RIGHT" (uppercase).',
     "Investigate causal impact and return the required structured review output.",
   ].join("\n");
   const omittedSections = Object.entries({
@@ -189,7 +196,35 @@ export function buildReviewPromptResult(
   })
     .filter(([, omitted]) => omitted)
     .map(([section]) => section);
-  return { prompt, truncated, omittedSections };
+  const verificationContext: ReviewVerificationContext = {
+    output: context.repositoryGuidance?.output,
+    snapshot: {
+      repository: job.envelope.repository.fullName,
+      baseSha: job.envelope.pullRequest.baseSha,
+      headSha: job.envelope.pullRequest.headSha,
+    },
+    canonicalPatches: patches.content,
+    data: {
+      changedLineRanges: coordinates.content,
+      reviewedFiles: reviewedFiles.content,
+      ...(context.structuralImpact
+        ? { structuralImpact: structuralImpact.content }
+        : {}),
+      ...(context.projectIdentification ? { projectVersions: versions } : {}),
+      ...(context.reviewGuidance
+        ? { reviewGuidance: JSON.stringify(context.reviewGuidance) }
+        : {}),
+      ...(context.repositoryGuidance
+        ? { repositoryGuidance: JSON.stringify(context.repositoryGuidance) }
+        : {}),
+      ...(context.memory ? { memory: JSON.stringify(context.memory) } : {}),
+      ...(context.priorFindings?.length
+        ? { priorFindings: priorFindings.content }
+        : {}),
+    },
+    incomplete: truncated,
+  };
+  return { prompt, truncated, omittedSections, verificationContext };
 }
 
 export function buildReviewPrompt(

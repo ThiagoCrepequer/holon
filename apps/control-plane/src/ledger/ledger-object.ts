@@ -916,7 +916,22 @@ export class ReviewLedgerObject
 
   private async cleanupRepository(runId: string): Promise<void> {
     new RunConfigurationStore(this.ctx.storage).cleanup(runId);
-    await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
+    const startedAt = Date.now();
+    let outcome = "failed";
+    try {
+      await this.env.REPOSITORY_EXECUTOR.cleanup(runId);
+      outcome = "completed";
+    } finally {
+      try {
+        consoleLogger.emit("repository.cleanup_finished", {
+          runId,
+          outcome,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch {
+        /* Cleanup remains authoritative when logging fails. */
+      }
+    }
     this.ctx.storage.sql.exec(
       "DELETE FROM review_analysis_artifacts WHERE run_id = ?",
       runId,

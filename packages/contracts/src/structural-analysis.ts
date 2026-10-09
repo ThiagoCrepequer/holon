@@ -79,6 +79,14 @@ export const structuralImpactReportSchema = z.strictObject({
   repositoryScanTruncated: z.boolean().optional(),
   securitySurfaces: z.array(securitySurfaceSignalSchema).max(50),
   totalDownstreamReferencesCount: z.number().int().nonnegative().optional(),
+  omittedSignals: z
+    .strictObject({
+      changedSymbols: z.number().int().nonnegative().safe(),
+      contractBreaks: z.number().int().nonnegative().safe(),
+      downstreamReferences: z.number().int().nonnegative().safe(),
+      securitySurfaces: z.number().int().nonnegative().safe(),
+    })
+    .optional(),
 });
 
 export type StructuralImpactReport = z.infer<

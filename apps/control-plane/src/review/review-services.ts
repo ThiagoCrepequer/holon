@@ -67,6 +67,10 @@ function shouldEnrichProjects(value: string): boolean {
 }
 
 export interface RepositoryExecutorBinding {
+  getEvidencePack(
+    runId: string,
+    deadlineAt: number,
+  ): Promise<import("@holon/contracts").ReviewEvidencePack>;
   discoverProjectMetadata(
     request: ProjectMetadataRequest,
   ): Promise<ProjectIdentificationResult>;

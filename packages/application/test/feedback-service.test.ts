@@ -84,7 +84,7 @@ function publisher() {
   const replyToComment = vi.fn().mockResolvedValue(999);
   const updateCheckRun = vi.fn().mockResolvedValue(undefined);
   const value: ReviewPublisher = {
-    findCommentByMarker: vi.fn().mockResolvedValue(undefined),
+    findCommentByMarker: vi.fn().mockResolvedValue({ status: "absent" }),
     publish: vi.fn(),
     replyToComment,
     updateCheckRun,

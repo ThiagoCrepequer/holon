@@ -141,19 +141,10 @@ function searchGlobArguments(flag: "--glob" | "--globs"): readonly string[] {
 }
 
 function structuralGlob(
-  language:
-    | "csharp"
-    | "go"
-    | "java"
-    | "javascript"
-    | "jsx"
-    | "kotlin"
-    | "php"
-    | "python"
-    | "ruby"
-    | "rust"
-    | "tsx"
-    | "typescript",
+  language: Extract<
+    RepositoryToolCall,
+    { name: "search_structure" }
+  >["arguments"]["language"],
 ): string {
   switch (language) {
     case "javascript":
@@ -164,22 +155,6 @@ function structuralGlob(
       return "**/*.tsx";
     case "typescript":
       return "**/*.{ts,mts,cts}";
-    case "python":
-      return "**/*.py";
-    case "go":
-      return "**/*.go";
-    case "rust":
-      return "**/*.rs";
-    case "java":
-      return "**/*.java";
-    case "csharp":
-      return "**/*.cs";
-    case "ruby":
-      return "**/*.rb";
-    case "php":
-      return "**/*.php";
-    case "kotlin":
-      return "**/*.{kt,kts}";
     default:
       throw new TypeError("Unsupported structural-search language");
   }

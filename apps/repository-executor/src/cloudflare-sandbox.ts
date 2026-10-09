@@ -22,6 +22,11 @@ import type {
 import {
   githubCredentialRequestSchema,
   githubCredentialResponseSchema,
+  repositoryDeadlineSchema,
+  repositoryToolCallSchema,
+  runIdSchema,
+  createReviewEvidenceReceipt,
+  reviewEvidencePackSchema,
 } from "@holon/contracts";
 import { type RepositoryToolOperation } from "@holon/contracts";
 import { WorkerEntrypoint } from "cloudflare:workers";
@@ -34,11 +39,15 @@ import {
 } from "./egress-policy.js";
 import { RepositoryExecutorService } from "./executor-service.js";
 import { RepositoryToolTask } from "./repository-tool-task.js";
-import { executeRepositoryTool } from "./repository-tools.js";
+import {
+  executeRepositoryTool,
+  repositoryToolCacheKey,
+} from "./repository-tools.js";
 import { SandboxRuntimeError } from "./sandbox-errors.js";
 import { createSandboxId, resolveContainerId } from "./sandbox-identity.js";
 import { SandboxLease, type LeaseState } from "./sandbox-lease.js";
 import type { SandboxPort, SandboxProvider } from "./sandbox-port.js";
+import { SnapshotToolCache } from "./snapshot-tool-cache.js";
 import { ToolExecution } from "./tool-execution.js";
 
 export interface GitHubCredentialBroker {
@@ -89,6 +98,7 @@ async function runSandboxOperation<T>(operation: () => Promise<T>): Promise<T> {
 
 export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
   public override enableInternet = false;
+  private readonly toolCache = new SnapshotToolCache();
   private readonly reviewLease = new SandboxLease({
     now: Date.now,
     load: () => this.ctx.storage.get<LeaseState>("holonReviewLease"),
@@ -100,7 +110,10 @@ export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
       );
     },
     keepAlive: (enabled) => this.setKeepAlive(enabled),
-    destroy: () => super.destroy(),
+    destroy: async () => {
+      await this.toolCache.clear();
+      await super.destroy();
+    },
     cancelSchedules: () => this.deleteSchedules("expireReviewLease"),
   });
   public acquireReviewLease(deadlineAt: number): Promise<void> {
@@ -114,6 +127,107 @@ export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
   }
   public closeReviewLease(): Promise<void> {
     return this.reviewLease.close();
+  }
+  public clearReviewToolCache(): Promise<void> {
+    return this.toolCache.clear();
+  }
+  public async getReviewEvidencePack(runId: string, deadlineAt: number) {
+    runIdSchema.parse(runId);
+    await this.assertReviewLease(deadlineAt);
+    const pack = [];
+    const execution = new ToolExecution(deadlineAt, (work) =>
+      this.ctx.waitUntil(work),
+    );
+    const sandbox = new CloudflareSandboxPort(
+      getSandbox(this.env.SANDBOXES, createSandboxId(runId)),
+      execution,
+    );
+    try {
+      for (const entry of this.toolCache.snapshot()) {
+        const identity = JSON.parse(entry.key) as {
+          runId: string;
+          call: RepositoryToolCall;
+        };
+        if (identity.runId !== runId || identity.call.name !== "read_file")
+          continue;
+        // Scope changes invalidate the receipt instead of leaking an earlier read.
+        if (
+          (await repositoryToolCacheKey(sandbox, runId, identity.call)) !==
+          entry.key
+        )
+          continue;
+        const args = identity.call.arguments;
+        const startLine = args.startLine ?? 1;
+        const endLine = Math.min(
+          args.endLine ?? startLine + 199,
+          startLine + entry.result.content.split("\n").length - 1,
+        );
+        const receipt = await createReviewEvidenceReceipt(
+          runId,
+          args.path,
+          startLine,
+          endLine,
+          entry.result.content,
+          entry.result.truncated,
+        );
+        const candidate = { receipt, content: entry.result.content };
+        if (reviewEvidencePackSchema.safeParse([...pack, candidate]).success)
+          pack.push(candidate);
+      }
+      await this.assertReviewLease(deadlineAt);
+      return reviewEvidencePackSchema.parse(pack);
+    } finally {
+      execution.dispose();
+    }
+  }
+
+  public async readReviewTool(
+    rawRunId: string,
+    rawCall: RepositoryToolCall,
+    rawDeadlineAt: number,
+  ) {
+    const runId = runIdSchema.parse(rawRunId);
+    const call = repositoryToolCallSchema.parse(rawCall);
+    const deadlineAt = repositoryDeadlineSchema.parse(rawDeadlineAt);
+    await this.assertReviewLease(deadlineAt);
+    const startedAt = Date.now();
+    const execution = new ToolExecution(
+      deadlineAt,
+      (work) => this.ctx.waitUntil(work),
+      () => {},
+    );
+    const sandbox = new CloudflareSandboxPort(
+      getSandbox(this.env.SANDBOXES, createSandboxId(runId)),
+      execution,
+    );
+    let output;
+    try {
+      const key = await repositoryToolCacheKey(sandbox, runId, call);
+      output = await this.toolCache.read(key, () =>
+        executeRepositoryTool(sandbox, runId, call),
+      );
+    } finally {
+      execution.dispose();
+    }
+    // Lease closure/deadline while a shared operation runs invalidates every caller.
+    await this.assertReviewLease(deadlineAt);
+    try {
+      console.info(
+        JSON.stringify({
+          event: "repository.tool_read",
+          runId,
+          tool: call.name,
+          reused: output.reused,
+          durationMs: Date.now() - startedAt,
+          outputBytes: new TextEncoder().encode(output.result.content)
+            .byteLength,
+          truncated: output.result.truncated,
+        }),
+      );
+    } catch {
+      // Telemetry cannot turn a complete, authorized read into a tool failure.
+    }
+    return output.result;
   }
 }
 
@@ -322,9 +436,13 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
     );
   }
 
-  public prepareRepository(
+  public async prepareRepository(
     request: ExecutorRequest,
   ): Promise<PreparedRepository> {
+    await getSandbox(
+      this.env.SANDBOXES,
+      createSandboxId(request.runId),
+    ).clearReviewToolCache();
     return this.service().prepareRepository(request);
   }
 
@@ -369,10 +487,10 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
         undefined,
         "lease_check",
       );
-      return executeRepositoryTool(
-        new CloudflareSandboxPort(sandbox, execution),
-        runId,
-        call,
+      return execution.wait(
+        () => sandbox.readReviewTool(runId, call, deadlineAt),
+        undefined,
+        "tool_read",
       );
     });
   }
@@ -382,6 +500,12 @@ export class RepositoryExecutorEntrypoint extends WorkerEntrypoint<RepositoryExe
       this.env.SANDBOXES,
       createSandboxId(runId),
     ).acquireReviewLease(deadlineAt);
+  }
+  public getEvidencePack(runId: string, deadlineAt: number) {
+    return getSandbox(
+      this.env.SANDBOXES,
+      createSandboxId(runId),
+    ).getReviewEvidencePack(runId, deadlineAt);
   }
 
   public cleanup(runId: string): Promise<void> {

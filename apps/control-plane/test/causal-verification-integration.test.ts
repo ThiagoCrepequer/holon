@@ -1,6 +1,5 @@
-import { reviewJobSchema } from "@holon/contracts";
+import { createReviewEvidenceReceipt, reviewJobSchema } from "@holon/contracts";
 import type { ReviewRun, RunId } from "@holon/domain";
-import { createRepositoryModelTools, withGenerationBudget } from "@holon/model";
 import { getAgentByName } from "agents";
 import { MockLanguageModelV4 } from "ai/test";
 import { reset, runInDurableObject } from "cloudflare:test";
@@ -111,10 +110,20 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
     resolutions: [],
     summary: "The caller will crash.",
   };
+  const receipt = await createReviewEvidenceReceipt(
+    runId,
+    "src/caller.ts",
+    1,
+    1,
+    "if (value !== null) return value.id;",
+    false,
+  );
   const verificationAnswer = {
     assessments: [
       {
         candidateIndex: 0,
+        basis: "repository",
+        evidenceReceiptIds: [receipt.id],
         outcome: "refuted",
         confidence: 0.98,
         rationale:
@@ -132,18 +141,13 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
       const prompt = JSON.stringify(options.prompt);
       expect(prompt).toContain("skeptical causal verifier");
       if (verifierTurns++ === 0) {
-        expect(prompt).not.toContain("if (result === null) return;");
+        expect(prompt).not.toContain("if (value !== null) return value.id;");
         return stream("read_file", { path: "src/caller.ts" });
       }
-      expect(prompt).toContain("if (result === null) return;");
+      expect(prompt).toContain("if (value !== null) return value.id;");
       return stream("think_final_answer", verificationAnswer);
     },
   });
-  const readCaller = vi.fn(async () => ({
-    content:
-      "const result = load();\nif (result === null) return;\nconsume(result.value);",
-    truncated: false,
-  }));
   for (const [phase, model] of [
     ["investigation", investigation],
     ["causal_verification", verification],
@@ -151,29 +155,7 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
     const name = `${runId}:0${phase === "causal_verification" ? ":causal" : ""}`;
     const agent = await getAgentByName(env.REVIEW_AGENTS, name);
     await runInDurableObject(agent, async (instance: ReviewAgent) => {
-      vi.spyOn(instance, "getModel").mockReturnValue(
-        withGenerationBudget(
-          model,
-          {
-            reserve: (request) =>
-              env.REVIEW_LEDGERS.getByName(prKey).reserveModelGeneration(
-                runId,
-                { ...request, shardIndex: 0, shardCount: 1 },
-              ),
-            settle: (id, outputTokens) =>
-              env.REVIEW_LEDGERS.getByName(prKey).settleModelGeneration(
-                runId,
-                id,
-                outputTokens,
-              ),
-          },
-          phase,
-        ),
-      );
-      if (phase === "causal_verification")
-        vi.spyOn(instance, "getTools").mockReturnValue(
-          createRepositoryModelTools({ run: readCaller }),
-        );
+      vi.spyOn(instance, "getProviderModel").mockReturnValue(model);
     });
   }
   const reviewer = new ThinkReviewModelReviewer(env, 0, 1, () =>
@@ -196,10 +178,6 @@ it("refutes a draft through an isolated Think workflow after inspecting a guarde
   expect(result.output.isDegraded).not.toBe(true);
   expect(investigation.doStreamCalls).toHaveLength(1);
   expect(verification.doStreamCalls).toHaveLength(2);
-  expect(readCaller).toHaveBeenCalledWith(
-    { name: "read_file", arguments: { path: "src/caller.ts" } },
-    expect.anything(),
-  );
   await runInDurableObject(ledger, (_instance, state) => {
     const reservations = state.storage.sql
       .exec(

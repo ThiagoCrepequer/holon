@@ -177,11 +177,57 @@ it("does not start a shard workflow for an expired or obsolete run", async () =>
   });
 });
 
-it.each(["clean", "unevidenced", "missing_final"] as const)(
+it.each([
+  { shardIndex: 1, totalShards: 1, prKey },
+  { shardIndex: 0, totalShards: 1, prKey: "github:43:pr:7" },
+])(
+  "rejects inconsistent review identities before starting a workflow: %j",
+  async (identity) => {
+    const ledger = env.REVIEW_LEDGERS.getByName(prKey);
+    await ledger.claimRun(run, "invalid-identity");
+    await ledger.transition(
+      runId,
+      "queued",
+      "running",
+      new Date().toISOString(),
+      "invalid-identity:start",
+    );
+    const agent = await getAgentByName(
+      env.REVIEW_AGENTS,
+      `${runId}:invalid-identity`,
+    );
+    await runInDurableObject(agent, async (instance: ReviewAgent) => {
+      const start = vi
+        .spyOn(instance, "runWorkflow")
+        .mockResolvedValue("unexpected-workflow");
+      await expect(
+        instance.startReview({
+          deadlineAt: Date.now() + 60_000,
+          phase: "investigation",
+          prompt: "review",
+          runId,
+          ...identity,
+        }),
+      ).rejects.toThrow("Review identity is inconsistent");
+      expect(start).not.toHaveBeenCalled();
+    });
+  },
+);
+
+it.each([
+  "clean",
+  "unevidenced",
+  "missing_final",
+  "invalid_suggestion",
+  "missing_investigations",
+] as const)(
   "preserves the structured Think prompt outcome: %s",
   async (scenario) => {
     const unevidenced = scenario === "unevidenced";
     const missingFinal = scenario === "missing_final";
+    const schemaInvalid =
+      scenario === "invalid_suggestion" ||
+      scenario === "missing_investigations";
     const ledger = env.REVIEW_LEDGERS.getByName(prKey);
     await ledger.claimRun(run, "think-prompt-integration");
     await ledger.transition(
@@ -201,26 +247,31 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
                 toolCallId: "final-answer",
                 toolName: "think_final_answer",
                 input: JSON.stringify({
-                  findings: unevidenced
-                    ? Array.from({ length: 2 }, () => ({
-                        confidence: 0.9,
-                        diagnostic:
-                          "Removing this guard permits an unauthorized write.",
-                        evidence: [],
-                        location: {
-                          path: "src/a.ts",
-                          line: 10,
-                          side: "RIGHT",
-                          startLine: null,
-                        },
-                        severity: "high",
-                        suggestion: null,
-                      }))
-                    : [],
+                  findings:
+                    unevidenced || scenario === "invalid_suggestion"
+                      ? Array.from({ length: 2 }, () => ({
+                          confidence: 0.9,
+                          diagnostic:
+                            "Removing this guard permits an unauthorized write.",
+                          evidence: [],
+                          location: {
+                            path: "src/a.ts",
+                            line: 10,
+                            side: "RIGHT",
+                            startLine: null,
+                          },
+                          severity: "high",
+                          suggestion:
+                            scenario === "invalid_suggestion"
+                              ? { text: "Restore the guard." }
+                              : null,
+                        }))
+                      : [],
                   isDegraded: false,
                   outputLimitations: [],
                   resolutions: [],
-                  investigations: [],
+                  investigations:
+                    scenario === "missing_investigations" ? undefined : [],
                   summary: "No verified regressions.",
                 }),
               });
@@ -244,7 +295,13 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
         }),
       }),
     });
-    const shardIndex = missingFinal ? 4 : unevidenced ? 3 : 2;
+    const shardIndex = [
+      "clean",
+      "unevidenced",
+      "missing_final",
+      "invalid_suggestion",
+      "missing_investigations",
+    ].indexOf(scenario);
     const agent = await getAgentByName(
       env.REVIEW_AGENTS,
       `${runId}:${shardIndex}`,
@@ -252,7 +309,7 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
     const workflowId = await runInDurableObject(
       agent,
       async (instance: ReviewAgent) => {
-        vi.spyOn(instance, "getModel").mockReturnValue(model);
+        vi.spyOn(instance, "getProviderModel").mockReturnValue(model);
         return await instance.startReview({
           deadlineAt: Date.now() + 60_000,
           phase: "investigation" as const,
@@ -277,7 +334,7 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
       status = await workflow.status();
     }
     expect(status).toMatchObject(
-      missingFinal
+      missingFinal || schemaInvalid
         ? {
             status: "errored",
             error: {
@@ -295,11 +352,28 @@ it.each(["clean", "unevidenced", "missing_final"] as const)(
               : { findings: [], summary: "No verified regressions." },
           },
     );
-    if (missingFinal) {
+    if (missingFinal || schemaInvalid) {
       await evictDurableObject(agent);
-      expect(await agent.getReviewFailure()).toBe("model_output_missing");
+      expect(await agent.getReviewFailure()).toBe(
+        schemaInvalid ? "model_schema_invalid" : "model_output_missing",
+      );
     }
     expect(model.doStreamCalls).toHaveLength(1);
+    expect(
+      await ledger.reserveModelGeneration(runId, {
+        shardCount: 5,
+        shardIndex,
+        phase: "investigation",
+        inputBytes: 1,
+        outputTokens: 24_000,
+      }),
+    ).toMatchObject({
+      accepted: false,
+      reason: "shard_output_tokens",
+      consumed: 10,
+      requested: 24_000,
+      limit: 24_000,
+    });
   },
   15_000,
 );

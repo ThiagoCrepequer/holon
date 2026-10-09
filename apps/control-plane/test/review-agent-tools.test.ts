@@ -3,6 +3,7 @@ import type { RunId } from "@holon/domain";
 import { expect, it, vi } from "vitest";
 
 import { ReviewAgent } from "../src/review/review-agent.js";
+import { reviewStepFixture } from "./review-step-fixture.js";
 
 const runId =
   `github:42:pr:7:head:${"a".repeat(40)}:base:${"b".repeat(40)}` as RunId;
@@ -60,7 +61,7 @@ it("allows a corrected query after a safe rejection but stops on infrastructure 
   await expect(execute({ path: "missing.ts" }, {})).rejects.toThrow(
     "path_unavailable",
   );
-  expect(() => agent.beforeStep()).not.toThrow();
+  expect(() => agent.beforeStep(reviewStepFixture())).not.toThrow();
   await expect(execute({ path: "valid.ts" }, {})).resolves.toMatchObject({
     content: "safe",
   });
@@ -89,7 +90,9 @@ it.each(["investigation", "causal_verification"] as const)(
       config.shardIndex,
       config.totalShards,
     );
-    expect(() => agent.beforeStep()).toThrow("Review tool budget exhausted");
+    expect(() => agent.beforeStep(reviewStepFixture())).toThrow(
+      "Review tool budget exhausted",
+    );
   },
 );
 

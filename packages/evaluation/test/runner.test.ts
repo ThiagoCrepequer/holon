@@ -8,6 +8,56 @@ import {
 } from "./fixtures.js";
 
 describe("runEvaluationSuite", () => {
+  it("fails integrity on fabricated candidates even when the case expects silence", async () => {
+    const negative = createEvalCase({
+      id: "no-finding.negative",
+      category: "no-finding",
+      expected: {
+        findings: [],
+        forbiddenOutputTerms: [],
+        partial: false,
+        requiredSummaryTerms: [],
+      },
+    });
+    const candidate = evalSubjectOutputSchema.parse(createPassingOutput());
+    candidate.output.findings[0]!.evidence[0]!.excerpt = "fabricated()";
+    const result = await runEvaluationSuite(
+      [negative],
+      async () => candidate,
+      evaluationConfiguration,
+    );
+    expect(result.failedCases).toBe(1);
+    expect(result.metrics.precision).toBe(0);
+    expect(result.metrics.rejectedFindings).toBe(1);
+  });
+  it("includes failed positive cases in operational recall", async () => {
+    const positive = createEvalCase();
+    const negative = createEvalCase({
+      id: "no-finding.negative",
+      category: "no-finding",
+      expected: {
+        findings: [],
+        forbiddenOutputTerms: [],
+        partial: false,
+        requiredSummaryTerms: [],
+      },
+    });
+    const result = await runEvaluationSuite(
+      [positive, negative],
+      async (input) => {
+        if (input.caseId === positive.id)
+          throw new Error("Synthetic provider failure");
+        return {
+          output: { findings: [], summary: "Checked this case." },
+          partial: false,
+        };
+      },
+      evaluationConfiguration,
+    );
+    expect(result.metrics.expectedFindings).toBe(1);
+    expect(result.metrics.recall).toBe(0);
+    expect(result.subjectErrors).toBe(1);
+  });
   it("rejects an empty suite instead of producing a false green result", async () => {
     const subject = vi.fn().mockResolvedValue(createPassingOutput());
 
@@ -76,7 +126,7 @@ describe("runEvaluationSuite", () => {
       completedCases: 0,
       failedCases: 1,
       invalidOutputs: 1,
-      metrics: { precision: null, recall: null },
+      metrics: { precision: null, recall: 0 },
       subjectErrors: 0,
     });
     expect(result.caseRuns).toEqual([
@@ -125,7 +175,10 @@ describe("runEvaluationSuite", () => {
     });
     expect(result.caseRuns[0]).toMatchObject({
       grade: {
-        failures: [{ findingId: "return-null", kind: "missing_finding" }],
+        failures: [
+          { findingId: "return-null", kind: "missing_finding" },
+          { kind: "evidence_integrity", rejectedCount: 1 },
+        ],
       },
       outcome: "completed",
       rejectedFindings: 1,

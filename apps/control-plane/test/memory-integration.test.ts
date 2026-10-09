@@ -159,7 +159,7 @@ function session(permission = "write") {
 function publisher() {
   return {
     publish: vi.fn(),
-    findCommentByMarker: vi.fn().mockResolvedValue(undefined),
+    findCommentByMarker: vi.fn().mockResolvedValue({ status: "absent" }),
     replyToComment: vi.fn().mockResolvedValue(303),
   };
 }
@@ -322,7 +322,11 @@ it("handles propose, inspect, approve, list, revoke and redelivery through authe
     204,
   );
   await handleFeedbackCommentWebhook(testEnv, approval, dependencies);
-  vi.mocked(publish.findCommentByMarker).mockResolvedValueOnce(999);
+  vi.mocked(publish.findCommentByMarker).mockResolvedValueOnce({
+    status: "found",
+    id: 999,
+    body: "Previous reply",
+  });
   const replay = await handleFeedbackCommentWebhook(
     testEnv,
     approval,

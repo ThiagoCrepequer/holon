@@ -1293,6 +1293,9 @@ describe("check run contracts", () => {
 
     it("validates calibrationMetricsSchema", () => {
       const metrics = {
+        adjudicatedFindings: 20,
+        conflictedFindings: 0,
+        resolvedFindings: 0,
         falsePositiveCount: 2,
         falsePositiveRate: 0.2,
         helpfulCount: 7,
@@ -1392,7 +1395,7 @@ describe("check run contracts", () => {
       expect(structuralImpactReportSchema.parse(report)).toEqual(report);
     });
 
-    it("validates expanded languages in searchStructureArgumentsSchema", () => {
+    it("rejects structural languages outside the implemented JS/TS capability", () => {
       const validCall = {
         arguments: {
           language: "python" as const,
@@ -1401,7 +1404,7 @@ describe("check run contracts", () => {
         },
         name: "search_structure" as const,
       };
-      expect(repositoryToolCallSchema.parse(validCall)).toEqual(validCall);
+      expect(repositoryToolCallSchema.safeParse(validCall).success).toBe(false);
     });
   });
 

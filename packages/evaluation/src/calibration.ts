@@ -9,48 +9,63 @@ export function computeCalibrationMetrics(
   feedbacks: readonly FindingFeedbackRecord[],
   totalReviewedFindings: number,
 ): CalibrationMetrics {
+  const groups = new Map<string, Set<FindingFeedbackRecord["label"]>>();
+  for (const feedback of feedbacks) {
+    const key = `${feedback.prKey}:${feedback.fingerprint}`;
+    const labels = groups.get(key) ?? new Set();
+    labels.add(feedback.label);
+    groups.set(key, labels);
+  }
+  if (
+    !Number.isSafeInteger(totalReviewedFindings) ||
+    totalReviewedFindings < groups.size
+  ) {
+    throw new TypeError(
+      "reviewed finding count must cover unique feedback findings",
+    );
+  }
   let falsePositiveCount = 0;
   let helpfulCount = 0;
   let wrongSeverityCount = 0;
-
-  for (const fb of feedbacks) {
-    if (
-      fb.label === "false_positive" ||
-      fb.label === "not_actionable" ||
-      fb.label === "duplicate" ||
-      fb.label === "thread_resolved"
-    ) {
-      falsePositiveCount += 1;
-    } else if (fb.label === "helpful") {
-      helpfulCount += 1;
-    } else if (fb.label === "wrong_severity") {
-      wrongSeverityCount += 1;
+  let conflictedFindings = 0;
+  let resolvedFindings = 0;
+  let adjudicatedFindings = 0;
+  for (const labels of groups.values()) {
+    const rejected = ["false_positive", "not_actionable", "duplicate"].some(
+      (label) => labels.has(label as FindingFeedbackRecord["label"]),
+    );
+    const accepted = labels.has("helpful") || labels.has("wrong_severity");
+    if (labels.has("thread_resolved")) resolvedFindings++;
+    if (accepted && rejected) {
+      conflictedFindings++;
+      continue;
     }
+    if (accepted || rejected) adjudicatedFindings++;
+    if (rejected) falsePositiveCount++;
+    if (labels.has("helpful")) helpfulCount++;
+    if (labels.has("wrong_severity")) wrongSeverityCount++;
   }
-
-  const totalFeedbacks = feedbacks.length;
-  const safeTotalFindings = Math.max(totalReviewedFindings, totalFeedbacks);
-  const falsePositiveRate =
-    safeTotalFindings > 0
-      ? Number((falsePositiveCount / safeTotalFindings).toFixed(4))
-      : 0;
-  const utilityRate =
-    totalFeedbacks > 0 ? Number((helpfulCount / totalFeedbacks).toFixed(4)) : 0;
-
   return calibrationMetricsSchema.parse({
     falsePositiveCount,
-    falsePositiveRate: Math.min(Math.max(falsePositiveRate, 0), 1),
+    falsePositiveRate:
+      adjudicatedFindings === 0
+        ? null
+        : falsePositiveCount / adjudicatedFindings,
     helpfulCount,
-    totalFeedbacks,
-    totalReviewedFindings: safeTotalFindings,
-    utilityRate: Math.min(Math.max(utilityRate, 0), 1),
+    totalFeedbacks: feedbacks.length,
+    totalReviewedFindings,
+    utilityRate:
+      adjudicatedFindings === 0 ? null : helpfulCount / adjudicatedFindings,
     wrongSeverityCount,
+    adjudicatedFindings,
+    conflictedFindings,
+    resolvedFindings,
   });
 }
 
 export interface CalibrationCandidateCase {
   readonly description: string;
-  readonly expectedVerdict: "APPROVE" | "REQUEST_CHANGES";
+  readonly requiresAdjudication: true;
   readonly feedbackLabel: string;
   readonly filePath: string;
   readonly fingerprint: string;
@@ -62,14 +77,9 @@ export function promoteFeedbackToCalibrationCase(
   feedback: FindingFeedbackRecord,
   finding?: TrackedFinding,
 ): CalibrationCandidateCase {
-  const isFP =
-    feedback.label === "false_positive" ||
-    feedback.label === "not_actionable" ||
-    feedback.label === "duplicate";
-
   return {
     description: `Calibration case from feedback ${feedback.label}: ${feedback.reason ?? finding?.diagnostic ?? "No description"}`,
-    expectedVerdict: isFP ? "APPROVE" : "REQUEST_CHANGES",
+    requiresAdjudication: true,
     feedbackLabel: feedback.label,
     filePath: finding?.filePath ?? "unknown",
     fingerprint: feedback.fingerprint,

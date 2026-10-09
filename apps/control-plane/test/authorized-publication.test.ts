@@ -52,12 +52,42 @@ function publisher(
   existing?: number,
 ): ReviewPublisher & { readonly publish: ReturnType<typeof vi.fn> } {
   return {
-    findCommentByMarker: () => Promise.resolve(existing),
+    findCommentByMarker: () =>
+      Promise.resolve(
+        existing === undefined
+          ? { status: "absent" as const }
+          : {
+              status: "found" as const,
+              id: existing,
+              body: "Previous publication",
+            },
+      ),
     publish: vi.fn(() => Promise.resolve(321)),
   };
 }
 
 describe("authorized publication", () => {
+  it("retains an ambiguous claim without posting when marker search is inconclusive", async () => {
+    const state = ledger(() =>
+      Promise.resolve({ outcome: "reconcile", record }),
+    );
+    const github = publisher();
+    github.findCommentByMarker = () =>
+      Promise.resolve({ status: "inconclusive", reason: "page_limit" });
+    await expect(
+      publishReviewAuthorized(
+        state,
+        github,
+        runId,
+        "Review",
+        "COMMENT",
+        [],
+        async () => true,
+      ),
+    ).rejects.toThrow("Publication marker lookup is inconclusive");
+    expect(github.publish).not.toHaveBeenCalled();
+    expect(state.completePublication).not.toHaveBeenCalled();
+  });
   it("reuses an already published clean review without another GitHub mutation", async () => {
     const state = ledger(() =>
       Promise.resolve({
@@ -152,7 +182,16 @@ describe("authorized publication", () => {
     );
     const marker = buildPublicationMarker(runId, findingId);
     const github: ReviewPublisher & { publish: ReturnType<typeof vi.fn> } = {
-      findCommentByMarker: () => Promise.resolve(posted ? 321 : undefined),
+      findCommentByMarker: () =>
+        Promise.resolve(
+          posted
+            ? {
+                status: "found" as const,
+                id: 321,
+                body: "Previous publication",
+              }
+            : { status: "absent" as const },
+        ),
       findReviewCommentsByMarkers: (_reviewId, markers) =>
         Promise.resolve(new Map(markers.map((value) => [value, 777]))),
       publish: vi.fn(async () => {
@@ -215,7 +254,9 @@ describe("authorized publication", () => {
     const github: ReviewPublisher = {
       publish: vi.fn(),
       findCommentByMarker: async (marker) =>
-        bodies.some((body) => body.includes(marker)) ? 87 : undefined,
+        bodies.some((body) => body.includes(marker))
+          ? { status: "found" as const, id: 87, body: "Previous reply" }
+          : { status: "absent" as const },
       replyToComment: vi.fn(async (_id, body) => {
         bodies.push(body);
         return 87;
@@ -416,4 +457,72 @@ describe("authorized publication", () => {
     ).resolves.toBe(true);
     expect(accepted.publish).toHaveBeenCalledOnce();
   });
+});
+
+it("does not duplicate an accepted review whose lost response leaves its marker on page 21", async () => {
+  const { GitHubReviewPublisher } = await import("@holon/github");
+  let acceptedBody: string | undefined;
+  let claims = 0;
+  const state = ledger((next) =>
+    Promise.resolve({
+      outcome: claims++ === 0 ? "claimed" : "reconcile",
+      record: next,
+    }),
+  );
+  const request = vi.fn(
+    async (_route: string, parameters: Record<string, unknown>) => {
+      acceptedBody = String(parameters.body);
+      throw new Error("response lost after GitHub accepted the review");
+    },
+  );
+  const github = new GitHubReviewPublisher(
+    {
+      request,
+      async *iterate() {
+        if (acceptedBody === undefined) return;
+        for (let page = 1; page <= 21; page++)
+          yield page === 21
+            ? [
+                {
+                  id: 321,
+                  body: acceptedBody,
+                  user: { login: "holon[bot]", type: "Bot" },
+                },
+              ]
+            : [];
+      },
+    },
+    {
+      owner: "acme",
+      repo: "api",
+      pullNumber: 7,
+      headSha: "a".repeat(40),
+      expectedAuthorLogin: "holon[bot]",
+    },
+  );
+  await expect(
+    publishReviewAuthorized(
+      state,
+      github,
+      runId,
+      "Review",
+      "COMMENT",
+      [],
+      async () => true,
+    ),
+  ).rejects.toThrow("response lost");
+  expect(acceptedBody).toContain(buildPublicationMarker(runId, "summary"));
+  await expect(
+    publishReviewAuthorized(
+      state,
+      github,
+      runId,
+      "Review",
+      "COMMENT",
+      [],
+      async () => true,
+    ),
+  ).rejects.toThrow("lookup is inconclusive");
+  expect(request).toHaveBeenCalledOnce();
+  expect(state.completePublication).not.toHaveBeenCalled();
 });

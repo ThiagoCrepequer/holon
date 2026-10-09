@@ -1,5 +1,6 @@
 import {
   clarificationMarker,
+  requireConclusivePublicationLookup,
   renderClarificationReply,
 } from "@holon/application";
 import type { ClarificationRecord } from "@holon/contracts";
@@ -99,9 +100,11 @@ export async function publishClarification(
   });
   const marker = clarificationMarker(record.id);
   // Reconciliation first also handles a successful POST followed by an ambiguous timeout.
-  const existing = await publisher.findCommentByMarker(marker, "inline");
-  if (existing !== undefined) {
-    await ledger.completeClarification(record.id, existing);
+  const existing = requireConclusivePublicationLookup(
+    await publisher.findCommentByMarker(marker, "inline"),
+  );
+  if (existing.status === "found") {
+    await ledger.completeClarification(record.id, existing.id);
     return;
   }
   const current = await validateQuestion(

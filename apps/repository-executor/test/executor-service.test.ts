@@ -183,6 +183,14 @@ class FakeSandbox implements SandboxPort {
         stdout: ripgrepMatch(1),
         truncated: false,
       });
+    if (
+      argv[0] !== "git" ||
+      !(
+        ["init", "fetch"].includes(argv[1] ?? "") ||
+        (argv[1] === "-c" && argv.includes("checkout"))
+      )
+    )
+      throw new TypeError(`Unexpected sandbox command: ${argv[0]} ${argv[1]}`);
     return Promise.resolve({
       exitCode: 0,
       stderr: "",

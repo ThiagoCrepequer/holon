@@ -37,16 +37,11 @@ export interface StableFingerprintInput {
 }
 
 /**
- * Normalizes code excerpt across whitespace and line ending variations
- * to ensure formatting shifts don't disrupt fingerprint stability.
+ * Only platform line endings are equivalent. Literals, indentation and blank
+ * lines are semantic data; formatting changes conservatively invalidate reuse.
  */
 export function normalizeExcerpt(excerpt: string): string {
-  return excerpt
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join(" ")
-    .replaceAll(/\s+/gu, " ");
+  return excerpt.replaceAll("\r\n", "\n");
 }
 
 /**

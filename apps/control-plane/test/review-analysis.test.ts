@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import { analyzeReview } from "../src/review/review-analysis.js";
 import type { ReviewServices } from "../src/review/review-services.js";
 import { ThinkReviewFailure } from "../src/review/think-reviewer.js";
+import { eventId } from "../src/review/workflow-policy.js";
 import {
   configurationReader,
   defaultRunConfiguration,
@@ -124,6 +125,72 @@ function createMockServices(
 }
 
 describe("analyzeReview", () => {
+  it.each([
+    "model.output_limits",
+    "review.coverage_planned",
+    "model.input",
+    "review.analysis_context_loaded",
+  ])(
+    "retains a partial review when the %s log sink fails",
+    async (failedEvent) => {
+      const services = createMockServices(
+        {
+          changedLines: [{ path: "src/index.ts", line: 10, side: "RIGHT" }],
+          files: [
+            { path: "src/index.ts", mode: "structural", patch: canonicalPatch },
+          ],
+          truncated: false,
+        },
+        {
+          output: {
+            findings: [moderateFinding],
+            summary: "A verified observation with omitted input context.",
+          },
+          promptTruncated: true,
+          promptOmissions: ["priorFindings"],
+        },
+      );
+      let observed = false;
+      const emit = (event: string) => {
+        if (event === failedEvent) {
+          observed = true;
+          throw new Error("Log sink failed");
+        }
+      };
+      const result = await analyzeReview(job, services, emit);
+      expect(observed).toBe(true);
+      expect(result.findings).toMatchObject([moderateFinding]);
+      expect(result.isDegraded).toBe(true);
+      expect(result.verdict).toBe("COMMENT");
+      expect(result.shardsAnalyzed).toBe(1);
+    },
+  );
+
+  it("gives each measured phase a distinct stable event identity", async () => {
+    const emit = vi.fn();
+    await analyzeReview(
+      job,
+      createMockServices({
+        changedLines: [{ path: "src/index.ts", line: 10, side: "RIGHT" }],
+        files: [
+          { path: "src/index.ts", mode: "structural", patch: canonicalPatch },
+        ],
+        truncated: false,
+      }),
+      emit,
+    );
+    const timings = emit.mock.calls.filter(
+      ([event]) => event === "review.phase_finished",
+    );
+    expect(timings.length).toBeGreaterThan(3);
+    expect(
+      new Set(
+        timings.map(([event, _fields, suffix]) =>
+          eventId("test-workflow", event, suffix),
+        ),
+      ).size,
+    ).toBe(timings.length);
+  });
   it.each(["omitted", "degraded"] as const)(
     "marks incomplete multi-shard review without trusting its narrative (%s)",
     async (reason) => {
@@ -387,6 +454,7 @@ describe("analyzeReview", () => {
       expect(emit).toHaveBeenCalledWith(
         "model.output_limits",
         expect.objectContaining({ inputContextOmitted: inputOmitted }),
+        "0",
       );
       expect(emit).toHaveBeenCalledWith(
         "review.shard_partial",
@@ -902,7 +970,7 @@ it("publishes an incomplete result when the shared deadline expires before infer
   );
 });
 
-it("runs more than one wave of shards with bounded concurrency", async () => {
+it("runs successive shards in stable lanes with bounded concurrency", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: true,
@@ -949,7 +1017,7 @@ it("runs more than one wave of shards with bounded concurrency", async () => {
   expect(result.summary).not.toContain("input_context_omitted");
 });
 
-it("replays a completed first wave and successful peers without repeating their model calls", async () => {
+it("replays the stable lane plan and successful peers without repeating their model calls", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: false,
@@ -995,7 +1063,7 @@ it("replays a completed first wave and successful peers without repeating their 
   await expect(
     analyzeReview(job, services, () => {}, undefined, execution),
   ).rejects.toThrow("temporary ledger dependency failure");
-  const firstWave = cache.get("analysis-wave-1");
+  const firstWave = cache.get("plan-review");
   const result = await analyzeReview(
     job,
     services,
@@ -1004,7 +1072,7 @@ it("replays a completed first wave and successful peers without repeating their 
     execution,
   );
   expect(result.totalShards).toBe(7);
-  expect(cache.get("analysis-wave-1")).toBe(firstWave);
+  expect(cache.get("plan-review")).toBe(firstWave);
   expect([...calls.values()].reduce((a, b) => a + b, 0)).toBe(8);
   expect(calls.get(`src/file${reviewExecutionLimits.shardFiles * 5}.ts`)).toBe(
     2,
@@ -1014,7 +1082,7 @@ it("replays a completed first wave and successful peers without repeating their 
   );
 });
 
-it("cancels a wave on infrastructure loss, joins cancellation, and never starts the next wave", async () => {
+it("cancels lanes on infrastructure loss and joins every started shard", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: false,
@@ -1068,7 +1136,7 @@ it("cancels a wave on infrastructure loss, joins cancellation, and never starts 
   expect(joined).toBe(started);
 });
 
-it("shares wave preparation with a delayed shard instead of rebuilding while a peer investigates", async () => {
+it("shares preparation with a delayed shard instead of rebuilding while a peer investigates", async () => {
   const services = createMockServices({
     changedLines: [],
     truncated: false,
@@ -1388,4 +1456,51 @@ it("reloads and validates the plan after invocation replay without repeating com
   ).rejects.toThrow("Review plan changed during replay");
   expect(load).toHaveBeenCalledTimes(2);
   expect(review).toHaveBeenCalledOnce();
+});
+
+it("starts later work in a free lane while a peer is still investigating", async () => {
+  const services = createMockServices({
+    changedLines: [],
+    truncated: false,
+    files: Array.from(
+      { length: reviewExecutionLimits.shardFiles * 5 + 1 },
+      (_, i) => ({
+        path: `src/slot${String(i).padStart(3, "0")}.ts`,
+        mode: "structural" as const,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+      }),
+    ),
+  });
+  let release!: () => void;
+  const slow = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let active = 0,
+    peak = 0;
+  const started: number[] = [];
+  services.createShardReviewer = (index) => ({
+    model: {
+      review: async () => {
+        started.push(index);
+        active++;
+        peak = Math.max(peak, active);
+        if (index === 0) await slow;
+        active--;
+        return {
+          output: { findings: [], summary: "Reviewed" },
+          promptTruncated: false,
+        };
+      },
+    },
+  });
+  const pending = analyzeReview(job, services, vi.fn());
+  try {
+    await vi.waitFor(() =>
+      expect(started.some((index) => index >= 3)).toBe(true),
+    );
+  } finally {
+    release();
+    await pending;
+  }
+  expect(peak).toBeLessThanOrEqual(3);
 });

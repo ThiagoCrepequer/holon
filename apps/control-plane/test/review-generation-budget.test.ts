@@ -29,6 +29,87 @@ async function ledgerForRun() {
   );
   return ledger;
 }
+
+it("protects all nine peers through complete uncertain shard cycles and eviction", async () => {
+  const ledger = await ledgerForRun();
+  const admitted = [];
+  for (const phase of [
+    "investigation",
+    "investigation",
+    "investigation",
+    "investigation",
+    "causal_verification",
+    "causal_verification",
+    "recovery",
+  ] as const) {
+    const round = await Promise.all(
+      Array.from({ length: 9 }, (_, shardIndex) =>
+        ledger.reserveModelGeneration(runId, {
+          shardIndex,
+          shardCount: 9,
+          phase,
+          inputBytes: 10_000,
+          outputTokens: phase === "recovery" ? 1024 : 2051,
+        }),
+      ),
+    );
+    expect(round.every((result) => result?.accepted)).toBe(true);
+    admitted.push(...round);
+  }
+  expect(
+    new Set(admitted.flatMap((result) => (result?.accepted ? [result.id] : [])))
+      .size,
+  ).toBe(63);
+  await evictDurableObject(ledger);
+  const denied = await Promise.all(
+    Array.from({ length: 9 }, (_, shardIndex) =>
+      ledger.reserveModelGeneration(runId, {
+        shardIndex,
+        shardCount: 9,
+        phase: "investigation",
+        inputBytes: 1,
+        outputTokens: 1,
+      }),
+    ),
+  );
+  expect(denied).toEqual(
+    Array.from({ length: 9 }, () => ({
+      accepted: false,
+      reason: "shard_calls",
+      consumed: 7,
+      requested: 1,
+      limit: 7,
+    })),
+  );
+  expect(await ledger.loadModelGenerationStop(runId)).toBeUndefined();
+});
+
+it("preserves the protected tool capacity of eight peers when a ninth consumes the shared surplus", async () => {
+  const ledger = await ledgerForRun();
+  for (let index = 0; index < 56; index++)
+    expect(await ledger.reserveAnalysisToolCall(runId, 0, 9)).toBe(true);
+  expect(await ledger.reserveAnalysisToolCall(runId, 0, 9)).toBe(false);
+  await evictDurableObject(ledger);
+  const peers = await Promise.all(
+    Array.from({ length: 8 }, async (_, index) => {
+      const admissions = [];
+      for (let call = 0; call < 5; call++)
+        admissions.push(
+          await ledger.reserveAnalysisToolCall(runId, index + 1, 9),
+        );
+      return admissions;
+    }),
+  );
+  expect(peers).toEqual(
+    Array.from({ length: 8 }, () => [true, true, true, true, true]),
+  );
+  const exhausted = await Promise.all(
+    Array.from({ length: 9 }, (_, index) =>
+      ledger.reserveAnalysisToolCall(runId, index, 9),
+    ),
+  );
+  expect(exhausted).toEqual(Array(9).fill(false));
+});
 it("bounds concurrent model calls across shards and eviction", async () => {
   const ledger = await ledgerForRun();
   const ids = await Promise.all(

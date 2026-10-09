@@ -6,6 +6,8 @@ const valid = {
   assessments: [
     {
       candidateIndex: 0,
+      basis: "patch",
+      evidenceReceiptIds: [],
       outcome: "confirmed",
       confidence: 0.9,
       rationale:
@@ -14,6 +16,34 @@ const valid = {
   ],
   summary: "One regression was confirmed.",
 };
+it("selects complete host receipt IDs without redeclaring their metadata", () => {
+  expect(
+    causalVerificationSchema.parse({
+      ...valid,
+      assessments: [
+        {
+          ...valid.assessments[0],
+          basis: "repository",
+          evidenceReceiptIds: ["a".repeat(64)],
+        },
+      ],
+    }).assessments[0]?.evidenceReceiptIds,
+  ).toEqual(["a".repeat(64)]);
+});
+it.each([
+  { basis: "repository", evidenceReceiptIds: [] },
+  { basis: "patch", evidenceReceiptIds: ["a".repeat(64)] },
+  { basis: "repository", evidenceReceiptIds: ["short"] },
+  { basis: "repository", evidenceReceiptIds: Array(9).fill("a".repeat(64)) },
+  { evidenceReferences: [] },
+])("rejects missing, invalid or obsolete receipt selection: %j", (invalid) => {
+  expect(
+    causalVerificationSchema.safeParse({
+      ...valid,
+      assessments: [{ ...valid.assessments[0], ...invalid }],
+    }).success,
+  ).toBe(false);
+});
 
 it.each(["confirmed", "refuted", "inconclusive"])(
   "accepts an explicit %s causal assessment",

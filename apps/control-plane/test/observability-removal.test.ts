@@ -29,8 +29,8 @@ it("shares the 96-call durable limit across concurrent reservations and recreate
     "budget-test:start",
   );
   const reservations = await Promise.all(
-    Array.from({ length: 97 }, () =>
-      ledger.reserveAnalysisToolCall(runId, 0, 2),
+    Array.from({ length: 97 }, (_, index) =>
+      ledger.reserveAnalysisToolCall(runId, index % 2, 2),
     ),
   );
   expect(reservations.filter(Boolean)).toHaveLength(96);
@@ -53,7 +53,7 @@ it("shares the 96-call durable limit across concurrent reservations and recreate
       runId,
       shardIndex: 0,
       rule: "run_calls",
-      shardCurrent: 96,
+      shardCurrent: 48,
       totalCurrent: 96,
       totalLimit: 96,
     }),
@@ -225,7 +225,9 @@ it("migrates consumed budgets atomically without changing core rows and is repla
     ).not.toContain("summary_json");
   });
   for (let remaining = 0; remaining < 84; remaining++)
-    expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(true);
+    expect(
+      await ledger.reserveAnalysisToolCall(runId, remaining % 13, 13),
+    ).toBe(true);
   expect(await ledger.reserveAnalysisToolCall(runId, 0, 13)).toBe(false);
   expect(await ledger.reserveAnalysisToolCall(runId, 12, 13)).toBe(false);
 });

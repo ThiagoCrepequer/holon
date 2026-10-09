@@ -3,8 +3,10 @@ import {
   limitReviewText,
   modelReviewOutputSchema,
   reviewTextLimits,
+  reviewEvidenceReceiptSchema,
   type ModelReviewOutput,
   type ReviewLanguage,
+  type ReviewEvidenceReceipt,
 } from "@holon/contracts";
 import { minimumFindingConfidence, reviewText } from "@holon/domain";
 
@@ -40,10 +42,25 @@ export function applyCausalVerification(
   draft: ModelReviewOutput,
   raw: unknown,
   language: ReviewLanguage = "en",
+  receipts: readonly ReviewEvidenceReceipt[] = [],
 ): ModelReviewOutput {
   const parsed = causalVerificationSchema.safeParse(raw);
   if (!parsed.success) return withholdUnverifiedFindings(draft, language);
   const verification = parsed.data;
+  if (
+    verification.assessments.some((item) =>
+      item.evidenceReceiptIds.some(
+        (id) =>
+          !receipts.some(
+            (receipt) =>
+              receipt.id === id &&
+              !receipt.truncated &&
+              reviewEvidenceReceiptSchema.safeParse(receipt).success,
+          ),
+      ),
+    )
+  )
+    return withholdUnverifiedFindings(draft, language);
   const indices = new Set(
     verification.assessments.map((item) => item.candidateIndex),
   );

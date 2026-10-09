@@ -141,16 +141,16 @@ it("reserves one shared tool-call ceiling across shards and eviction", async () 
     "budget-test:start",
   );
   const reservations = await Promise.all(
-    Array.from({ length: 97 }, () =>
-      ledger.reserveAnalysisToolCall(runId, 0, 5),
+    Array.from({ length: 96 }, (_, index) =>
+      ledger.reserveAnalysisToolCall(runId, index % 3, 3),
     ),
   );
   expect(reservations.filter(Boolean)).toHaveLength(96);
   await evictDurableObject(ledger);
-  await expect(ledger.reserveAnalysisToolCall(runId, 0, 5)).resolves.toBe(
+  await expect(ledger.reserveAnalysisToolCall(runId, 0, 3)).resolves.toBe(
     false,
   );
-  await expect(ledger.reserveAnalysisToolCall(runId, 4, 5)).resolves.toBe(
+  await expect(ledger.reserveAnalysisToolCall(runId, 2, 3)).resolves.toBe(
     false,
   );
   await runInDurableObject(ledger, (_object, state) => {
@@ -197,10 +197,14 @@ it("allows the last shard of a 64-part plan to spend the shared budget", async (
   );
   expect(results.filter(Boolean)).toHaveLength(25);
   await evictDurableObject(ledger);
-  for (let index = 0; index < 71; index++)
+  for (let index = 0; index < 63; index++)
     await expect(
-      ledger.reserveAnalysisToolCall(runId, index % 64, 64),
+      ledger.reserveAnalysisToolCall(runId, index, 64),
     ).resolves.toBe(true);
+  for (let index = 0; index < 8; index++)
+    await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
+      true,
+    );
   await expect(ledger.reserveAnalysisToolCall(runId, 63, 64)).resolves.toBe(
     false,
   );
@@ -213,6 +217,50 @@ it("allows the last shard of a 64-part plan to spend the shared budget", async (
     );
     expect(() => object.reserveAnalysisToolCall(runId, 0, 65)).toThrow(
       "Invalid shard",
+    );
+  });
+});
+
+it("protects peer tools transactionally even when a dominant shard exhausts the unprotected pool", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName("github:42:pr:7");
+  await ledger.claimRun(
+    {
+      causalVersion: new Date().toISOString(),
+      id: runId,
+      prKey: "github:42:pr:7",
+      createdAt: new Date().toISOString(),
+      state: "queued",
+      attempt: 0,
+    },
+    "fair-tools",
+  );
+  await ledger.transition(
+    runId,
+    "queued",
+    "running",
+    new Date().toISOString(),
+    "fair-tools:start",
+  );
+  const dominant = await Promise.all(
+    Array.from({ length: 97 }, () =>
+      ledger.reserveAnalysisToolCall(runId, 0, 9),
+    ),
+  );
+  expect(dominant.filter(Boolean)).toHaveLength(56);
+  await evictDurableObject(ledger);
+  const peers = await Promise.all(
+    Array.from({ length: 8 }, async (_, index) => {
+      for (let call = 0; call < 5; call++)
+        expect(await ledger.reserveAnalysisToolCall(runId, index + 1, 9)).toBe(
+          true,
+        );
+    }),
+  );
+  expect(peers).toHaveLength(8);
+  expect(await ledger.reserveAnalysisToolCall(runId, 1, 9)).toBe(false);
+  await runInDurableObject(ledger, (object) => {
+    expect(() => object.reserveAnalysisToolCall(runId, 0, 8)).toThrow(
+      "plan changed",
     );
   });
 });

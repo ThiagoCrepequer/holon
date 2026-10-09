@@ -18,6 +18,9 @@ import { classifyPullRequestDiffFile } from "./policy.js";
 import { mapReviewSurface } from "./surface.js";
 
 export interface BuildReviewPlanOptions {
+  readonly relationships?:
+    | readonly { readonly callerPath: string; readonly targetPath: string }[]
+    | undefined;
   readonly additionalExcludes?: readonly string[] | undefined;
   readonly maxShardDiffBytes?: number | undefined;
   readonly maxShardFiles?: number | undefined;
@@ -218,9 +221,29 @@ export function buildReviewPlan(
 
   let oversizedFileCount = 0;
 
+  // Unite only observed static edges; unknown or dynamic consumers remain retrieval obligations.
+  const parents = new Map<string, string>();
+  const root = (key: string): string => {
+    const parent = parents.get(key);
+    if (!parent || parent === key) return key;
+    const result = root(parent);
+    parents.set(key, result);
+    return result;
+  };
+  const keys = new Set(
+    prioritizedFiles.map((file) => relatedFileKey(file.file.path)),
+  );
+  for (const edge of options?.relationships ?? []) {
+    const left = relatedFileKey(edge.callerPath),
+      right = relatedFileKey(edge.targetPath);
+    if (!keys.has(left) || !keys.has(right)) continue;
+    const pair = [root(left), root(right)].toSorted();
+    parents.set(pair[1]!, pair[0]!);
+  }
+  const groupingKey = (path: string) => root(relatedFileKey(path));
   const relatedGroups = new Map<string, EligibleFile[]>();
   for (const file of prioritizedFiles) {
-    const key = relatedFileKey(file.file.path);
+    const key = groupingKey(file.file.path);
     const group = relatedGroups.get(key) ?? [];
     group.push(file);
     relatedGroups.set(key, group);
@@ -228,7 +251,7 @@ export function buildReviewPlan(
   // Balance whole groups so textual coverage cannot separate a source/test pair.
   const groups = balanceReviewModes(
     [...relatedGroups.values()].map((group) => group[0]!),
-  ).map((first) => relatedGroups.get(relatedFileKey(first.file.path))!);
+  ).map((first) => relatedGroups.get(groupingKey(first.file.path))!);
   for (const group of groups) {
     const groupBytes = group.reduce((sum, file) => sum + file.patchBytes, 0);
     const groupLines = group.reduce(

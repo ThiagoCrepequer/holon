@@ -1,5 +1,6 @@
 import {
   parseMemoryCommand,
+  requireConclusivePublicationLookup,
   memoryScopeMatches,
   type ProcessFeedbackCommentResult,
   type ReviewPublisher,
@@ -153,11 +154,13 @@ export async function handleMemoryComment(
   if (!publisher.replyToComment)
     throw new Error("Memory reply publisher unavailable");
   const marker = `<!-- holon;memory=${encodeURIComponent(event.deliveryId)} -->`;
-  const existing = await publisher.findCommentByMarker(marker, "inline");
-  if (!existing)
+  const existing = requireConclusivePublicationLookup(
+    await publisher.findCommentByMarker(marker, "inline"),
+  );
+  if (existing.status === "absent")
     await publisher.replyToComment(
       event.commentId,
       `${redactSecrets(response).replaceAll("<!--", "&lt;!--")}\n\n${marker}`,
     );
-  return { actionTaken, replyPosted: existing === undefined };
+  return { actionTaken, replyPosted: existing.status === "absent" };
 }

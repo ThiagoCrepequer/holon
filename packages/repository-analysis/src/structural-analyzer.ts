@@ -22,7 +22,10 @@ export interface StructuralAnalysisInput {
 export function analyzeStructuralImpact(
   input: StructuralAnalysisInput,
 ): StructuralImpactReport {
-  const changedSymbols = extractChangedSymbols(input.changedFiles);
+  const changedSymbols = extractChangedSymbols(
+    input.changedFiles,
+    input.repositoryFiles,
+  );
 
   const downstream = findDownstreamReferences(
     changedSymbols,
@@ -37,6 +40,13 @@ export function analyzeStructuralImpact(
     input.repositoryFiles,
   );
   const securitySurfaces = detectSecuritySurfaces(input.changedFiles);
+  const omittedSignals = {
+    changedSymbols: Math.max(0, changedSymbols.length - 100),
+    contractBreaks: Math.max(0, contractBreaks.length - 50),
+    downstreamReferences:
+      downstream.totalCount - Math.min(100, downstream.references.length),
+    securitySurfaces: Math.max(0, securitySurfaces.length - 50),
+  };
 
   return {
     changedSymbols: changedSymbols.slice(0, 100),
@@ -45,5 +55,8 @@ export function analyzeStructuralImpact(
     repositoryScanTruncated: input.repositoryScanTruncated ?? false,
     securitySurfaces: securitySurfaces.slice(0, 50),
     totalDownstreamReferencesCount: downstream.totalCount,
+    ...(Object.values(omittedSignals).some((count) => count > 0)
+      ? { omittedSignals }
+      : {}),
   };
 }

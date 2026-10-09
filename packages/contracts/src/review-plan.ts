@@ -76,18 +76,29 @@ export const reviewPlanSchema = z.strictObject({
   unsupportedFilesCount: z.number().int().nonnegative(),
 });
 
-export const shardReviewResultSchema = z.strictObject({
-  investigations: z.array(investigationObservationSchema).max(4).optional(),
-  resolutions: z.array(reviewResolutionSchema).max(8).optional(),
-  errorReason: z.string().optional(),
-  findings: z.array(reviewFindingSchema),
-  isDegraded: z.boolean().optional(),
-  outputLimitations: reviewOutputLimitationsSchema.optional(),
+const shardResultIdentity = {
   shardId: z.string().min(1).max(100),
   shardIndex: z.number().int().nonnegative(),
-  status: z.enum(["success", "failure"]),
-  summary: z.string().trim().max(reviewTextLimits.summary),
-});
+};
+export const shardReviewResultSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    ...shardResultIdentity,
+    investigations: z.array(investigationObservationSchema).max(4).optional(),
+    resolutions: z.array(reviewResolutionSchema).max(8).optional(),
+    findings: z.array(reviewFindingSchema).max(reviewTextLimits.findings),
+    isDegraded: z.boolean().optional(),
+    outputLimitations: reviewOutputLimitationsSchema.optional(),
+    status: z.literal("success"),
+    summary: z.string().trim().max(reviewTextLimits.summary),
+  }),
+  z.strictObject({
+    ...shardResultIdentity,
+    status: z.literal("failure"),
+    errorReason: z.string().trim().min(1).max(100),
+    findings: z.array(reviewFindingSchema).length(0),
+    summary: z.string().length(0),
+  }),
+]);
 
 export const aggregatedReviewResultSchema = z.strictObject({
   findings: z.array(reviewFindingSchema),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildReviewPlan } from "../../repository-analysis/src/index.js";
 import {
   aggregateShardReviews,
   formatCleanFollowUpReview,
@@ -9,6 +10,118 @@ import {
 } from "../src/index.js";
 
 describe("aggregateShardReviews", () => {
+  it("cannot count a duplicate shard as coverage of a missing shard", () => {
+    const completed = {
+      shardId: "shard-0",
+      shardIndex: 0,
+      status: "success" as const,
+      findings: [],
+      summary: "Checked the assigned shard.",
+    };
+    const output = aggregateShardReviews(plan, [completed, completed]);
+    expect(output.shardsAnalyzed).toBe(0);
+    expect(output.scopeStatus).toBe("partial_by_failure");
+    expect(output.verdict).toBe("COMMENT");
+  });
+  it("derives degradation from unresolved output limitations", () => {
+    const output = aggregateShardReviews(
+      plan,
+      plan.shards.map((shard) => ({
+        shardId: shard.id,
+        shardIndex: shard.index,
+        status: "success" as const,
+        findings: [],
+        summary: "Checked the assigned shard.",
+        outputLimitations: ["summary_missing" as const],
+      })),
+    );
+    expect(output.isDegraded).toBe(true);
+    expect(output.verdict).toBe("COMMENT");
+  });
+  it("blocks clean approval when canonical verification rejects a candidate", () => {
+    const output = aggregateShardReviews(
+      plan,
+      plan.shards.map((shard) => ({
+        shardId: shard.id,
+        shardIndex: shard.index,
+        status: "success" as const,
+        summary: "The entire pull request is safe.",
+        findings:
+          shard.index === 0
+            ? [
+                {
+                  confidence: 0.95,
+                  severity: "high" as const,
+                  diagnostic:
+                    "A fabricated excerpt must not authorize a clean approval.",
+                  location: {
+                    path: "src/a.ts",
+                    line: 10,
+                    side: "RIGHT" as const,
+                  },
+                  evidence: [
+                    {
+                      path: "src/a.ts",
+                      startLine: 10,
+                      excerpt: "fabricated()",
+                      reason: "Synthetic invalid evidence.",
+                    },
+                  ],
+                },
+              ]
+            : [],
+      })),
+    );
+    expect(output.findings).toHaveLength(0);
+    expect(output.isDegraded).toBe(true);
+    expect(output.verdict).toBe("COMMENT");
+    expect(output.summary).not.toContain("entire pull request is safe");
+  });
+  it("preserves canonical evidence after a large file is partitioned", () => {
+    const path = "src/large.ts";
+    const plan = buildReviewPlan([
+      {
+        path,
+        oldPath: path,
+        newPath: path,
+        changeType: "modified",
+        patch: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,0 +1,800 @@\n${Array.from({ length: 800 }, (_, index) => `+const value${index + 1} = ${index + 1};`).join("\n")}\n`,
+      },
+    ]);
+    expect(plan.shards).toHaveLength(2);
+    const results = plan.shards.map((shard) => ({
+      shardId: shard.id,
+      shardIndex: shard.index,
+      status: "success" as const,
+      summary: "Investigated the assigned fragment.",
+      findings:
+        shard.index === 1
+          ? [
+              {
+                confidence: 0.95,
+                severity: "high" as const,
+                diagnostic:
+                  "The changed assignment violates the required invariant.",
+                location: { path, line: 800, side: "RIGHT" as const },
+                evidence: [
+                  {
+                    path,
+                    startLine: 800,
+                    excerpt: "const value800 = 800;",
+                    reason: "The incompatible value is introduced here.",
+                  },
+                ],
+              },
+            ]
+          : [],
+    }));
+    for (const ordered of [results, results.toReversed()]) {
+      const aggregated = aggregateShardReviews(plan, ordered);
+      expect(aggregated.findings).toHaveLength(1);
+      expect(aggregated.findings[0]?.location.line).toBe(800);
+      expect(aggregated.verdict).toBe("REQUEST_CHANGES");
+    }
+  });
   it("formats a compact follow-up review in the configured language", () => {
     expect(formatCleanFollowUpReview("ee02be7" + "a".repeat(33), "pt-BR")).toBe(
       "## ✅ Holon · Revisão atualizada\n\n**0 novos achados** · `ee02be7`\n\n### Mudanças revisadas\n\nNenhum novo achado confirmado. Os trechos elegíveis deste commit foram revisados.",
@@ -102,8 +215,16 @@ describe("aggregateShardReviews", () => {
             findings: [],
             shardId: "shard-1",
             shardIndex: 1,
-            status: mode === "partial_by_failure" ? "failure" : "success",
-            summary: "The whole PR is safe.",
+            ...(mode === "partial_by_failure"
+              ? {
+                  status: "failure" as const,
+                  errorReason: "model_schema_invalid",
+                  summary: "",
+                }
+              : {
+                  status: "success" as const,
+                  summary: "The whole PR is safe.",
+                }),
           },
         ],
         {},
@@ -360,6 +481,7 @@ describe("aggregateShardReviews", () => {
         findings: [],
         summary: "",
         status: "failure" as const,
+        errorReason: "model_schema_invalid",
         shardId: "shard-0",
         shardIndex: 0,
       },
@@ -464,16 +586,14 @@ describe("aggregateShardReviews", () => {
   });
 
   it("truncates summary exceeding character limit", () => {
-    const longSummary = "x".repeat(20_000);
-    const shardResults = [
-      {
-        findings: [],
-        shardId: "shard-0",
-        shardIndex: 0,
-        status: "success" as const,
-        summary: longSummary,
-      },
-    ];
+    const longSummary = "x".repeat(10_000);
+    const shardResults = plan.shards.map((shard) => ({
+      findings: [],
+      shardId: shard.id,
+      shardIndex: shard.index,
+      status: "success" as const,
+      summary: longSummary,
+    }));
 
     const aggregated = aggregateShardReviews(plan, shardResults);
     expect(aggregated.summary.length).toBeLessThanOrEqual(16_000);
@@ -632,6 +752,25 @@ describe("aggregateShardReviews", () => {
   });
 
   describe("formatStructuralImpactSection", () => {
+    it("reports structural signal omissions separately from repository scan coverage", () => {
+      const formatted = formatStructuralImpactSection(
+        {
+          changedSymbols: [],
+          contractBreaks: [],
+          downstreamReferences: [],
+          securitySurfaces: [],
+          omittedSignals: {
+            changedSymbols: 1,
+            contractBreaks: 2,
+            downstreamReferences: 3,
+            securitySurfaces: 4,
+          },
+        },
+        "pt-BR",
+      );
+      expect(formatted).toContain("Sinais estruturais omitidos**: 10");
+      expect(formatted).not.toContain("Varredura do repositório");
+    });
     it("formats all parts of structural impact report cleanly", () => {
       const report = {
         changedSymbols: [

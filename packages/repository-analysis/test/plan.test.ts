@@ -212,3 +212,33 @@ it("packs small hunks of the same file without spending one shard per hunk", () 
     ),
   ).toEqual(Array(200).fill("+new  "));
 });
+
+it("groups observed producer/consumer edges and retains hard shard limits", () => {
+  const paths = ["a/consumer.ts", "b/unrelated.ts", "c/producer.ts"];
+  const files = splitPullRequestDiff(
+    paths.map((path) => patchFor(path)).join(""),
+  );
+  const relationships = [{ callerPath: paths[0]!, targetPath: paths[2]! }];
+  const related = buildReviewPlan(files, { maxShardFiles: 2, relationships });
+  expect(
+    related.shards.some((shard) =>
+      paths
+        .filter((path) => path !== paths[1])
+        .every((path) => shard.files.some((file) => file.path === path)),
+    ),
+  ).toBe(true);
+  expect(
+    buildReviewPlan(files.toReversed(), {
+      maxShardFiles: 2,
+      relationships: relationships.toReversed(),
+    }),
+  ).toEqual(related);
+  const constrained = buildReviewPlan(files, {
+    maxShardFiles: 1,
+    relationships,
+  });
+  expect(constrained.shards).toHaveLength(3);
+  expect(constrained.shards.every((shard) => shard.files.length <= 1)).toBe(
+    true,
+  );
+});

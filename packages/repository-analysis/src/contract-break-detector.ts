@@ -1,10 +1,11 @@
-import { parse } from "@babel/parser";
 import type {
   ChangedSymbol,
   ContractBreakSignal,
   DownstreamReference,
 } from "@holon/contracts";
 import { parsePatch } from "diff";
+
+import { parseRepositoryModule } from "./repository-module.js";
 
 const sqlDestructivePatterns: readonly {
   readonly description: string;
@@ -52,31 +53,12 @@ interface PreservedModuleExports {
   readonly values: Set<string>;
 }
 
-function getBabelPlugins(
-  filePath: string,
-): import("@babel/parser").ParserPlugin[] {
-  const lower = filePath.toLowerCase();
-  const isTs = /\.(?:[cm]?ts|tsx)$/u.test(lower);
-  const isJsx = /\.[jt]sx$/u.test(lower);
-  const plugins: import("@babel/parser").ParserPlugin[] = [];
-  if (isTs) plugins.push("typescript");
-  if (isJsx) plugins.push("jsx");
-  return plugins;
-}
-
 function extractExportsFromAst(
   source: string,
   filePath: string,
 ): PreservedModuleExports | undefined {
-  let ast;
-  try {
-    ast = parse(source, {
-      sourceType: "module",
-      plugins: getBabelPlugins(filePath),
-    });
-  } catch {
-    return undefined;
-  }
+  const ast = parseRepositoryModule(source, filePath);
+  if (!ast) return undefined;
 
   const localTypeDeclarations = new Set<string>();
   const localValueDeclarations = new Set<string>();

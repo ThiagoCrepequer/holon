@@ -1,5 +1,6 @@
 import type { ReviewLedger, ReviewPublisher } from "@holon/application";
 import type { PublishCommentInput } from "@holon/application";
+import { requireConclusivePublicationLookup } from "@holon/application";
 import { reviewMessage, type ReviewLanguage } from "@holon/domain";
 import {
   buildPublicationMarker,
@@ -79,13 +80,12 @@ export async function publishAuthorized(
     return false;
   }
   if (claim.outcome === "reconcile") {
-    const existingId = await publisher.findCommentByMarker(
-      claim.record.marker,
-      kind,
+    const existing = requireConclusivePublicationLookup(
+      await publisher.findCommentByMarker(claim.record.marker, kind),
     );
-    if (existingId !== undefined) {
-      await ledger.completePublication(id, existingId);
-      onPublished?.(existingId);
+    if (existing.status === "found") {
+      await ledger.completePublication(id, existing.id);
+      onPublished?.(existing.id);
       return false;
     }
   }
@@ -154,12 +154,14 @@ export async function publishReviewAuthorized(
     }
     reviewId = claim.record.githubCommentId;
   } else {
-    const existingId =
+    const existing =
       claim.outcome === "reconcile"
-        ? await publisher.findCommentByMarker(marker, "summary")
-        : undefined;
-    if (existingId !== undefined) {
-      reviewId = existingId;
+        ? requireConclusivePublicationLookup(
+            await publisher.findCommentByMarker(marker, "summary"),
+          )
+        : { status: "absent" as const };
+    if (existing.status === "found") {
+      reviewId = existing.id;
       await ledger.completePublication(publicationId, reviewId);
     } else {
       await requireAuthorization(authorizeImmediatelyBeforeMutation);
@@ -248,7 +250,11 @@ export async function publishFailureNoticeAuthorized(
   customBody?: string,
 ): Promise<boolean> {
   const marker = `<!-- holon;run=${runId};finding=system-failure -->`;
-  if ((await publisher.findCommentByMarker(marker, "summary")) !== undefined) {
+  if (
+    requireConclusivePublicationLookup(
+      await publisher.findCommentByMarker(marker, "summary"),
+    ).status === "found"
+  ) {
     return false;
   }
   if (!(await authorizeImmediatelyBeforeMutation())) return false;

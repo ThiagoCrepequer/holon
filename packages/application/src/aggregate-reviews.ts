@@ -1,6 +1,7 @@
 import type { ReviewOutputPreferences } from "@holon/contracts";
 import {
   aggregatedReviewResultSchema,
+  shardReviewResultSchema,
   type AggregatedReviewResult,
   type ModelGenerationStopReason,
   type ReviewLanguage,
@@ -22,12 +23,18 @@ import {
   type ReviewVerdictPolicyOptions,
 } from "@holon/domain";
 
-import { verifyFindingsWithCanonicalEvidence } from "./evidence.js";
+import {
+  verifyFindingsWithCanonicalEvidence,
+  type createCanonicalEvidenceVerifier,
+} from "./evidence.js";
 import { formatConfiguredFindings } from "./inline-publication-plan.js";
 import { fitPublicationSummary } from "./publication-summary.js";
 import { formatReviewSummaryHeader } from "./review-summary-header.js";
 
 export interface AggregateShardReviewOptions {
+  readonly evidenceVerifier?: ReturnType<
+    typeof createCanonicalEvidenceVerifier
+  >;
   readonly budgetStopReason?: ModelGenerationStopReason | undefined;
   readonly publication?:
     | {
@@ -111,6 +118,18 @@ export function formatStructuralImpactSection(
       ),
     );
   }
+  const omitted = Object.values(report.omittedSignals ?? {}).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  if (omitted > 0)
+    parts.push(
+      text(
+        `- ⚠️ **Structural Signals Omitted**: ${omitted}; the bounded report does not cover all observed leads`,
+        `- ⚠️ **Sinais estruturais omitidos**: ${omitted}; o relatório limitado não cobre todas as pistas observadas`,
+        `- ⚠️ **Señales estructurales omitidas**: ${omitted}; el informe limitado no cubre todas las pistas observadas`,
+      ),
+    );
   if (parts.length === 0) return "";
   return [
     text(
@@ -286,8 +305,36 @@ export function aggregateShardReviews(
   const candidateFindings: ReviewFinding[] = [];
   candidateFindings.push(...(options.additionalFindings ?? []));
   const shardSummaries: string[] = [];
-
+  const counts = new Map<string, number>();
+  for (const result of shardResults)
+    counts.set(result.shardId, (counts.get(result.shardId) ?? 0) + 1);
+  let invalidResults = false;
+  const admittedResults: ShardReviewResult[] = [];
   for (const result of shardResults) {
+    const shard = plan.shards.find((item) => item.id === result.shardId);
+    const parsed = shardReviewResultSchema.safeParse(result);
+    if (
+      !parsed.success ||
+      counts.get(result.shardId) !== 1 ||
+      shard?.index !== result.shardIndex
+    ) {
+      invalidResults = true;
+      continue;
+    }
+    admittedResults.push(parsed.data);
+  }
+  if (invalidResults || admittedResults.length !== plan.shards.length) {
+    scopeStatus = "partial_by_failure";
+    omissionReasons.push(
+      text(
+        "Shard results do not uniquely cover the admitted plan.",
+        "Os resultados das partes não cobrem o plano admitido de forma única.",
+        "Los resultados no cubren de forma única el plan admitido.",
+      ),
+    );
+  }
+
+  for (const result of admittedResults) {
     if (result.status === "failure") {
       scopeStatus = "partial_by_failure";
       omissionReasons.push(
@@ -341,15 +388,14 @@ export function aggregateShardReviews(
   const allChangedLines = plan.shards.flatMap((shard) => shard.changedLines);
   const dedupedCandidates = Array.from(dedupedFindingsMap.values());
 
-  const verifiedFindings = verifyFindingsWithCanonicalEvidence(
-    dedupedCandidates,
-    {
+  const verifiedFindings =
+    options.evidenceVerifier?.verify(dedupedCandidates) ??
+    verifyFindingsWithCanonicalEvidence(dedupedCandidates, {
       changedLines: allChangedLines,
       files: allFiles,
       surface: plan.shards.flatMap((shard) => shard.surface ?? []),
       truncated: scopeStatus !== "complete",
-    },
-  );
+    });
 
   const sortedFindings = (
     options.canonicalFindings ?? verifiedFindings.findings
@@ -357,7 +403,22 @@ export function aggregateShardReviews(
 
   const isAnyShardDegraded =
     (options.reconciliation?.unverifiedCount ?? 0) > 0 ||
-    shardResults.some((result) => result.isDegraded === true);
+    verifiedFindings.rejections.length > 0 ||
+    admittedResults.some(
+      (result) =>
+        result.status === "success" &&
+        (result.summary.trim().length === 0 ||
+          result.isDegraded === true ||
+          (result.outputLimitations?.length ?? 0) > 0),
+    );
+  if (verifiedFindings.rejections.length > 0)
+    omissionReasons.push(
+      text(
+        "Candidate evidence was rejected by canonical verification.",
+        "Evidências de candidatos foram rejeitadas pela verificação canônica.",
+        "La verificación canónica rechazó evidencias de candidatos.",
+      ),
+    );
 
   const verdictDetails = determineReviewVerdict({
     language: options.language,

@@ -1,5 +1,6 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { baselineCorpusV4 } from "../corpus/v4/index.js";
 import { baselineRecordingsV4 } from "../recordings/v4/index.js";
@@ -29,7 +30,7 @@ async function writeResult(
   process.stdout.write(summary);
 }
 
-async function main(): Promise<void> {
+export async function runEvaluationCli(): Promise<void> {
   if (process.argv[2] !== "recorded")
     throw new TypeError("evaluation mode must be recorded");
   const sourceRevision = safeRunMetadata("GITHUB_SHA", "local");
@@ -56,4 +57,5 @@ async function main(): Promise<void> {
   if (suite.failedCases > 0) process.exitCode = 1;
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  await runEvaluationCli();

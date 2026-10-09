@@ -7,21 +7,19 @@ import {
   aggregateShardReviews,
   admitReviewPlan,
   createReviewRun,
-  verifyFindingsWithCanonicalEvidence,
-  type EvidenceRejection,
+  createCanonicalEvidenceVerifier,
+  planReviewLanes,
 } from "@holon/application";
 import type { MemorySnapshot } from "@holon/contracts";
 import { reviewExecutionLimits } from "@holon/contracts";
 import type { RunConfigurationRef } from "@holon/contracts";
 import {
-  modelReviewOutputSchema,
   reconciledReviewOutputSchema,
   type ReconciledReviewOutput,
   type ReviewJob,
   type RepositoryPolicy,
   type ShardReviewResult,
   type ModelGenerationStopReason,
-  type StructuralImpactReport,
 } from "@holon/contracts";
 import { matchingConfigurationRules } from "@holon/domain";
 import {
@@ -29,11 +27,9 @@ import {
   computeEvidenceFingerprint,
   createPrKey,
   reconcileFindings,
-  type TrackedFinding,
 } from "@holon/domain";
 import { reviewTimeBudget } from "@holon/model";
 import {
-  ModelProviderRequestError,
   nonRetryableModelFailureCode,
   preflightReviewPrompt,
 } from "@holon/model";
@@ -41,10 +37,15 @@ import { buildReviewPlan } from "@holon/repository-analysis";
 import { NonRetryableError } from "cloudflare:workflows";
 
 import { errorKind } from "../observability.js";
-import { resolveReviewGuidance } from "./review-guidance.js";
+import {
+  emitDiagnostic,
+  emitEvidenceRejections,
+  type EmitReviewEvent,
+} from "./review-diagnostics.js";
+import { createReviewGuidanceResolver } from "./review-guidance.js";
 import type { ReviewServices } from "./review-services.js";
 import { buildShardReviewContext } from "./review-shard-context.js";
-import { ThinkReviewFailure } from "./think-reviewer.js";
+import { reviewShard } from "./review-shard-execution.js";
 
 export type { ReconciledReviewOutput } from "@holon/contracts";
 type ReviewAnalysisServices = Pick<
@@ -63,32 +64,13 @@ type ReviewAnalysisServices = Pick<
 
 export interface ReviewAnalysisExecution<T extends Rpc.Serializable<T>> {
   readonly configuration: RunConfigurationRef;
-  readonly memory?: MemorySnapshot;
+  readonly memory?: MemorySnapshot | undefined;
   runStep<R extends Rpc.Serializable<R>>(
     name: string,
     phase: "preparation" | "analysis",
     callback: () => Promise<R>,
   ): Promise<R>;
   finish(output: ReconciledReviewOutput): Promise<T>;
-}
-
-type EmitReviewEvent = (
-  event: string,
-  fields?: Readonly<Record<string, boolean | number | string | undefined>>,
-  suffix?: number | string,
-) => void;
-
-function emitDiagnostic(
-  emit: EmitReviewEvent | undefined,
-  event: string,
-  fields: Readonly<Record<string, boolean | number | string | undefined>>,
-  suffix?: string,
-): void {
-  try {
-    emit?.(event, fields, suffix);
-  } catch {
-    // Observability cannot change a review result or its retry decision.
-  }
 }
 
 function contextBytes(context: {
@@ -116,217 +98,6 @@ function reviewedFiles(
     .flatMap((shard) => shard.files.map((file) => file.path));
 }
 
-async function reviewShards(
-  job: ReviewJob,
-  services: ReviewAnalysisServices,
-  plan: ReturnType<typeof buildReviewPlan>,
-  structuralImpact: StructuralImpactReport | undefined,
-  inputTruncated = false,
-  emit?: EmitReviewEvent,
-  baseline: readonly TrackedFinding[] = [],
-  shardIndex?: number,
-  deadlineAt?: number,
-  effectivePolicy?: RepositoryPolicy,
-  configuration?: RunConfigurationRef,
-  cancellation?: AbortController,
-  memory?: MemorySnapshot,
-): Promise<{
-  readonly results: readonly ShardReviewResult[];
-  readonly anyPromptTruncated: boolean;
-}> {
-  const results: ShardReviewResult[] = [];
-  let anyPromptTruncated = false;
-  const identification = services.getProjectIdentification?.();
-  for (const shard of plan.shards) {
-    if (shardIndex !== undefined && shard.index !== shardIndex) continue;
-    const reviewer = services.createShardReviewer(
-      shard.index,
-      plan.shards.length,
-      cancellation,
-    );
-    const snapshot =
-      configuration === undefined
-        ? undefined
-        : await services.ledger.loadRunConfiguration(configuration);
-    const repositoryGuidance =
-      snapshot === undefined
-        ? undefined
-        : projectConfigurationGuidance(
-            snapshot,
-            shard.files.map((file) => file.path),
-          );
-    const supplemental = await resolveReviewGuidance(
-      snapshot?.config.documentation,
-      shard.files.map((file) => file.path),
-      identification,
-    );
-    const shardContext = {
-      ...buildShardReviewContext(
-        shard,
-        structuralImpact,
-        baseline,
-        identification,
-        inputTruncated,
-        repositoryGuidance,
-        deadlineAt,
-      ),
-      reviewGuidance: supplemental,
-      memory: memory
-        ? projectRepositoryMemory(
-            memory,
-            shard.files.map((file) => file.path),
-          )
-        : undefined,
-    };
-    try {
-      const reviewResult = await reviewer.model.review(job, shardContext);
-      if (reviewResult.promptTruncated) {
-        anyPromptTruncated = true;
-      }
-      const modelOutput = modelReviewOutputSchema.parse(reviewResult.output);
-      const verification = verifyFindingsWithCanonicalEvidence(
-        modelOutput.findings,
-        shardContext,
-      );
-      emitEvidenceRejections(
-        emit,
-        shard.index,
-        "finding",
-        verification.rejections,
-      );
-      const verifiedFindings = verification.findings;
-      const investigations = (modelOutput.investigations ?? []).filter(
-        (item) =>
-          verifyFindingsWithCanonicalEvidence(
-            [
-              {
-                confidence: 1,
-                diagnostic: item.summary,
-                severity: "low",
-                location: { path: item.path, line: item.line, side: "RIGHT" },
-                evidence: [
-                  {
-                    path: item.path,
-                    startLine: item.line,
-                    excerpt: item.excerpt,
-                    reason: "Investigation observation",
-                  },
-                ],
-              },
-            ],
-            shardContext,
-          ).findings.length === 1,
-      );
-
-      const evidenceRejected =
-        verifiedFindings.length !== modelOutput.findings.length;
-      if (
-        modelOutput.outputLimitations?.length ||
-        reviewResult.promptTruncated ||
-        evidenceRejected
-      )
-        emit?.("model.output_limits", {
-          shardIndex: shard.index,
-          findingsReceived: modelOutput.findings.length,
-          evidenceRejectedCount:
-            modelOutput.findings.length - verifiedFindings.length,
-          limitationCodes: [
-            ...(modelOutput.outputLimitations ?? []),
-            ...(reviewResult.promptTruncated ? ["input_context_omitted"] : []),
-          ].join(","),
-          inputContextOmitted: reviewResult.promptTruncated,
-          omittedSections: reviewResult.promptOmissions?.join(","),
-        });
-      const limitations = [
-        ...new Set([
-          ...(modelOutput.outputLimitations ?? []),
-          ...(reviewResult.promptTruncated
-            ? ["input_context_omitted" as const]
-            : []),
-          ...(evidenceRejected ? ["evidence_rejected" as const] : []),
-        ]),
-      ];
-      for (const reason of limitations)
-        emitDiagnostic(
-          emit,
-          "review.shard_partial",
-          {
-            severity: "warning",
-            shardIndex: shard.index,
-            reason,
-            findingsReceived: modelOutput.findings.length,
-            findingsVerified: verifiedFindings.length,
-          },
-          `${shard.index}:${reason}`,
-        );
-      if (modelOutput.isDegraded && limitations.length === 0)
-        emitDiagnostic(
-          emit,
-          "review.shard_partial",
-          {
-            severity: "warning",
-            shardIndex: shard.index,
-            reason: "model_degraded",
-          },
-          `${shard.index}:model_degraded`,
-        );
-      results.push({
-        findings: modelOutput.findings.filter((finding) =>
-          verifiedFindings.includes(finding),
-        ),
-        resolutions: modelOutput.resolutions,
-        investigations,
-        isDegraded:
-          modelOutput.isDegraded ||
-          reviewResult.promptTruncated ||
-          evidenceRejected,
-        outputLimitations: limitations,
-        shardId: shard.id,
-        shardIndex: shard.index,
-        status: "success",
-        summary: modelOutput.summary,
-      });
-    } catch (error) {
-      const failureCode = nonRetryableModelFailureCode(error);
-      if (
-        failureCode === undefined &&
-        !(error instanceof ModelProviderRequestError) &&
-        !(error instanceof ThinkReviewFailure)
-      )
-        throw error;
-      const reason =
-        failureCode ??
-        (error instanceof ThinkReviewFailure
-          ? error.reason
-          : error instanceof ModelProviderRequestError && error.isRetryable
-            ? "provider_transient"
-            : "provider_permanent");
-      emitDiagnostic(
-        emit,
-        "review.shard_failed",
-        {
-          severity: "error",
-          shardIndex: shard.index,
-          reason,
-          ...(error instanceof ModelProviderRequestError
-            ? { statusCode: error.statusCode, retryable: error.isRetryable }
-            : {}),
-        },
-        `${shard.index}:${reason}`,
-      );
-      results.push({
-        shardId: shard.id,
-        shardIndex: shard.index,
-        status: "failure",
-        findings: [],
-        summary: "",
-        errorReason: reason,
-      });
-    }
-  }
-  return { anyPromptTruncated, results };
-}
-
 export function analyzeReview(
   job: ReviewJob,
   services: ReviewAnalysisServices,
@@ -343,15 +114,46 @@ export function analyzeReview<T extends Rpc.Serializable<T>>(
 export async function analyzeReview<T extends Rpc.Serializable<T>>(
   job: ReviewJob,
   services: ReviewAnalysisServices,
-  emit: EmitReviewEvent,
+  emitSink: EmitReviewEvent,
   effectivePolicy?: RepositoryPolicy,
   execution?: ReviewAnalysisExecution<T>,
 ): Promise<T | ReconciledReviewOutput> {
+  const emit: EmitReviewEvent = (...args) => {
+    try {
+      emitSink(...args);
+    } catch {
+      // All diagnostics are advisory, including preparation and planning.
+    }
+  };
+  const resolveGuidance = createReviewGuidanceResolver();
   const runStep = <R extends Rpc.Serializable<R>>(
     name: string,
     phase: "preparation" | "analysis",
     fn: () => Promise<R>,
-  ): Promise<R> => (execution ? execution.runStep(name, phase, fn) : fn());
+  ): Promise<R> => {
+    const timed = async () => {
+      const startedAt = Date.now();
+      let outcome = "failed";
+      try {
+        const value = await fn();
+        outcome = "completed";
+        return value;
+      } finally {
+        emitDiagnostic(
+          emit,
+          "review.phase_finished",
+          {
+            phase,
+            step: name,
+            outcome,
+            durationMs: Date.now() - startedAt,
+          },
+          name,
+        );
+      }
+    };
+    return execution ? execution.runStep(name, phase, timed) : timed();
+  };
   const loadUncached = async () => {
     const startedAt = Date.now();
     const context = await services.loadContext(effectivePolicy);
@@ -364,7 +166,10 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           patch: file.patch,
           path: file.path,
         })),
-        { policyExcludedFilesCount: context.waiversCount },
+        {
+          policyExcludedFilesCount: context.waiversCount,
+          relationships: context.structuralImpact?.downstreamReferences,
+        },
       ),
     );
     const effectivePlan = context.truncated
@@ -494,6 +299,10 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
       });
       return {
         shardIds: plan.shards.map((shard) => shard.id),
+        lanes: planReviewLanes(
+          plan.shards.map((shard) => shard.byteLength),
+          reviewExecutionLimits.concurrency,
+        ).map((lane) => [...lane]),
         planDigest: digest,
         deadlineAt:
           Date.now() +
@@ -507,146 +316,152 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
     const shardResults: ShardReviewResult[] = [];
     let anyPromptTruncated = false;
     let budgetStop: ModelGenerationStopReason | undefined;
-    for (
-      let offset = 0;
-      offset < planning.shardIds.length;
-      offset += reviewExecutionLimits.concurrency
-    ) {
-      const wave = await runStep(
-        `analysis-wave-${offset / reviewExecutionLimits.concurrency + 1}`,
-        "preparation",
-        async () => ({
-          budgetStop: await services.ledger.loadModelGenerationStop(runId),
-          deadlineAt: Math.min(
-            planning.deadlineAt,
-            Date.now() + reviewTimeBudget.analysisMs,
-          ),
-        }),
-      );
-      if (wave.budgetStop !== undefined) {
-        budgetStop = wave.budgetStop;
-        const skipped = await runStep(
-          "skip-shards-budget",
-          "preparation",
-          async () => {
-            const results: ShardReviewResult[] = planning.shardIds
-              .slice(offset)
-              .map((shardId, position) => ({
-                shardId,
-                shardIndex: offset + position,
-                status: "failure",
-                findings: [],
-                summary: "",
-                errorReason: "model_budget_exhausted",
-              }));
-            emitDiagnostic(emit, "review.analysis_budget_stopped", {
-              severity: "warning",
-              rule: wave.budgetStop,
-              unstartedShards: results.length,
-            });
-            return results;
-          },
-        );
-        shardResults.push(...skipped);
-        break;
-      }
-      const cancellation = new AbortController();
-      // One preparation barrier per live wave. No peer can reconstruct a checkout
-      // after another peer has already started using it, including on replay.
-      let ready: ReturnType<typeof load> | undefined;
-      const prepareWave = () =>
-        (ready ??= (async () => {
-          cancellation.signal.throwIfAborted();
-          if (Date.now() < wave.deadlineAt)
-            await services.executor.acquireReviewLease(
-              job.runId,
-              wave.deadlineAt,
+    const cancellation = new AbortController();
+    let ready: ReturnType<typeof load> | undefined;
+    const prepareReview = () =>
+      (ready ??= (async () => {
+        cancellation.signal.throwIfAborted();
+        const loaded = await load();
+        if (loaded.digest !== planning.planDigest)
+          throw new NonRetryableError("Review plan changed during replay");
+        return loaded;
+      })());
+    // A stable lane assignment survives replay; each lane starts its next item when free.
+    // All lanes are joined, including after infrastructure failure or supersession.
+    const settled = await Promise.allSettled(
+      planning.lanes.map(async (lane) => {
+        const completed = [];
+        try {
+          for (const index of lane) {
+            cancellation.signal.throwIfAborted();
+            const shardId = planning.shardIds[index]!;
+            const admission = await runStep(
+              `admit-shard-${index + 1}`,
+              "preparation",
+              async () => ({
+                budgetStop:
+                  await services.ledger.loadModelGenerationStop(runId),
+                deadlineAt: Math.min(
+                  planning.deadlineAt,
+                  Date.now() + reviewTimeBudget.analysisMs,
+                ),
+              }),
             );
-          const loaded = await load();
-          if (loaded.digest !== planning.planDigest)
-            throw new NonRetryableError("Review plan changed during replay");
-          return loaded;
-        })());
-      const settled = await Promise.allSettled(
-        planning.shardIds
-          .slice(offset, offset + reviewExecutionLimits.concurrency)
-          .map(async (shardId, position) => {
-            const index = offset + position;
-            return await runStep(
-              `analyze-shard-${index + 1}`,
-              "analysis",
-              async () => {
-                cancellation.signal.throwIfAborted();
-                const { context, plan, digest } = await prepareWave();
-                cancellation.signal.throwIfAborted();
-                if (
-                  plan.shards[index]?.id !== shardId ||
-                  digest !== planning.planDigest
-                )
-                  throw new NonRetryableError(
-                    "Review plan changed during replay",
-                  );
-                if (Date.now() >= wave.deadlineAt) {
-                  emitDiagnostic(
-                    emit,
-                    "review.shard_failed",
-                    {
-                      severity: "error",
-                      shardIndex: index,
-                      reason: "analysis_deadline",
-                      deadlineAt: wave.deadlineAt,
-                      overdueMs: Math.max(0, Date.now() - wave.deadlineAt),
-                    },
-                    `${index}:analysis_deadline`,
-                  );
-                  return {
-                    results: [
+            if (admission.budgetStop !== undefined) {
+              budgetStop = admission.budgetStop;
+              completed.push({
+                results: [
+                  {
+                    shardId,
+                    shardIndex: index,
+                    status: "failure" as const,
+                    findings: [],
+                    summary: "",
+                    errorReason: "model_budget_exhausted",
+                  },
+                ],
+                anyPromptTruncated: false,
+              });
+              continue;
+            }
+            const result = await (async () => {
+              return await runStep(
+                `analyze-shard-${index + 1}`,
+                "analysis",
+                async () => {
+                  cancellation.signal.throwIfAborted();
+                  if (Date.now() < admission.deadlineAt)
+                    await services.executor.acquireReviewLease(
+                      job.runId,
+                      admission.deadlineAt,
+                    );
+                  const { context, plan, digest } = await prepareReview();
+                  cancellation.signal.throwIfAborted();
+                  const shard = plan.shards[index];
+                  if (
+                    !shard ||
+                    shard.id !== shardId ||
+                    digest !== planning.planDigest
+                  )
+                    throw new NonRetryableError(
+                      "Review plan changed during replay",
+                    );
+                  if (Date.now() >= admission.deadlineAt) {
+                    emitDiagnostic(
+                      emit,
+                      "review.shard_failed",
                       {
-                        shardId,
+                        severity: "error",
                         shardIndex: index,
-                        status: "failure" as const,
-                        findings: [],
-                        summary: "",
-                        errorReason: "analysis_deadline",
+                        reason: "analysis_deadline",
+                        deadlineAt: admission.deadlineAt,
+                        overdueMs: Math.max(
+                          0,
+                          Date.now() - admission.deadlineAt,
+                        ),
                       },
-                    ],
-                    anyPromptTruncated: false,
-                  };
-                }
-                return reviewShards(
-                  job,
-                  services,
-                  plan,
-                  context.structuralImpact,
-                  false,
-                  emit,
-                  await services.ledger.loadPrFindings(prKey),
-                  index,
-                  wave.deadlineAt,
-                  effectivePolicy,
-                  execution?.configuration,
-                  cancellation,
-                  execution?.memory,
-                );
-              },
-            ).catch((error: unknown) => {
-              cancellation.abort(error);
-              throw error;
-            });
-          }),
-      );
-      // Join every in-flight shard before terminal cleanup. Infrastructure/state
-      // failures retain their cause and cannot become a publishable partial review.
-      cancellation.signal.throwIfAborted();
-      for (const result of settled)
-        if (result.status === "rejected") throw result.reason;
-      for (const completed of settled) {
-        if (completed.status !== "fulfilled") continue;
-        const result = completed.value;
-        shardResults.push(...result.results);
-        anyPromptTruncated ||= result.anyPromptTruncated;
-      }
-    }
+                      `${index}:analysis_deadline`,
+                    );
+                    return {
+                      results: [
+                        {
+                          shardId,
+                          shardIndex: index,
+                          status: "failure" as const,
+                          findings: [],
+                          summary: "",
+                          errorReason: "analysis_deadline",
+                        },
+                      ],
+                      anyPromptTruncated: false,
+                    };
+                  }
+                  return reviewShard({
+                    job,
+                    services,
+                    shard,
+                    shardCount: plan.shards.length,
+                    structuralImpact: context.structuralImpact,
+                    emit,
+                    baseline: await services.ledger.loadPrFindings(prKey),
+                    deadlineAt: admission.deadlineAt,
+                    configuration: execution?.configuration,
+                    cancellation,
+                    memory: execution?.memory,
+                    resolveGuidance,
+                  });
+                },
+              );
+            })();
+            completed.push(result);
+          }
+          return completed;
+        } catch (error) {
+          cancellation.abort(error);
+          throw error;
+        }
+      }),
+    );
+    cancellation.signal.throwIfAborted();
+    for (const lane of settled)
+      if (lane.status === "rejected") throw lane.reason;
+    for (const lane of settled)
+      if (lane.status === "fulfilled")
+        for (const result of lane.value) {
+          shardResults.push(...result.results);
+          anyPromptTruncated ||= result.anyPromptTruncated;
+        }
+    shardResults.sort((left, right) => left.shardIndex - right.shardIndex);
+    if (budgetStop !== undefined)
+      emitDiagnostic(emit, "review.analysis_budget_stopped", {
+        severity: "warning",
+        rule: budgetStop,
+        unstartedShards: shardResults.filter(
+          (result) =>
+            result.status === "failure" &&
+            result.errorReason === "model_budget_exhausted",
+        ).length,
+      });
     // A denial in the final/only wave also yields explicit partial coverage.
     budgetStop ??= await runStep("analysis-budget-status", "preparation", () =>
       services.ledger.loadModelGenerationStop(runId),
@@ -713,7 +528,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         return execution ? execution.finish(output) : output;
       }
 
+      const evidenceVerifier = createCanonicalEvidenceVerifier(context);
       const rawAggregated = aggregateShardReviews(plan, shardResults, {
+        evidenceVerifier,
         budgetStopReason: budgetStop,
         language: outputPreferences.language,
         verdictPolicy,
@@ -737,7 +554,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         await Promise.all(
           shardResults
             .filter(
-              (result) =>
+              (
+                result,
+              ): result is Extract<ShardReviewResult, { status: "success" }> =>
                 result.status === "success" && result.isDegraded !== true,
             )
             .flatMap((result) =>
@@ -759,10 +578,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
                     resolution.confidence < 0.9
                   )
                     return [];
-                  const verified = verifyFindingsWithCanonicalEvidence(
-                    [{ ...resolution, severity: previous.severity }],
-                    context,
-                  );
+                  const verified = evidenceVerifier.verify([
+                    { ...resolution, severity: previous.severity },
+                  ]);
                   emitEvidenceRejections(
                     emit,
                     result.shardIndex,
@@ -804,6 +622,7 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         prKey,
       });
       const finalAggregated = aggregateShardReviews(plan, shardResults, {
+        evidenceVerifier,
         budgetStopReason: budgetStop,
         language: outputPreferences.language,
         canonicalFindings: reconciled.activeFindings,
@@ -820,7 +639,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
         output: outputPreferences,
         investigations: shardResults
           .filter(
-            (result) =>
+            (
+              result,
+            ): result is Extract<ShardReviewResult, { status: "success" }> =>
               result.status === "success" && result.isDegraded !== true,
           )
           .flatMap((result) => result.investigations ?? []),
@@ -848,8 +669,9 @@ export async function analyzeReview<T extends Rpc.Serializable<T>>(
           failedShards: shardResults.filter(
             (result) => result.status === "failure",
           ).length,
-          degradedShards: shardResults.filter((result) => result.isDegraded)
-            .length,
+          degradedShards: shardResults.filter(
+            (result) => result.status === "success" && result.isDegraded,
+          ).length,
           omittedReasons: plan.omissionReasons
             .map((reason) => reason.code)
             .join(","),
@@ -886,29 +708,4 @@ async function planDigest(
   return Array.from(new Uint8Array(bytes), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
-}
-
-/** Logging is advisory and must not change evidence acceptance or retries. */
-function emitEvidenceRejections(
-  emit: EmitReviewEvent | undefined,
-  shardIndex: number,
-  candidateKind: "finding" | "resolution",
-  rejections: readonly EvidenceRejection[],
-): void {
-  for (const rejection of rejections) {
-    try {
-      emit?.(
-        "model.evidence_rejected",
-        {
-          severity: "warning",
-          shardIndex,
-          candidateKind,
-          ...rejection,
-        },
-        `${shardIndex}:${candidateKind}:${rejection.findingIndex}`,
-      );
-    } catch {
-      // Keep the canonical verification result even if the log sink fails.
-    }
-  }
 }

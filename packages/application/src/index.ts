@@ -4,6 +4,7 @@ export * from "./evidence.js";
 export * from "./execute-review.js";
 export * from "./feedback-service.js";
 export * from "./ports.js";
+export * from "./publication-lookup.js";
 export * from "./project-identification.js";
 export * from "./publication-summary.js";
 export * from "./repository-configuration.js";
@@ -23,3 +24,5 @@ export * from "./repository-memory.js";
 export * from "./causal-verification.js";
 export * from "./finding-clarification.js";
 export * from "./review-admission.js";
+
+export * from "./review-scheduling.js";

@@ -20,6 +20,8 @@ import {
   reviewGenerationSteps,
   modelGenerationShardLimits,
   runIdSchema,
+  prKeySchema,
+  createReviewEvidenceReceipt,
   type RepositoryToolOperation,
   type RepositoryToolCall,
 } from "@holon/contracts";
@@ -42,15 +44,22 @@ import {
   type ReviewFailureReason,
 } from "./review-failure.js";
 
-const reviewAgentConfigSchema = z.strictObject({
-  deadlineAt: z.number().int().positive(),
-  prKey: z.string().min(1).max(200),
-  prompt: z.string().min(1).max(200_000),
-  phase: z.enum(["investigation", "causal_verification"]),
-  runId: runIdSchema,
-  shardIndex: z.number().int().nonnegative(),
-  totalShards: z.number().int().positive().max(64),
-});
+const reviewAgentConfigSchema = z
+  .strictObject({
+    deadlineAt: z.number().int().positive(),
+    prKey: prKeySchema,
+    prompt: z.string().min(1).max(200_000),
+    phase: z.enum(["investigation", "causal_verification"]),
+    runId: runIdSchema,
+    shardIndex: z.number().int().nonnegative(),
+    totalShards: z.number().int().positive().max(64),
+  })
+  .refine(
+    (config) =>
+      config.shardIndex < config.totalShards &&
+      config.runId.startsWith(`${config.prKey}:head:`),
+    "Review identity is inconsistent",
+  );
 
 export type ReviewAgentConfig = z.infer<typeof reviewAgentConfigSchema>;
 type ReviewAgentWorkflowParams = { readonly prompt: string };
@@ -202,17 +211,7 @@ export class ReviewAgent extends Think<
   override getModel() {
     const config = this.reviewConfig();
     return withGenerationBudget(
-      createGatewayLanguageModel({
-        accountId: this.env.AI_GATEWAY_ACCOUNT_ID,
-        apiToken: this.env.AI_GATEWAY_API_TOKEN,
-        gatewayId: this.env.AI_GATEWAY_ID,
-        model: this.env.AI_MODEL_ID,
-        metadata: {
-          run_id: config.runId,
-          shard_index: String(config.shardIndex),
-          stage: config.phase,
-        },
-      }),
+      this.getProviderModel(),
       {
         reserve: async (request) => {
           if (!(await this.isReviewAuthorized())) return undefined;
@@ -239,6 +238,22 @@ export class ReviewAgent extends Think<
       },
       config.phase,
     );
+  }
+
+  /** External provider seam; the owning host always wraps it in durable budgets. */
+  getProviderModel() {
+    const config = this.reviewConfig();
+    return createGatewayLanguageModel({
+      accountId: this.env.AI_GATEWAY_ACCOUNT_ID,
+      apiToken: this.env.AI_GATEWAY_API_TOKEN,
+      gatewayId: this.env.AI_GATEWAY_ID,
+      model: this.env.AI_MODEL_ID,
+      metadata: {
+        run_id: config.runId,
+        shard_index: String(config.shardIndex),
+        stage: config.phase,
+      },
+    });
   }
 
   override getSystemPrompt(): string {
@@ -304,6 +319,22 @@ export class ReviewAgent extends Think<
               if (outcome.error.kind === "infrastructure")
                 throw this.failReview(outcome.error.code);
               throw new RepositoryQueryError(outcome.error.code);
+            }
+            if (call.name === "read_file" && outcome.content.length) {
+              const start = call.arguments.startLine ?? 1;
+              const end = Math.min(
+                call.arguments.endLine ?? start + 199,
+                start + outcome.content.split("\n").length - 1,
+              );
+              const receipt = await createReviewEvidenceReceipt(
+                config.runId,
+                call.arguments.path,
+                start,
+                end,
+                outcome.content,
+                outcome.truncated,
+              );
+              return { ...outcome, receipt };
             }
             return outcome;
           } catch (error) {
@@ -402,8 +433,9 @@ export class ReviewAgent extends Think<
     }
   }
 
-  override beforeStep() {
+  override beforeStep(_context: Parameters<Think["beforeStep"]>[0]) {
     if (this.fatalReviewFailure) throw this.fatalReviewFailure;
+    return undefined;
   }
 
   override async beforeToolCall(context: ToolCallContext) {

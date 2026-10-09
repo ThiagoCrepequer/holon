@@ -12,7 +12,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "test": "pnpm test:architecture && pnpm test:deploy && turbo run test",
-    "test:coverage": "pnpm test:architecture && pnpm test:deploy:coverage && turbo run test:coverage",
+    "test:coverage": "pnpm test:architecture && pnpm test:deploy:coverage && turbo run test:coverage --concurrency=1",
     "typecheck": "turbo run typecheck",
     "verify": "pnpm brand:check && pnpm config:schema:check && pnpm config:validate && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "config:validate": "pnpm --filter @holon/config-cli holon config validate",

@@ -29,6 +29,8 @@ import {
   WorkflowEntrypoint,
   type WorkflowEvent,
   type WorkflowStep,
+  type WorkflowStepConfig,
+  type WorkflowStepRollbackOptions,
 } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 
@@ -173,13 +175,54 @@ export async function executeReviewWorkflow(
     | "analysis"
     | "publication" = "admission";
 
+  const checkpoints = {
+    sleep: (...args: Parameters<WorkflowStep["sleep"]>) => step.sleep(...args),
+    do<R extends Rpc.Serializable<R>>(
+      name: string,
+      options: WorkflowStepConfig,
+      callback: () => Promise<R>,
+      rollback?: WorkflowStepRollbackOptions<R>,
+    ): Promise<R> {
+      return step.do(
+        name,
+        options,
+        async () => {
+          const startedAt = Date.now();
+          const checkpointPhase = phase;
+          let outcome = "failed";
+          try {
+            const value = await callback();
+            outcome = "completed";
+            return value;
+          } finally {
+            try {
+              emit(
+                "review.checkpoint_finished",
+                {
+                  step: name,
+                  phase: checkpointPhase,
+                  outcome,
+                  durationMs: Date.now() - startedAt,
+                },
+                name,
+              );
+            } catch {
+              /* Timings cannot change authority, results or retries. */
+            }
+          }
+        },
+        rollback,
+      );
+    },
+  };
+
   const moveTo = async (
     stepName: string,
     expected: RunState,
     next: RunState,
     cleanup: boolean,
   ): Promise<string> =>
-    await step.do(stepName, stateStep, async () => {
+    await checkpoints.do(stepName, stateStep, async () => {
       const occurredAt = now();
       if (cleanup) {
         await services.ledger.transitionAndRequestCleanup(
@@ -261,7 +304,7 @@ export async function executeReviewWorkflow(
     pullNumber: job.envelope.pullRequest.number,
   };
   const ensureCheckRunStarted = async (): Promise<number | undefined> =>
-    await step
+    await checkpoints
       .do(
         "start-check-run",
         publicationStep,
@@ -325,7 +368,7 @@ export async function executeReviewWorkflow(
     output: CheckRunOutput,
     requireCurrentRefs = true,
   ): Promise<boolean> =>
-    await step
+    await checkpoints
       .do(stepName, publicationStep, async () => {
         await services.ledger.scheduleCheckRun(run.id, {
           ...checkTarget,
@@ -356,7 +399,7 @@ export async function executeReviewWorkflow(
       });
 
   try {
-    const claim = await step.do("claim-run", stateStep, async () => {
+    const claim = await checkpoints.do("claim-run", stateStep, async () => {
       const result = runClaimResultSchema.parse(
         await services.ledger.claimRun(run, workflowInstanceId),
       );
@@ -371,7 +414,7 @@ export async function executeReviewWorkflow(
     runClaimed = true;
 
     for (const [index, superseded] of claim.supersededWorkflows.entries()) {
-      await step
+      await checkpoints
         .do(
           `terminate-superseded-workflow-${index + 1}`,
           stateStep,
@@ -409,7 +452,7 @@ export async function executeReviewWorkflow(
         });
     }
 
-    await step.do("start-run", stateStep, async () => {
+    await checkpoints.do("start-run", stateStep, async () => {
       const current = await services.ledger.runState(run.id);
       if (current !== "running" && current !== "publishing") {
         if (current !== "queued" && current !== "failed_retryable") {
@@ -427,7 +470,7 @@ export async function executeReviewWorkflow(
       }
     });
 
-    const initialRefsAreCurrent = await step.do(
+    const initialRefsAreCurrent = await checkpoints.do(
       "revalidate-initial-refs",
       publicationStep,
       async () => {
@@ -450,7 +493,7 @@ export async function executeReviewWorkflow(
 
     repositoryStarted = true;
     phase = "configuration";
-    configuration = await step.do(
+    configuration = await checkpoints.do(
       "resolve-repository-config",
       configurationStep,
       async () => {
@@ -486,7 +529,7 @@ export async function executeReviewWorkflow(
       },
     );
     const configurationRef = configuration;
-    const preferences = await step.do(
+    const preferences = await checkpoints.do(
       "load-repository-scope",
       stateStep,
       async () => {
@@ -504,7 +547,7 @@ export async function executeReviewWorkflow(
 
     repositoryStarted = true;
     phase = "preparation";
-    await step.do("prepare-repository", repositoryStep, async () => {
+    await checkpoints.do("prepare-repository", repositoryStep, async () => {
       await services.registerCredentialScope();
       const policy = configurationScopePolicy(
         await services.ledger.loadRunConfiguration(configurationRef),
@@ -526,19 +569,23 @@ export async function executeReviewWorkflow(
         policy: effectivePolicy,
         configuration: configurationRef,
         services,
-        step,
+        step: checkpoints,
         emit,
       });
     }
 
-    await step.do("resolve-repository-memory", configurationStep, async () => {
-      await services.ensureContext(2, effectivePolicy);
-      const context = await services.loadContext(effectivePolicy);
-      const snapshot = await services.resolveMemory(
-        context.files.map((file) => file.path),
-      );
-      return { revision: snapshot.revision };
-    });
+    await checkpoints.do(
+      "resolve-repository-memory",
+      configurationStep,
+      async () => {
+        await services.ensureContext(2, effectivePolicy);
+        const context = await services.loadContext(effectivePolicy);
+        const snapshot = await services.resolveMemory(
+          context.files.map((file) => file.path),
+        );
+        return { revision: snapshot.revision };
+      },
+    );
     const memory = await services.ledger.loadRunMemory(run.id);
     if (!memory)
       throw new NonRetryableError("Repository memory snapshot unavailable");
@@ -547,7 +594,7 @@ export async function executeReviewWorkflow(
       configuration: configurationRef,
       memory,
       runStep: async (name, stepPhase, callback) =>
-        await step
+        await checkpoints
           .do(
             name,
             name === "plan-review" ? repositoryStep : modelStep,
@@ -575,7 +622,7 @@ export async function executeReviewWorkflow(
 
     phase = "publication";
     await moveTo("begin-publication", "running", "publishing", false);
-    const currentBeforePublication = await step.do(
+    const currentBeforePublication = await checkpoints.do(
       "revalidate-current-refs",
       publicationStep,
       async () => {
@@ -596,7 +643,7 @@ export async function executeReviewWorkflow(
       );
     }
 
-    const inlinePlan = await step.do(
+    const inlinePlan = await checkpoints.do(
       "plan-inline-publications",
       stateStep,
       async () => {
@@ -611,7 +658,7 @@ export async function executeReviewWorkflow(
     );
     // Notify resolutions on original comment threads
     for (let index = 0; index < output.resolvedFindingsCount; index += 1) {
-      const resolutionAuthorized = await step.do(
+      const resolutionAuthorized = await checkpoints.do(
         `notify-resolved-${index + 1}`,
         publicationStep,
         async () => {
@@ -653,7 +700,7 @@ export async function executeReviewWorkflow(
       }
     }
 
-    const summaryResult = await step.do(
+    const summaryResult = await checkpoints.do(
       "publish-summary",
       publicationStep,
       async () => {
@@ -744,7 +791,7 @@ export async function executeReviewWorkflow(
     );
 
     // Persist tracked findings in ledger
-    await step.do("save-pr-findings", publicationStep, async () => {
+    await checkpoints.do("save-pr-findings", publicationStep, async () => {
       const detail = await services.ledger.loadReviewAnalysis(run.id);
       await services.ledger.savePrFindings(
         prKey,
@@ -757,10 +804,8 @@ export async function executeReviewWorkflow(
         run.id,
       );
     });
-    const { checkRunConclusion, checkRunOutput, checkpoint } = await step.do(
-      "format-check-run-output",
-      stateStep,
-      async () => {
+    const { checkRunConclusion, checkRunOutput, checkpoint } =
+      await checkpoints.do("format-check-run-output", stateStep, async () => {
         const detail = await loadReviewWithCurrentFeedback(
           services.ledger,
           run.id,
@@ -795,10 +840,9 @@ export async function executeReviewWorkflow(
           checkRunOutput: formattedOutput,
           checkpoint: buildReviewAnalysisCheckpoint(detail),
         };
-      },
-    );
+      });
     output = checkpoint;
-    await step.do("record-review-decision", stateStep, async () => {
+    await checkpoints.do("record-review-decision", stateStep, async () => {
       const snapshot =
         await services.ledger.loadRunConfiguration(configurationRef);
       await services.ledger.recordReviewDecision(run.id, {
@@ -854,7 +898,7 @@ export async function executeReviewWorkflow(
       outputLanguage,
     );
 
-    const terminal = await step
+    const terminal = await checkpoints
       .do("mark-review-terminal-and-schedule-cleanup", stateStep, async () => {
         const occurredAt = now();
         const changed = await services.ledger.markTerminalAndRequestCleanup(
@@ -895,7 +939,7 @@ export async function executeReviewWorkflow(
     }
 
     if (runClaimed && terminal?.changed === true) {
-      await step
+      await checkpoints
         .do("publish-failure-notice", publicationStep, async () => {
           const github = await services.createMutationContext();
           const noticeBody = isConfigurationError

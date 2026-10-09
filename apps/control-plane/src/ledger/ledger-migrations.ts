@@ -423,6 +423,10 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       ALTER TABLE model_generation_plans ADD COLUMN stop_reason TEXT CHECK(stop_reason IN ('calls', 'input_bytes', 'output_tokens'));
     `,
   },
+  {
+    version: 23,
+    statements: `CREATE TABLE review_tool_plans(run_id TEXT PRIMARY KEY, shard_count INTEGER NOT NULL CHECK(shard_count BETWEEN 1 AND 64));`,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {
