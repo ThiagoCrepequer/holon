@@ -17,6 +17,7 @@ import {
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/d1";
 
+import { credentialKeyConfig } from "./credential-key.server.js";
 import { githubCodeRedemptionPlugin } from "./github-code-redemption-plugin.server.js";
 import {
   validateGitHubAuthConfig,
@@ -38,6 +39,7 @@ export interface AuthServiceOptions {
   readonly database: D1Database;
   readonly appOrigin: string;
   readonly authSecret: string;
+  readonly secretVersions?: unknown;
   readonly githubClientId: string;
   readonly githubClientSecret: string;
   readonly environment?: AuthEnvironment;
@@ -133,9 +135,14 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
 
   const rateLimitStorage = createD1RateLimitStorage(options.database);
 
+  const keyConfig = credentialKeyConfig(
+    options.authSecret,
+    options.secretVersions,
+  );
   const auth = betterAuth({
     baseURL: config.appOrigin,
     secret: options.authSecret,
+    ...(keyConfig.secrets ? { secrets: keyConfig.secrets } : {}),
     database: drizzleAdapter(
       drizzle(options.database, { schema: identityAuthSchema }),
       {
@@ -442,3 +449,10 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     },
   };
 }
+
+export {
+  createGitHubUserService,
+  type GitHubUserService,
+} from "./github-user.server.js";
+
+export { credentialKeyConfig } from "./credential-key.server.js";

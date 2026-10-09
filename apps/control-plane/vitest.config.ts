@@ -7,9 +7,16 @@ export default defineConfig({
       miniflare: {
         bindings: { GITHUB_APP_SLUG: "holon-reviewer" },
         serviceBindings: {
+          DASHBOARD_ACCESS_EVENTS: "dashboard-access-events-current",
           REPOSITORY_EXECUTOR: "repository-executor-current",
         },
         workers: [
+          {
+            name: "dashboard-access-events-current",
+            compatibilityDate: "2026-08-29",
+            modules: true,
+            script: `import { WorkerEntrypoint } from "cloudflare:workers"; export default class extends WorkerEntrypoint { applyEvent() {} }`,
+          },
           {
             compatibilityDate: "2026-08-29",
             modules: true,

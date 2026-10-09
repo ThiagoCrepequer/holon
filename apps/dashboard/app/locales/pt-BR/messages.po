@@ -15,9 +15,44 @@ msgid "reviews.count"
 msgstr "{count, plural, =0 {# revisões} one {# revisão} other {# revisões}}"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.accepted"
+msgstr "Aceito"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.denied"
+msgstr "Acesso negado. Recarregue seus workspaces."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.active"
+msgstr "Ativa"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.devices"
 msgstr "Sessões ativas"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.notice"
+msgstr "Um convite registra uma intenção de entrega. Isso não confirma o envio do email. Cancelar interrompe próximos envios; uma mensagem já em trânsito ainda pode chegar."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.cancel"
+msgstr "Cancelar convite"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.canceled"
+msgstr "Cancelado"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.choose"
+msgstr "Escolha um workspace"
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
@@ -35,9 +70,59 @@ msgid "preferences.close"
 msgstr "Fechar preferências"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.confirm"
+msgstr "Confirmar mudança na conexão"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/invitation-controls.tsx
+msgid "invitation.accept"
+msgstr "Confirmar destinatário e aceitar"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.loading"
+msgstr "Confirmando o acesso atual…"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.personal"
+msgstr "Criar meu workspace pessoal"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.createTeam"
+msgstr "Criar equipe"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.ready"
+msgstr "Estado atual confirmado."
+
+#. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
 msgid "theme.dark"
 msgstr "Escuro"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.expired"
+msgstr "Expirado"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.github"
+msgstr "Conexões GitHub"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.installation"
+msgstr "ID da instalação GitHub"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/invitation-controls.tsx
+msgid "invitation.accepted"
+msgstr "Convite aceito. O acesso aos repositórios é verificado separadamente."
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -55,6 +140,11 @@ msgid "session.loading"
 msgstr "Carregando sessões…"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.load"
+msgstr "Gerenciar workspaces"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.nextPage"
 msgstr "Próximas sessões"
@@ -63,6 +153,11 @@ msgstr "Próximas sessões"
 #: app/features/sessions/sessions.tsx
 msgid "session.deviceDescription"
 msgstr "Somente suas sessões são listadas. Os nomes dos navegadores são aproximados."
+
+#. js-lingui-explicit-id
+#: app/routes/invitation/route.tsx
+msgid "invitation.privacy"
+msgstr "Abrir este link não altera nada nem revela detalhes do workspace. Entre e confirme seu email atual verificado no GitHub para aceitar."
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
@@ -76,6 +171,11 @@ msgid "error.page"
 msgstr "Página indisponível"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.pending"
+msgstr "Pendente"
+
+#. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
 msgid "preferences.title"
 msgstr "Preferências"
@@ -86,14 +186,59 @@ msgid "preferences.saved"
 msgstr "Preferências salvas."
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.email"
+msgstr "Email do destinatário"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.reconnectAction"
+msgstr "Reconectar GitHub"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.reconnect"
+msgstr "Reconecte a mesma conta GitHub para continuar."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.invite"
+msgstr "Registrar convite"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.refresh"
+msgstr "Atualizar conexões"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.list"
+msgstr "Atualizar convites"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.refresh"
 msgstr "Atualizar sessões"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.unconfirmed"
+msgstr "Resultado desconhecido. Repita o mesmo convite para confirmar sua intenção original."
+
+#. js-lingui-explicit-id
+#: app/routes/invitation/route.tsx
+msgid "invitation.home"
+msgstr "Voltar ao Holon"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.revoke"
 msgstr "Revogar sessão"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.revoked"
+msgstr "Revogada"
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -131,14 +276,44 @@ msgid "session.signoutAll"
 msgstr "Sair em todos os dispositivos"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.suspended"
+msgstr "Suspensa"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.team"
+msgstr "Nome da equipe"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.privacy"
+msgstr "O link do convite não revela detalhes do workspace. O aceite exige o email atual verificado no GitHub do destinatário e concede apenas participação como membro."
+
+#. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
 msgid "preferences.theme"
 msgstr "Tema"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/invitation-controls.tsx
+msgid "invitation.historical"
+msgstr "Este convite já foi aceito. Ele não restaura uma participação removida."
+
+#. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
 msgid "preferences.timezone"
 msgstr "Fuso horário"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.rate"
+msgstr "Muitas solicitações. Aguarde um minuto antes de tentar novamente."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.unavailable"
+msgstr "Não foi possível confirmar o acesso. Repita a mesma ação."
 
 #. js-lingui-explicit-id
 #: app/features/preferences/preferences.tsx
@@ -151,9 +326,44 @@ msgid "session.failed"
 msgstr "Não foi possível confirmar a sessão. Tente novamente."
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/invitation-controls.tsx
+msgid "invitation.failed"
+msgstr "Não foi possível confirmar este convite. Confira sua conta GitHub atual e tente novamente."
+
+#. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx
 msgid "welcome.description"
 msgstr "Entenda cada mudança com clareza e o contexto que importa."
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.unlink"
+msgstr "Verificar identidade e desvincular"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.link"
+msgstr "Verificar titularidade e vincular"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.workspace"
+msgstr "Workspace"
+
+#. js-lingui-explicit-id
+#: app/routes/invitation/route.tsx
+msgid "invitation.title"
+msgstr "Convite para workspace"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.invitations"
+msgstr "Convites do workspace"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "collaboration.title"
+msgstr "Workspaces e acesso"
 
 #. js-lingui-explicit-id
 #: app/routes/welcome/route.tsx

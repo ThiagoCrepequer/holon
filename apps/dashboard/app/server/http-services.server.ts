@@ -1,5 +1,6 @@
 import type { AuthService } from "@holon/auth/server";
 import {
+  CollaborationError,
   deriveRateLimitKey,
   PreferencesError,
   RateLimitStorageError,
@@ -15,6 +16,21 @@ interface ReadServices {
 }
 
 export function mapBoundaryError(error: unknown): unknown {
+  if (error instanceof CollaborationError) {
+    const status = {
+      denied: 403,
+      reconnect_required: 401,
+      unavailable: 503,
+      command_unknown: 503,
+      conflict: 409,
+      rate_limited: 429,
+    }[error.code];
+    return new HttpBoundaryError(
+      error.code === "conflict" ? "invalid_request" : error.code,
+      status,
+      error.code === "rate_limited" ? 60 : undefined,
+    );
+  }
   if (error instanceof PreferencesError) {
     if (error.code === "invalid_preferences") {
       return new HttpBoundaryError("invalid_request", 400);
