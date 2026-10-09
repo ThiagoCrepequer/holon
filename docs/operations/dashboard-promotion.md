@@ -73,6 +73,12 @@ restrito. Executor recebe credenciais efêmeras do broker privado, sem secrets
 humanos no browser. Conferir os nomes efetivos pela API autorizada antes de
 ativar qualquer ambiente; configuração local não demonstra seu isolamento real.
 
+Com autenticação habilitada, `GITHUB_APP_ID` é obrigatório nas vars públicas do
+manifest do dashboard e precisa corresponder à App dos Client ID/Client Secret.
+É o ID numérico da App, não o client ID nem o installation ID. O pré-flight
+rejeita ausência, zero, fração ou valor fora do intervalo inteiro seguro: sem
+esse binding, o login pode funcionar enquanto convites/conexões respondem 503.
+
 Artefatos sintéticos da CI têm retenção de sete dias. D1/DO/Queue/logs remotos
 seguem o plano contratado e a política de [dados](../architecture/data-lifecycle.md).
 Registrar retenção efetiva e bookmarks antes do rollout. Queue/DLQ são transporte;
@@ -220,11 +226,54 @@ rollback transacional e a obrigação durável.
 | `dashboard.alarm_health` code 1             | falha getAlarm/setAlarm                | operador: conferir scheduler e obrigação; code 0 após agendamento válido, sem apagar tarefa          |
 | falha cron                                  | exceção runtime, retry não progride    | operador: conferir scheduler e próximo wake durável; não apagar a obrigação                          |
 
-Os eventos são instrumentação local. O operador deve configurar alertas remotos,
-canal/owner nominal, janelas/retention e comprovar disparo **e recuperação** antes
-de promoção; esta mudança não cria um serviço de alertas nem envia notificações.
-O runbook não prova monitor ativo. Os testes usam falhas controladas e verificam
-terminalidade/privacy; o gate real de alertas permanece aberto em #166.
+Os testes locais usam falhas controladas e verificam terminalidade/privacy.
+Disparo **e recuperação** remotos continuam exigindo receipts independentes.
+Em 2026-10-09, a operação autorizada cadastrou cinco alertas Cloudflare
+`custom_analytics`, conferidos por API como enabled. Responsável nominal e
+destinatário autorizado ficam no registro restrito; não copiar o endereço para
+fixtures ou documentos versionados.
+
+| Política produtiva                                     | Sinais / condição                                                   | ID da política                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------- |
+| `Holon production - email DLQ`                         | `email_dlq`: qualquer evento                                        | `ca11f04052fd4755bd9d50c1acbf6da5` |
+| `Holon production - email health`                      | `email_health` code >=1                                             | `e1e6c6b87be04a15b6aba12fab01ad55` |
+| `Holon production - projection retry`                  | `dashboard.projection_retry` code >=2 (attempt >=6)                 | `d0717317f7e44d0b82567bfedb0e2bb7` |
+| `Holon production - projection and alarm health`       | `dashboard.projection_health` ou `dashboard.alarm_health`, code >=1 | `3be9d7dab8d54c22854648045d948331` |
+| `Holon production - private read and GitHub authority` | `private_review_read` ou `github_authority_health`, code >=1        | `4ca50a7f0ccf40a38bc1d1cf5f098b99` |
+
+A conta aceita no máximo cinco políticas custom analytics; o agrupamento
+preserva as condições da tabela. Falha de leitura privada é um sinal amplo:
+conferir request/autoridade/provider antes de classificar como revogação.
+As consultas usam `logs.workersLogs`, `accountTag` da conta produtiva,
+`scriptName` exato e comparações de `attributes['event']`/`attributes['code']`.
+Retornam `COUNT(*) AS value`; threshold >=1, janela/intervalo `10m`, repetição
+`1h`. Não selecionam mensagem, URL, payload ou identidade. Exemplo do formato,
+substituindo somente a conta pelo inventário autorizado:
+
+```sql
+SELECT COUNT(*) AS value FROM logs.workersLogs
+WHERE accountTag = '<ACCOUNT_ID>'
+  AND scriptName = 'holon-email-delivery'
+  AND attributes['event'] = 'email_dlq'
+```
+
+Na API Notifications, usar `source: ["sql_api"]`, `selectors: [SQL]`,
+`alert_trigger_preferences: ["threshold"]`, valor `["1"]`, operador `[">="]`,
+`alert_trigger_preferences_short_window: ["10m"]` e
+`execution_interval: ["10m"]`. Omitir timestamp em modo automático; em uma
+consulta avulsa de validação fornecer `time_range` explícito. A API valida antes
+de salvar. Conferir política desabilitada antes de ativar, evitando duplicatas
+por nome/ID após uma resposta incerta. Preservar o canal confirmado no registro
+restrito ao atualizar uma política.
+
+O SQL API declara amostragem adaptativa e logs exigem intervalo mínimo de dez
+minutos. O limite overdue de cinco minutos é calculado pela aplicação; a
+notificação acrescenta a janela de avaliação e a latência de ingestão. Não
+prometer detecção em cinco minutos nem ausência de incidente por zero amostras.
+O ensaio de DLQ e suas limitações estão na
+[evidência M6](../planning/dashboard-milestone-six-evidence.md). Esses sete sinais
+não comprovam outage real de cron/D1/Queue/provider; #166 permanece aberta para
+os cenários faltantes, disparo/recuperação e recuperação coordenada.
 
 Fontes primárias verificadas em 2026-10-09:
 [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
@@ -232,3 +281,9 @@ Fontes primárias verificadas em 2026-10-09:
 [rollbacks Workers](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/),
 [Wrangler](https://developers.cloudflare.com/workers/wrangler/commands/) e
 [Workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+
+Fontes dos alertas verificadas em 2026-10-09:
+[Custom Alerts](https://developers.cloudflare.com/notifications/notification-available/),
+[políticas Notifications](https://developers.cloudflare.com/api/resources/alerting/subresources/policies/methods/create/),
+[SQL API](https://developers.cloudflare.com/analytics/sql-api/query-api/) e
+[atributos JSON](https://developers.cloudflare.com/analytics/sql-api/sql-reference/data-types/#json-fields).

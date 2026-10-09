@@ -33,18 +33,18 @@ operação distingue as amostras executadas na conta Cloudflare real.
 
 ## Matriz de requisitos
 
-| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                                    |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                               |
-| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                                       |
-| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                                          |
-| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                               |
-| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue                      |
-| #164  | budgets e browser local; adapter real no D1 produtivo com 20k linhas, região/colo, SQL p50/p95 e rows_read; paginação e recuperação de escopo remotas                                                       | CPU do Worker, lag de publicação real e CWV de campo; latência REST não mede essas grandezas                           |
-| #165  | manifests/grafo/gates; inventário produtivo, artefato congelado, quatro Workers publicados, Sandbox por digest existente, migrations e rollback real da mesma versão                                        | Conferir CI e manter escopo/autorização dos testes; integração OAuth pertence à #167                                   |
-| #166  | hold/DO/alarm locais; Time Travel real dos dois D1 vazios, preservando schema/contagens e barreira; recuperação scoped da projeção                                                                          | PITR coordenado com ledgers/obrigações externas e alertas remotos com disparo/recuperação e canal nominal              |
-| #167  | artefato produtivo publicado; cron/Queue/RPC/provider reais, recebimento bilíngue confirmado, duplicatas/DLQ sem novo envio e cancelamento/expiração sem tentativa                                          | OAuth humano, GitHub privado/org/revoke, criação/aceite de convite pela jornada autenticada e demais gates de promoção |
-| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                                            |
+| Issue | Implementação/prova local                                                                                                                                                                                   | Condição restante para encerramento                                                                      |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| #159  | `/account`, onboarding/workspaces/repositórios, membros/owners, governança OAuth, convites, sessões e preferências bilíngues; mesma intenção após resposta perdida; último owner; retorno/reauth no detalhe | Critérios locais cobertos pelo gate completo; encerrável                                                 |
+| #160  | lista/status/search/order=activity na URL; cursor scoped, reset de filtro/refresh, back/forward, uma leitura por intenção, Query disabled; 50 por página e dois repos de 10k no D1 local                    | Critérios locais cobertos; benchmark remoto pertence à #164/#157                                         |
+| #161  | rota de detalhe/painel comum, Markdown restrito, severidade/estado/evidência/sugestão, dez achados por payload/DOM; 200 achados, source original, Escape/foco/scroll, URL profunda                          | Critérios locais cobertos; matriz física/integração real pertence à #163/#167                            |
+| #162  | Dialog/painel usam CSS/tokens compartilhados; reduced motion instantâneo/live, close/reopen sem timer de foco nem evento close antigo                                                                       | Critérios locais cobertos; matriz física pertence à #163                                                 |
+| #163  | matriz pt-BR/en × Chromium/Firefox/WebKit, keyboard, axe WCAG 2.2 AA, 320px/zoom200, CSP/HTML/tracking, retorno/expiry/reauth; retries=0, provas CI sete dias                                               | Últimas duas versões estáveis reais, Safari real e dispositivo físico; emulação não encerra issue        |
+| #164  | budgets e browser local; adapter real no D1 produtivo com 20k linhas, região/colo, SQL p50/p95 e rows_read; paginação e recuperação de escopo remotas                                                       | CPU do Worker, lag de publicação real e CWV de campo; latência REST não mede essas grandezas             |
+| #165  | manifests/grafo/gates; inventário produtivo, artefato congelado, quatro Workers publicados, Sandbox por digest existente, migrations e rollback real da mesma versão                                        | Conferir CI e manter escopo/autorização dos testes; integração OAuth pertence à #167                     |
+| #166  | hold/DO/alarm locais; Time Travel real dos dois D1 vazios; recuperação scoped da projeção; cinco alertas ativos, responsável/canal confirmados, envio do alerta DLQ e recuperação do sinal 1→0              | PITR coordenado com ledgers/obrigações externas, demais cenários de outage e qualificação dos alertas    |
+| #167  | artefato produtivo publicado; OAuth humano; cron/Queue/RPC/provider reais, recebimento bilíngue confirmado, duplicatas/DLQ sem novo envio e cancelamento/expiração sem tentativa                            | GitHub privado/org/revoke, criação/aceite de convite pela jornada autenticada e demais gates de promoção |
+| #127  | experiência/core/admissão/efeitos integrados no código; evidência das issues específicas                                                                                                                    | Todos os gates operacionais acima; tracker não pode fechar por código local                              |
 
 Após o gate completo, #159–#162 podem usar `Closes`: os gates reais pertencem
 às issues #163–#167, que permanecem abertas junto de #127. Não usar `Closes`
@@ -215,7 +215,7 @@ manifests, `pnpm test:deploy:coverage` passou 73 testes, com cobertura de linhas
 99,29%, branches 94,48% e funções 94,81%, além de formato, lint focado, tipos do
 executor e builds produtivos. Esses comandos não representam CI remota.
 
-### Versões efetivas e superfície
+### Versões da primeira implantação e superfície
 
 | Worker                      | Versão com 100% de tráfego             | Publicação/reativação UTC |
 | --------------------------- | -------------------------------------- | ------------------------- |
@@ -269,6 +269,55 @@ ser reutilizados agora:** há efeitos de email e identidade posteriores ao ensai
 O drill não demonstra restore coordenado de core/DO nem reconciliação de efeitos
 externos, leases e alarms pendentes.
 
+### Alertas remotos e CI após configuração do remetente
+
+O operador confirmou responsável nominal e canal de incidentes no registro
+restrito da operação. O token inicialmente não permitia escrita em Notifications
+(HTTP 403); após sua atualização pelo responsável, a API aceitou o cadastro.
+O limite real da conta foi cinco políticas `custom_analytics` (erro 17204 na
+sexta), por isso sete sinais foram agrupados em cinco políticas. Todas foram
+salvas desabilitadas, conferidas por leitura da configuração exata e ativadas
+em `2026-10-09T23:15Z`. Filtros incluem somente conta/Worker/eventos fixos e
+códigos; a consulta retorna um agregado numérico `value`.
+
+As políticas cobrem DLQ, email unknown/overdue, retry de projeção com attempt
+
+> =6, saúde da projeção/alarm e falha de leitura privada/autoridade GitHub.
+> Janela e avaliação são de dez minutos, repetição de uma hora. O SQL API exigiu
+> comparações JSON diretas e janela explícita no cadastro; `IN` sobre atributo
+> JSON e uma expressão excessivamente aninhada foram recusados antes do cadastro.
+> As cinco consultas finais foram validadas remotamente. O catálogo declara
+> amostragem adaptativa; ausência de amostra não comprova ausência de incidente.
+
+Às `2026-10-09T23:16:10Z`, uma duplicata de job sintético já completed foi enviada
+à DLQ original. Às `23:17:36Z`, o sinal era 1, os cinco alertas continuavam ativos
+e o job conservava uma tentativa/um accepted. Notifications registrou envio por
+email da política DLQ em `23:25:41Z`. A API retorna o UUID do histórico com
+hífens, diferente do ID da política; a correlação normalizou essa representação.
+Às `23:26:28Z`, a consulta da janela retornou 0 e o job permaneceu completed,
+com uma tentativa/um accepted. Isso comprova disparo do alerta e recuperação do
+sinal, sem reenvio do convite. Nessa observação havia um único registro de envio,
+sem mensagem de recuperação. O operador confirmou recebimento do alerta por
+email; resolução notificada não deve ser inferida desse recebimento. Outros cenários de outage, as demais políticas
+e o PITR coordenado continuam pendentes.
+
+A CI de `03676fd` falhou ao conferir os tipos gerados de email-delivery após
+habilitar o remetente produtivo. A mesma falha foi reproduzida localmente;
+`wrangler types` regenerou somente os literais da configuração e seu hash.
+Depois da correção, `pnpm verify` completo passou: 21 tasks de tipos, 32 de
+cobertura (29 reaproveitadas), 17 de build (16 reaproveitadas), 73 testes de deploy
+e 97 jornadas nativas sem falhas. A primeira tentativa dessa repetição dentro
+do sandbox não iniciou o servidor loopback; a execução autorizada com Workerd,
+Playwright e Docker concluiu o gate. Isso não é resultado da nova CI remota.
+Os tipos gerados não alteram o JavaScript do artefato produtivo congelado.
+
+A revisão real do Holon para `03676fd` terminou partial/neutral, com zero achados
+novos verificados e limites de inventário/contratos. Uma observação anterior de
+baixa severidade sobre `DashboardViewer` foi conferida manualmente: todos os
+consumidores usam o módulo atual, somente via import type; o loader continua
+executando autoridade no servidor. O typecheck e o build/browser verificaram
+essa composição. Isso não transforma a revisão parcial em aprovação integral.
+
 O rollback de Worker selecionou a versão de manutenção
 `8ce890c0-9b48-46ad-87e3-88c2414a05d3`, do mesmo bundle, e confirmou HTTP 503.
 A reativação selecionou a versão exata `cb0c869e-8937-40e5-9a4f-f4eb0b4be858`
@@ -293,7 +342,7 @@ mensagem inválida foi entregue na principal. Tail confirmou dois batches com
 outcome ok, sem exceções, e sinal numérico `email_dlq`. Após o consumo, os jobs
 aceitos mantiveram uma tentativa/um receipt cada: não houve novo envio.
 O Tail foi encerrado. Isso não prova resultado desconhecido do provider,
-falha transitória real nem disparo de um alerta remoto. Fixtures de transporte
+falha transitória real. O ensaio posterior do alerta DLQ está descrito acima. Fixtures de transporte
 não substituem criação de convite pela UI, email verificado e aceite único na
 jornada OAuth.
 
@@ -304,8 +353,26 @@ Smoke anônimo confirmou `/` e `/account` 200, `/api/health` 200, sessão 200/nu
 não confiável 403. CSP nonce, nosniff, no-referrer e no-store estavam presentes.
 Três assets remotos tiveram bytes decodificados e SHA-256 idênticos ao artefato.
 O login humano no Chrome retornou à conta com os controles autenticados de
-workspace/sessões; isso comprova essa entrada OAuth, não toda a matriz de
-instalações, organizações e revogações.
+workspace/sessões. O operador confirmou as opções de workspace na UI. O controle
+nativo conseguiu ler a conta, mas falhou ao expandir o seletor e enviar teclado;
+essa limitação de automação não foi tratada como defeito do produto. Isso comprova
+essa entrada OAuth, não toda a matriz de instalações, organizações e revogações.
+
+O primeiro aceite humano do convite retornou a mensagem sanitizada de falha.
+Uma leitura por estados e comparações mostrou convite pending/não expirado,
+email primário correspondente e nenhuma membership nova. O inventário da versão
+ativa mostrou ausência de `GITHUB_APP_ID`: a composição mantém colaboração
+indisponível sem esse binding, embora OAuth e workspaces M2 funcionem. O operador
+confirmou que o login usa a mesma App do check real de review. Seu ID público foi
+configurado no manifest do dashboard, e os tipos foram regenerados. A regressão
+de pré-flight falhou inicialmente por aceitar App ID ausente; depois passou,
+cobrindo ausência, valores inválidos e inteiro inseguro. Correção de configuração
+e teste local não substituem repetição do aceite na versão produtiva corrigida.
+O gate completo após essa correção passou: 74 testes de deploy com cobertura de
+linhas 99,29%, branches 94,55% e funções 94,81%; 21 tasks de tipos (20 em cache),
+32 de cobertura (30 em cache), 17 de build (16 em cache) e 97 jornadas nativas
+sem falhas, com os mesmos dois labs CDP ignorados em Firefox/WebKit. Nenhum
+threshold foi alterado. Esse resultado ainda não é o da CI remota do novo HEAD.
 
 O adapter real `createProjectionPersistence` foi executado via batch REST no D1
 produtivo, usando somente dois repositórios sintéticos com 10k registros cada,
