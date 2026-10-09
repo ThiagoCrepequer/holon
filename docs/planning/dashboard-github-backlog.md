@@ -4,7 +4,7 @@ kind: planning
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - dashboard-implementation-plan.md
   - dashboard-engineering-decision-review.md
@@ -177,3 +177,13 @@ grants e ciclo de convites com obrigação durável. Email delivery continua em
 #150–#153/M4 e dataset/projeção privados em M5. Gates locais não equivalem a
 OAuth real, migrations remotas ou publicação. Nenhuma operação remota M3 foi
 executada para preparar o PR.
+
+## Integração M3 em main — 2026-10-09
+
+A conferência após os merges encontrou #145–#149 abertas: #180 foi integrado
+na branch de M2 depois de #177 já ter entrado em `main`. O PR complementar
+reaplica apenas os commits de M3 sobre o main atual e tem a branch padrão como
+base, permitindo o encerramento automático das cinco issues após o merge.
+O [relatório M3](../research/2026-10-08-dashboard-milestone-three-results.md#integração-em-main-conferida-em-2026-10-09)
+registra a causa, base e validação. Publicação e smokes remotos não são inferidos
+da correção do destino do PR.

@@ -4,7 +4,7 @@ kind: research
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - ../architecture/user-dashboard.md
   - ../operations/dashboard-environments-and-recovery.md
@@ -159,3 +159,28 @@ do recorte; estados revogados preservam alocação para reconexão no mesmo espa
 Build/dry-run prova composição do artefato, sem executar integrações remotas.
 Matriz de engines/axe local não prova aparelhos/versões estáveis Q3 completos;
 #163/#167 continuam donos da promoção e dos smokes reais autorizados.
+
+## Integração em main conferida em 2026-10-09
+
+O PR #177 foi integrado em `main` antes do PR #180. Este último manteve a base
+`codex/dashboard-milestone-two-completion`; seu merge não levou os commits M3
+para `main` e não interpretou `Closes #145`–`Closes #149` contra a branch padrão.
+A conferência do GitHub encontrou as cinco issues abertas e os arquivos M3
+ausentes no tree de `main`.
+
+O PR complementar parte de `44ceea941d6c0bce903a9f80fda29be9ceaf4f1a` e reaplica
+somente os commits M3 `271279a`/`e4544f0`, sem conflitos, como `5c00f09`/`8d5d325`.
+A comparação com o artefato M3 original confirma código idêntico nos arquivos
+da entrega; a documentação acrescenta este registro de integração. As demais
+diferenças pertencem ao PR #179 já integrado em main.
+Os dados, migrations e garantias do recorte são preservados. A base do novo PR
+é `main`, com fechamento das cinco issues no corpo; não as encerra manualmente
+antes da integração. Estado do milestone e deploy permanecem ações separadas.
+
+**`pnpm verify`: PASS (exit 0)** em 2026-10-09 no main combinado: marca,
+config/schema, formatter, lint, typecheck, arquitetura, cobertura, browsers e
+build/dry-runs (incluindo imagem Docker). Control-plane concluiu **364 testes**
+com coverage statements 91.95%, branches 86.53%, functions 92.89% e lines 93.2%;
+as suites M3 permaneceram com os contadores acima. Thresholds preservados.
+Este registro complementa a evidência de 2026-10-08 e não demonstra deploy,
+GitHub/email reais ou sucesso de CI remoto do novo PR.
