@@ -115,6 +115,10 @@ export async function dispatchReviewMessages(
       const envelope: WebhookEnvelope = webhookEnvelopeSchema.parse(
         message.body,
       );
+      if (envelope.action === "edited" || envelope.action === "closed") {
+        message.ack();
+        continue;
+      }
       const prKey = createPrKey({
         provider: "github",
         pullRequestNumber: envelope.pullRequest.number,

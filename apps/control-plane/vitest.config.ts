@@ -1,16 +1,33 @@
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { readD1Migrations, cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
-export default defineConfig({
+export default defineConfig(async () => ({
   plugins: [
     cloudflareTest({
       miniflare: {
-        bindings: { GITHUB_APP_SLUG: "holon-reviewer" },
+        d1Databases: { PROJECTION_DB: "core-projection-test" },
+        bindings: {
+          GITHUB_APP_SLUG: "holon-reviewer",
+          PROJECTION_MIGRATIONS: await readD1Migrations(
+            "../../packages/db/migrations/projection",
+          ),
+        },
         serviceBindings: {
+          REVIEW_PROJECTION: {
+            name: "projection-writer-current",
+            entrypoint: "ReviewProjectionWriter",
+          },
           DASHBOARD_ACCESS_EVENTS: "dashboard-access-events-current",
           REPOSITORY_EXECUTOR: "repository-executor-current",
         },
         workers: [
+          {
+            name: "projection-writer-current",
+            compatibilityDate: "2026-08-29",
+            modules: true,
+            scriptPath: "./dist/projection/projection-worker.js",
+            d1Databases: { PROJECTION_DB: "core-projection-test" },
+          },
           {
             name: "dashboard-access-events-current",
             compatibilityDate: "2026-08-29",
@@ -72,4 +89,4 @@ export default defineConfig({
     reporters: ["default", "junit"],
     restoreMocks: true,
   },
-});
+}));

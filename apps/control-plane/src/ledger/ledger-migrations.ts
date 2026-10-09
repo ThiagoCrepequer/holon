@@ -430,6 +430,17 @@ const ledgerMigrations: readonly LedgerMigration[] = [
       CREATE TABLE review_budget_completions(run_id TEXT NOT NULL, shard_index INTEGER NOT NULL CHECK(shard_index BETWEEN 0 AND 63), PRIMARY KEY(run_id, shard_index));
     `,
   },
+  {
+    version: 24,
+    statements: `
+      ALTER TABLE runs ADD COLUMN read_head_sha TEXT;
+      ALTER TABLE runs ADD COLUMN read_base_sha TEXT;
+      CREATE TABLE review_read_metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1), payload TEXT NOT NULL, conflicted INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE review_read_snapshot(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL, generation INTEGER NOT NULL, signature TEXT NOT NULL, payload TEXT NOT NULL);
+      CREATE TABLE review_projection_task(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL, revision INTEGER NOT NULL, attempts INTEGER NOT NULL, next_attempt_at TEXT NOT NULL);
+      CREATE TABLE private_review_detail(run_id TEXT NOT NULL, part INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(run_id,part));
+    `,
+  },
 ] as const;
 
 export function applyLedgerMigrations(storage: DurableObjectStorage): void {

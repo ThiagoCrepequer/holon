@@ -9,7 +9,15 @@
   "vars": {
     "APP_ORIGIN": "http://127.0.0.1:8794",
   },
-  "triggers": { "crons": ["*/15 * * * *"] },
+  "services": [
+    {
+      "binding": "REVIEW_CORE",
+      "service": "holon-control-plane",
+      "entrypoint": "DashboardReviewReader",
+    },
+    { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery-local" },
+  ],
+  "triggers": { "crons": ["* * * * *"] },
   "observability": {
     "enabled": false,
   },
@@ -32,6 +40,14 @@
   "env": {
     "production": {
       "name": "holon-dashboard",
+      "services": [
+        {
+          "binding": "REVIEW_CORE",
+          "service": "holon-control-plane",
+          "entrypoint": "DashboardReviewReader",
+        },
+        { "binding": "EMAIL_DELIVERY", "service": "holon-email-delivery" },
+      ],
       "workers_dev": true,
       "preview_urls": false,
       "observability": {

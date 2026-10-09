@@ -1,6 +1,6 @@
 import type { AdmittedUser } from "@holon/contracts/dashboard";
 import { applyD1Migrations, env, type D1Migration } from "cloudflare:test";
-const bindings = env as {
+const bindings = env as unknown as {
   IDENTITY_DB: D1Database;
   IDENTITY_MIGRATIONS: D1Migration[];
 };

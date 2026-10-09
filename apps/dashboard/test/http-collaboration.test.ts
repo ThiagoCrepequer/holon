@@ -76,7 +76,7 @@ function setup() {
     authorizeReviews: vi.fn(async () => ({
       userId: "actor",
       workspaceId: "team",
-      repositoryIds: [91],
+      repositories: [{ installationId: 77, repositoryId: 91 }],
     })),
     connectionStatus: vi.fn(async () => ({ status: "connected" as const })),
     createConnectionReauth: vi.fn(async () => ({
@@ -162,7 +162,10 @@ it("all collaboration APIs enforce the same admission, CSRF and DTOs", async () 
     ["/api/github/status", { status: "connected" }],
     ["/api/workspaces/team/github", [connection]],
     ["/api/workspaces/team/invitations", [invitation]],
-    ["/api/workspaces/team/github/repositories", { repositoryIds: [91] }],
+    [
+      "/api/workspaces/team/github/repositories",
+      { repositories: [{ installationId: 77, repositoryId: 91 }] },
+    ],
   ] as const) {
     const response = await f.request(path);
     expect(response.status).toBe(200);

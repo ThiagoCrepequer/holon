@@ -18,12 +18,14 @@ export default defineConfig(async () => ({
     reporters: ["default", "junit"],
     outputFile: { junit: "junit.workers.xml" },
     include: [
+      "test/private-reviews.test.ts",
       "test/http-security.test.ts",
       "test/http-composition-review.test.ts",
       "test/http-session-preferences.test.ts",
       "test/viewer.test.ts",
       "test/http-collaboration.test.ts",
       "test/collaboration-composition.worker.ts",
+      "test/email-publisher.worker.ts",
     ],
     fileParallelism: false,
     coverage: {

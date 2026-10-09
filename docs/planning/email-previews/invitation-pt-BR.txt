@@ -1,0 +1,9 @@
+Você recebeu um convite para o Holon
+
+Você recebeu um convite para participar do workspace Workspace de exemplo.
+
+Abrir convite: https://dashboard.example.invalid/invitations/invite_synthetic
+
+O convite expira em 16 de outubro de 2026 às 15:00 (UTC). Entre com o GitHub usando um email verificado correspondente ao destinatário.
+
+Você pode receber esta mensagem mais de uma vez. É o mesmo convite. Se não esperava este convite, ignore a mensagem.

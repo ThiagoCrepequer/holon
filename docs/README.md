@@ -76,8 +76,10 @@ A [revisão de decisões do dashboard](planning/dashboard-engineering-decision-r
 O [modelo de identidade e workspaces](engineering/dashboard-identity-and-workspaces.md)
 registra o modelo de produto acordado: organização e workspace são o mesmo
 conceito, com memberships N:M e integração GitHub explícita. O primeiro recorte M2 implementa identidade e tenancy no runtime local;
-M3 acrescenta convites, conexões e grants locais; dataset privado e entrega
-continuam em M5/M4.
+M3 acrescenta convites, conexões e grants locais; M4 acrescenta entrega
+recuperável conforme a [matriz de evidência](planning/dashboard-milestone-four-evidence.md).
+M5 acrescenta projeção e leitura privada conforme a [matriz M5](planning/dashboard-milestone-five-evidence.md).
+Envio real e benchmark/PITR remotos dependem de operação autorizada.
 
 Para iniciar essa evolução, use o [plano de implementação do dashboard](planning/dashboard-implementation-plan.md),
 consolidado após a [revisão de robustez](research/2026-10-04-dashboard-plan-robustness-review.md).
@@ -152,3 +154,6 @@ A [continuação do benchmark real](research/2026-10-08-review-core-live-benchma
 Os [resultados M3](research/2026-10-08-dashboard-milestone-three-results.md)
 rastreiam #145–#149: credenciais/refresh, dupla autoridade GitHub, grants e
 convites atômicos por alvo, com provas Workerd/D1/browser e limites remotos.
+
+- [Evidência de Dashboard 5](planning/dashboard-milestone-five-evidence.md): causalidade, leitura privada e limites de prova.
+- [Evidência de Dashboard 4](planning/dashboard-milestone-four-evidence.md): critérios e limites locais de entrega recuperável.

@@ -1,0 +1,9 @@
+You’re invited to Holon
+
+You’ve been invited to join the Workspace de exemplo workspace.
+
+Open invitation: https://dashboard.example.invalid/invitations/invite_synthetic
+
+This invitation expires on October 16, 2026 at 3:00 PM (UTC). Sign in with GitHub using a verified email matching the recipient.
+
+You may receive this message more than once. It is the same invitation. If you weren’t expecting it, ignore this message.

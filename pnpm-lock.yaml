@@ -216,6 +216,9 @@ importers:
       '@lingui/react':
         specifier: 6.9.0
         version: 6.9.0(@babel/core@7.29.7(supports-color@10.2.2))(react@19.3.0)
+      '@tanstack/react-query':
+        specifier: 5.104.1
+        version: 5.104.1(react@19.3.0)
       hono:
         specifier: 'catalog:'
         version: 4.13.5

@@ -21,6 +21,11 @@ msgstr "Aceito"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.accepted"
+msgstr "Aceito pelo provedor de email; entrega na caixa de entrada não confirmada"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.denied"
 msgstr "Acesso negado. Recarregue seus workspaces."
 
@@ -35,9 +40,29 @@ msgid "session.devices"
 msgstr "Sessões ativas"
 
 #. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.all"
+msgstr "Todos os estados"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.notice"
 msgstr "Um convite registra uma intenção de entrega. Isso não confirma o envio do email. Cancelar interrompe próximos envios; uma mensagem já em trânsito ainda pode chegar."
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.apply"
+msgstr "Aplicar filtros"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.awaiting"
+msgstr "Aguardando revisão"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.back"
+msgstr "Voltar às revisões"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -70,6 +95,11 @@ msgid "preferences.close"
 msgstr "Fechar preferências"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.completed"
+msgstr "Concluído"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.confirm"
 msgstr "Confirmar mudança na conexão"
@@ -95,6 +125,11 @@ msgid "collaboration.createTeam"
 msgstr "Criar equipe"
 
 #. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.observation"
+msgstr "Observação atual. Atualize para ver a atividade recente."
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.ready"
 msgstr "Estado atual confirmado."
@@ -106,8 +141,33 @@ msgstr "Escuro"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
+msgid "delivery.failed"
+msgstr "Entrega de email interrompida"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.unknown"
+msgstr "Resultado do email desconhecido; uma tentativa limitada pode enviar uma duplicata"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.intent"
+msgstr "Email agendado"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.expired"
 msgstr "Expirado"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.failed"
+msgstr "Falhou"
+
+#. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.canceled"
+msgstr "Próximas tentativas de email interrompidas"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -135,6 +195,11 @@ msgid "theme.light"
 msgstr "Claro"
 
 #. js-lingui-explicit-id
+#: app/features/collaboration/workspace-messages.ts
+msgid "delivery.duplicate"
+msgstr "Tentativas limitadas podem enviar o mesmo convite mais de uma vez. A aceitação pelo provedor não confirma a entrega na caixa de entrada."
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.loading"
 msgstr "Carregando sessões…"
@@ -145,9 +210,29 @@ msgid "collaboration.load"
 msgstr "Gerenciar workspaces"
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.conflict"
+msgstr "Metadados precisam de reconciliação"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.nextFindings"
+msgstr "Mais achados"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.next"
+msgstr "Próxima página"
+
+#. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
 msgid "session.nextPage"
 msgstr "Próximas sessões"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.empty"
+msgstr "Nenhuma revisão corresponde a estes filtros."
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
@@ -186,6 +271,16 @@ msgid "preferences.saved"
 msgstr "Preferências salvas."
 
 #. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.publishing"
+msgstr "Publicando"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.queued"
+msgstr "Na fila"
+
+#. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.email"
 msgstr "Email do destinatário"
@@ -204,6 +299,11 @@ msgstr "Reconecte a mesma conta GitHub para continuar."
 #: app/features/collaboration/workspace-messages.ts
 msgid "collaboration.invite"
 msgstr "Registrar convite"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.refresh"
+msgstr "Atualizar"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts
@@ -226,9 +326,39 @@ msgid "collaboration.unconfirmed"
 msgstr "Resultado desconhecido. Repita o mesmo convite para confirmar sua intenção original."
 
 #. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.results"
+msgstr "resultados"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.retryable"
+msgstr "Nova tentativa pendente"
+
+#. js-lingui-explicit-id
 #: app/routes/invitation/route.tsx
 msgid "invitation.home"
 msgstr "Voltar ao Holon"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.unavailable"
+msgstr "Dados da revisão indisponíveis. Verifique seu acesso e tente novamente."
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.status"
+msgstr "Estado da revisão"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.running"
+msgstr "Em revisão"
+
+#. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.title"
+msgstr "Revisões"
 
 #. js-lingui-explicit-id
 #: app/features/sessions/sessions.tsx
@@ -256,6 +386,11 @@ msgid "preferences.saving"
 msgstr "Salvando…"
 
 #. js-lingui-explicit-id
+#: app/routes/reviews/route.tsx
+msgid "reviews.search"
+msgstr "Buscar título ou número do PR"
+
+#. js-lingui-explicit-id
 #: app/root.tsx
 msgid "error.service"
 msgstr "Serviço indisponível. Tente novamente."
@@ -274,6 +409,11 @@ msgstr "Sair"
 #: app/features/sessions/sessions.tsx
 msgid "session.signoutAll"
 msgstr "Sair em todos os dispositivos"
+
+#. js-lingui-explicit-id
+#: app/features/reviews/review-messages.ts
+msgid "reviews.state.obsolete"
+msgstr "Substituído"
 
 #. js-lingui-explicit-id
 #: app/features/collaboration/workspace-messages.ts

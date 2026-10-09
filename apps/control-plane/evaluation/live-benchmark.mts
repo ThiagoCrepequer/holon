@@ -475,7 +475,15 @@ try {
             deliveryId: `github:live-${number}`,
             installationId: 99,
             receivedAt: timestamp,
-            pullRequest: { number, headSha, baseSha, updatedAt: timestamp },
+            pullRequest: {
+              title: "Synthetic review",
+              author: "synthetic",
+              state: "open",
+              number,
+              headSha,
+              baseSha,
+              updatedAt: timestamp,
+            },
             repository: {
               id: 4242,
               owner: "synthetic",

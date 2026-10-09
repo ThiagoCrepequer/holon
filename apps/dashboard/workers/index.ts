@@ -1,3 +1,10 @@
+import type { PrivateReviewCorePort } from "@holon/contracts/dashboard-reviews";
+import { createProjectionPersistence } from "@holon/db/projection/server";
+export { ReviewProjectionWriter } from "./review-projection-writer.js";
+export { EmailDeliveryAuthority } from "./email-delivery-authority.js";
+import type { EmailDeliveryPort } from "@holon/application/dashboard-ports";
+
+import { publishDueEmail } from "./email-publisher.js";
 export { GitHubAccessEvents } from "./github-access-events.js";
 import {
   createAuthService,
@@ -33,6 +40,8 @@ import {
 } from "../app/server/http-security.server.js";
 
 export interface DashboardWorkerBindings {
+  readonly REVIEW_CORE?: PrivateReviewCorePort | undefined;
+  readonly EMAIL_DELIVERY?: EmailDeliveryPort | undefined;
   readonly APP_ORIGIN?: string | undefined;
   readonly AUTH_ENVIRONMENT?: string | undefined;
   readonly AUTH_REGISTERED_ORIGINS?: string | undefined;
@@ -83,6 +92,8 @@ export default {
     const env = environment as unknown as DashboardWorkerBindings;
     if (env.IDENTITY_DB)
       await createInvitationPersistence(env.IDENTITY_DB).expireDue();
+    if (env.IDENTITY_DB && env.EMAIL_DELIVERY)
+      await publishDueEmail(env.IDENTITY_DB, env.EMAIL_DELIVERY);
   },
   async fetch(request: Request, environment: Env): Promise<Response> {
     const requestNonce = nonce();
@@ -192,6 +203,11 @@ export default {
       return await handle(request, appOrigin, {
         authService,
         tenancyPersistence,
+        reviewCore: env.REVIEW_CORE,
+        reviewProjection:
+          env.PROJECTION_DB && authSecret
+            ? createProjectionPersistence(env.PROJECTION_DB, authSecret)
+            : undefined,
         collaboration:
           shouldCreateAuth && env.IDENTITY_DB && env.GITHUB_APP_ID
             ? createWorkspaceCollaboration(

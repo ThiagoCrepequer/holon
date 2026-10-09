@@ -17,6 +17,14 @@ vi.mock("react-router", async (importOriginal) => {
 vi.mock("../workers/github-access-events.js", () => ({
   GitHubAccessEvents: class {},
 }));
+// The entrypoint lifecycle is covered with real RPC/Workerd in email-delivery.
+// This Node suite isolates framework exports while testing HTTP composition.
+vi.mock("../workers/email-delivery-authority.js", () => ({
+  EmailDeliveryAuthority: class {},
+}));
+vi.mock("../workers/review-projection-writer.js", () => ({
+  ReviewProjectionWriter: class {},
+}));
 
 import worker, { type DashboardWorkerBindings } from "../workers/index.js";
 

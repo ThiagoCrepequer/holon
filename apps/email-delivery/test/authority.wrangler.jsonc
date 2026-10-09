@@ -1,0 +1,7 @@
+{
+  "name": "email-authority-test",
+  "main": "authority.ts",
+  "compatibility_date": "2026-08-29",
+  "workers_dev": false,
+  "preview_urls": false,
+}

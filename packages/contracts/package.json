@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
     "./dashboard-preferences": "./src/dashboard-preferences.ts",
-    "./dashboard-collaboration": "./src/dashboard-collaboration.ts"
+    "./dashboard-collaboration": "./src/dashboard-collaboration.ts",
+    "./email-delivery": "./src/email-delivery.ts",
+    "./dashboard-reviews": "./src/dashboard-reviews.ts"
   },
   "scripts": {
     "test": "vitest run --config ../../vitest.config.ts --root .",

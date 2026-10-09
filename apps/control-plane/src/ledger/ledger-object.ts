@@ -48,6 +48,12 @@ import type {
   ClarificationAdmission,
   ClarificationRead,
 } from "@holon/contracts";
+import {
+  projectionWriteResultSchema,
+  pullRequestMetadataSchema,
+  type ReviewProjectionWriterPort,
+  type CoreReviewDetailResult,
+} from "@holon/contracts/dashboard-reviews";
 import type {
   FindingFingerprint,
   PrKey,
@@ -71,6 +77,7 @@ import { applyLedgerMigrations } from "./ledger-migrations.js";
 import { ReviewAnalysisStore } from "./review-analysis-store.js";
 import { ReviewBudgetPlanStore } from "./review-budget-plan-store.js";
 import { ReviewGenerationBudgetStore } from "./review-generation-budget-store.js";
+import { ReviewReadModel } from "./review-read-model.js";
 import { ReviewToolBudgetStore } from "./review-tool-budget-store.js";
 import { RunConfigurationStore } from "./run-configuration-store.js";
 import { RunMemoryStore } from "./run-memory-store.js";
@@ -187,13 +194,145 @@ export class ReviewLedgerObject
     rawRun: ReviewRun,
     rawWorkflowInstanceId: string,
   ): Promise<RunClaimResult> {
-    const result = runClaimResultSchema.parse(
-      this.claimRunInternal(rawRun, rawWorkflowInstanceId),
-    );
-    if (result.supersededWorkflows.length > 0) {
-      await this.ensureMaintenanceAlarm();
-    }
+    const result = await this.mutateReadModel(() => {
+      const parsed = runClaimSchema.parse({
+        run: rawRun,
+        workflowInstanceId: rawWorkflowInstanceId,
+      });
+      const receipt = runClaimResultSchema.parse(
+        this.claimRunInternal(rawRun, parsed.workflowInstanceId),
+      );
+      const identity = /:head:([a-f0-9]{40}):base:([a-f0-9]{40})$/u.exec(
+        parsed.run.id,
+      );
+      this.ctx.storage.sql.exec(
+        "UPDATE runs SET read_head_sha=?,read_base_sha=? WHERE id=?",
+        identity?.[1] ?? null,
+        identity?.[2] ?? null,
+        parsed.run.id,
+      );
+      return receipt;
+    }, rawRun.causalVersion);
     return result;
+  }
+
+  private async mutateReadModel<T>(
+    mutation: () => T,
+    occurredAt: string,
+    forceProjection = false,
+  ): Promise<T> {
+    if (
+      !forceProjection &&
+      !this.ctx.storage.sql
+        .exec("SELECT 1 FROM review_read_metadata LIMIT 1")
+        .toArray().length
+    ) {
+      const result = this.ctx.storage.transactionSync(mutation);
+      await this.ensureMaintenanceAlarm();
+      return result;
+    }
+    return this.ctx.storage.transaction(async () => {
+      const result = mutation();
+      await new ReviewReadModel(this.ctx.storage).touch(occurredAt);
+      await this.ensureMaintenanceAlarm();
+      return result;
+    });
+  }
+  private runActivityAt(runId: string): string {
+    const row = this.ctx.storage.sql
+      .exec<{ updated_at: string | null; causal_version: string }>(
+        "SELECT updated_at,causal_version FROM runs WHERE id=?",
+        runId,
+      )
+      .toArray()[0];
+    return row?.updated_at ?? row?.causal_version ?? new Date().toISOString();
+  }
+  public async observePullRequest(raw: unknown): Promise<string> {
+    const input = pullRequestMetadataSchema.parse(raw);
+    const expected = `github:${input.repositoryId}:pr:${input.pullRequestNumber}`;
+    if (this.ctx.id.name !== undefined && this.ctx.id.name !== expected)
+      throw new Error("review_scope_mismatch");
+    return this.mutateReadModel(
+      () => new ReviewReadModel(this.ctx.storage).observe(input),
+      input.sourceUpdatedAt,
+      true,
+    );
+  }
+  public async reviewDetail(raw: unknown): Promise<CoreReviewDetailResult> {
+    try {
+      return {
+        status: "available" as const,
+        generation: new ReviewReadModel(this.ctx.storage).generation(),
+        detail: new ReviewReadModel(this.ctx.storage).detail(raw),
+      };
+    } catch (error) {
+      return {
+        status:
+          error instanceof Error && error.message === "review_revision_changed"
+            ? "revision_changed"
+            : error instanceof Error && error.message === "review_unavailable"
+              ? "unavailable"
+              : "invalid_request",
+      };
+    }
+  }
+  public async resumeProjection(raw: unknown): Promise<void> {
+    await this.ctx.storage.transaction(async () => {
+      new ReviewReadModel(this.ctx.storage).resume(raw);
+      await this.ensureMaintenanceAlarm();
+    });
+  }
+  private async deliverProjection(): Promise<void> {
+    const claim = await this.ctx.storage.transaction(async () => {
+      const result = new ReviewReadModel(this.ctx.storage).claim(Date.now());
+      await this.ensureMaintenanceAlarm();
+      return result;
+    });
+    if (!claim) return;
+    try {
+      const writer = (
+        this.env as unknown as {
+          REVIEW_PROJECTION?: ReviewProjectionWriterPort;
+        }
+      ).REVIEW_PROJECTION;
+      if (!writer) throw new Error("projection_writer_unavailable");
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let reply: unknown;
+      try {
+        reply = await Promise.race([
+          writer.write(claim.input),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error("projection_deadline")),
+              10000,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+      const result = projectionWriteResultSchema.parse(reply);
+      if (result === "applied" || result === "duplicate") {
+        await this.ctx.storage.transaction(async () => {
+          new ReviewReadModel(this.ctx.storage).acknowledge(
+            claim.input.generation,
+            claim.input.snapshot.snapshotRevision,
+            claim.attempt,
+          );
+          await this.ensureMaintenanceAlarm();
+        });
+      } else
+        consoleLogger.emit("dashboard.projection_blocked", {
+          generation: claim.input.generation,
+          revision: claim.input.snapshot.snapshotRevision,
+          result,
+        });
+    } catch (error) {
+      consoleLogger.emit("dashboard.projection_retry", {
+        attempt: claim.attempt,
+        errorKind: errorKind(error),
+      });
+    }
   }
 
   private claimRunInternal(
@@ -378,7 +517,14 @@ export class ReviewLedgerObject
       operationId,
       runId,
     });
-    this.ctx.storage.transactionSync(() => this.applyTransition(transition));
+    await this.mutateReadModel(
+      () => this.applyTransition(transition),
+      next === "failed_retryable" ||
+        (expected === "failed_retryable" && next === "running")
+        ? (new ReviewReadModel(this.ctx.storage).snapshot()?.activityAt ??
+            occurredAt)
+        : occurredAt,
+    );
   }
 
   public async transitionAndRequestCleanup(
@@ -398,10 +544,10 @@ export class ReviewLedgerObject
     if (!["completed", "failed_terminal", "obsolete"].includes(next)) {
       throw new TypeError("Cleanup transition must be terminal");
     }
-    this.ctx.storage.transactionSync(() => {
+    await this.mutateReadModel(() => {
       this.applyTransition(transition);
       this.insertCleanup(runId, occurredAt);
-    });
+    }, occurredAt);
     await this.ensureMaintenanceAlarm();
   }
 
@@ -413,7 +559,7 @@ export class ReviewLedgerObject
     const parsedRunId = runIdSchema.parse(runId);
     const parsedOccurredAt = timestampSchema.parse(occurredAt);
     let changed = false;
-    this.ctx.storage.transactionSync(() => {
+    await this.mutateReadModel(() => {
       const cursor = this.ctx.storage.sql.exec(
         "UPDATE runs SET state = 'failed_terminal', updated_at = ? WHERE id = ? AND state IN ('queued', 'running', 'publishing', 'failed_retryable')",
         parsedOccurredAt,
@@ -423,7 +569,7 @@ export class ReviewLedgerObject
       if (requiresCleanup) {
         this.insertCleanup(parsedRunId as RunId, parsedOccurredAt);
       }
-    });
+    }, parsedOccurredAt);
     if (requiresCleanup) await this.ensureMaintenanceAlarm();
     return changed;
   }
@@ -672,6 +818,7 @@ export class ReviewLedgerObject
       }
     }
 
+    await this.deliverProjection();
     await this.deliverMemory();
     await this.reconcileChecks();
     await this.processDueWorkflowSupersession(startedAt.toISOString());
@@ -895,7 +1042,13 @@ export class ReviewLedgerObject
       return undefined;
     }
 
+    const projectionAt = this.ctx.storage.sql
+      .exec<{ next_attempt_at: string | null }>(
+        "SELECT MIN(next_attempt_at) AS next_attempt_at FROM review_projection_task",
+      )
+      .toArray()[0]?.next_attempt_at;
     const candidates = [
+      projectionAt ? Date.parse(projectionAt) : undefined,
       this.clarificationStore.nextExpiration(),
       row.next_attempt_at === null
         ? undefined
@@ -966,11 +1119,12 @@ export class ReviewLedgerObject
   ): Promise<ReviewAnalysisCheckpoint> {
     const store = new RunMemoryStore(this.ctx.storage);
     const validated = memoryReviewOutputSchema.parse(output);
-    const result = this.ctx.storage.transactionSync(() => {
+    const result = await this.mutateReadModel(() => {
       const checkpoint = new ReviewAnalysisStore(this.ctx.storage).save(
         runId,
         validated,
       );
+      new ReviewReadModel(this.ctx.storage).saveDetail(runId, validated);
       const snapshot = store.load(runId);
       if (snapshot) {
         for (const finding of validated.activeFindings.filter((candidate) =>
@@ -1003,7 +1157,7 @@ export class ReviewLedgerObject
           });
       }
       return checkpoint;
-    });
+    }, this.runActivityAt(runId));
     await this.ensureMaintenanceAlarm();
     return result;
   }
@@ -1203,7 +1357,10 @@ export class ReviewLedgerObject
     this.clarificationStore.settleGeneration(id, reservationId, outputTokens);
   }
   public async answerClarification(id: number, answer: unknown) {
-    const result = this.clarificationStore.answer(id, answer);
+    const result = await this.mutateReadModel(
+      () => this.clarificationStore.answer(id, answer),
+      new Date().toISOString(),
+    );
     await this.ensureMaintenanceAlarm();
     return result;
   }
@@ -1214,13 +1371,15 @@ export class ReviewLedgerObject
     this.clarificationStore.complete(id, replyCommentId);
   }
 
-  public savePrFindings(
+  public async savePrFindings(
     prKey: PrKey,
     findings: readonly TrackedFinding[],
     writerRunId: RunId,
   ): Promise<void> {
-    this.findingStore.savePrFindings(prKey, findings, writerRunId);
-    return Promise.resolve();
+    await this.mutateReadModel(
+      () => this.findingStore.savePrFindings(prKey, findings, writerRunId),
+      this.runActivityAt(writerRunId),
+    );
   }
 
   public findFindingByCommentId(
@@ -1249,12 +1408,14 @@ export class ReviewLedgerObject
     );
   }
 
-  public recordReviewDecision(
+  public async recordReviewDecision(
     runId: RunId,
     decision: Omit<ReviewDecisionContext, "checkRunId" | "runId">,
   ): Promise<void> {
-    this.findingStore.recordReviewDecision(runId, decision);
-    return Promise.resolve();
+    await this.mutateReadModel(
+      () => this.findingStore.recordReviewDecision(runId, decision),
+      this.runActivityAt(runId),
+    );
   }
 
   public loadLatestReviewDecision(
@@ -1283,7 +1444,7 @@ export class ReviewLedgerObject
   public async applyFindingFeedback(
     input: ApplyFindingFeedbackInput,
   ): Promise<AppliedFindingFeedback> {
-    const result = this.ctx.storage.transactionSync(() => {
+    const result = await this.mutateReadModel(() => {
       const applied = this.findingStore.applyFindingFeedback(input);
       if (applied.feedback && applied.outcome === "applied") {
         const store = new RunMemoryStore(this.ctx.storage);
@@ -1310,7 +1471,7 @@ export class ReviewLedgerObject
           });
       }
       return applied;
-    });
+    }, input.createdAt);
     await this.ensureMaintenanceAlarm();
     return result;
   }

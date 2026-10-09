@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-07
+last-reviewed: 2026-10-09
 related:
   - ../decisions/0002-adopt-typescript-monorepo-toolchain.md
   - ../decisions/0003-adopt-initial-typescript-application-stack.md
@@ -40,7 +40,7 @@ holon/
 |       |-- Dockerfile
 |       `-- wrangler.jsonc
 |   |-- dashboard/              # app/, workers/, test/; SSR/API local
-|   `-- email-delivery/         # src/, test/; RPC privado local
+|   `-- email-delivery/         # src/, test/; Queue/DLQ e transporte privado
 |-- packages/
 |   |-- ui/                    # React/Lucide/tokens, exports browser
 |   |-- auth/                  # Better Auth encapsulado, sessão, OAuth GitHub App
@@ -340,3 +340,15 @@ e leitura autenticada de blobs Git delimitados no control plane, conforme
 ## Identificação de versões (2026-09-05)
 
 A [arquitetura de identificação](project-version-identification.md), governada pela [ADR-0030](../decisions/0030-identify-project-versions-from-snapshot-evidence.md), descreve o package reutilizável, coleta de metadados por SHA, cache DO por instalação/repositório, checkpoints e snapshot de auditoria no ledger. Conteúdo integral dos manifests não é persistido; versões são dados, nunca instruções de review.
+
+### Entrega recuperável de convites (Dashboard 4)
+
+O dashboard é dono de `invitation_delivery_intent` e `email_delivery_attempt` no D1
+de identidade. O entrypoint privado `EmailDeliveryAuthority` expõe claim/start/result
+apenas ao sender. Seu cron reserva/publica referências e reconcilia vencimentos.
+`apps/email-delivery` recebe IDs na Queue/DLQ, obtém contexto autorizado por RPC e
+usa `send_email` com templates HTML/texto. Não importa DB nem tem binding D1.
+Os resultados causais e limites estão no
+[runbook de email](../operations/dashboard-email-delivery.md).
+Os manifests deixam efeitos desabilitados até ativação autorizada; este grafo
+descreve a implementação, não prova implantação ou email real.

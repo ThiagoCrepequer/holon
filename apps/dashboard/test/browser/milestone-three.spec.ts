@@ -3,18 +3,30 @@ import { expect, test, type Page } from "@playwright/test";
 const origin = "https://127.0.0.1:8795";
 test("workspace controls wait for hydration before accepting the first click", async ({
   page,
+  browser,
 }, info) => {
   const subject =
     84001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
   await signIn(page, subject);
+  // A fresh browsing context prevents WebKit's warm module cache from bypassing
+  // interception on reload; the persisted session still reaches the real SSR.
+  const coldContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+    ignoreHTTPSErrors: true,
+    extraHTTPHeaders: { "X-Holon-Test-Client": String(subject) },
+  });
+  const coldPage = await coldContext.newPage();
   const scripts = Promise.withResolvers<void>();
-  await page.route("**/assets/*.js", async (route) => {
+  const blocked = Promise.withResolvers<void>();
+  await coldPage.route("**/assets/*.js", async (route) => {
+    blocked.resolve();
     await scripts.promise;
     await route.continue();
   });
   try {
-    await page.reload({ waitUntil: "commit" });
-    const manage = page.getByRole("button", {
+    await coldPage.goto(origin + "/", { waitUntil: "commit" });
+    await blocked.promise;
+    const manage = coldPage.getByRole("button", {
       name: "Manage workspaces",
       exact: true,
     });
@@ -23,9 +35,10 @@ test("workspace controls wait for hydration before accepting the first click", a
     scripts.resolve();
     await expect(manage).toBeEnabled();
     await manage.click();
-    await expect(page.getByLabel("Team name")).toBeVisible();
+    await expect(coldPage.getByLabel("Team name")).toBeVisible();
   } finally {
     scripts.resolve();
+    await coldContext.close();
   }
 });
 async function signIn(page: Page, subject: number, locale = "en") {
@@ -65,6 +78,8 @@ async function signIn(page: Page, subject: number, locale = "en") {
   await expect(
     page.getByRole("button", { name: /^(Active sessions|Sessões ativas)$/ }),
   ).toBeVisible();
+  // OAuth navigates to an SSR document before its client scripts finish loading.
+  await page.waitForLoadState("load");
 }
 async function createTeam(page: Page, name: string, portuguese = false) {
   await page
@@ -148,6 +163,7 @@ test("connection requires native reauth, shows live state and receives private R
   await expect(
     page.getByRole("button", { name: "Confirm connection change" }),
   ).toBeVisible();
+  await page.waitForLoadState("load");
   await page.getByRole("button", { name: "Confirm connection change" }).click();
   await expect(page.getByLabel("Workspace", { exact: true })).toContainText(
     "Synthetic GitHub workspace",
@@ -166,7 +182,11 @@ test("connection requires native reauth, shows live state and receives private R
     `/api/workspaces/${workspace}/github/repositories`,
   );
   expect(scope.status()).toBe(200);
-  expect(await scope.json()).toEqual({ repositoryIds: [subject + 200000] });
+  expect(await scope.json()).toEqual({
+    repositories: [
+      { installationId: subject + 100000, repositoryId: subject + 200000 },
+    ],
+  });
   expect(
     (
       await page.request.post("/__test/access-event", {
@@ -184,7 +204,7 @@ test("connection requires native reauth, shows live state and receives private R
     await (
       await page.request.get(`/api/workspaces/${workspace}/github/repositories`)
     ).json(),
-  ).toEqual({ repositoryIds: [] });
+  ).toEqual({ repositories: [] });
 });
 test("Portuguese controls are accessible at 320px and scanners cannot accept or expose invitations", async ({
   page,
@@ -224,3 +244,127 @@ test("Portuguese controls are accessible at 320px and scanners cannot accept or 
   await page.getByRole("button", { name: "Cancelar convite" }).click();
   await expect(page.getByRole("listitem")).toContainText("Cancelado");
 });
+
+for (const locale of ["en", "pt-BR"])
+  test(`email status distinguishes provider acceptance and unknown result in ${locale}`, async ({
+    page,
+  }, info) => {
+    const subject =
+      85001 +
+      ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
+      (locale === "en" ? 0 : 100);
+    await signIn(page, subject, locale);
+    await createTeam(page, "Synthetic delivery", locale === "pt-BR");
+    const pt = locale === "pt-BR";
+    await expect(
+      page.getByText(
+        pt
+          ? "Tentativas limitadas podem enviar o mesmo convite mais de uma vez. A aceitação pelo provedor não confirma a entrega na caixa de entrada."
+          : "Limited retries may send the same invitation more than once. Provider acceptance does not confirm inbox delivery.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
+      .fill(`alias-${subject + 1}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    const link = page.locator('a[href^="/invitations/"]');
+    await expect(link).toHaveCount(1);
+    const jobId = (await link.getAttribute("href"))!.split("/").pop();
+    await expect(
+      page.getByText(pt ? "Email agendado" : "Email scheduled", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId, outcome: "accepted" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt
+          ? "Aceito pelo provedor de email; entrega na caixa de entrada não confirmada"
+          : "Accepted by email provider; inbox delivery unconfirmed",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
+      .fill(`alias-${subject + 2}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    await expect(link).toHaveCount(2);
+    const unknownId = (await link.last().getAttribute("href"))!
+      .split("/")
+      .pop();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId: unknownId, outcome: "unknown" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt
+          ? "Resultado do email desconhecido; uma tentativa limitada pode enviar uma duplicata"
+          : "Email result unknown; a limited retry may send a duplicate",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    await page
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
+      .fill(`alias-${subject + 3}@example.invalid`);
+    await page
+      .getByRole("button", {
+        name: pt ? "Registrar convite" : "Record invitation",
+        exact: true,
+      })
+      .click();
+    await expect(link).toHaveCount(3);
+    const failedId = (await link.last().getAttribute("href"))!.split("/").pop();
+    expect(
+      (
+        await page.request.post("/__test/email", {
+          data: { jobId: failedId, outcome: "permanent" },
+        })
+      ).status(),
+    ).toBe(200);
+    await page
+      .getByRole("button", {
+        name: pt ? "Atualizar convites" : "Refresh invitations",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByText(
+        pt ? "Entrega de email interrompida" : "Email delivery stopped",
+        { exact: false },
+      ),
+    ).toBeVisible();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });

@@ -164,10 +164,32 @@ const runtime = new Miniflare(
         name: "native-browser",
         bindings: { ...config.vars, ...authBindings },
         d1Databases: ["IDENTITY_DB", "PROJECTION_DB"],
+        serviceBindings: {
+          REVIEW_CORE: {
+            name: "native-core",
+            entrypoint: "DashboardReviewReader",
+          },
+        },
         assets: {
           routerConfig: { has_user_worker: true },
           directory: resolve(buildDirectory, config.assets.directory),
           ...(config.assets.binding ? { binding: config.assets.binding } : {}),
+        },
+      },
+      {
+        name: "native-core",
+        compatibilityDate: config.compatibility_date,
+        compatibilityFlags: config.compatibility_flags,
+        modules: true,
+        scriptPath: resolve("build/test-core/core-read-worker.js"),
+        durableObjects: {
+          REVIEW_LEDGERS: { className: "ReviewLedgerObject", useSQLite: true },
+        },
+        serviceBindings: {
+          REVIEW_PROJECTION: {
+            name: "native-browser",
+            entrypoint: "ReviewProjectionWriter",
+          },
         },
       },
       {
@@ -178,6 +200,18 @@ const runtime = new Miniflare(
           ACCESS: { name: "native-browser", entrypoint: "GitHubAccessEvents" },
         },
         script: `export default {async fetch(request,env){await env.ACCESS.applyEvent(await request.json());return Response.json({ok:true});}}`,
+      },
+      {
+        name: "email-authority-bridge",
+        compatibilityDate: config.compatibility_date,
+        modules: true,
+        serviceBindings: {
+          AUTHORITY: {
+            name: "native-browser",
+            entrypoint: "EmailDeliveryAuthority",
+          },
+        },
+        script: `export default {async fetch(request,env){const input=await request.json();const claim=await env.AUTHORITY.claim({jobId:input.jobId});if(!claim)return Response.json({started:false});const attempt={jobId:claim.jobId,attemptId:claim.attemptId,generation:claim.generation};if(!await env.AUTHORITY.start(attempt))return Response.json({started:false});return Response.json(await env.AUTHORITY.record({...attempt,outcome:input.outcome}));}}`,
       },
       ...misconfigured.map((worker) => ({ ...source, ...worker })),
     ],
@@ -204,6 +238,22 @@ for (const [binding, authority] of [
 
 async function control(request) {
   const url = new URL(request.url);
+  if (url.pathname === "/__test/reviews/proof" && request.method === "GET") {
+    const subject = Number(url.searchParams.get("subject"));
+    const database = await runtime.getD1Database("PROJECTION_DB");
+    return Response.json(
+      await database
+        .prepare(
+          "SELECT count(*) AS total,sum(state='completed') AS completed FROM review_projection WHERE installation_id=? AND repository_id=?",
+        )
+        .bind(subject + 100000, subject + 200000)
+        .first(),
+    );
+  }
+  if (url.pathname === "/__test/reviews/seed" && request.method === "POST")
+    return (await runtime.getWorker("native-core")).fetch(request);
+  if (url.pathname === "/__test/email" && request.method === "POST")
+    return (await runtime.getWorker("email-authority-bridge")).fetch(request);
   if (url.pathname === "/__test/access-event" && request.method === "POST")
     return (await runtime.getWorker("access-event-bridge")).fetch(request);
   if (url.pathname === "/__test/invitation/proof" && request.method === "GET") {

@@ -26,7 +26,13 @@ export const invitationDtoSchema = z.strictObject({
   recipientEmail: invitationEmailSchema,
   state: z.enum(["pending", "accepted", "canceled", "expired"]),
   expiresAt: z.iso.datetime(),
-  delivery: z.literal("intent_recorded"),
+  delivery: z.enum([
+    "intent_recorded",
+    "provider_accepted",
+    "failed",
+    "result_unknown",
+    "delivery_canceled",
+  ]),
 });
 export const invitationListSchema = z.array(invitationDtoSchema).max(100);
 export const connectionDtoSchema = z.strictObject({

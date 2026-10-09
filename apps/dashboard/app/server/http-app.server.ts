@@ -1,5 +1,6 @@
 import { registerCollaborationRoutes } from "./http-collaboration.server.js";
 import type { DashboardServices, ApiEnv } from "./http-context.server.js";
+import { readPrivateReviews } from "./private-reviews.server.js";
 export type { DashboardServices } from "./http-context.server.js";
 import {
   createTeamWorkspaceInputSchema,
@@ -585,6 +586,18 @@ export function createDashboardHandler(
     return respondWithCookies(result, c.env.sessionCookies);
   });
 
+  for (const kind of ["list", "detail"] as const)
+    api.get(`/api/reviews/${kind}`, async (c) =>
+      respondWithCookies(
+        await readPrivateReviews(
+          c.req.raw,
+          c.env.services,
+          kind,
+          c.env.sessionCookies,
+        ),
+        c.env.sessionCookies,
+      ),
+    );
   registerCollaborationRoutes(api, {
     requireAdmittedSession,
     requireAdmittedMutation,

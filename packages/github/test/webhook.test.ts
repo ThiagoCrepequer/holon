@@ -61,6 +61,10 @@ describe("GitHub webhook boundary", () => {
         pull_request: {
           base: { sha: "b".repeat(40) },
           head: { sha: "a".repeat(40) },
+          title: "Synthetic pull request",
+          user: { login: "synthetic" },
+          state: "open",
+          merged: false,
           updated_at: "2026-08-29T11:59:59.000Z",
         },
         repository: {
@@ -83,6 +87,9 @@ describe("GitHub webhook boundary", () => {
         baseSha: "b".repeat(40),
         headSha: "a".repeat(40),
         number: 7,
+        title: "Synthetic pull request",
+        author: "synthetic",
+        state: "open",
         updatedAt: "2026-08-29T11:59:59.000Z",
       },
       receivedAt: "2026-08-29T12:00:00.000Z",

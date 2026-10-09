@@ -21,8 +21,8 @@ A [ADR-0054](../decisions/0054-establish-user-dashboard-foundations.md) material
 as fundações locais de `apps/dashboard`, `apps/email-delivery`, `packages/ui` e
 `packages/db`. A [arquitetura do dashboard](../architecture/user-dashboard.md)
 descreve arquivos/interfaces concretos. Exemplos de review/auth/queries abaixo
-incluem a integração M2 de sessão/preferências; os exemplos de reviews/queries
-continuam desenhos para M5–M6, sem pastas vazias ou comportamento simulado.
+incluem M2 e a implementação M5 de reviews/queries. A feature `reviews` mantém
+cliente/keys/transporte; loader e Hono compartilham o caso servidor, sem self-HTTP.
 A ADR-0040 permanece vigente para o admin retirado.
 O [guia TypeScript](typescript-and-module-design.md) continua valendo para
 imports, tipos, módulos e contratos de todo o Holon.
@@ -342,12 +342,12 @@ revalidar sessão/membership na próxima request, sem cookie cache de sessão;
 grants GitHub têm cache de até 60 s e invalidação por eventos recebidos.
 A política de produto é compartilhada entre SSR e API, sem duas ACLs distintas.
 
-## Fronteira proposta de entrega de emails
+## Fronteira de entrega de emails
 
 Q35 confirmou `apps/email-delivery` separado/privado e Q36 escolheu fila com
 retries duráveis desde a primeira entrega. A proposta anterior de chamada
-aguardada sem Queue foi superada. A direção está acordada; contratos, jobs e
-bindings ainda não foram implementados.
+aguardada sem Queue foi superada. M4 (2026-10-09) implementa os contratos, jobs, bindings e
+provas locais dessa direção; recursos e envio reais têm gates separados.
 
 | Responsável            | Capacidade                                                                                                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -356,9 +356,9 @@ bindings ainda não foram implementados.
 | Worker de email        | Consumir/validar referência, obter claim/contexto por RPC privado, renderizar template pt-BR/en, enviar e persistir resultado antes de ack individual                                                        |
 | Packages               | Auth identifica usuário/sessão; application define política e portas; db implementa persistência; contracts valida Queue/RPC; templates ficam internos ao Worker enquanto não houver consumidor independente |
 
-**Composição proposta:** convite+outbox no mesmo D1 → publisher recuperável →
+**Composição implementada em M4 (2026-10-09):** convite+outbox no mesmo D1 → publisher recuperável →
 Queue → email-delivery → Email Sending. Worker usa capability estreita no
-dashboard para claim/contexto/resultado; proposta sem acesso ORM/D1 amplo no
+dashboard para claim/start/resultado; sem acesso ORM/D1 no
 sender. Payload da Queue é referência, sem email, corpo ou token/link.
 Não expor endpoint público de envio nem aceitar HTML/remetente/URL arbitrários.
 
@@ -375,7 +375,8 @@ A [investigação de entrega](../research/2026-10-04-dashboard-email-delivery-in
 detalha falhas, leases, retries, DLQ, privacidade/preview e provas. Queue e
 Worker email são capacidades necessárias acordadas; não adicionar outros canais,
 scheduler de notificações, digest ou novas funcionalidades por disponibilidade.
-Nenhum recurso foi criado. O [estado de referência](../planning/dashboard-engineering-decision-review.md)
+Esta implementação não criou recursos remotos. O [runbook de email](../operations/dashboard-email-delivery.md)
+descreve o protocolo e a ativação autorizada. O [estado de referência](../planning/dashboard-engineering-decision-review.md)
 separa política acordada, desenho técnico e provas restantes.
 
 ## Internacionalização desde a primeira entrega
@@ -543,3 +544,14 @@ conteúdo privado seguem #159 e suas dependências.
 Cada feature expõe somente seus controles de apresentação por `public.ts`;
 a rota não importa transporte ou outros módulos privados. O gate de imports
 confere essas interfaces no código materializado.
+
+## Integração de leitura privada materializada em M5
+
+`app/features/reviews/public.ts` expõe somente as capacidades usadas pelo app.
+`review-client` compõe Query desabilitada, ownership por sessão/escopo e intents,
+AbortSignal e invalidação causal; `review-parameters` valida URL/keys;
+`review-messages` concentra estados bilíngues. O root compõe provider e a rota
+`reviews` compõe dehydrate/hidratação. O adapter servidor usa o caso de aplicação
+`createPrivateReviewReads`, D1 e RPC privados; nenhuma política SQL ou grant
+é repetida no loader/client. O [runbook](../operations/dashboard-review-projection.md)
+e a [matriz](../planning/dashboard-milestone-five-evidence.md) delimitam as provas.

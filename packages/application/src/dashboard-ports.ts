@@ -9,7 +9,6 @@ import type {
   ReauthInitInput,
   ReauthReceipt,
   RemoveMemberInput,
-  ReviewPage,
   SessionIdentity,
   WorkspaceAccess,
   WorkspaceDto,
@@ -87,12 +86,8 @@ export interface EmailDeliveryPort {
 export interface AuthorizedReviewScope {
   readonly userId: string;
   readonly workspaceId: string;
-  readonly repositoryIds: readonly number[];
-}
-/** M5 adds list filters and detail without exposing a SQL handle or stored rows. */
-export interface ReviewReadPort {
-  list(
-    scope: AuthorizedReviewScope,
-    page: { readonly cursor: string | null; readonly limit: number },
-  ): Promise<ReviewPage>;
+  readonly repositories: readonly {
+    installationId: number;
+    repositoryId: number;
+  }[];
 }

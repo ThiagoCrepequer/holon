@@ -138,6 +138,16 @@ o executor 130, a análise estrutural 226, contracts 177, application 158 e mode
 [resumo local](experiments/2026-10-09-review-context-coverage/local-verification.json)
 registra comandos, métricas, arquivos alterados e hashes dos fontes finais.
 
+Antes da abertura do PR, a correção `99cf7caf0ab1ffb3782bdfca525439c0139b2e4d`
+foi integrada à `main` em `929ed5b8eaed671f7c6d5da3e8cdb1a117ba5ce0`.
+A identidade do compilador foi regenerada a partir dos inputs e lockfile
+combinados. `pnpm verify` passou novamente em Node 24.19.0/pnpm 11.24.0,
+incluindo os novos testes de projeção/leitura do dashboard e os dry-runs.
+O control-plane passou 414 testes, com 93,57% de linhas/87,02% de branches.
+O resumo local anterior e os snapshots pagos permanecem intactos: registram
+a versão anterior à integração. Nenhuma chamada paga adicional foi executada
+para abrir o PR; essa nova validação comprova a integração local.
+
 Os arquivos produtivos alterados pertencem a `packages/contracts` (limites,
 omissões, severidade e identidade gerada), `packages/repository-analysis`
 (inventário, coordenadas, planejamento e janelas), `packages/model` (projeção e

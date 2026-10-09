@@ -311,6 +311,7 @@ describe("ReviewLedgerObject", () => {
         { version: 21 },
         { version: 22 },
         { version: 23 },
+        { version: 24 },
       ]);
       expect(
         state.storage.sql
@@ -978,10 +979,10 @@ it("rejects delayed finding writes from a superseded run inside the ledger trans
     ],
     nextId,
   );
-  await runInDurableObject(ledger, (object) => {
-    expect(() => object.savePrFindings(run.prKey, [finding], runId)).toThrow(
-      "no longer authoritative",
-    );
+  await runInDurableObject(ledger, async (object) => {
+    await expect(
+      object.savePrFindings(run.prKey, [finding], runId),
+    ).rejects.toThrow("no longer authoritative");
   });
   expect((await ledger.loadPrFindings(run.prKey))[0]).toMatchObject({
     lastSeenRunId: nextId,

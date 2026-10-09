@@ -68,7 +68,8 @@ export function createWorkspaceCollaboration(
       const links = await connections.list(actor, workspaceId);
       const active = links.filter((l) => l.state === "active");
       const identity = await github.identity(actor);
-      const repositoryIds = new Set<number>();
+      const repositories: { installationId: number; repositoryId: number }[] =
+        [];
       const authorized: {
         installationId: number;
         generation: number;
@@ -106,7 +107,11 @@ export function createWorkspaceCollaboration(
           };
         }
         authorized.push({ ...link, grantExpiresAt: grant.expiresAt });
-        for (const id of grant.repositoryIds) repositoryIds.add(id);
+        for (const id of grant.repositoryIds)
+          repositories.push({
+            installationId: link.installationId,
+            repositoryId: id,
+          });
       }
       await grants.assertCurrent(
         actor,
@@ -118,7 +123,11 @@ export function createWorkspaceCollaboration(
       return {
         userId: actor.id,
         workspaceId,
-        repositoryIds: [...repositoryIds].toSorted((a, b) => a - b),
+        repositories: repositories.toSorted(
+          (a, b) =>
+            a.installationId - b.installationId ||
+            a.repositoryId - b.repositoryId,
+        ),
       };
     },
   };

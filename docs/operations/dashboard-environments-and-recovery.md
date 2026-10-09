@@ -421,7 +421,7 @@ produtores **e escritas da projeção**, não apenas tráfego do dashboard. Entr
 anteriores ao restore ainda em trânsito não podem reaplicar revisão alta depois
 da reconstrução ou da retomada.
 
-O candidato de barreira usa geração de recuperação persistida por escopo,
+A implementação M5 de barreira usa geração de recuperação persistida por escopo,
 conferida na gravação e capturada junto do snapshot **antes** de I/O. Recuperação
 coordenada, com ingress/consumers suspensos, instala uma geração nova em autoridade
 e destino, reconstrói e só então reabre o escopo. Destino rejeita geração antiga;
@@ -541,3 +541,20 @@ e [plugins públicos Better Auth](https://better-auth.com/docs/concepts/plugins)
 REST usa a revisão externa `2026-03-10`; versão externa não é versão de contrato
 Holon. Revogação no GitHub e commit D1 não formam transação distribuída; cache
 limitado/eventos reduzem a janela sem prometer atomicidade externa.
+
+## Atualização de código de Dashboard 4 — 2026-10-09
+
+O código agora implementa Queue/DLQ, provider, RPC de entrega e vigília. As tabelas
+de deploy acima são snapshots datados e não demonstram que esses artefatos
+foram publicados. Os efeitos continuam desabilitados no manifest; ativação,
+recuperação e gates da conta constam no [runbook de email](dashboard-email-delivery.md).
+
+## Atualização de código de Dashboard 5 — 2026-10-09
+
+Migration de projeção 0002, migration DO 24, bindings privados de writer/reader,
+metadata causal e lista/detalhe estão materializados no código. Isso não atualiza
+os snapshots de deploy acima nem aplica schema remoto. O
+[runbook de projeção](dashboard-review-projection.md) é dono do rollout coordenado,
+inventário, barreira de geração e reconstrução; a [matriz M5](../planning/dashboard-milestone-five-evidence.md)
+registra testes locais e gate remoto pendente. Não usar `resumeProjection` para
+reabrir execução de review ou aceitar snapshot antigo sob geração nova.

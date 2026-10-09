@@ -32,6 +32,7 @@ export function WorkspaceInvitations({
       <h3>{labels.invitationTitle}</h3>
       <p>{labels.notice}</p>
       <p>{labels.privacy}</p>
+      <p>{labels.duplicateNotice}</p>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -95,7 +96,7 @@ export function WorkspaceInvitations({
         {invitations.map((invitation) => (
           <li key={invitation.id}>
             <a href={`/invitations/${invitation.id}`}>{invitation.id}</a> —{" "}
-            {labels[invitation.state]}{" "}
+            {labels[invitation.state]} — {labels[invitation.delivery]}{" "}
             {invitation.state === "pending" && (
               <Button
                 variant="quiet"
