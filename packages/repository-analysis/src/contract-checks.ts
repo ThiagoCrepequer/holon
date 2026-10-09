@@ -4,6 +4,7 @@ import {
   type ReviewShard,
   type StructuralImpactReport,
 } from "@holon/contracts";
+import { selectStructuralImpact, structuralImpactFits } from "@holon/domain";
 
 import { collectChangedLines } from "./diff.js";
 import { evidenceWindowCount, partitionPatch } from "./patch-partition.js";
@@ -48,6 +49,7 @@ function combineWindows(
   maxBytes: number,
   maxLines: number,
   maxFiles: number,
+  impact: StructuralImpactReport | undefined,
 ) {
   const files = [...existing.files];
   for (const file of incoming) {
@@ -63,7 +65,15 @@ function combineWindows(
     content.byteLength > maxBytes ||
     content.changedLines.length > maxLines ||
     files.reduce((sum, file) => sum + evidenceWindowCount(file.patch), 0) >
-      reviewExecutionLimits.shardEvidenceWindows
+      reviewExecutionLimits.shardEvidenceWindows ||
+    !structuralImpactFits(
+      impact
+        ? selectStructuralImpact(
+            impact,
+            files.map((file) => file.path),
+          )
+        : undefined,
+    )
   )
     return undefined;
   return content;
@@ -189,6 +199,7 @@ export function buildContractChecks(
         maxBytes,
         maxLines,
         maxFiles,
+        impact,
       );
       if (!combined) continue;
       Object.assign(check, combined);

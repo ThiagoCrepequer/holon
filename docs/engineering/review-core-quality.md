@@ -104,6 +104,11 @@ Um flag opcional não pode apagar timeout, ausência de shard ou rejeição de c
   Preservar a primeira no plano/agregação; não atribuir o mesmo corte global a
   cada parte. Compartilhar janelas canônicas antes de gastar outra parte ou
   inferência. Preservar coordenadas da declaração e do edit no corpo.
+- Medir o contexto estrutural completo antes de agrupar arquivos ou janelas,
+  usando a mesma seleção, envelope e teto UTF-8 da projeção. Um agrupamento que
+  cabe no patch pode exceder o prompt. Separar arquivos quando couberem isolados;
+  conservar `structural_context` e revisão parcial quando um contexto obrigatório
+  exceder sozinho o teto. Não inflar partes repetindo patches para repartir pistas.
 - Registrar estágio e motivo seguro de rejeições anteriores à publicação. Um
   contador posterior zero não invalida uma rejeição anterior. Declarar quando
   a normalização não preserva a contagem original.

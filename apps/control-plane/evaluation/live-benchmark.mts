@@ -326,6 +326,8 @@ try {
           "../../packages/contracts/src/structural-analysis.ts",
           "../../packages/contracts/src/review-plan.ts",
           "../../packages/model/src/context-projection.ts",
+          "../../packages/domain/src/structural-context.ts",
+          "../../packages/domain/src/index.ts",
           "src/review/review-shard-context.ts",
           "evaluation/live-gateway-route.mts",
           "evaluation/live-model-relay.mts",

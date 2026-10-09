@@ -161,3 +161,61 @@ qualidade com outro modelo ou estabilidade entre muitas repetições. O falso
 positivo da confirmação histórica permanece evidência adversa do gate geral;
 esta família nova não o substitui. Janela ausente ou inventário maior que os
 tetos continuam produzindo revisão parcial, de forma explícita.
+
+## Continuação: contexto denso no PR #185
+
+A review do head `0dcf243be6f8f1a6c8135b01e7285c5f247bce56`, contra a base
+`929ed5b8eaed671f7c6d5da3e8cdb1a117ba5ce0`, terminou `NEUTRAL`. Os 122 eventos
+correlacionados da Cloudflare mostraram oito partes degradadas e nenhuma falha
+terminal ou recusa de orçamento; todas omitiram `structuralImpact`. Os oito
+requests do Gateway retornaram HTTP 200. O Worker usado foi
+`06aa69b8-2af5-4f64-a2f0-3b5fb36c570b`, implantado em 2026-10-09T19:55:40Z,
+antes do commit da correção em 2026-10-09T20:15:18Z. Essa execução não validou
+o novo motor nem revelou um erro novo do provider.
+
+O replay local também revelou uma limitação real do novo código: o agrupamento
+considerava tamanho do patch, mas não o contexto estrutural agregado. Duas partes
+perdiam sinais sob 24.000 bytes, embora todos os arquivos isolados coubessem.
+A [ADR-0061](../decisions/0061-pack-review-shards-with-structural-context-budget.md)
+complementa a decisão anterior com medição do envelope completo antes da união
+de arquivos e de janelas de contrato. Seleção, medição e projeção pertencem a
+uma política pura de `domain`, compartilhada pelo planner e pelo modelo.
+
+As três regressões falharam antes das correções: união densa que perde
+referências, plano indevidamente completo para um único arquivo acima do teto e
+janelas de contrato compartilhadas acima do orçamento estrutural. O caminho
+planner → composição → prompt → agregação permanece real. Cobrem ainda ordem
+determinística, limite de partes, UTF-8, validação do novo motivo e preservação
+das omissões globais. Os testes da projeção foram movidos para seu novo dono,
+sem retirar comportamentos ou reduzir thresholds.
+
+O mesmo recorte offline conserva 33 módulos, 354.019 bytes, 100 símbolos e 115
+referências. Não é o inventário de produção nem uma nova revisão do modelo.
+
+| Métrica                           | Antes deste ajuste |       Depois |
+| --------------------------------- | -----------------: | -----------: |
+| Partes                            |                 13 |           11 |
+| Partes com perda estrutural local |                  2 |            0 |
+| Ocorrências de sinais omitidos    |                 56 |            0 |
+| Checks de contrato omitidos       |                  0 |            0 |
+| Maior projeção estrutural         |       23.866 bytes | 22.474 bytes |
+
+As ocorrências contam perdas por projeção, não sinais globais únicos. A revisão
+continua parcial pela varredura restrita aos módulos alterados, com
+`structural_inventory` explícito. Se um arquivo ou par canônico obrigatório
+exceder sozinho o teto, `structural_context` mantém o plano parcial; não criamos
+partes com patches repetidos para repartir pistas. Os tetos financeiros, 64
+partes e oito checks adicionais permanecem.
+
+O [replay e a comparação](experiments/2026-10-09-review-context-coverage/README.md)
+foram adicionados sem substituir o arquivo histórico, o seed financeiro ou os
+snapshots pagos. Não foram feitas chamadas pagas adicionais para esse ajuste;
+o par Gemma anterior não é evidência de execução desta nova versão.
+
+Após essa continuação, `pnpm verify` passou novamente em Node 24.19.0/pnpm
+11.24.0, incluindo tipos, arquitetura, cobertura, evidências, browser e builds
+dry-run. O control-plane passou 417 testes, com 93,56% de linhas/87,01% de
+branches; domínio 116 testes, análise estrutural 226 e model 48. Os nove hashes
+produtivos registrados no replay foram conferidos com os fontes finais. Não
+houve deploy nem reexecução manual remota; CI e review após o push pertencem
+a outra execução e não são demonstrados pelo gate local.

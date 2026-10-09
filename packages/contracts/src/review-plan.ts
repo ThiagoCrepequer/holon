@@ -60,6 +60,11 @@ export const reviewPlanOmissionSchema = z.discriminatedUnion("code", [
   }),
   z.strictObject({ code: z.literal("executor_budget") }),
   z.strictObject({
+    code: z.literal("structural_context"),
+    count: z.number().int().positive(),
+    bytes: z.number().int().positive(),
+  }),
+  z.strictObject({
     code: z.literal("structural_inventory"),
     count: z.number().int().nonnegative().safe(),
     repositoryScanTruncated: z.boolean(),

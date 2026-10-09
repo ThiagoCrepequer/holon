@@ -150,6 +150,11 @@ antes dos cortes. O plano mantém `structural_inventory` quando há perdas ou
 varredura incompleta. A projeção preserva esses fatos, mas conta apenas suas
 perdas locais em `omitted`/`truncated`, sob 24.000 bytes UTF-8 de contexto
 estrutural. Lacuna global não marca automaticamente todos os prompts truncados.
+O planner mede esse envelope completo antes de agrupar arquivos e janelas,
+usando a seleção e projeção puras de `domain`. Separar arquivos evita perdas
+provocadas pela união de contextos que cabem isolados. Contextos obrigatórios
+acima do teto permanecem `structural_context`, com plano parcial, conforme a
+[ADR-0061](../decisions/0061-pack-review-shards-with-structural-context-budget.md).
 Edits de corpo fora da declaração recebem `patchLine` comprovada no patch;
 `line` continua apontando para a declaração. Os tetos de leitura não mudam.
 A verificação de símbolos exportados removidos utiliza a AST completa do módulo

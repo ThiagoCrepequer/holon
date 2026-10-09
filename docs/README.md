@@ -59,6 +59,9 @@ capacidade do Gemma e registra as provas correspondentes.
 O [ajuste de cobertura após o PR #184](research/2026-10-09-review-context-coverage.md)
 registra a separação de omissões, janelas compartilhadas e a política de
 severidade fornecida ao modelo, com regressões locais e par sintético no Gateway.
+Sua continuação registra o orçamento estrutural considerado no agrupamento e
+o replay limitado do PR #185, conforme a
+[ADR-0061](decisions/0061-pack-review-shards-with-structural-context-budget.md).
 
 A verificação de candidatos antes da publicação segue a
 [ADR-0050](decisions/0050-verify-finding-causality-before-publication.md), o

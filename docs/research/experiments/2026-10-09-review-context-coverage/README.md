@@ -34,6 +34,21 @@ Requer os objetos Git, dependências e fontes corrigidos no checkout. O script
 usa o argumento para localizar os fontes e explicita a varredura parcial; não
 chama modelo nem reproduz o inventário completo de produção.
 
+O replay arquivado acima usa a localização histórica da projeção, anterior à
+ADR-0061; execute-o nesse checkout histórico. Para os fontes atuais, a continuação
+do PR #185 está em `context-budget-replay.mts` e a comparação em
+`context-budget-replay.json`. Essa comparação conserva o motor anterior no commit
+`0dcf243`, os mesmos SHAs do diff/inventário e hashes dos fontes do ajuste. Não
+captura uma execução do modelo nem altera os snapshots pagos.
+
+```bash
+pnpm --filter @holon/control-plane exec node --import tsx "$PWD/docs/research/experiments/2026-10-09-review-context-coverage/context-budget-replay.mts" "$PWD"
+```
+
+O analisador valida a identidade e hash do script, denominadores, contagens e
+preservação da varredura parcial. Os hashes dos fontes identificam a captura;
+mudanças futuras não transformam essa captura em prova dos fontes novos.
+
 Para nova rodada paga, siga [operações](../../../operations/evaluations.md)
 e execute `benchmark:live --quality-check --structural-context --coverage-regression`.
 Não apague o ledger. Os snapshots já existentes não mudam quando a formatação

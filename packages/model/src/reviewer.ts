@@ -8,16 +8,17 @@ import {
   type ReviewOutputPreferences,
   reviewSeverityGuidance,
 } from "@holon/contracts";
+import {
+  projectStructuralImpact,
+  structuralContextLimits,
+} from "@holon/domain";
 
 import {
   outputLanguageInstructions,
   preflightConfigurationPrompt,
   serializedRepositoryGuidance,
 } from "./configuration-guidance.js";
-import {
-  projectContextList,
-  projectStructuralImpact,
-} from "./context-projection.js";
+import { projectContextList } from "./context-projection.js";
 import { compactProjectContext } from "./host-context.js";
 import { redactSecrets } from "./redaction.js";
 
@@ -144,7 +145,7 @@ export function buildReviewPromptResult(
   );
   const structuralImpact = projectStructuralImpact(
     context.structuralImpact,
-    24_000,
+    structuralContextLimits.maximumBytes,
   );
   const versions = compactProjectContext(context.projectIdentification);
   const priorFindings = projectContextList(context.priorFindings ?? [], 24_000);

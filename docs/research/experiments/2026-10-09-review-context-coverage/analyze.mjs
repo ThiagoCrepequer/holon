@@ -117,5 +117,43 @@ if (process.argv[2] === "--read") {
     campaignLimitUSD: seed.policy.limitUSD,
   };
   assert.deepEqual(summary, JSON.parse(files.get("summary.json")));
+  const replay = await json("./context-budget-replay.json");
+  assert.equal(replay.baseSha, "929ed5b8eaed671f7c6d5da3e8cdb1a117ba5ce0");
+  assert.equal(replay.headSha, "0dcf243be6f8f1a6c8135b01e7285c5f247bce56");
+  assert.equal(replay.beforeEngineCommit, replay.headSha);
+  assert.equal(
+    replay.replayScriptDigest,
+    createHash("sha256")
+      .update(
+        await readFile(new URL("./context-budget-replay.mts", import.meta.url)),
+      )
+      .digest("hex"),
+  );
+  for (const digest of Object.values(replay.sourceDigests))
+    assert.match(digest, /^[a-f0-9]{64}$/u);
+  for (const key of [
+    "files",
+    "bytes",
+    "symbols",
+    "allSymbols",
+    "references",
+    "totalRefs",
+  ])
+    assert.equal(replay.before[key], replay.after[key]);
+  assert.equal(replay.before.plan.shards, 13);
+  assert.equal(replay.after.plan.shards, 11);
+  assert.equal(
+    sum(replay.before.projection, (part) => part.omitted),
+    56,
+  );
+  assert.equal(
+    sum(replay.after.projection, (part) => part.omitted),
+    0,
+  );
+  assert.equal(replay.after.projection.length, replay.after.plan.shards);
+  assert(replay.after.projection.every((part) => part.bytes <= 24000));
+  assert.deepEqual(replay.after.plan.omissions, [
+    { code: "structural_inventory", count: 0, repositoryScanTruncated: true },
+  ]);
   console.log(JSON.stringify(summary, null, 2));
 }
