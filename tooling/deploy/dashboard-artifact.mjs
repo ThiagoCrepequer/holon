@@ -17,7 +17,7 @@ export const promotionGates = [
   "oauthPrivate",
   "emailProvider",
   "recovery",
-  "previewAccess",
+  "environmentAccess",
   "rollback",
 ];
 const components = [

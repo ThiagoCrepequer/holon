@@ -59,7 +59,7 @@ async function configs(environment = "preview") {
   }
   return result;
 }
-function configuredFiles(graph) {
+function configuredFiles(graph, environment = "preview") {
   const input = files();
   for (const [component, config] of Object.entries(graph))
     input.set(
@@ -71,7 +71,7 @@ function configuredFiles(graph) {
     Buffer.from(
       JSON.stringify({
         ...graph.dashboard,
-        targetEnvironment: "preview",
+        targetEnvironment: environment,
       }),
     ),
   );
@@ -217,6 +217,50 @@ void test("preview remains closed, isolated and unable to use a production sende
     /remote_environment_required/,
   );
   assertEnvironment(await configs("production"), "production");
+});
+void test("production qualification requires production access evidence without provisioning preview", async () => {
+  const graph = await configs("production");
+  graph["repository-executor"].containers[0].image =
+    `registry/image@sha256:${hash}`;
+  const input = configuredFiles(graph, "production");
+  const manifest = artifactManifest(sha, "production", input);
+  const now = Date.parse("2026-10-09T00:00:00.000Z");
+  const record = {
+    status: "passed",
+    revision: sha,
+    environment: "production",
+    digest: hash,
+    completedAt: new Date(now).toISOString(),
+  };
+  const evidence = {
+    revision: sha,
+    environment: "production",
+    rollbackRevision: sha,
+    operator: "synthetic-operator",
+    authorization: "explicit-human-approval",
+    containerImage: `registry/image@sha256:${hash}`,
+    installedSchemas: Object.entries(manifest.entries)
+      .filter(([path]) => path.startsWith("packages/"))
+      .map(([path, value]) => [path, value.sha256]),
+    gates: Object.fromEntries(
+      promotionGates
+        .filter((gate) => gate !== "previewAccess")
+        .map((gate) => [gate, structuredClone(record)]),
+    ),
+  };
+  evidence.gates.environmentAccess = structuredClone(record);
+  assertPromotion(manifest, manifest, input, evidence, now);
+  evidence.gates.environmentAccess.environment = "preview";
+  assert.throws(
+    () => assertPromotion(manifest, manifest, input, evidence, now),
+    /gate_environmentAccess_missing/,
+  );
+  delete evidence.gates.environmentAccess;
+  evidence.gates.previewAccess = structuredClone(record);
+  assert.throws(
+    () => assertPromotion(manifest, manifest, input, evidence, now),
+    /gate_environmentAccess_missing/,
+  );
 });
 void test("promotion requires current evidence, explicit human approval, compatible rollback and provisioned resources", async () => {
   const graph = await configs();

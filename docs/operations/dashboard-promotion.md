@@ -18,6 +18,16 @@ Os manifests preview são fechados e usam UUIDs/origem sintéticos; não são
 recursos provisionados. A matriz de [evidência M6](../planning/dashboard-milestone-six-evidence.md)
 registra as pendências. Não há deploy automático destes apps na CI.
 
+Em 2026-10-09, o responsável dispensou o provisionamento de preview e autorizou
+os deploys e validações diretamente em produção, além do ajuste da #165.
+Os Workers produtivos existentes são atualizados; não criar duplicatas de teste.
+Preview continua opcional e, quando usado, permanece isolado. A qualificação em
+produção usa contas/repositórios de teste e destinatários explicitamente
+autorizados, registra o inventário real e preserva dados, secrets e obrigações.
+Essa decisão não encerra gates físicos, OAuth humano, provider, alertas ou PITR.
+Não executar restore destrutivo de dados produtivos para fabricar prova: o ensaio
+coordenado requer inventário, bookmarks, reconciliação e janela de manutenção.
+
 ## Inventário e responsáveis
 
 `core-team` responde por admissão, schema, rollout e revisão do grafo; Thiago
@@ -40,6 +50,13 @@ dashboard→core `DashboardReviewReader`; dashboard→email; email→dashboard
 `EmailDeliveryAuthority`; core→dashboard `ReviewProjectionWriter` e
 `GitHubAccessEvents`; core→executor; executor→core `GitHubCredentialBrokerEntrypoint`.
 Bindings com alvo/entrypoint incorreto ou DO externo são rejeitados.
+
+O responsável habilitou Email Sending para `crepequer.dev` em 2026-10-09.
+O manifest de produção passa a usar `noreply@crepequer.dev`, com allowlist
+do remetente e envio habilitado; local/preview continuam sem provider real.
+Antes de enviar convites, conferir DNS e manter a visualização do conteúdo
+dos emails desativada no domínio, pois o corpo contém links privados.
+Configuração e domínio habilitado não demonstram entrega ou recebimento.
 Preview exige inventário dos dois UUIDs produtivos para rejeitar também a
 reutilização de um ID sob nome diferente.
 
@@ -105,15 +122,20 @@ rollback com schemas idênticos e mesma implementação da barreira, e imagem
 `@sha256` idêntica à configuração do executor. Evidências precisam de timestamp
 válido, digest e execução nas últimas 24 horas: `verify`, `bilingual`,
 `physicalBrowsers`, `remoteD1`, `oauthPrivate`, `emailProvider`, `recovery`,
-`previewAccess`, `rollback`. Records sintéticos de unit tests só testam a política;
+`environmentAccess`, `rollback`. O gate `environmentAccess` pertence ao ambiente
+do artefato: em produção comprova escopo das contas/repositórios/destinatários
+de teste, controle de acesso e ausência de ingress público no sender/executor;
+em preview comprova também proteção do domínio e isolamento de recursos.
+Prova de preview não satisfaz esse gate de produção. Records sintéticos de unit tests só testam a política;
 não autorizam nem substituem as provas reais. A função é preflight, sem deploy.
 
 ## Sequência operacional autorizada
 
 1. Identificar conta, ambiente, SHA, artefato, imagem por digest, operador,
    autoridade da GitHub App e autorização com escopo de recursos/efeitos. Verificar
-   ausência de público no preview/sender/executor e proteção do domínio preview
-   por controle de acesso explícito. Placeholders abortam prontidão.
+   ausência de público no sender/executor, escopo autorizado dos testes e controle
+   de acesso produtivo. Quando houver preview, conferir também proteção de seu
+   domínio e isolamento dos recursos. Placeholders abortam prontidão.
 2. Registrar inventário remoto de bindings, secrets por nome, schemas/receipts,
    Queue/DLQ, workflows, callbacks, origem/cookies, versões e backups. Conferir
    invariantes e migrations pendentes sem PII; não executar reset.

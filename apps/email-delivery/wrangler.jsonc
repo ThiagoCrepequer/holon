@@ -54,13 +54,13 @@
       "name": "holon-email-delivery",
       "vars": {
         "APP_ORIGIN": "https://holon-dashboard.thiago-crepequer.workers.dev",
-        "EMAIL_FROM": "noreply@example.invalid",
-        "EMAIL_SEND_ENABLED": "false",
+        "EMAIL_FROM": "noreply@crepequer.dev",
+        "EMAIL_SEND_ENABLED": "true",
       },
       "send_email": [
         {
           "name": "EMAIL",
-          "allowed_sender_addresses": ["noreply@example.invalid"],
+          "allowed_sender_addresses": ["noreply@crepequer.dev"],
         },
       ],
       "services": [

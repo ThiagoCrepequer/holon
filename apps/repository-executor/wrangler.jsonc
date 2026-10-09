@@ -7,7 +7,7 @@
   "containers": [
     {
       "class_name": "HolonSandbox",
-      "image": "./Dockerfile",
+      "image": "registry.cloudflare.com/4be6ae7d1bb4a3b2a395c6d30e2671a5/holon-repository-executor-holonsandbox@sha256:e2fed19a256a14d9b60f3c2d061a87584019fd0e18b0f3a8a8834a8eeed621a1",
       "instance_type": "lite",
       "max_instances": 10,
     },

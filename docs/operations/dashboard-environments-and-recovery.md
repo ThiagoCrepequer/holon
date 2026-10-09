@@ -27,6 +27,11 @@ real ainda não foi validado. M6 materializa configs preview fechadas e o prefli
 proteção de domínio e recuperação remota continuam não executados. Consulte
 [promoção M6](dashboard-promotion.md) para o contrato atual e gates restantes. O pipeline automático do core não publica esses apps.
 
+Em 2026-10-09, o responsável dispensou preview separado e autorizou deploys e
+validações em produção. A #165 passa a exigir o inventário e os ensaios nesse
+ambiente; isolamento continua obrigatório se um preview for provisionado.
+Consultar o runbook de promoção para escopo de teste, manutenção e evidências.
+
 ## Bootstrap de produção
 
 Conta Cloudflare: `4be6ae7d1bb4a3b2a395c6d30e2671a5`. Owner operacional desta
