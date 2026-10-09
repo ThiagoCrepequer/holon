@@ -107,8 +107,11 @@ Fontes atuais consultadas em 2026-10-09:
 [Workers API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/)
 oferece builder estruturado e `messageId`;
 [send bindings](https://developers.cloudflare.com/email-service/configuration/send-bindings/)
-descreve restrições de remetente e também destino verificado. Essa descrição não
-prova envio a um convidado novo: a discrepância permanece um gate da conta real.
+descreve restrições de remetente e também destino verificado. A página atual de
+[limites](https://developers.cloudflare.com/email-service/platform/limits/) esclarece
+que, após onboarding de domínio de envio, qualquer destinatário é permitido.
+A descrição de bindings omite essa condição; a disponibilidade/configuração da
+conta real e o smoke autorizado continuam gates de ativação.
 [Local sending](https://developers.cloudflare.com/email-service/local-development/sending/)
 avisa que simulação nativa escreve conteúdo em console/arquivos; os testes Holon
 usam provider controlado e dados sintéticos. Não usar simulação nativa com PII.
@@ -127,8 +130,10 @@ Com acesso restrito e autorização operacional, consultar agregados de
 `invitation_delivery_intent` por estado, due e idade. Investigar IDs causais em
 `email_delivery_attempt` sem exportar destinatários. Conferir cron, D1, bindings,
 quotas, provider e consumers antes de qualquer replay. Restaurar esses serviços
-retoma a vigília automaticamente. Para inspeção imediata, invocar o cron pelo
-caminho operacional suportado; não editar contadores nem reiniciar deadline.
+retoma a vigília automaticamente. Confirmar a próxima execução do cron
+configurado e acompanhar a redução de due, sem editar contadores nem reiniciar
+deadline. O [teste manual de scheduled](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/)
+documentado em 2026-10-09 é uma ferramenta da bancada local.
 
 Replay de DLQ usa só o mesmo ID e passa por claim/start. Terminais e orçamento
 esgotado não são reabertos. Falha permanente/prazo esgotado exige um novo convite

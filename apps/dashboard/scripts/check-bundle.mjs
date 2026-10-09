@@ -126,7 +126,15 @@ if (expectedEnv === "production") {
   for (const binding of config.d1_databases)
     assert.equal(binding.remote, false);
 }
-assert.equal(config.services.length, 0);
+assert.deepEqual(config.services, [
+  {
+    binding: "EMAIL_DELIVERY",
+    service:
+      targetEnv === "production"
+        ? "holon-email-delivery"
+        : "holon-email-delivery-local",
+  },
+]);
 console.log(
   `Dashboard build (${targetEnv ?? "local"}): ${assets.length} assets, JS gzip ${compressed} bytes, UI CSS/fonts and server isolation verified.`,
 );

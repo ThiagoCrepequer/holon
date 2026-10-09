@@ -9,7 +9,10 @@ last-reviewed: 2026-10-09
 
 # Dashboard 4 · Email recuperável
 
-Milestone GitHub **#5**, issues **#150–#153**, sobre `main` após merge de #181.
+Milestone GitHub **#5**, issues **#150–#153**, sobre `main` após merge de #181
+(base `6dcb7e5279a0b413985d401cc90290a62a1f39a9`). Implementação em `168b600`,
+complemento dos oráculos de composição em `68a5deb`; ajustes finais acompanham
+este relatório no mesmo PR.
 Esta matriz distingue implementação/prova local e ativação operacional. O
 [runbook](../operations/dashboard-email-delivery.md) é dono das regras de entrega.
 
@@ -35,12 +38,41 @@ do módulo ainda ausente; não foi uma regressão observável do código antigo.
 implementar o protocolo, os cenários de D1 passaram. As provas de composição
 controlam somente o provider e falhas de fronteira; não replicam o algoritmo D1.
 
-- `pnpm --filter @holon/db test:coverage`: passou com limites 90/85 preservados.
-- `pnpm --filter @holon/email-delivery test:coverage`: passou, incluindo timeout
-  e aceitação tardia, com limites preservados.
-- `pnpm --filter @holon/dashboard test:workers`: passou, incluindo publisher.
+- `pnpm --filter @holon/db test:coverage`: 160 testes passaram; cobertura
+  95,06% statements, 87,17% branches, 100% funções e 95,98% linhas.
+- `pnpm --filter @holon/email-delivery test:coverage`: 21 testes passaram,
+  incluindo timeout e aceitação tardia; cobertura 97,72% statements, 96,61%
+  branches, 91,66% funções e 98,76% linhas.
+- `pnpm --filter @holon/dashboard test:workers`: 92 testes passaram, incluindo
+  publisher; o gate completo também executou seus 144 testes Node, cobertura de
+  ambas as suites e 12 cenários de fundação + 39 de auth/tenancy/convites/email
+  em Chromium, Firefox e WebKit. A bancada browser M0 passou seus 60 cenários.
+- `pnpm verify`: passou em 2026-10-09 com Node 24.11.0 e pnpm 11.24.0;
+  inclui marca, schemas/config, formatação, lint, tipos, arquitetura, cobertura,
+  browsers, builds/dry-runs e imagem Docker. Os thresholds existentes foram
+  preservados; Turbo reutilizou resultados locais válidos conforme seus hashes.
+- `CLOUDFLARE_ENV=production pnpm --filter @holon/dashboard build` e
+  `pnpm --filter @holon/email-delivery exec wrangler deploy --env production --dry-run --outdir dist`:
+  passaram, incluindo bindings privados e configuração de envio desabilitada.
 - Regressão adicional: referência duplicada após lease expirada reservava geração 2 antes da reconciliação; o teste falhou pelo claim indevido. A correção exige lease reconciliada (zero) e retry_at vencido.
-- Gate completo e revisão final serão registrados neste arquivo após conclusão.
+- O gate também expôs uma guarda antiga de bundle que exigia zero services;
+  agora exige exatamente o binding privado do ambiente. Traces de browser
+  mostraram cliques após OAuth sobre HTML SSR antes de scripts carregados;
+  helpers passaram a aguardar o carregamento da navegação. IDs sintéticos e
+  seletores pt-BR foram corrigidos. Asserts, timeouts e zero retries permanecem.
+
+## Revisão de encerramento
+
+Revisões independentes de padrões e de aderência às issues, incluindo o diff
+final, terminaram sem achados sustentados pendentes. A revisão de aderência
+identificou inicialmente duas lacunas de evidência, corrigidas em `68a5deb`:
+batch misto com ack/retry individuais e cancelamento durante provider em voo
+com falha do registro D1. Os testes compõem RPC e persistência reais locais,
+observam estado por queries independentes e contam efeitos do provider.
+
+Os critérios de implementação de #150–#153 estão rastreados nesta matriz. A
+aprovação editorial dos previews e os gates operacionais de promoção continuam
+explícitos abaixo, sem inferir resultados remotos.
 
 ## Limites e revisão
 

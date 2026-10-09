@@ -4,7 +4,7 @@ kind: planning
 status: proposed
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - dashboard-engineering-decision-review.md
   - ../engineering/frontend-application-structure.md

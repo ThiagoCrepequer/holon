@@ -255,3 +255,22 @@ Fontes reconsultadas em **2026-10-04**: [retenção/limites Queue](https://devel
 [DLQ](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/)
 e [API de envio](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/).
 Protocolo é proposta Holon; não foi reproduzido em Workers nem enviado email.
+
+## Revalidação durante Dashboard 4 — 2026-10-09
+
+A [Workers API atual](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/)
+documenta builder estruturado e acknowledgement com `messageId`. A versão de tipos
+presente no repositório suporta essa assinatura, e build/dry-run local aceitou o
+binding `send_email`; isso não comprova capacidade da conta ou envio real.
+
+A página de [limites](https://developers.cloudflare.com/email-service/platform/limits/)
+(atualizada em 2026-09-25, consultada em 2026-10-09) explicita que onboarding de
+domínio de envio permite qualquer destinatário. A página de
+[send bindings](https://developers.cloudflare.com/email-service/configuration/send-bindings/)
+ainda descreve destino verificado sem esse contexto. A condição documentada
+agora está mais clara que no snapshot desta investigação: configurar domínio e
+provar destinatário novo na conta escolhida continua necessário na ativação.
+Não houve alteração de domínio, DNS ou envio para provar isso.
+
+A implementação e seus limites locais estão no
+[runbook de Dashboard 4](../operations/dashboard-email-delivery.md).

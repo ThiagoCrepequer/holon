@@ -38,6 +38,8 @@ async function signIn(page: Page, subject: number, locale = "en") {
   await expect(
     page.getByRole("button", { name: /^(Active sessions|Sessões ativas)$/ }),
   ).toBeVisible();
+  // OAuth navigates to an SSR document before its client scripts finish loading.
+  await page.waitForLoadState("load");
 }
 async function createTeam(page: Page, name: string, portuguese = false) {
   await page
@@ -121,6 +123,7 @@ test("connection requires native reauth, shows live state and receives private R
   await expect(
     page.getByRole("button", { name: "Confirm connection change" }),
   ).toBeVisible();
+  await page.waitForLoadState("load");
   await page.getByRole("button", { name: "Confirm connection change" }).click();
   await expect(page.getByLabel("Workspace", { exact: true })).toContainText(
     "Synthetic GitHub workspace",
@@ -203,7 +206,7 @@ for (const locale of ["en", "pt-BR"])
     page,
   }, info) => {
     const subject =
-      82001 +
+      85001 +
       ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
       (locale === "en" ? 0 : 100);
     await signIn(page, subject, locale);
@@ -218,7 +221,7 @@ for (const locale of ["en", "pt-BR"])
       ),
     ).toBeVisible();
     await page
-      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
       .fill(`alias-${subject + 1}@example.invalid`);
     await page
       .getByRole("button", {
@@ -256,7 +259,7 @@ for (const locale of ["en", "pt-BR"])
       ),
     ).toBeVisible();
     await page
-      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
       .fill(`alias-${subject + 2}@example.invalid`);
     await page
       .getByRole("button", {
@@ -290,7 +293,7 @@ for (const locale of ["en", "pt-BR"])
       ),
     ).toBeVisible();
     await page
-      .getByLabel(pt ? "Email destinatário" : "Recipient email")
+      .getByLabel(pt ? "Email do destinatário" : "Recipient email")
       .fill(`alias-${subject + 3}@example.invalid`);
     await page
       .getByRole("button", {
