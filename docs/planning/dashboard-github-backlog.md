@@ -187,3 +187,18 @@ base, permitindo o encerramento automático das cinco issues após o merge.
 O [relatório M3](../research/2026-10-08-dashboard-milestone-three-results.md#integração-em-main-conferida-em-2026-10-09)
 registra a causa, base e validação. Publicação e smokes remotos não são inferidos
 da correção do destino do PR.
+
+## Implementação M6 — 2026-10-09
+
+O PR do milestone GitHub #7 reúne conta/onboarding, lista/detalhe bilíngues,
+motion/acessibilidade, budgets medidos e preparação de promoção/recuperação.
+A [matriz M6](dashboard-milestone-six-evidence.md) relaciona #159–#167 e #127 a
+código, testes e condições restantes. O [runbook de promoção](../operations/dashboard-promotion.md)
+registra a barreira independente, artefato por SHA, inventário e sequência.
+
+Manifests fechados, testes sintéticos e dry-runs não encerram duas versões reais
+de browsers/aparelhos físicos, benchmark D1 remoto, PITR coordenado, alertas
+remotos nem promoção do mesmo artefato. Essas operações exigem autorização
+explícita; manter o PR draft e #163–#167/#127 abertas. #159–#162 são encerráveis
+com os critérios locais e gate completo comprovados na matriz, sem transferir
+para elas os gates operacionais das issues donas. SSE #168 permanece pós-MVP.

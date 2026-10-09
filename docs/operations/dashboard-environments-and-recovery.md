@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - ../planning/dashboard-implementation-plan.md
   - ../research/2026-10-04-dashboard-email-delivery-investigation.md
@@ -23,8 +23,9 @@ A fundação M1 tem manifests, tipos e comandos locais. A operação autorizada 
 bootstrap publicou a fundação estática com autenticação desabilitada. A ativação
 posterior pelo responsável cadastrou os secrets GitHub e habilitou auth; o
 manifest de produção acompanha esse estado com `AUTH_ENABLED=true`. O OAuth
-real ainda não foi validado. Preview e recuperação
-remota continuam propostas. O pipeline automático do core não publica esses apps.
+real ainda não foi validado. M6 materializa configs preview fechadas e o preflight de artefato; seus recursos,
+proteção de domínio e recuperação remota continuam não executados. Consulte
+[promoção M6](dashboard-promotion.md) para o contrato atual e gates restantes. O pipeline automático do core não publica esses apps.
 
 ## Bootstrap de produção
 

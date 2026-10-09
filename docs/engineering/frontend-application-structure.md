@@ -549,9 +549,31 @@ confere essas interfaces no código materializado.
 
 `app/features/reviews/public.ts` expõe somente as capacidades usadas pelo app.
 `review-client` compõe Query desabilitada, ownership por sessão/escopo e intents,
-AbortSignal e invalidação causal; `review-parameters` valida URL/keys;
+AbortSignal e invalidação causal; `app/review-parameters.ts` valida o contrato
+de URL compartilhado por SSR, API e cliente;
 `review-messages` concentra estados bilíngues. O root compõe provider e a rota
 `reviews` compõe dehydrate/hidratação. O adapter servidor usa o caso de aplicação
 `createPrivateReviewReads`, D1 e RPC privados; nenhuma política SQL ou grant
 é repetida no loader/client. O [runbook](../operations/dashboard-review-projection.md)
 e a [matriz](../planning/dashboard-milestone-five-evidence.md) delimitam as provas.
+
+## Experiência materializada em M6
+
+As rotas welcome/account compõem `features/account`; a rota reviews mantém
+loader/hidratação finos e compõe `features/reviews/review-screen.tsx`. Features
+consomem somente os tipos serializados de `app/viewer-data.ts`, sem importar o
+root ou o adapter servidor. O root permanece dono do provider e da admissão.
+
+`Dialog` exige `returnFocusRef` para o gatilho concreto. O componente restaura
+esse foco ao fechar/desmontar, mesmo quando a política de pointer do navegador
+não focou o botão; Escape e contenção permanecem nativos. Close antigo após
+reabertura é ignorado. Foco e cleanup não aguardam duração da animação.
+
+Marked 18.1.0 é uma exceção direta localizada em `review-markdown.tsx`: o lexer
+retorna tokens privados da implementação, convertidos em elementos React fixos.
+Não expõe o SDK na interface da feature, não insere HTML e não cria pacote para
+um único renderer do produto. `review-code.tsx` mantém scroll por teclado e o
+source original; o contrato de retorno à review é puro e relativo. O SDK
+`web-vitals` é dev-only e instrumenta apenas o lab sintético. A
+[matriz M6](../planning/dashboard-milestone-six-evidence.md) delimita os gates
+locais e as provas operacionais pendentes.

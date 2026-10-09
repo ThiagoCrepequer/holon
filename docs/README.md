@@ -153,3 +153,5 @@ convites atômicos por alvo, com provas Workerd/D1/browser e limites remotos.
 
 - [Evidência de Dashboard 5](planning/dashboard-milestone-five-evidence.md): causalidade, leitura privada e limites de prova.
 - [Evidência de Dashboard 4](planning/dashboard-milestone-four-evidence.md): critérios e limites locais de entrega recuperável.
+
+- [Evidência de Dashboard 6](planning/dashboard-milestone-six-evidence.md): experiência, budgets e gates operacionais de promoção ainda abertos.

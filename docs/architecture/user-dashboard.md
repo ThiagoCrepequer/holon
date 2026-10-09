@@ -407,3 +407,31 @@ continuação da mesma revisão. Texto GitHub/modelo é escapado como dado.
 O [runbook de projeção](../operations/dashboard-review-projection.md) define
 barreira/geração e rollout coordenado. A [matriz M5](../planning/dashboard-milestone-five-evidence.md)
 separa provas locais e benchmark/PITR remotos ainda dependentes de autorização.
+
+## Experiência e preparação de promoção M6 — 2026-10-09
+
+Rotas são composição/loader: `features/account` reúne onboarding e conta;
+`features/reviews` possui dataset, retorno/foco, conteúdo Markdown e recuperação.
+`/account` reutiliza o mesmo contexto root e mantém retorno relativo validado a
+review. Error boundary privado oferece novo OAuth preservando a URL; o novo
+callback revalida autoridade, sem usar cache antigo. Query continua disabled e
+sem refetch implícito. Nenhuma capacidade analítica/admin/SSE foi introduzida.
+
+`listMembers` admite sessão/account/membership junto dos nomes/roles na mesma
+batch D1, com relógio SQL e paginação de 100. HTTP não faz I/O depois desse
+snapshot. Mutações de governança usam os comandos/provas M2; a UI acrescenta
+reauth por alvo e confirmação explícita. Criar equipe após resultado desconhecido
+retém ID/nome da mesma intenção. Repositórios são limpos antes de cada leitura.
+
+`ReviewMarkdown` usa lexer Marked direto no app e elementos React fixos, sem HTML
+inserido ou requests de imagem. Blocos de código ficam focáveis com rolagem
+interna. Motion compartilhado usa CSS/tokens; o Dialog ignora close nativo antigo
+quando já foi reaberto. Fonte/dependência servidor não entra no browser.
+
+`DASHBOARD_RECOVERY_MODE` fora do D1 restaurado fecha HTTP/cron/claim/start/writer
+na ausência de configuração ou em `closed`. `rebuilding` permite somente writer
+privado com cerca D1; `active` depende de reconciliação operacional. Resultados
+causais de email em voo continuam registráveis. O [runbook M6](../operations/dashboard-promotion.md)
+define grafo, artefato, schema/rollback e gates reais. A [matriz M6](../planning/dashboard-milestone-six-evidence.md)
+distingue instrumentação/testes/dry-run de promoção; os quatro manifests preview
+não provam provisão ou integração real.

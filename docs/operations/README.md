@@ -31,3 +31,5 @@ dry-run não prova credenciais, bindings, cotas nem comportamento de produção.
 - [Perguntas sobre findings](finding-clarification.md): invocação na discussão, autorização, limites e ativação dos bindings.
 
 - [Projeção e leitura privada de reviews](dashboard-review-projection.md) — protocolo durável, geração e recuperação de Dashboard 5.
+
+- [Promoção e recuperação de Dashboard 6](dashboard-promotion.md): grafo por ambiente, artefato imutável, hold independente, alertas e operação autorizada.
