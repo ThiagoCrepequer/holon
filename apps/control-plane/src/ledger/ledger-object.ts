@@ -519,7 +519,8 @@ export class ReviewLedgerObject
     });
     await this.mutateReadModel(
       () => this.applyTransition(transition),
-      next === "failed_retryable" || expected === "failed_retryable"
+      next === "failed_retryable" ||
+        (expected === "failed_retryable" && next === "running")
         ? (new ReviewReadModel(this.ctx.storage).snapshot()?.activityAt ??
             occurredAt)
         : occurredAt,

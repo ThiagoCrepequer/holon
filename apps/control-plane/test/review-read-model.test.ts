@@ -596,3 +596,32 @@ it("accepts a causally newer replacement installation without changing PR identi
     }),
   ).toEqual(result);
 });
+it("promotes final terminal failure after retries as meaningful activity", async () => {
+  const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
+  await ledger.observePullRequest(metadata);
+  await ledger.claimRun(run, "terminal-activity");
+  await ledger.transition(
+    run.id,
+    "queued",
+    "running",
+    metadata.sourceUpdatedAt,
+    "start",
+  );
+  await ledger.transition(
+    run.id,
+    "running",
+    "failed_retryable",
+    "2026-10-09T04:00:00.000Z",
+    "retryable",
+  );
+  await ledger.transition(
+    run.id,
+    "failed_retryable",
+    "failed_terminal",
+    "2026-10-09T05:00:00.000Z",
+    "terminal",
+  );
+  expect((await readDetail(ledger)).review.activityAt).toBe(
+    "2026-10-09T05:00:00.000Z",
+  );
+});
