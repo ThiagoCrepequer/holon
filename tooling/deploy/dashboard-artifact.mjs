@@ -214,6 +214,16 @@ export function assertEnvironment(
   }
   const dashboard = configs.dashboard,
     email = configs["email-delivery"];
+  if (dashboard.vars.AUTH_ENABLED === "true") {
+    const appId = dashboard.vars.GITHUB_APP_ID;
+    assert(
+      typeof appId === "string" &&
+        /^\d+$/.test(appId) &&
+        Number.isSafeInteger(Number(appId)) &&
+        Number(appId) > 0,
+      "github_app_id_required",
+    );
+  }
   assert.equal(
     dashboard.vars.AUTH_ENVIRONMENT,
     environment,

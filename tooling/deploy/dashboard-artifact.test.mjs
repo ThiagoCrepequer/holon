@@ -218,6 +218,30 @@ void test("preview remains closed, isolated and unable to use a production sende
   );
   assertEnvironment(await configs("production"), "production");
 });
+void test("authenticated environments require a valid GitHub App ID for collaboration", async () => {
+  const graph = await configs("production");
+  graph.dashboard.vars.GITHUB_APP_ID = "123456";
+  assertEnvironment(graph, "production");
+  for (const value of [
+    undefined,
+    "",
+    "0",
+    "-1",
+    "1.5",
+    "invalid",
+    "9007199254740992",
+  ]) {
+    const changed = structuredClone(graph);
+    if (value === undefined) delete changed.dashboard.vars.GITHUB_APP_ID;
+    else changed.dashboard.vars.GITHUB_APP_ID = value;
+    assert.throws(
+      () => assertEnvironment(changed, "production"),
+      /github_app_id_required/,
+    );
+  }
+  const preview = await configs("preview");
+  assertEnvironment(preview, "preview", productionIds);
+});
 void test("production qualification requires production access evidence without provisioning preview", async () => {
   const graph = await configs("production");
   graph["repository-executor"].containers[0].image =
@@ -265,6 +289,7 @@ void test("production qualification requires production access evidence without 
 void test("promotion requires current evidence, explicit human approval, compatible rollback and provisioned resources", async () => {
   const graph = await configs();
   graph.dashboard.vars.AUTH_ENABLED = "true";
+  graph.dashboard.vars.GITHUB_APP_ID = "123456";
   graph.dashboard.vars.DASHBOARD_RECOVERY_MODE = "active";
   graph.dashboard.vars.APP_ORIGIN = "https://preview.example.com";
   graph.dashboard.vars.AUTH_REGISTERED_ORIGINS = JSON.stringify({

@@ -71,6 +71,7 @@
         "AUTH_ENVIRONMENT": "production",
         "AUTH_REGISTERED_ORIGINS": "{\"preview\":[],\"production\":[\"https://holon-dashboard.thiago-crepequer.workers.dev\"]}",
         "AUTH_ENABLED": "true",
+        "GITHUB_APP_ID": "4766750",
         "DASHBOARD_RECOVERY_MODE": "active",
       },
       "d1_databases": [
