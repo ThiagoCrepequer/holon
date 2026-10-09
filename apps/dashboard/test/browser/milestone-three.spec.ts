@@ -3,18 +3,30 @@ import { expect, test, type Page } from "@playwright/test";
 const origin = "https://127.0.0.1:8795";
 test("workspace controls wait for hydration before accepting the first click", async ({
   page,
+  browser,
 }, info) => {
   const subject =
     84001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
   await signIn(page, subject);
+  // A fresh browsing context prevents WebKit's warm module cache from bypassing
+  // interception on reload; the persisted session still reaches the real SSR.
+  const coldContext = await browser.newContext({
+    storageState: await page.context().storageState(),
+    ignoreHTTPSErrors: true,
+    extraHTTPHeaders: { "X-Holon-Test-Client": String(subject) },
+  });
+  const coldPage = await coldContext.newPage();
   const scripts = Promise.withResolvers<void>();
-  await page.route("**/assets/*.js", async (route) => {
+  const blocked = Promise.withResolvers<void>();
+  await coldPage.route("**/assets/*.js", async (route) => {
+    blocked.resolve();
     await scripts.promise;
     await route.continue();
   });
   try {
-    await page.reload({ waitUntil: "commit" });
-    const manage = page.getByRole("button", {
+    await coldPage.goto(origin + "/", { waitUntil: "commit" });
+    await blocked.promise;
+    const manage = coldPage.getByRole("button", {
       name: "Manage workspaces",
       exact: true,
     });
@@ -23,9 +35,10 @@ test("workspace controls wait for hydration before accepting the first click", a
     scripts.resolve();
     await expect(manage).toBeEnabled();
     await manage.click();
-    await expect(page.getByLabel("Team name")).toBeVisible();
+    await expect(coldPage.getByLabel("Team name")).toBeVisible();
   } finally {
     scripts.resolve();
+    await coldContext.close();
   }
 });
 async function signIn(page: Page, subject: number, locale = "en") {

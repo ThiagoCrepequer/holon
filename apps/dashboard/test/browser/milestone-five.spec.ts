@@ -83,7 +83,7 @@ test("native SSR: zero hydration reads, one explicit read per filter/page/detail
   page,
 }, info) => {
   const subject =
-    97001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
+    170001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
   const workspace = await signIn(page, subject);
   expect(
     (
@@ -150,7 +150,8 @@ test("a revoked grant hides the visible dataset and denied SSR never dehydrates 
   page,
 }, info) => {
   const subject =
-      98001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10,
+      180001 +
+      ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10,
     workspace = await signIn(page, subject);
   expect(
     (
@@ -197,7 +198,7 @@ test("navigation cancels an in-flight refresh and keeps the new dataset refresha
   page,
 }, info) => {
   const subject =
-    99001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
+    190001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
   const workspace = await signIn(page, subject);
   expect(
     (
@@ -262,7 +263,7 @@ test("concurrent SSR users keep datasets, locales and timestamps isolated", asyn
     browser.newContext({ baseURL: origin, ignoreHTTPSErrors: true }),
   ]);
   try {
-    const subjects = [100001 + offset, 101001 + offset],
+    const subjects = [200001 + offset, 210001 + offset],
       pages = await Promise.all(contexts.map((context) => context.newPage()));
     const workspaces = await Promise.all(
       pages.map((page, index) => signIn(page, subjects[index]!)),
