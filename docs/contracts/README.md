@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-09
 ---
 
 # Contratos
@@ -40,7 +40,7 @@ integra o pedido de reserva no mesmo orçamento da run.
 
 - Schemas são independentes de SDK e provedor.
 - Toda estrutura produzida por modelo é validada em runtime.
-- Versões incompatíveis recebem novo identificador de schema.
+- Contratos internos mantêm um único shape atual, alterando produtores e consumidores juntos; sem versões/aliases internos antigos (ADR-0036).
 - Campos desconhecidos são rejeitados nas fronteiras de segurança, salvo decisão
   explícita em contrário.
 - Exemplos válidos e inválidos acompanham cada schema.
@@ -57,6 +57,13 @@ entram nesse contexto nem são enviados ao modelo. O contexto preserva cada
 patch completo; o prompt pode omitir arquivo inteiro, nunca cortar hunk. A mesma política autoriza
 paths e resultados das tools. A saída por shard contém até oito findings, quatro evidências
 por finding e resumo de até 10.000 unidades UTF-16 (ADR-0033).
+
+`StructuralImpactReport` limita símbolos/referências a 100 e contratos/superfícies
+a 50 por categoria. Quando há perdas, `omittedSignals` contém contagens inteiras
+não negativas por categoria, calculadas antes do corte. O campo é omitido sem
+perdas. Projeções somam suas próprias omissões a essas contagens e propagam
+limitação de contexto. `repositoryScanTruncated` continua descrevendo o scan;
+não substitui as contagens dos tetos do relatório.
 
 `read_file` aceita uma janela inclusiva de no máximo 500 linhas. Depois de
 resolver e autorizar o path real, o executor traduz essa janela para um comando
@@ -148,3 +155,24 @@ A fila compartilhada aceita o envelope de PR e `followUpMessageSchema` para CI/f
 ## Perguntas em findings
 
 `finding-clarification.ts` valida admissão, identidade do Agent, registro persistido, leituras e resposta. A resposta limita explicação a 5.000 caracteres, cenário a 2.000 e até seis referências, com linhas positivas e trecho de até 2.000 caracteres. O host exige correspondência às leituras efetivas, não apenas um schema válido. A fase `finding_clarification` usa reservas separadas por pergunta. A [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md) define autoridade e efeitos.
+
+## Evidência recuperada e resultados de shards
+
+`review-evidence.ts` define receipts ligados a run/head/path/janela/digest e o pacote
+limitado de oito reads, com 20 kB totais. `validateReviewEvidencePack` recalcula a
+identidade e o conteúdo no snapshot esperado. `causalVerificationSchema` exige
+`basis` (`patch`/`repository`) e `evidenceReceiptIds`; repository requer IDs de
+receipts inspecionados e completos, patch requer lista vazia. O host resolve a
+janela inteira pelos IDs e valida os metadados, além da cobertura posicional única
+de candidatos. A [ADR-0057](../decisions/0057-select-host-evidence-receipts-in-causal-assessments.md)
+remove a repetição de path/coordenadas na resposta, preservando a validação de
+identidade/conteúdo pelo adapter.
+
+`shardReviewResultSchema` discrimina sucesso/falha. Sucesso admite até oito
+findings; falha exige causa e não carrega findings/resumo publicáveis. A agregação
+exige IDs/índices únicos do plano e deriva degradação também das limitações e
+rejeições, sem depender só de `isDegraded`.
+
+A porta de lookup GitHub retorna `found` com ID/corpo, `absent` somente após
+paginação concluída ou `inconclusive` por limite. Nenhum consumidor pode transformar
+inconclusivo em autorização de nova mutação. São contratos atuais, sem fallback.

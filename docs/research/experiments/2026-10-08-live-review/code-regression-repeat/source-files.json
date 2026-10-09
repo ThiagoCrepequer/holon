@@ -1,0 +1,130 @@
+{
+  "apps/control-plane/src/review/review-agent.ts.source": {
+    "snapshot": "../source-snapshots/fef080cef4e6ad02167de2eb3b21ddbca266b5de43913c6312e75bd7c1a40ba9.source",
+    "sha256": "fef080cef4e6ad02167de2eb3b21ddbca266b5de43913c6312e75bd7c1a40ba9"
+  },
+  "apps/control-plane/evaluation/live-fixtures.ts.source": {
+    "snapshot": "../source-snapshots/218df84ac8a8454b7f47e77a473033703c5f51032790f20bf25742edf95dcbd3.source",
+    "sha256": "218df84ac8a8454b7f47e77a473033703c5f51032790f20bf25742edf95dcbd3"
+  },
+  "packages/model/src/reviewer.ts.source": {
+    "snapshot": "../source-snapshots/b16e2e4b1a1547c168ff9fdfd2e3fc0148c61c6e85a5ff5e7f611e885f30a271.source",
+    "sha256": "b16e2e4b1a1547c168ff9fdfd2e3fc0148c61c6e85a5ff5e7f611e885f30a271"
+  },
+  "packages/application/src/evidence.ts.source": {
+    "snapshot": "../source-snapshots/54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0.source",
+    "sha256": "54319bb6c166a749ee31240e9002594ff13d3ba6b62cc1d2936f61b70d1135b0"
+  },
+  "packages/model/src/causal-verification.ts.source": {
+    "snapshot": "../source-snapshots/76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945.source",
+    "sha256": "76f78e2aab319be60e8c8730c7f0a224dd380b4ad4aae4018a94ac0be936e945"
+  },
+  "packages/model/src/gateway.ts.source": {
+    "snapshot": "../source-snapshots/11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa.source",
+    "sha256": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa"
+  },
+  "packages/contracts/src/review-output.ts.source": {
+    "snapshot": "../source-snapshots/16e2a18e01f407382d766a5b3151b5e9654b92236afca8d1ea2829e452bdcd01.source",
+    "sha256": "16e2a18e01f407382d766a5b3151b5e9654b92236afca8d1ea2829e452bdcd01"
+  },
+  "packages/contracts/src/causal-verification.ts.source": {
+    "snapshot": "../source-snapshots/d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871.source",
+    "sha256": "d09b5235162c72a5c6c898514f8dc205bb3477b9fbd9e2c6440e7f54c9cac871"
+  },
+  "apps/control-plane/evaluation/live-benchmark.mts.source": {
+    "snapshot": "../source-snapshots/59b7430f12308dbdbdd98a20c5ce02ec6b3551fa073dc6e64c6ff2a645b2ff51.source",
+    "sha256": "59b7430f12308dbdbdd98a20c5ce02ec6b3551fa073dc6e64c6ff2a645b2ff51"
+  },
+  "apps/control-plane/evaluation/review-core.live.ts.source": {
+    "snapshot": "../source-snapshots/fdd9f17e93401a80815c3a0210103968ef7951980f503c2118a3043767092a34.source",
+    "sha256": "fdd9f17e93401a80815c3a0210103968ef7951980f503c2118a3043767092a34"
+  },
+  "apps/control-plane/evaluation/live-fixture-executor.mts.source": {
+    "snapshot": "../source-snapshots/8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13.source",
+    "sha256": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13"
+  },
+  "apps/control-plane/evaluation/live-benchmark-policy.ts.source": {
+    "snapshot": "../source-snapshots/b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b.source",
+    "sha256": "b29f36959e4c565c5163ffd21f7d65f871f6cfe719ee0e27479edfb7083b714b"
+  },
+  "apps/control-plane/evaluation/live-benchmark-budget.ts.source": {
+    "snapshot": "../source-snapshots/d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854.source",
+    "sha256": "d21523dd20f4cce2214fdd5cbb20a70d59ba41acbeddea9f3b32eaa330810854"
+  },
+  "apps/control-plane/evaluation/live-model-spend.ts.source": {
+    "snapshot": "../source-snapshots/ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b.source",
+    "sha256": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b"
+  },
+  "apps/control-plane/evaluation/live-fixture-context.mts.source": {
+    "snapshot": "../source-snapshots/28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66.source",
+    "sha256": "28b7664c3b68de5b32e0f16e45ce51a1487b6334f652074fd54dd745cb311f66"
+  },
+  "apps/control-plane/evaluation/live-holdout-fixtures.ts.source": {
+    "snapshot": "../source-snapshots/e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51.source",
+    "sha256": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51"
+  },
+  "apps/control-plane/evaluation/live-confirmation-fixtures.ts.source": {
+    "snapshot": "../source-snapshots/34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840.source",
+    "sha256": "34f7806c1f60e7b3b62bebf077a7ac01f4f593318b73c8970ee7728ec8693840"
+  },
+  "apps/control-plane/evaluation/live-code-regression-fixtures.ts.source": {
+    "snapshot": "../source-snapshots/eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee.source",
+    "sha256": "eafdf5894a81dfef48dd6f1616160e5f3b64c54290d9f88120e1c05e21e9f9ee"
+  },
+  "apps/control-plane/evaluation/live-gateway-route.mts.source": {
+    "snapshot": "../source-snapshots/8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622.source",
+    "sha256": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622"
+  },
+  "apps/control-plane/evaluation/live-model-relay.mts.source": {
+    "snapshot": "../source-snapshots/3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0.source",
+    "sha256": "3c3aa6c04be4784642e35b088b2ff5323029d37b480485763db08c4ecf85bdb0"
+  },
+  "apps/control-plane/evaluation/live-campaign-spend.mts.source": {
+    "snapshot": "../source-snapshots/8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193.source",
+    "sha256": "8b158e583280825cf7756444b50f6fedf9cd530641e9649a345ceb7cea7f0193"
+  },
+  "apps/control-plane/evaluation/live-final-validation.ts.source": {
+    "snapshot": "../source-snapshots/13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d.source",
+    "sha256": "13b31b6fcfd87239eb4ada3aa0f180f97870547b9fba2cf4c448161a45df430d"
+  },
+  "apps/control-plane/evaluation/live-review-grade.ts.source": {
+    "snapshot": "../source-snapshots/282666d080b929b7f6cdae062e5e31a99c8947f70c716ac46a53f7a8ebd5b2e2.source",
+    "sha256": "282666d080b929b7f6cdae062e5e31a99c8947f70c716ac46a53f7a8ebd5b2e2"
+  },
+  "apps/control-plane/evaluation/live-fixture-typecheck.mts.source": {
+    "snapshot": "../source-snapshots/7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a.source",
+    "sha256": "7b6c870d97600b3c0e4a6438d7c74c0a9cd27b1e456ee77aa73f4e8cb4b30d1a"
+  },
+  "apps/repository-executor/src/structural-repository-inventory.ts.source": {
+    "snapshot": "../source-snapshots/f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3.source",
+    "sha256": "f3fd028799f084a4ab41249259cd1b48c404a6f89a92e3bde31575ce7208d9f3"
+  },
+  "apps/repository-executor/src/review-context.ts.source": {
+    "snapshot": "../source-snapshots/7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843.source",
+    "sha256": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843"
+  },
+  "packages/repository-analysis/src/changed-head-declarations.ts.source": {
+    "snapshot": "../source-snapshots/138d42892ffabef83ecb88c0f8259f5ff955060a93d9b59553ca695eddbc57c7.source",
+    "sha256": "138d42892ffabef83ecb88c0f8259f5ff955060a93d9b59553ca695eddbc57c7"
+  },
+  "packages/repository-analysis/src/repository-module.ts.source": {
+    "snapshot": "../source-snapshots/bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555.source",
+    "sha256": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555"
+  },
+  "packages/repository-analysis/src/symbol-extractor.ts.source": {
+    "snapshot": "../source-snapshots/9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218.source",
+    "sha256": "9a21c57f607da80b48eac66701d0ae60400091722a63a17e03966ef30c0c6218"
+  },
+  "packages/repository-analysis/src/downstream-tracer.ts.source": {
+    "snapshot": "../source-snapshots/676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99.source",
+    "sha256": "676b1efd137a2157ea5804e0f505202fb9b385d5b76ea922fd9ae3f7fa48db99"
+  },
+  "packages/repository-analysis/src/structural-analyzer.ts.source": {
+    "snapshot": "../source-snapshots/d6ab1c8fe11957b239d0279a758a441e2b369d111594ef590b4510508cc7dce3.source",
+    "sha256": "d6ab1c8fe11957b239d0279a758a441e2b369d111594ef590b4510508cc7dce3"
+  },
+  "pnpm-lock.yaml.source": {
+    "snapshot": "../source-snapshots/4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271.source",
+    "sha256": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271"
+  }
+}

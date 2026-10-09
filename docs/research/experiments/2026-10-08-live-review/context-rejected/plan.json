@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-08",
+  "route": "dynamic/pr-review",
+  "shardCount": 9,
+  "limits": {
+    "calls": 24,
+    "inputBytes": 600000,
+    "outputTokens": 50000,
+    "requestMs": 45000,
+    "suiteMs": 360000
+  },
+  "cases": [
+    {
+      "id": "null-consumer.positive",
+      "family": "null-consumer",
+      "positive": true,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "literal-contract.positive",
+      "family": "literal-contract",
+      "positive": true,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "null-consumer.negative",
+      "family": "null-consumer",
+      "positive": false,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "literal-contract.negative",
+      "family": "literal-contract",
+      "positive": false,
+      "variants": ["receipts"]
+    }
+  ],
+  "variants": ["receipts"],
+  "gates": {
+    "receipts": "No case regression or incomplete positive; reduce duplicate causal tools and generation rounds on identical cases.",
+    "prefetch": "Three-way patch-only/full/selective comparison. No case regression, lower rounds and no increase in total bytes/tools without benefit.",
+    "weighted": "Observe live envelopes; no production activation without allocation-pressure and durable borrowing evidence.",
+    "reuse": "No production activation without independently established dependency closure and invalidation evidence.",
+    "specialists": "No production activation without adjudicated incremental gain at fixed total effort."
+  },
+  "profile": "context-validation",
+  "probe": false,
+  "routeDeployment": "e335278a-96b4-4a32-87d5-219ca80dd052",
+  "tracePayloads": false,
+  "cacheBypassed": true,
+  "image": "holon-repository-executor-holonsandbox:worker",
+  "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+  "sourceDigests": {
+    "src/review/review-agent.ts": "7b5f829688b4e9cd75b1c1bc40b74666355ee1dcdc6851e8a5bc28c043ca8ad6",
+    "evaluation/live-fixtures.ts": "c7e4fd478cce5694775783f0ecccfcc4690b0ab1b3948c4bdba61871bfec8664",
+    "../../packages/model/src/reviewer.ts": "e031341878c4e7202880965ba07056552769e2952d65421a9f128d8b6fe348a8",
+    "../../packages/model/src/causal-verification.ts": "126c635da2d054f32ebee4a805d3ef741c68f3820be0571ff5d36b7f5768f4d9",
+    "../../packages/model/src/review-step-context.ts": "570501d1740d91236a6ae0dde6c02fa91683570c0bf178f240f211dba39504f4"
+  },
+  "oracles": [
+    {
+      "caseId": "null-consumer.positive",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": true
+      }
+    },
+    {
+      "caseId": "literal-contract.positive",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": true
+      }
+    },
+    {
+      "caseId": "null-consumer.negative",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": false
+      }
+    },
+    {
+      "caseId": "literal-contract.negative",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": false
+      }
+    }
+  ],
+  "resumedFrom": null
+}

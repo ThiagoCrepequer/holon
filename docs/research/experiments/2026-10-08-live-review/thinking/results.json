@@ -1,0 +1,582 @@
+{
+  "configuration": {
+    "date": "2026-10-08",
+    "route": "dynamic/pr-review",
+    "shardCount": 9,
+    "limits": {
+      "calls": 24,
+      "inputBytes": 600000,
+      "outputTokens": 50000,
+      "requestMs": 45000,
+      "suiteMs": 360000
+    },
+    "cases": [
+      {
+        "id": "null-consumer.positive",
+        "family": "null-consumer",
+        "positive": true,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "literal-contract.positive",
+        "family": "literal-contract",
+        "positive": true,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "null-consumer.negative",
+        "family": "null-consumer",
+        "positive": false,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "literal-contract.negative",
+        "family": "literal-contract",
+        "positive": false,
+        "variants": ["receipts"]
+      }
+    ],
+    "variants": ["receipts"],
+    "gates": {
+      "receipts": "No case regression or incomplete positive; reduce duplicate causal tools and generation rounds on identical cases.",
+      "prefetch": "Three-way patch-only/full/selective comparison. No case regression, lower rounds and no increase in total bytes/tools without benefit.",
+      "weighted": "Observe live envelopes; no production activation without allocation-pressure and durable borrowing evidence.",
+      "reuse": "No production activation without independently established dependency closure and invalidation evidence.",
+      "specialists": "No production activation without adjudicated incremental gain at fixed total effort."
+    },
+    "profile": "quality-check",
+    "thinking": true,
+    "probe": false,
+    "routeDeployment": "e335278a-96b4-4a32-87d5-219ca80dd052",
+    "tracePayloads": false,
+    "cacheBypassed": true,
+    "image": "holon-repository-executor-holonsandbox:worker",
+    "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+    "sourceDigests": {
+      "src/review/review-agent.ts": "da18ddec2e09bbdbffe7ae5f1576c1cc206afa00e3d33519972c3e4b99032d31",
+      "evaluation/live-fixtures.ts": "c7e4fd478cce5694775783f0ecccfcc4690b0ab1b3948c4bdba61871bfec8664",
+      "../../packages/model/src/reviewer.ts": "e031341878c4e7202880965ba07056552769e2952d65421a9f128d8b6fe348a8",
+      "../../packages/model/src/causal-verification.ts": "126c635da2d054f32ebee4a805d3ef741c68f3820be0571ff5d36b7f5768f4d9",
+      "../../packages/model/src/gateway.ts": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "evaluation/live-benchmark.mts": "469169d27f5a4f06c17d37661af48330e5abf44363c833c003252a9300608b6c",
+      "evaluation/review-core.live.ts": "febffbae3cd13828a9862ff171d6e4ade5be8a8914bfd7af5865dc1205478454",
+      "evaluation/live-fixture-executor.mts": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "../../pnpm-lock.yaml": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271"
+    },
+    "oracles": [
+      {
+        "caseId": "null-consumer.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "literal-contract.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "null-consumer.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      },
+      {
+        "caseId": "literal-contract.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      }
+    ],
+    "resumedFrom": null
+  },
+  "budget": {
+    "calls": 14,
+    "inputBytes": 224139,
+    "reservedOutputTokens": 28714,
+    "denied": 0
+  },
+  "modelEvents": [
+    {
+      "status": 200,
+      "inputBytes": 12600,
+      "maxOutputTokens": 2051,
+      "durationMs": 13213.491375,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 6979.146833000001,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2522,
+      "outputTokens": 303,
+      "reasoningTokens": 234,
+      "cost": 0.00027956
+    },
+    {
+      "status": 200,
+      "inputBytes": 15849,
+      "maxOutputTokens": 2051,
+      "durationMs": 2794.5052909999977,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1323.8267080000005,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3371,
+      "outputTokens": 81,
+      "reasoningTokens": 44,
+      "cost": 0.00026351
+    },
+    {
+      "status": 200,
+      "inputBytes": 16904,
+      "maxOutputTokens": 2051,
+      "durationMs": 9818.035124999999,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1340.0466250000027,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3783,
+      "outputTokens": 631,
+      "reasoningTokens": 554,
+      "cost": 0.00047935
+    },
+    {
+      "status": 200,
+      "inputBytes": 21139,
+      "maxOutputTokens": 2051,
+      "durationMs": 14069.470792,
+      "phase": "investigation",
+      "toolChoice": {
+        "type": "function",
+        "function": {
+          "name": "think_final_answer"
+        }
+      },
+      "toolNames": ["think_final_answer"],
+      "firstByteMs": 1401.9395000000004,
+      "model": "google/gemma-4-26b-a4b-it"
+    },
+    {
+      "status": 200,
+      "inputBytes": 12595,
+      "maxOutputTokens": 2051,
+      "durationMs": 7723.520541999998,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1457.669167,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2516,
+      "outputTokens": 336,
+      "reasoningTokens": 270,
+      "cost": 0.00029036
+    },
+    {
+      "status": 200,
+      "inputBytes": 16400,
+      "maxOutputTokens": 2051,
+      "durationMs": 5497.680124999992,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 2231.2050420000014,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3494,
+      "outputTokens": 189,
+      "reasoningTokens": 139,
+      "cost": 0.00030884
+    },
+    {
+      "status": 200,
+      "inputBytes": 17945,
+      "maxOutputTokens": 2051,
+      "durationMs": 20505.957790999993,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1490.1070829999953,
+      "model": "google/gemma-4-26b-a4b-it"
+    },
+    {
+      "status": 200,
+      "inputBytes": 12600,
+      "maxOutputTokens": 2051,
+      "durationMs": 6007.365334000002,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 908.6345000000001,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2523,
+      "outputTokens": 272,
+      "reasoningTokens": 213,
+      "cost": 0.00026909
+    },
+    {
+      "status": 200,
+      "inputBytes": 15767,
+      "maxOutputTokens": 2051,
+      "durationMs": 2092.3757500000065,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 862.6375830000034,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3341,
+      "outputTokens": 80,
+      "reasoningTokens": 47,
+      "cost": 0.00026107
+    },
+    {
+      "status": 200,
+      "inputBytes": 16883,
+      "maxOutputTokens": 2051,
+      "durationMs": 6590.980249999993,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1013.8139999999985,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3758,
+      "outputTokens": 298,
+      "reasoningTokens": 248,
+      "cost": 0.00036438
+    },
+    {
+      "status": 200,
+      "inputBytes": 18544,
+      "maxOutputTokens": 2051,
+      "durationMs": 14850.703832999992,
+      "phase": "investigation",
+      "toolChoice": {
+        "type": "function",
+        "function": {
+          "name": "think_final_answer"
+        }
+      },
+      "toolNames": ["think_final_answer"],
+      "firstByteMs": 1288.7641250000015,
+      "model": "google/gemma-4-26b-a4b-it"
+    },
+    {
+      "status": 200,
+      "inputBytes": 12598,
+      "maxOutputTokens": 2051,
+      "durationMs": 8526.960000000006,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1603.6365829999995,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2515,
+      "outputTokens": 337,
+      "reasoningTokens": 287,
+      "cost": 0.00029063
+    },
+    {
+      "status": 200,
+      "inputBytes": 16486,
+      "maxOutputTokens": 2051,
+      "durationMs": 4776.660708999989,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1288.1792089999944,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3493,
+      "outputTokens": 158,
+      "reasoningTokens": 129,
+      "cost": 0.00029823
+    },
+    {
+      "status": 200,
+      "inputBytes": 17829,
+      "maxOutputTokens": 2051,
+      "durationMs": 5380.730333999993,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1198.6597089999996,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3958,
+      "outputTokens": 168,
+      "reasoningTokens": 91,
+      "cost": 0.00033418
+    }
+  ],
+  "results": [
+    {
+      "caseId": "null-consumer.positive",
+      "variant": "receipts",
+      "runId": "github:4242:pr:12:head:9250a64cc25d966d514c74efbc470275328c8bf4:base:0a1cbe94be515afce4f58613c482b33827237af6",
+      "passed": false,
+      "expectedDefect": true,
+      "failure": "workflow_failed",
+      "durationMs": 43506,
+      "usage": {
+        "generations": 4,
+        "inputBytes": 64044,
+        "outputTokens": 3066,
+        "settled": 3,
+        "logicalTools": 3
+      },
+      "rejections": [],
+      "draft": null,
+      "final": null,
+      "phases": [],
+      "executor": {
+        "logicalTools": 3,
+        "physicalTools": 3,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1400.3401249999988
+          },
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 883.5614170000008
+          },
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1061.3525410000002
+          }
+        ]
+      },
+      "modelEventEnd": 4
+    },
+    {
+      "caseId": "literal-contract.positive",
+      "variant": "receipts",
+      "runId": "github:4242:pr:22:head:49c3eca00e2336bfd6e060b35b27f35bd85bf8ba:base:2932089975955ba8897dcfa0fce7b510c4756bf5",
+      "passed": false,
+      "expectedDefect": true,
+      "failure": "workflow_failed",
+      "durationMs": 36473,
+      "usage": {
+        "generations": 3,
+        "inputBytes": 45344,
+        "outputTokens": 2576,
+        "settled": 2,
+        "logicalTools": 2
+      },
+      "rejections": [],
+      "draft": null,
+      "final": null,
+      "phases": [],
+      "executor": {
+        "logicalTools": 2,
+        "physicalTools": 2,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1473.3343330000062
+          },
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 900.5719160000008
+          }
+        ]
+      },
+      "modelEventEnd": 7
+    },
+    {
+      "caseId": "null-consumer.negative",
+      "variant": "receipts",
+      "runId": "github:4242:pr:32:head:85fd8a5a4f88a2cf4a2d2af0c4c840546e2c624e:base:c362135799937d0fccc3b9f85ef95879e86d6cc2",
+      "passed": false,
+      "expectedDefect": false,
+      "failure": "workflow_failed",
+      "durationMs": 33282,
+      "usage": {
+        "generations": 4,
+        "inputBytes": 61618,
+        "outputTokens": 2701,
+        "settled": 3,
+        "logicalTools": 3
+      },
+      "rejections": [],
+      "draft": null,
+      "final": null,
+      "phases": [],
+      "executor": {
+        "logicalTools": 3,
+        "physicalTools": 3,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1196.1086249999935
+          },
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 1307.304375000007
+          },
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 912.5132080000039
+          }
+        ]
+      },
+      "modelEventEnd": 11
+    },
+    {
+      "caseId": "literal-contract.negative",
+      "variant": "receipts",
+      "runId": "github:4242:pr:42:head:abc2646acaef160d5ff770e826acf3f106113223:base:2932089975955ba8897dcfa0fce7b510c4756bf5",
+      "passed": true,
+      "expectedDefect": false,
+      "failure": null,
+      "durationMs": 20954,
+      "usage": {
+        "generations": 3,
+        "inputBytes": 45334,
+        "outputTokens": 663,
+        "settled": 3,
+        "logicalTools": 2
+      },
+      "rejections": [],
+      "draft": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* Replaced the literal space character in `delimiter()` with its hex escape sequence `\\x20`."
+      },
+      "final": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* Replaced the literal space character in `delimiter()` with its hex escape sequence `\\x20`."
+      },
+      "phases": [
+        {
+          "phase": "investigation",
+          "durationMs": 20933,
+          "output": {
+            "investigations": [],
+            "resolutions": [],
+            "findings": [],
+            "isDegraded": false,
+            "summary": "* Replaced the literal space character in `delimiter()` with its hex escape sequence `\\x20`."
+          }
+        }
+      ],
+      "executor": {
+        "logicalTools": 2,
+        "physicalTools": 2,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1259.3199169999862
+          },
+          {
+            "tool": "read_file",
+            "path": "src/producer.ts",
+            "reused": false,
+            "durationMs": 758.5099159999809
+          }
+        ]
+      },
+      "modelEventEnd": 14
+    }
+  ]
+}

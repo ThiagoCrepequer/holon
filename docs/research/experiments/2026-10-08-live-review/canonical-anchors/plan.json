@@ -1,0 +1,300 @@
+{
+  "date": "2026-10-08",
+  "route": "dynamic/pr-review",
+  "shardCount": 9,
+  "limits": {
+    "calls": 24,
+    "inputBytes": 600000,
+    "outputTokens": 50000,
+    "requestMs": 45000,
+    "suiteMs": 360000
+  },
+  "cases": [
+    {
+      "id": "null-consumer.positive",
+      "family": "null-consumer",
+      "positive": true,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "literal-contract.positive",
+      "family": "literal-contract",
+      "positive": true,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "null-consumer.negative",
+      "family": "null-consumer",
+      "positive": false,
+      "variants": ["receipts"]
+    },
+    {
+      "id": "literal-contract.negative",
+      "family": "literal-contract",
+      "positive": false,
+      "variants": ["receipts"]
+    }
+  ],
+  "variants": ["receipts"],
+  "gates": {
+    "receipts": "No case regression or incomplete positive; reduce duplicate causal tools and generation rounds on identical cases.",
+    "prefetch": "Three-way patch-only/full/selective comparison. No case regression, lower rounds and no increase in total bytes/tools without benefit.",
+    "weighted": "Observe live envelopes; no production activation without allocation-pressure and durable borrowing evidence.",
+    "reuse": "No production activation without independently established dependency closure and invalidation evidence.",
+    "specialists": "No production activation without adjudicated incremental gain at fixed total effort."
+  },
+  "profile": "quality-check",
+  "thinking": false,
+  "structuralContext": true,
+  "costPolicy": {
+    "limitUSD": 0.5,
+    "inputNanodollarsPerToken": 150,
+    "outputNanodollarsPerToken": 600,
+    "templateTokenAllowance": 2048,
+    "routeAttempts": 2,
+    "marginPercent": 125
+  },
+  "campaignExposureBeforeUSD": 0.135011179,
+  "routeModels": [
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "retries": 0,
+      "timeout": 0
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-26b-a4b-it-20260403",
+      "retries": 0,
+      "timeout": 0
+    }
+  ],
+  "pricesVerifiedAt": "2026-10-09T02:40:05.291Z",
+  "probe": false,
+  "routeDeployment": "e335278a-96b4-4a32-87d5-219ca80dd052",
+  "tracePayloads": false,
+  "cacheBypassed": true,
+  "image": "holon-repository-executor-holonsandbox:worker",
+  "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+  "sourceDigests": {
+    "src/review/review-agent.ts": "2069e8eec79729dcd456c4b71d3d74e45b842a78ce8c05f18b7b61fc91b45847",
+    "evaluation/live-fixtures.ts": "c7e4fd478cce5694775783f0ecccfcc4690b0ab1b3948c4bdba61871bfec8664",
+    "../../packages/model/src/reviewer.ts": "d2a0d615c0aa1ca2e37e06bab79f352e2549b2ac23f6c92695c7bd0cd0a6157e",
+    "../../packages/application/src/evidence.ts": "01a96d3915d5fe84d6803bcb152798982845d0027eb9f5a2dfa385979fa3622b",
+    "../../packages/model/src/causal-verification.ts": "126c635da2d054f32ebee4a805d3ef741c68f3820be0571ff5d36b7f5768f4d9",
+    "../../packages/model/src/gateway.ts": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+    "../../packages/contracts/src/review-output.ts": "f980d84a2c91cc613e2bdbf0a1b68ea09822323ff78c007bce17ab9459c3eb6b",
+    "evaluation/live-benchmark.mts": "9c204cd67d0c0148de1aff9d4518b4a9015ee9a68a84f5f3c41d184085ea4a93",
+    "evaluation/review-core.live.ts": "bdec5ddee0892e3a873feb44803733a84cfd937d8c0fd38d7059eb2100c840ac",
+    "evaluation/live-fixture-executor.mts": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+    "evaluation/live-benchmark-policy.ts": "87f4e281c6cc4f0f567c72c11e71b601c512bdae998bb3d00ac5e4a77b8b5a09",
+    "evaluation/live-benchmark-budget.ts": "2ce7755b50d57f67d39d002c320da6f73d17732579cf4817f7ba909e304ca16c",
+    "evaluation/live-model-spend.ts": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+    "evaluation/live-fixture-context.mts": "35dab4b3c134d6c186e8d14cfabf53dcdcc07561cf506f5573e8fb797f799d9d",
+    "evaluation/live-final-validation.ts": "29d0514d6ee05d7e7222b541fd6f678e3e4eafe6b61a6a6f978ee42dd6815b78",
+    "../repository-executor/src/structural-repository-inventory.ts": "611780dc16c0e2433b98a239dc504c288d004f0192146343feeccff5beb8088d",
+    "../repository-executor/src/review-context.ts": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+    "../../packages/repository-analysis/src/changed-head-declarations.ts": "82873fc7a6e10ae678a9d0525352cd905d2df6d9a59cf1c1ea193e9b99442264",
+    "../../packages/repository-analysis/src/repository-module.ts": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+    "../../packages/repository-analysis/src/symbol-extractor.ts": "38f30e69a958b96e20b3d76ba1d840b5076e6120a7892fa4fd09ce3d786f84ac",
+    "../../packages/repository-analysis/src/structural-analyzer.ts": "25adc3d89ce6432b67f1274f55a0b990ca3f9b61f436f131089f6f29666f6be2",
+    "../../pnpm-lock.yaml": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271"
+  },
+  "oracles": [
+    {
+      "caseId": "null-consumer.positive",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": true
+      }
+    },
+    {
+      "caseId": "literal-contract.positive",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": true
+      }
+    },
+    {
+      "caseId": "null-consumer.negative",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": false
+      }
+    },
+    {
+      "caseId": "literal-contract.negative",
+      "base": {
+        "executed": true,
+        "failed": false
+      },
+      "head": {
+        "executed": true,
+        "failed": false
+      }
+    }
+  ],
+  "preparation": [
+    {
+      "caseId": "null-consumer.positive",
+      "headSha": "865b5c3e9ce5e893f9bc2c0db1b1005df93583a3",
+      "baseSha": "7e38b7b256b269537d351d2ec1b8bcf8605f2d79",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "metrics": {
+        "durationMs": 2447.4524579999998,
+        "events": [
+          {
+            "operation": "git",
+            "durationMs": 997.4451250000001,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.19879199999991215,
+            "bytes": 44
+          },
+          {
+            "operation": "rg",
+            "durationMs": 747.4664169999999,
+            "bytes": 36
+          },
+          {
+            "operation": "git",
+            "durationMs": 693.114709,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.21050000000013824,
+            "bytes": 112
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "literal-contract.positive",
+      "headSha": "b5dfa340f533e169b062d041c19032f131ac666a",
+      "baseSha": "c3680acad406559777838e20360e16db70231c5c",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "metrics": {
+        "durationMs": 2002.2057080000004,
+        "events": [
+          {
+            "operation": "git",
+            "durationMs": 650.4424170000002,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.23870799999986048,
+            "bytes": 46
+          },
+          {
+            "operation": "rg",
+            "durationMs": 705.6111250000004,
+            "bytes": 36
+          },
+          {
+            "operation": "git",
+            "durationMs": 644.4065419999997,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.24112499999955617,
+            "bytes": 188
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "null-consumer.negative",
+      "headSha": "f69bfd03da595a358c21a31865fc00805fe2000e",
+      "baseSha": "1e7700f9c158765da918b761acfaa92855f626fc",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "metrics": {
+        "durationMs": 2010.6820420000004,
+        "events": [
+          {
+            "operation": "git",
+            "durationMs": 655.4487499999996,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.25583300000016607,
+            "bytes": 44
+          },
+          {
+            "operation": "rg",
+            "durationMs": 681.4548750000004,
+            "bytes": 36
+          },
+          {
+            "operation": "git",
+            "durationMs": 672.1758749999999,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.3986249999998108,
+            "bytes": 152
+          }
+        ]
+      }
+    },
+    {
+      "caseId": "literal-contract.negative",
+      "headSha": "0e45bcd0a0f7d090dcdadd51f9b2faf51283faf9",
+      "baseSha": "c3680acad406559777838e20360e16db70231c5c",
+      "paths": ["src/producer.ts", "src/consumer.ts"],
+      "truncated": false,
+      "metrics": {
+        "durationMs": 2972.260709,
+        "events": [
+          {
+            "operation": "git",
+            "durationMs": 1280.2390419999992,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.8252910000010161,
+            "bytes": 48
+          },
+          {
+            "operation": "rg",
+            "durationMs": 1002.8277500000004,
+            "bytes": 36
+          },
+          {
+            "operation": "git",
+            "durationMs": 682.5076670000017,
+            "bytes": 77
+          },
+          {
+            "operation": "read_file",
+            "durationMs": 0.24675000000024738,
+            "bytes": 188
+          }
+        ]
+      }
+    }
+  ],
+  "resumedFrom": null
+}

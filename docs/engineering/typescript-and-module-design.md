@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-08
 ---
 
 # TypeScript, módulos e padrões no Holon
@@ -120,6 +120,29 @@ quantidade de classes. O [catálogo de padrões](https://refactoring.guru/design
 ajuda a comparar alternativas. Evite pass-throughs, singletons ocultos,
 configuração global mutável, classes para cada função e abstrações que
 espalham uma regra causal entre pacotes.
+
+## Transformações que preservam significado
+
+Particionar, filtrar, deduplicar ou normalizar dados precisa preservar a regra
+do domínio. Paths repetidos podem representar fragmentos diferentes; identidade
+de objeto e posição em array não substituem ID explícito. Centralizar a visão
+canônica no módulo dono e testar a composição que transforma esses dados.
+
+Normalização deve especificar equivalências permitidas. Colapsar whitespace de
+código pode alterar literals, regex ou indentação; não usar essa técnica como
+prova de equivalência semântica. Separar fingerprint estável de validação de
+conteúdo e da autorização para reutilizar uma decisão anterior.
+
+Projeções limitadas devem devolver conteúdo e informação de omissão, inclusive
+por quantidade. Sucesso/falha/cancelamento precisam de variantes coerentes;
+não deixar opcionais/flags representarem combinações impossíveis. Preferir
+entrada nomeada coesa quando argumentos posicionais passam a misturar identidades,
+contexto, dependências e modos. Não usar um objeto global como atalho.
+
+O [guia do core](review-core-quality.md) concretiza essas regras para evidência,
+shards e lifecycle; a [auditoria](../research/2026-10-08-review-core-audit.md)
+registra as lacunas atuais. Extrair módulos deve esconder complexidade de uma
+regra, não distribuir a mesma condicional entre wrappers.
 
 ## Evolução de contratos
 

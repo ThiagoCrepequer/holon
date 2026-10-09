@@ -1,0 +1,14 @@
+{"probe":"fragmented-file","shards":2,"locallyVerified":1,"aggregateFindings":0,"verdict":"APPROVE","scope":"complete"}
+{"probe":"duplicate-shard-id","shardsAnalyzed":2,"totalShards":2,"verdict":"APPROVE"}
+{"probe":"aggregate-rejected-evidence","findings":0,"degraded":false,"verdict":"APPROVE"}
+{"probe":"limitation-without-flag","degraded":false,"verdict":"APPROVE","mentionsMissing":true}
+{"probe":"literal-whitespace","accepted":1}
+{"probe":"python-structural-search","content":"","truncated":false}
+{"probe":"evaluation-fabrication-negative","passedCases":1,"failedCases":0,"precision":1,"rejected":1}
+{"probe":"prior-findings-cap","baseline":9,"projected":8,"promptTruncated":false,"omissions":[]}
+{"probe":"pagination-negative","markerExistsOnPage":21,"pagesVisited":20,"found":null}
+{"probe":"calibration-thread-resolved","metrics":{"falsePositiveCount":1,"falsePositiveRate":1,"helpfulCount":0,"totalFeedbacks":1,"totalReviewedFindings":1,"utilityRate":0,"wrongSeverityCount":0}}
+{"probe":"calibration-duplicate-feedback","metrics":{"falsePositiveCount":2,"falsePositiveRate":1,"helpfulCount":0,"totalFeedbacks":2,"totalReviewedFindings":2,"utilityRate":0,"wrongSeverityCount":0}}
+{"probe":"literal-fingerprint","equal":true}
+{"probe":"recall-after-subject-error","subjectErrors":1,"expectedFindings":0,"recall":1,"failedCases":1}
+{"probe":"corpus-partitions","cases":7,"holdout":0}

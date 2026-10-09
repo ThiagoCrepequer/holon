@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-08
+last-reviewed: 2026-10-09
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -39,7 +39,7 @@ sequenceDiagram
     WF->>LE: claim e supersede run anterior
     WF->>GH: configuração e diff canônico
     WF->>EX: preparar checkout no head exato
-    WF->>WF: planejar shards e ondas
+    WF->>WF: planejar shards e lanes
     loop Cada shard admitido (até três simultâneos)
       WF->>AG: startReview(run, shard, deadline)
       AG->>LE: validar autoridade
@@ -52,7 +52,7 @@ sequenceDiagram
         opt read_file/search_text/search_structure
           AG->>LE: reservar tool por run
           AG->>EX: executar leitura ou busca autorizada
-          EX-->>AG: resultado limitado
+          EX-->>AG: resultado limitado e receipt de leitura
         end
       end
       AG-->>AW: resposta estruturada
@@ -65,7 +65,8 @@ sequenceDiagram
       AW-->>WF: candidatos do shard
       WF->>WF: validar evidência no diff canônico
       opt Há candidatos válidos
-        WF->>AG: startReview em conversa isolada, fase causal_verification
+        WF->>EX: recuperar pacote limitado de reads canônicos
+        WF->>AG: conversa isolada com dados/receipts, causal_verification
         AG->>AW: Workflow com identidade por fase
         AW->>AG: step.prompt para tentar refutar candidatos
         AG->>LE: reservar inferências e tools no mesmo saldo
@@ -108,15 +109,38 @@ O plano efetivo fixa `totalShards` antes do digest e conserva os totais elegíve
 limitação explícita; não é tratado como cobertura.
 
 O coordenador mantém contexto validado, plano e digest apenas na memória da
-invocação de análise. Cada onda compartilha uma barreira de preparação: verifica
-a presença do contexto e adquire o lease antes de iniciar peers. Se o Sandbox
+invocação de análise. Lanes compartilham uma barreira de preparação; cada shard
+revalida/adquire seu lease antes de iniciar. A assignment determinística é salva
+no planejamento e todos os trabalhos iniciados são aguardados. Se o Sandbox
 precisar ser reconstruído, o snapshot é invalidado e relido; uma retomada do
 Workflow começa com memória nova. O digest precisa coincidir com o checkpoint
 do planejamento antes de qualquer shard vivo e antes da agregação. O contexto
-completo não é serializado como resultado de step. Sem reconstrução, 50 shards
-usam uma leitura completa e um cálculo do digest nessa invocação.
+completo não é serializado como resultado de step. Sem reconstrução, os shards
+admitidos compartilham uma leitura completa e um cálculo do digest nessa invocação.
+Relações produtor/consumidor podem orientar os grupos, respeitando os mesmos caps;
+referências que atravessam partes seguem como pistas compactas em ambos.
+Consulte a [ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md).
 
 O analisador estrutural produz pistas para investigar contratos, não findings.
+Na composição local, `review-analysis.ts` coordena preparação/plano/agregação;
+`review-shard-execution.ts` executa uma parte e valida sua evidência, com serviços
+restritos a essa responsabilidade. Diagnósticos consultivos são protegidos pelo
+host: falha do sink não muda resultado ou retry. Seleção canônica de candidatos
+para confirmação conserva limitações por meio da política compartilhada
+`prepareCausalCandidates`, também usada pelo harness.
+Mudanças apenas no corpo de uma declaração superior JS/TS usam a AST completa
+do HEAD verificado para identificar o símbolo, mesmo com a assinatura fora do
+hunk. O inventário lê primeiro os módulos alterados e só então procura nomes
+downstream, validando ambos os lotes e compartilhando seu teto total de bytes.
+Exports locais com aliases públicos fornecem ambos os nomes à busca. Essa pista
+usa a mesma fronteira lexical de identificadores no `rg` e no tracer JavaScript,
+incluindo `$`, letras Unicode e join controls, sem tratar nomes maiores como
+referências ao fragmento. Ela continua lexical nos consumidores: não resolve aliases arbitrários de import,
+reexports encadeados ou imports dinâmicos nem demonstra fechamento de dependências. Consulte a
+[ADR-0056](../decisions/0056-trace-edited-declarations-in-verified-head.md).
+Tetos do relatório registram `omittedSignals` antes de cortar os arrays;
+projeções preservam essas contagens, acrescentam suas perdas e indicam contexto
+limitado. Varredura incompleta permanece um sinal distinto.
 A verificação de símbolos exportados removidos utiliza a AST completa do módulo
 em HEAD (`@babel/parser`): declarações movidas e reexportadas (inclusive via
 fachadas multiline e aliases públicos) não disparam alerta se o nome público e o
@@ -212,26 +236,28 @@ no modelo ou na rota; não há parser de texto nem resposta limpa fabricada.
 O ledger reserva recursos antes da inferência, incluindo chamadas, bytes de
 entrada e máximo de saída. São 64 chamadas, 4.000.000 bytes e 120.000 tokens
 de saída por run; uso incerto mantém a reserva. Tools compartilham 96 chamadas
-por run entre todos os shards. Esses limites não são uma estimativa exata de
+por run entre todos os shards. O ledger protege `max(1, floor(96/(2*N)))`
+chamadas ainda não consumidas de cada peer; o restante é compartilhado, com
+cardinalidade fixa pela migração aditiva 23. Esses limites não são uma estimativa exata de
 tokens de entrada ou custo monetário. Retry e eviction não renovam saldo.
 Cada shard admitido tem uma parcela protegida `floor(teto / totalShards)` nas
 três dimensões. Investigação, causalidade e recuperação compartilham essa parcela;
 settlement não transfere recursos entre shards. A saída máxima normal por chamada
 é `min(12.000, floor((parcela de saída - 1.024) / 6))`. As recusas `shard_calls`,
 `shard_input_bytes` e `shard_output_tokens` falham somente a parte atual, sem
-bloquear pares ou ondas seguintes. Histórico crescente ainda pode ultrapassar a
+bloquear pares ou shards seguintes. Histórico crescente ainda pode ultrapassar a
 parcela de entrada; uma parte incompleta não demonstra ausência de regressões.
 
 A primeira recusa de teto agregado persiste sua dimensão em
 `model_generation_plans.stop_reason`, na mesma transação da decisão de admissão
-(migração aditiva 22). Antes de admitir cada nova onda, um step consulta o
+(migração aditiva 22). Antes de admitir cada novo shard, um step consulta o
 ledger da run atual em execução. Havendo recusa, nenhum novo Agent é iniciado:
-os shards ainda não admitidos recebem `model_budget_exhausted`. A onda já
-admitida é aguardada integralmente; seus peers podem terminar dentro dos tetos
+os shards ainda não admitidos recebem `model_budget_exhausted`. O trabalho já
+admitido é aguardado integralmente; seus peers podem terminar dentro dos tetos
 originais. Settlement não apaga a parada, mesmo se liberar saída reservada.
 Isso é uma política conservadora de admissão, não uma afirmação de saldo zero.
 
-Uma recusa na última onda também é lida em checkpoint antes da agregação. A
+Uma recusa no último shard também é lida em checkpoint antes da agregação. A
 publicação conserva achados verificados, informa o orçamento esgotado no idioma
 configurado e permanece parcial; não produz aprovação limpa nem resolução por
 silêncio. Falhas de ledger, contexto ou preparação continuam terminais. Sem
@@ -300,3 +326,38 @@ Pela [ADR-0051](../decisions/0051-learn-repository-rules-with-maintainer-approva
 ## Perguntas posteriores à publicação
 
 Após uma review concluída, uma resposta explícita ao finding segue webhook HMAC → Queue → validação autenticada da discussão e autorização → admissão no ledger → `FindingClarificationAgent`/`FindingClarificationWorkflow`. O Agent lê arquivos regulares do snapshot GitHub no head SHA fixado, aplica exclusões recompiladas no base SHA e reservas próprias. O Workflow valida trechos contra leituras, registra a conclusão e reconcilia a resposta no comentário raiz. Uma refutação retira o finding e recalcula o Check Run canônico; não publica nova review nem apaga o diagnóstico original. Novo head/base ou perda de autoridade impedem a mutação/publicação. Veja a [ADR-0052](../decisions/0052-answer-finding-questions-in-pr-threads.md).
+
+## Cache efêmero e proveniência de reads
+
+O Sandbox DO coalesce queries iguais dentro da run/política, guarda apenas resultados
+completos não vazios e revalida escopo/lease em todo hit. Até 32 entradas e 1 MB
+permanecem em memória; eviction apenas perde a otimização. Cleanup cerca conclusões
+tardias, aguarda execução física e limpa antes da destruição. Cancelamento de um
+caller não encerra o read de outro caller autorizado.
+
+`read_file` emite receipt ligado a run/head/path/janela e digest. O verificador
+recebe um pacote limitado de reads, como dados não confiáveis, em conversa isolada.
+Assessment declara `patch` ou `repository`; o segundo exige IDs/janelas completos
+emitidos pelo host. Pacote inválido, ID fabricado, janela incompatível ou read
+truncado gera verificação incompleta. O receipt prova leitura, não causalidade.
+Excerpts publicáveis continuam ancorados no diff RIGHT canônico. O índice canônico
+une todos os fragmentos e preserva semântica de espaços; resultado inválido ou
+shard sem cobertura única não gera aprovação limpa.
+
+Lookup de publicação incompleto após vinte páginas conserva claim e impede POST;
+[operação](../operations/error-observability.md#reconciliação-inconclusiva-de-publicação)
+explica a obrigação pendente. Não há cursor durável habilitado.
+
+## Contexto factual e seleção causal de receipts
+
+A construção do prompt também produz `verificationContext`: identidade head/base,
+patches canônicos, contexto factual limitado e preferências de saída. A conversa
+causal recebe essa projeção, candidatos e reads inspecionados; não recebe outra
+cópia das instruções para realizar investigação aberta.
+
+Conforme a [ADR-0057](../decisions/0057-select-host-evidence-receipts-in-causal-assessments.md),
+assessments selecionam `evidenceReceiptIds`. O host resolve a janela inteira de
+cada leitura completa e retém candidatos quando a seleção não corresponde aos
+receipts validados. A validação de pacote continua vinculada ao conteúdo e snapshot.
+Isso não comprova a verdade da inferência: alcance do cenário, proteções e contrato
+continuam responsabilidades da verificação causal e da avaliação de qualidade.

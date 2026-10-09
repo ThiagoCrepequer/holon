@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-08",
+  "node": "24.19.0",
+  "kind": "local-synthetic",
+  "rounds": {
+    "index": 15,
+    "reads": 7,
+    "scheduling": 15
+  },
+  "index": {
+    "batches": 100,
+    "lines": 800,
+    "cold": {
+      "medianMs": 5.762292000000002,
+      "p95Ms": 9.529333000000008,
+      "samples": [
+        9.529333000000008, 7.713209000000006, 6.378125000000011,
+        5.832958000000019, 5.807000000000016, 5.690375000000017,
+        5.821374999999989, 5.722082999999998, 5.604458000000022,
+        5.682667000000038, 5.677292000000023, 6.526499999999999,
+        5.734583000000043, 5.6213750000000005, 5.762292000000002
+      ]
+    },
+    "prepared": {
+      "medianMs": 0.8769999999999527,
+      "p95Ms": 0.92512499999998,
+      "samples": [
+        0.8722910000000184, 0.8711660000000165, 0.9070839999999976,
+        0.8928339999999935, 0.8727079999999887, 0.870790999999997,
+        0.8948330000000055, 0.8726249999999709, 0.92512499999998,
+        0.9172909999999774, 0.8769999999999527, 0.8740829999999846,
+        0.883041999999989, 0.8883329999999887, 0.8727499999999964
+      ]
+    },
+    "speedup": 6.570458380844142,
+    "outputEquivalent": true
+  },
+  "tools": {
+    "logical": 96,
+    "physicalBefore": 96,
+    "physicalAfter": 12,
+    "uncached": {
+      "medianMs": 127.8873329999999,
+      "p95Ms": 131.114917,
+      "samples": [
+        130.271209, 131.114917, 127.8873329999999, 126.08545800000002,
+        130.69891700000016, 119.68604200000004, 124.04725000000008
+      ]
+    },
+    "reused": {
+      "medianMs": 15.63633300000015,
+      "p95Ms": 15.77929099999983,
+      "samples": [
+        15.673583000000008, 15.63633300000015, 15.636208000000124,
+        14.422624999999925, 15.013625000000047, 15.765750000000025,
+        15.77929099999983
+      ]
+    },
+    "outputEquivalent": true,
+    "latencyAssumption": "1 ms per physical read; excludes provider/network/container startup"
+  },
+  "scheduling": {
+    "weights": [100, 10, 10, 100, 10, 10, 100, 10, 10],
+    "lanes": [
+      [0, 1, 5],
+      [3, 2, 7],
+      [6, 4, 8]
+    ],
+    "waveSpan": 300,
+    "progressiveSpan": 120,
+    "idleBefore": 540,
+    "idleAfter": 0,
+    "waves": {
+      "medianMs": 34.362333000000035,
+      "p95Ms": 36.8423329999996,
+      "samples": [
+        34.95166700000004, 35.53866700000003, 34.362333000000035,
+        36.118041000000176, 34.357957999999826, 34.079959000000144,
+        31.757416000000376, 32.91779200000019, 36.29016700000011,
+        35.86466699999983, 33.63212499999963, 31.092167000000245,
+        36.8423329999996, 33.331916999999976, 36.14120899999989
+      ]
+    },
+    "progressive": {
+      "medianMs": 13.940666999999848,
+      "p95Ms": 14.901041000000077,
+      "samples": [
+        14.791708000000199, 14.801417000000129, 14.780708000000232,
+        14.759875000000193, 13.940666999999848, 13.688583000000108,
+        14.901041000000077, 14.738208999999642, 13.804999999999836,
+        12.961999999999989, 13.690625000000182, 12.92758300000014,
+        14.792625000000044, 13.29208299999982, 13.426707999999962
+      ]
+    },
+    "measurement": "controlled timer workload; no model quality inference"
+  },
+  "causalGrouping": {
+    "baseline": [["a/consumer.ts", "b/unrelated.ts"], ["c/producer.ts"]],
+    "related": [["a/consumer.ts", "c/producer.ts"], ["b/unrelated.ts"]],
+    "coLocatedBefore": false,
+    "coLocatedAfter": true,
+    "note": "Static edge coverage only, not recall of an LLM"
+  },
+  "quotas": {
+    "allocation": {
+      "equal": [
+        444444, 444444, 444444, 444444, 444444, 444444, 444444, 444444, 444444
+      ],
+      "weighted": [
+        2857142, 142857, 142857, 142857, 142857, 142857, 142857, 142857, 142857
+      ],
+      "feasible": true,
+      "equalRejected": [0],
+      "minimumTotal": 1400000,
+      "unallocated": 2
+    },
+    "equalInputBytes": 444444,
+    "mixedCumulativeBytes": [
+      1000000, 50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000
+    ],
+    "note": "A large shard does not fit equal quotas; no production weighted allocation is inferred from this mathematical example"
+  },
+  "reuse": {
+    "unchanged": {
+      "reusable": true,
+      "reason": "complete_dependency_match"
+    },
+    "consumerChanged": {
+      "reusable": false,
+      "reason": "dependency_content"
+    },
+    "incomplete": {
+      "reusable": false,
+      "reason": "incomplete_proof"
+    },
+    "productionEnabled": false
+  },
+  "diversity": {
+    "pairedHarnessImplemented": true,
+    "liveQualityMeasured": false,
+    "productionEnabled": false
+  }
+}

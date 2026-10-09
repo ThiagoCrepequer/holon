@@ -1,0 +1,211 @@
+{
+  "verifiedAt": "2026-10-09T14:23:17.378Z",
+  "command": "pnpm verify",
+  "exitCode": 0,
+  "node": "24.19.0",
+  "pnpm": "11.24.0",
+  "taskCounts": {
+    "typecheck": 21,
+    "coverage": 32,
+    "buildDryRun": 17
+  },
+  "architectureTests": 14,
+  "coreVitestTests": 1441,
+  "hostNodeTests": 18,
+  "verifyLogSHA256": "5528192ca5d6f0f354fe40f506b5e48c540eb49eedf895c5a0002fbd2f426ef3",
+  "coverage": {
+    "packages/contracts": {
+      "lines": {
+        "total": 416,
+        "covered": 407,
+        "skipped": 0,
+        "pct": 97.83
+      },
+      "statements": {
+        "total": 430,
+        "covered": 415,
+        "skipped": 0,
+        "pct": 96.51
+      },
+      "functions": {
+        "total": 78,
+        "covered": 74,
+        "skipped": 0,
+        "pct": 94.87
+      },
+      "branches": {
+        "total": 246,
+        "covered": 222,
+        "skipped": 0,
+        "pct": 90.24
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    },
+    "packages/application": {
+      "lines": {
+        "total": 688,
+        "covered": 669,
+        "skipped": 0,
+        "pct": 97.23
+      },
+      "statements": {
+        "total": 733,
+        "covered": 704,
+        "skipped": 0,
+        "pct": 96.04
+      },
+      "functions": {
+        "total": 154,
+        "covered": 151,
+        "skipped": 0,
+        "pct": 98.05
+      },
+      "branches": {
+        "total": 742,
+        "covered": 666,
+        "skipped": 0,
+        "pct": 89.75
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "packages/repository-analysis": {
+      "lines": {
+        "total": 750,
+        "covered": 730,
+        "skipped": 0,
+        "pct": 97.33
+      },
+      "statements": {
+        "total": 812,
+        "covered": 788,
+        "skipped": 0,
+        "pct": 97.04
+      },
+      "functions": {
+        "total": 125,
+        "covered": 125,
+        "skipped": 0,
+        "pct": 100
+      },
+      "branches": {
+        "total": 660,
+        "covered": 596,
+        "skipped": 0,
+        "pct": 90.3
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "packages/model": {
+      "lines": {
+        "total": 209,
+        "covered": 205,
+        "skipped": 0,
+        "pct": 98.08
+      },
+      "statements": {
+        "total": 224,
+        "covered": 218,
+        "skipped": 0,
+        "pct": 97.32
+      },
+      "functions": {
+        "total": 58,
+        "covered": 57,
+        "skipped": 0,
+        "pct": 98.27
+      },
+      "branches": {
+        "total": 175,
+        "covered": 162,
+        "skipped": 0,
+        "pct": 92.57
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "apps/repository-executor": {
+      "lines": {
+        "total": 740,
+        "covered": 687,
+        "skipped": 0,
+        "pct": 92.83
+      },
+      "statements": {
+        "total": 771,
+        "covered": 713,
+        "skipped": 0,
+        "pct": 92.47
+      },
+      "functions": {
+        "total": 177,
+        "covered": 165,
+        "skipped": 0,
+        "pct": 93.22
+      },
+      "branches": {
+        "total": 512,
+        "covered": 446,
+        "skipped": 0,
+        "pct": 87.1
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": "Unknown"
+      }
+    },
+    "apps/control-plane": {
+      "lines": {
+        "total": 2611,
+        "covered": 2436,
+        "skipped": 0,
+        "pct": 93.29
+      },
+      "statements": {
+        "total": 2753,
+        "covered": 2533,
+        "skipped": 0,
+        "pct": 92
+      },
+      "functions": {
+        "total": 611,
+        "covered": 574,
+        "skipped": 0,
+        "pct": 93.94
+      },
+      "branches": {
+        "total": 1849,
+        "covered": 1597,
+        "skipped": 0,
+        "pct": 86.37
+      },
+      "branchesTrue": {
+        "total": 0,
+        "covered": 0,
+        "skipped": 0,
+        "pct": 100
+      }
+    }
+  },
+  "scope": "Local composition, controlled external boundaries, real Gateway inference only on synthetic fixtures. No CI/deploy/production proof."
+}

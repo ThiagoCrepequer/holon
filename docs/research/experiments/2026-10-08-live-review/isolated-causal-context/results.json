@@ -1,0 +1,1006 @@
+{
+  "configuration": {
+    "date": "2026-10-08",
+    "route": "dynamic/pr-review",
+    "shardCount": 9,
+    "limits": {
+      "calls": 24,
+      "inputBytes": 600000,
+      "outputTokens": 50000,
+      "requestMs": 45000,
+      "suiteMs": 360000
+    },
+    "cases": [
+      {
+        "id": "null-consumer.positive",
+        "family": "null-consumer",
+        "positive": true,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "literal-contract.positive",
+        "family": "literal-contract",
+        "positive": true,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "null-consumer.negative",
+        "family": "null-consumer",
+        "positive": false,
+        "variants": ["receipts"]
+      },
+      {
+        "id": "literal-contract.negative",
+        "family": "literal-contract",
+        "positive": false,
+        "variants": ["receipts"]
+      }
+    ],
+    "variants": ["receipts"],
+    "gates": {
+      "receipts": "No case regression or incomplete positive; reduce duplicate causal tools and generation rounds on identical cases.",
+      "prefetch": "Three-way patch-only/full/selective comparison. No case regression, lower rounds and no increase in total bytes/tools without benefit.",
+      "weighted": "Observe live envelopes; no production activation without allocation-pressure and durable borrowing evidence.",
+      "reuse": "No production activation without independently established dependency closure and invalidation evidence.",
+      "specialists": "No production activation without adjudicated incremental gain at fixed total effort."
+    },
+    "profile": "quality-check",
+    "thinking": false,
+    "structuralContext": true,
+    "holdout": false,
+    "costPolicy": {
+      "limitUSD": 0.5,
+      "inputNanodollarsPerToken": 150,
+      "outputNanodollarsPerToken": 600,
+      "templateTokenAllowance": 2048,
+      "routeAttempts": 2,
+      "marginPercent": 125
+    },
+    "campaignExposureBeforeUSD": 0.155470594,
+    "routeModels": [
+      {
+        "provider": "openrouter",
+        "model": "google/gemma-4-26b-a4b-it:free",
+        "retries": 0,
+        "timeout": 0
+      },
+      {
+        "provider": "openrouter",
+        "model": "google/gemma-4-26b-a4b-it-20260403",
+        "retries": 0,
+        "timeout": 0
+      }
+    ],
+    "routeDeployment": "e335278a-96b4-4a32-87d5-219ca80dd052",
+    "pricesVerifiedAt": "2026-10-09T02:56:06.279Z",
+    "probe": false,
+    "tracePayloads": false,
+    "cacheBypassed": true,
+    "image": "holon-repository-executor-holonsandbox:worker",
+    "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+    "sourceDigests": {
+      "src/review/review-agent.ts": "2069e8eec79729dcd456c4b71d3d74e45b842a78ce8c05f18b7b61fc91b45847",
+      "evaluation/live-fixtures.ts": "c7e4fd478cce5694775783f0ecccfcc4690b0ab1b3948c4bdba61871bfec8664",
+      "../../packages/model/src/reviewer.ts": "76fd0fb8ed753e972dcf60473137a86c08d99efae3fe578de807d1e7bb371e30",
+      "../../packages/application/src/evidence.ts": "01a96d3915d5fe84d6803bcb152798982845d0027eb9f5a2dfa385979fa3622b",
+      "../../packages/model/src/causal-verification.ts": "74315f93deb1e7cc0ea63a7b42fd8a8cb71b6e6965aabeec476a39360acca02e",
+      "../../packages/model/src/gateway.ts": "11d6be4ff1efa37a909fa2a83128d6eb86521d8a6bdde176333f6a7044b1a1fa",
+      "../../packages/contracts/src/review-output.ts": "f980d84a2c91cc613e2bdbf0a1b68ea09822323ff78c007bce17ab9459c3eb6b",
+      "../../packages/contracts/src/causal-verification.ts": "ce36b72f6c35b7854e73fbe3e73ebc85fa22d1f8a18c6a83d6b509f93ea943f2",
+      "evaluation/live-benchmark.mts": "f3f3216c73bad8697b06401261ccdc443e1ae9a25cd061eb4b1f19e6074ecf36",
+      "evaluation/review-core.live.ts": "b7aa24605e48f88f881c04561116884cfc7a3f9f1c3a48366db5c73bcee3c1e0",
+      "evaluation/live-fixture-executor.mts": "8b68ed45dd5b32ab77e6940db790a2c3894466e11e6da2918fe64074c7f4ff13",
+      "evaluation/live-benchmark-policy.ts": "a7cfb5a18fe7881393f2f9516787df0c7d3203e28988160ecca1d24ab3155b1d",
+      "evaluation/live-benchmark-budget.ts": "2ce7755b50d57f67d39d002c320da6f73d17732579cf4817f7ba909e304ca16c",
+      "evaluation/live-model-spend.ts": "ddcef48bc12767b7bf647d0a4b9b5de42af3d97b6e7dbd45e8f758b155f8ea6b",
+      "evaluation/live-fixture-context.mts": "35dab4b3c134d6c186e8d14cfabf53dcdcc07561cf506f5573e8fb797f799d9d",
+      "evaluation/live-holdout-fixtures.ts": "e9a8e9a38228c7660dbd5a2bf5eabe8bc808861c49191aec5a540361e70aaf51",
+      "evaluation/live-gateway-route.mts": "8edb41a23cdb67e1c843811f44d7409aff66be370bf97831f2cfacd4bb185622",
+      "evaluation/live-model-relay.mts": "bc95fedada2127289a0139f112033e04f0cf391f91fd5c8a565c8dcc2f3fd85e",
+      "evaluation/live-final-validation.ts": "7ebd6918e2ce881611d6861f810f1db267856b1c5c6903fe32b006ad050371ba",
+      "../repository-executor/src/structural-repository-inventory.ts": "611780dc16c0e2433b98a239dc504c288d004f0192146343feeccff5beb8088d",
+      "../repository-executor/src/review-context.ts": "7ec451119fbe45e4f3b7529f64936ac69dc593813c26a7215602cf5e01cd6843",
+      "../../packages/repository-analysis/src/changed-head-declarations.ts": "82873fc7a6e10ae678a9d0525352cd905d2df6d9a59cf1c1ea193e9b99442264",
+      "../../packages/repository-analysis/src/repository-module.ts": "bce7ff9a4c0b8e3e3298eb243815872a1f12ba8096c628b30d1db8f419a0b555",
+      "../../packages/repository-analysis/src/symbol-extractor.ts": "38f30e69a958b96e20b3d76ba1d840b5076e6120a7892fa4fd09ce3d786f84ac",
+      "../../packages/repository-analysis/src/structural-analyzer.ts": "25adc3d89ce6432b67f1274f55a0b990ca3f9b61f436f131089f6f29666f6be2",
+      "../../pnpm-lock.yaml": "4895c0d3dd353ce939ff12c4b893cc79a1e87a493276d98c5eea203d2a1ae271"
+    },
+    "oracles": [
+      {
+        "caseId": "null-consumer.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "literal-contract.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "null-consumer.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      },
+      {
+        "caseId": "literal-contract.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      }
+    ],
+    "preparation": [
+      {
+        "caseId": "null-consumer.positive",
+        "headSha": "865b5c3e9ce5e893f9bc2c0db1b1005df93583a3",
+        "baseSha": "7e38b7b256b269537d351d2ec1b8bcf8605f2d79",
+        "paths": ["src/producer.ts", "src/consumer.ts"],
+        "truncated": false,
+        "metrics": {
+          "durationMs": 2513.693792,
+          "events": [
+            {
+              "operation": "git",
+              "durationMs": 1167.213917,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.22695899999985159,
+              "bytes": 44
+            },
+            {
+              "operation": "rg",
+              "durationMs": 725.0202079999999,
+              "bytes": 36
+            },
+            {
+              "operation": "git",
+              "durationMs": 612.4552920000001,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.16441600000007384,
+              "bytes": 112
+            }
+          ]
+        }
+      },
+      {
+        "caseId": "literal-contract.positive",
+        "headSha": "b5dfa340f533e169b062d041c19032f131ac666a",
+        "baseSha": "c3680acad406559777838e20360e16db70231c5c",
+        "paths": ["src/producer.ts", "src/consumer.ts"],
+        "truncated": false,
+        "metrics": {
+          "durationMs": 1919.7079999999996,
+          "events": [
+            {
+              "operation": "git",
+              "durationMs": 626.3051659999996,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.23050000000012005,
+              "bytes": 46
+            },
+            {
+              "operation": "rg",
+              "durationMs": 664.5319159999995,
+              "bytes": 36
+            },
+            {
+              "operation": "git",
+              "durationMs": 627.1512499999999,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.22241699999995035,
+              "bytes": 188
+            }
+          ]
+        }
+      },
+      {
+        "caseId": "null-consumer.negative",
+        "headSha": "f69bfd03da595a358c21a31865fc00805fe2000e",
+        "baseSha": "1e7700f9c158765da918b761acfaa92855f626fc",
+        "paths": ["src/producer.ts", "src/consumer.ts"],
+        "truncated": false,
+        "metrics": {
+          "durationMs": 1961.8382080000001,
+          "events": [
+            {
+              "operation": "git",
+              "durationMs": 680.6944579999999,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.21875,
+              "bytes": 44
+            },
+            {
+              "operation": "rg",
+              "durationMs": 674.2915410000005,
+              "bytes": 36
+            },
+            {
+              "operation": "git",
+              "durationMs": 605.4882080000007,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.24416700000074343,
+              "bytes": 152
+            }
+          ]
+        }
+      },
+      {
+        "caseId": "literal-contract.negative",
+        "headSha": "0e45bcd0a0f7d090dcdadd51f9b2faf51283faf9",
+        "baseSha": "c3680acad406559777838e20360e16db70231c5c",
+        "paths": ["src/producer.ts", "src/consumer.ts"],
+        "truncated": false,
+        "metrics": {
+          "durationMs": 3021.6168340000004,
+          "events": [
+            {
+              "operation": "git",
+              "durationMs": 1302.850042000001,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.7519160000010743,
+              "bytes": 48
+            },
+            {
+              "operation": "rg",
+              "durationMs": 1032.860541,
+              "bytes": 36
+            },
+            {
+              "operation": "git",
+              "durationMs": 681.6132909999997,
+              "bytes": 77
+            },
+            {
+              "operation": "read_file",
+              "durationMs": 0.42775000000074215,
+              "bytes": 188
+            }
+          ]
+        }
+      }
+    ],
+    "resumedFrom": null
+  },
+  "budget": {
+    "calls": 10,
+    "inputBytes": 142148,
+    "reservedOutputTokens": 20510,
+    "denied": 0
+  },
+  "campaignExposureUSD": 0.158735846,
+  "modelEvents": [
+    {
+      "status": 200,
+      "inputBytes": 14752,
+      "maxOutputTokens": 2051,
+      "durationMs": 4995.097207999999,
+      "spendId": "live-2026-10-09T02-55-54.576Z:0",
+      "returnedTools": ["read_file"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 4586.4754170000015,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2982,
+      "outputTokens": 19,
+      "reasoningTokens": 0,
+      "cost": 0.0002152
+    },
+    {
+      "status": 200,
+      "inputBytes": 15609,
+      "maxOutputTokens": 2051,
+      "durationMs": 5351.305499999999,
+      "spendId": "live-2026-10-09T02-55-54.576Z:1",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1328.6371249999975,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 3330,
+      "outputTokens": 309,
+      "reasoningTokens": 0,
+      "cost": 0.00033816,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    },
+    {
+      "status": 200,
+      "inputBytes": 10068,
+      "maxOutputTokens": 2051,
+      "durationMs": 7416.973041999998,
+      "spendId": "live-2026-10-09T02-55-54.576Z:2",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "causal_verification",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1294.2589169999992,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2292,
+      "outputTokens": 354,
+      "reasoningTokens": 0,
+      "cost": 0.0002808,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    },
+    {
+      "status": 200,
+      "inputBytes": 14793,
+      "maxOutputTokens": 2051,
+      "durationMs": 2412.608500000002,
+      "spendId": "live-2026-10-09T02-55-54.576Z:3",
+      "returnedTools": ["read_file"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1994.1557500000054,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2988,
+      "outputTokens": 19,
+      "reasoningTokens": 0,
+      "cost": 0.00021562
+    },
+    {
+      "status": 200,
+      "inputBytes": 15752,
+      "maxOutputTokens": 2051,
+      "durationMs": 4646.284041999999,
+      "spendId": "live-2026-10-09T02-55-54.576Z:4",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1208.990334000002,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 3369,
+      "outputTokens": 300,
+      "reasoningTokens": 0,
+      "cost": 0.00033783,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    },
+    {
+      "status": 200,
+      "inputBytes": 10204,
+      "maxOutputTokens": 2051,
+      "durationMs": 4717.855125000002,
+      "spendId": "live-2026-10-09T02-55-54.576Z:5",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "causal_verification",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1524.2083749999947,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2334,
+      "outputTokens": 302,
+      "reasoningTokens": 0,
+      "cost": 0.00026606,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    },
+    {
+      "status": 200,
+      "inputBytes": 14752,
+      "maxOutputTokens": 2051,
+      "durationMs": 1539.5769999999975,
+      "spendId": "live-2026-10-09T02-55-54.576Z:6",
+      "returnedTools": ["read_file"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1292.5687499999985,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2978,
+      "outputTokens": 19,
+      "reasoningTokens": 0,
+      "cost": 0.00021492
+    },
+    {
+      "status": 200,
+      "inputBytes": 15657,
+      "maxOutputTokens": 2051,
+      "durationMs": 1846.9818749999977,
+      "spendId": "live-2026-10-09T02-55-54.576Z:7",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 925.6031660000008,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 3333,
+      "outputTokens": 95,
+      "reasoningTokens": 0,
+      "cost": 0.00026561,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    },
+    {
+      "status": 200,
+      "inputBytes": 14801,
+      "maxOutputTokens": 2051,
+      "durationMs": 2114.6314580000035,
+      "spendId": "live-2026-10-09T02-55-54.576Z:8",
+      "returnedTools": ["read_file"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1731.432375000004,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 2987,
+      "outputTokens": 19,
+      "reasoningTokens": 0,
+      "cost": 0.00021555
+    },
+    {
+      "status": 200,
+      "inputBytes": 15760,
+      "maxOutputTokens": 2051,
+      "durationMs": 2336.7339580000043,
+      "spendId": "live-2026-10-09T02-55-54.576Z:9",
+      "returnedTools": ["think_final_answer"],
+      "streamDone": true,
+      "phase": "investigation",
+      "toolChoice": "required",
+      "toolNames": [
+        "read_file",
+        "search_structure",
+        "search_text",
+        "think_final_answer"
+      ],
+      "firstByteMs": 1406.7394170000043,
+      "model": "google/gemma-4-26b-a4b-it",
+      "finishReason": "tool_calls",
+      "inputTokens": 3351,
+      "outputTokens": 82,
+      "reasoningTokens": 0,
+      "cost": 0.00026245,
+      "finalValidation": {
+        "jsonInvalid": false,
+        "promptIssues": [],
+        "transportIssues": []
+      }
+    }
+  ],
+  "results": [
+    {
+      "caseId": "null-consumer.positive",
+      "variant": "receipts",
+      "runId": "github:4242:pr:12:head:865b5c3e9ce5e893f9bc2c0db1b1005df93583a3:base:7e38b7b256b269537d351d2ec1b8bcf8605f2d79",
+      "passed": true,
+      "expectedDefect": true,
+      "failure": null,
+      "durationMs": 19120,
+      "usage": {
+        "generations": 3,
+        "inputBytes": 39779,
+        "outputTokens": 682,
+        "settled": 3,
+        "logicalTools": 1
+      },
+      "rejections": [],
+      "draft": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [
+          {
+            "confidence": 1,
+            "diagnostic": "The `run` function in `src/consumer.ts` accesses the `id` property of the value returned by `produce()`. Since `produce()` now returns `null` instead of an object `{ id: \"ok\" }`, `value.id` will throw a `TypeError: Cannot read properties of null (reading 'id')` at runtime.",
+            "evidence": [
+              {
+                "endLine": 2,
+                "excerpt": "  return null;",
+                "path": "src/producer.ts",
+                "reason": "The producer now returns null instead of an object containing an 'id' property.",
+                "startLine": 2
+              }
+            ],
+            "location": {
+              "line": 2,
+              "path": "src/producer.ts",
+              "side": "RIGHT",
+              "startLine": 2
+            },
+            "severity": "critical",
+            "suggestion": "Update `src/consumer.ts` to handle the case where `produce()` returns `null`, or ensure `produce()` always returns an object compatible with the consumer's expectations."
+          }
+        ],
+        "isDegraded": false,
+        "summary": "* The `produce` function in `src/producer.ts` was modified to return `null` instead of an object.\n* This change causes a runtime `TypeError` in `src/consumer.ts` when it attempts to access `.id` on the returned value."
+      },
+      "final": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [
+          {
+            "confidence": 1,
+            "diagnostic": "The `run` function in `src/consumer.ts` accesses the `id` property of the value returned by `produce()`. Since `produce()` now returns `null` instead of an object `{ id: \"ok\" }`, `value.id` will throw a `TypeError: Cannot read properties of null (reading 'id')` at runtime.",
+            "evidence": [
+              {
+                "endLine": 2,
+                "excerpt": "  return null;",
+                "path": "src/producer.ts",
+                "reason": "The producer now returns null instead of an object containing an 'id' property.",
+                "startLine": 2
+              }
+            ],
+            "location": {
+              "line": 2,
+              "path": "src/producer.ts",
+              "side": "RIGHT",
+              "startLine": 2
+            },
+            "severity": "critical",
+            "suggestion": "Update `src/consumer.ts` to handle the case where `produce()` returns `null`, or ensure `produce()` always returns an object compatible with the consumer's expectations."
+          }
+        ],
+        "isDegraded": false,
+        "summary": "The `produce` function in `src/producer.ts` was modified to return `null`. This breaks `src/consumer.ts`, which attempts to access the `.id` property of the returned value without performing a null check, leading to a runtime `TypeError`."
+      },
+      "phases": [
+        {
+          "phase": "investigation",
+          "durationMs": 11532,
+          "output": {
+            "investigations": [],
+            "resolutions": [],
+            "findings": [
+              {
+                "confidence": 1,
+                "diagnostic": "The `run` function in `src/consumer.ts` accesses the `id` property of the value returned by `produce()`. Since `produce()` now returns `null` instead of an object `{ id: \"ok\" }`, `value.id` will throw a `TypeError: Cannot read properties of null (reading 'id')` at runtime.",
+                "evidence": [
+                  {
+                    "endLine": 2,
+                    "excerpt": "  return null;",
+                    "path": "src/producer.ts",
+                    "reason": "The producer now returns null instead of an object containing an 'id' property.",
+                    "startLine": 2
+                  }
+                ],
+                "location": {
+                  "line": 2,
+                  "path": "src/producer.ts",
+                  "side": "RIGHT",
+                  "startLine": 2
+                },
+                "severity": "critical",
+                "suggestion": "Update `src/consumer.ts` to handle the case where `produce()` returns `null`, or ensure `produce()` always returns an object compatible with the consumer's expectations."
+              }
+            ],
+            "isDegraded": false,
+            "summary": "* The `produce` function in `src/producer.ts` was modified to return `null` instead of an object.\n* This change causes a runtime `TypeError` in `src/consumer.ts` when it attempts to access `.id` on the returned value."
+          }
+        },
+        {
+          "phase": "causal_verification",
+          "durationMs": 7532,
+          "output": {
+            "assessments": [
+              {
+                "candidateIndex": 0,
+                "basis": "repository",
+                "evidenceReferences": [
+                  {
+                    "id": "9513a4b1facae0e960921e9971e46390143f41ec4cfe0fccd38537bd14e194f6",
+                    "path": "src/consumer.ts",
+                    "startLine": 1,
+                    "endLine": 5
+                  },
+                  {
+                    "id": "9513a4b1facae0e960921e9971e46390143f41ec4cfe0fccd38537bd14e194f6",
+                    "path": "src/consumer.ts",
+                    "startLine": 1,
+                    "endLine": 2
+                  }
+                ],
+                "outcome": "confirmed",
+                "confidence": 1,
+                "rationale": "The patch changes `src/producer.ts` to return `null` instead of `{ id: \"ok\" }`. In `src/consumer.ts`, the `run` function calls `produce()` and immediately accesses `value.id` on the result (line 4). Since `value` is now `null`, this will cause a `TypeError: Cannot read properties of null (reading 'id')` at runtime."
+              }
+            ],
+            "summary": "The `produce` function in `src/producer.ts` was modified to return `null`. This breaks `src/consumer.ts`, which attempts to access the `.id` property of the returned value without performing a null check, leading to a runtime `TypeError`."
+          }
+        }
+      ],
+      "executor": {
+        "logicalTools": 1,
+        "physicalTools": 1,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 1022.9237080000021
+          }
+        ]
+      },
+      "modelEventEnd": 3
+    },
+    {
+      "caseId": "literal-contract.positive",
+      "variant": "receipts",
+      "runId": "github:4242:pr:22:head:b5dfa340f533e169b062d041c19032f131ac666a:base:c3680acad406559777838e20360e16db70231c5c",
+      "passed": true,
+      "expectedDefect": true,
+      "failure": null,
+      "durationMs": 13000,
+      "usage": {
+        "generations": 3,
+        "inputBytes": 40082,
+        "outputTokens": 621,
+        "settled": 3,
+        "logicalTools": 1
+      },
+      "rejections": [],
+      "draft": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [
+          {
+            "confidence": 1,
+            "diagnostic": "The `run` function in `src/consumer.ts` expects the delimiter to be a single space (\" \"), as evidenced by its strict assertion that the joined result must equal \"a b\". Changing the delimiter in `src/producer.ts` to two spaces (\"  \") causes `run` to produce \"a  b\", which triggers the \"WIRE_FORMAT\" error.",
+            "evidence": [
+              {
+                "endLine": 2,
+                "excerpt": "  return \"  \";",
+                "path": "src/producer.ts",
+                "reason": "The delimiter is changed from a single space to two spaces.",
+                "startLine": 2
+              }
+            ],
+            "location": {
+              "line": 2,
+              "path": "src/producer.ts",
+              "side": "RIGHT",
+              "startLine": 2
+            },
+            "severity": "high",
+            "suggestion": "Update the assertion in `src/consumer.ts` to match the new delimiter or revert the change in `src/producer.ts`."
+          }
+        ],
+        "isDegraded": false,
+        "summary": "* The change updates the `delimiter` function in `src/producer.ts` to return two spaces instead of one.\n* This modification breaks the `run` function in `src/consumer.ts`, which contains a hardcoded validation check expecting a single-space delimiter."
+      },
+      "final": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [
+          {
+            "confidence": 1,
+            "diagnostic": "The `run` function in `src/consumer.ts` expects the delimiter to be a single space (\" \"), as evidenced by its strict assertion that the joined result must equal \"a b\". Changing the delimiter in `src/producer.ts` to two spaces (\"  \") causes `run` to produce \"a  b\", which triggers the \"WIRE_FORMAT\" error.",
+            "evidence": [
+              {
+                "endLine": 2,
+                "excerpt": "  return \"  \";",
+                "path": "src/producer.ts",
+                "reason": "The delimiter is changed from a single space to two spaces.",
+                "startLine": 2
+              }
+            ],
+            "location": {
+              "line": 2,
+              "path": "src/producer.ts",
+              "side": "RIGHT",
+              "startLine": 2
+            },
+            "severity": "high",
+            "suggestion": "Update the assertion in `src/consumer.ts` to match the new delimiter or revert the change in `src/producer.ts`."
+          }
+        ],
+        "isDegraded": false,
+        "summary": "The change to `src/producer.ts` breaks the contract expected by `src/consumer.ts`. By increasing the delimiter from one space to two, the `run` function in the consumer fails its equality assertion (`result !== \"a b\"`) and throws a `WIRE_FORMAT` error."
+      },
+      "phases": [
+        {
+          "phase": "investigation",
+          "durationMs": 8145,
+          "output": {
+            "investigations": [],
+            "resolutions": [],
+            "findings": [
+              {
+                "confidence": 1,
+                "diagnostic": "The `run` function in `src/consumer.ts` expects the delimiter to be a single space (\" \"), as evidenced by its strict assertion that the joined result must equal \"a b\". Changing the delimiter in `src/producer.ts` to two spaces (\"  \") causes `run` to produce \"a  b\", which triggers the \"WIRE_FORMAT\" error.",
+                "evidence": [
+                  {
+                    "endLine": 2,
+                    "excerpt": "  return \"  \";",
+                    "path": "src/producer.ts",
+                    "reason": "The delimiter is changed from a single space to two spaces.",
+                    "startLine": 2
+                  }
+                ],
+                "location": {
+                  "line": 2,
+                  "path": "src/producer.ts",
+                  "side": "RIGHT",
+                  "startLine": 2
+                },
+                "severity": "high",
+                "suggestion": "Update the assertion in `src/consumer.ts` to match the new delimiter or revert the change in `src/producer.ts`."
+              }
+            ],
+            "isDegraded": false,
+            "summary": "* The change updates the `delimiter` function in `src/producer.ts` to return two spaces instead of one.\n* This modification breaks the `run` function in `src/consumer.ts`, which contains a hardcoded validation check expecting a single-space delimiter."
+          }
+        },
+        {
+          "phase": "causal_verification",
+          "durationMs": 4806,
+          "output": {
+            "assessments": [
+              {
+                "candidateIndex": 0,
+                "basis": "repository",
+                "evidenceReferences": [
+                  {
+                    "id": "3e969470423925386e86e72757f63d5590a58dd49e7fa5c0fa8bb6699d8ddb7b",
+                    "path": "src/consumer.ts",
+                    "startLine": 1,
+                    "endLine": 6
+                  }
+                ],
+                "outcome": "confirmed",
+                "confidence": 1,
+                "rationale": "The patch changes the return value of `delimiter()` in `src/producer.ts` from a single space `\" \"` to two spaces `\"  \"`. In `src/consumer.ts`, the `run` function joins `[\"a\", \"b\"]` using this delimiter and performs a strict equality check against `\"a b\"`. With the new delimiter, the joined result becomes `\"a  b\"`, causing `result !== \"a b\"` to be true and triggering the `Error(\"WIRE_FORMAT\")`."
+              }
+            ],
+            "summary": "The change to `src/producer.ts` breaks the contract expected by `src/consumer.ts`. By increasing the delimiter from one space to two, the `run` function in the consumer fails its equality assertion (`result !== \"a b\"`) and throws a `WIRE_FORMAT` error."
+          }
+        }
+      ],
+      "executor": {
+        "logicalTools": 1,
+        "physicalTools": 1,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 928.0829589999994
+          }
+        ]
+      },
+      "modelEventEnd": 6
+    },
+    {
+      "caseId": "null-consumer.negative",
+      "variant": "receipts",
+      "runId": "github:4242:pr:32:head:f69bfd03da595a358c21a31865fc00805fe2000e:base:1e7700f9c158765da918b761acfaa92855f626fc",
+      "passed": true,
+      "expectedDefect": false,
+      "failure": null,
+      "durationMs": 4456,
+      "usage": {
+        "generations": 2,
+        "inputBytes": 29973,
+        "outputTokens": 114,
+        "settled": 2,
+        "logicalTools": 1
+      },
+      "rejections": [],
+      "draft": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* The `produce` function in `src/producer.ts` was changed to return `null` instead of an object.\n* The consumer in `src/consumer.ts` explicitly checks for `null` and handles it gracefully, preventing a runtime error."
+      },
+      "final": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* The `produce` function in `src/producer.ts` was changed to return `null` instead of an object.\n* The consumer in `src/consumer.ts` explicitly checks for `null` and handles it gracefully, preventing a runtime error."
+      },
+      "phases": [
+        {
+          "phase": "investigation",
+          "durationMs": 4435,
+          "output": {
+            "investigations": [],
+            "resolutions": [],
+            "findings": [],
+            "isDegraded": false,
+            "summary": "* The `produce` function in `src/producer.ts` was changed to return `null` instead of an object.\n* The consumer in `src/consumer.ts` explicitly checks for `null` and handles it gracefully, preventing a runtime error."
+          }
+        }
+      ],
+      "executor": {
+        "logicalTools": 1,
+        "physicalTools": 1,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 962.6537499999977
+          }
+        ]
+      },
+      "modelEventEnd": 8
+    },
+    {
+      "caseId": "literal-contract.negative",
+      "variant": "receipts",
+      "runId": "github:4242:pr:42:head:0e45bcd0a0f7d090dcdadd51f9b2faf51283faf9:base:c3680acad406559777838e20360e16db70231c5c",
+      "passed": true,
+      "expectedDefect": false,
+      "failure": null,
+      "durationMs": 5836,
+      "usage": {
+        "generations": 2,
+        "inputBytes": 30113,
+        "outputTokens": 101,
+        "settled": 2,
+        "logicalTools": 1
+      },
+      "rejections": [],
+      "draft": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* Changed the delimiter in `src/producer.ts` from a literal space `\" \"` to its hex escape equivalent `\"\\x20\"`.\n* No functional regressions were detected in the consumer."
+      },
+      "final": {
+        "investigations": [],
+        "resolutions": [],
+        "findings": [],
+        "isDegraded": false,
+        "summary": "* Changed the delimiter in `src/producer.ts` from a literal space `\" \"` to its hex escape equivalent `\"\\x20\"`.\n* No functional regressions were detected in the consumer."
+      },
+      "phases": [
+        {
+          "phase": "investigation",
+          "durationMs": 5818,
+          "output": {
+            "investigations": [],
+            "resolutions": [],
+            "findings": [],
+            "isDegraded": false,
+            "summary": "* Changed the delimiter in `src/producer.ts` from a literal space `\" \"` to its hex escape equivalent `\"\\x20\"`.\n* No functional regressions were detected in the consumer."
+          }
+        }
+      ],
+      "executor": {
+        "logicalTools": 1,
+        "physicalTools": 1,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "read_file",
+            "path": "src/consumer.ts",
+            "reused": false,
+            "durationMs": 1169.5823749999981
+          }
+        ]
+      },
+      "modelEventEnd": 10
+    }
+  ]
+}

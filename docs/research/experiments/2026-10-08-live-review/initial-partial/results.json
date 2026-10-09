@@ -1,0 +1,199 @@
+{
+  "configuration": {
+    "date": "2026-10-08",
+    "route": "dynamic/pr-review",
+    "shardCount": 9,
+    "limits": {
+      "calls": 56,
+      "inputBytes": 1500000,
+      "outputTokens": 120000,
+      "requestMs": 45000,
+      "suiteMs": 900000
+    },
+    "cases": [
+      {
+        "id": "null-consumer.positive",
+        "family": "null-consumer",
+        "positive": true,
+        "variants": ["repeated", "receipts", "full", "selective"]
+      },
+      {
+        "id": "literal-contract.positive",
+        "family": "literal-contract",
+        "positive": true,
+        "variants": ["repeated", "receipts"]
+      },
+      {
+        "id": "null-consumer.negative",
+        "family": "null-consumer",
+        "positive": false,
+        "variants": ["repeated", "receipts", "full", "selective"]
+      },
+      {
+        "id": "literal-contract.negative",
+        "family": "literal-contract",
+        "positive": false,
+        "variants": ["repeated", "receipts"]
+      }
+    ],
+    "variants": ["repeated", "receipts", "full", "selective"],
+    "gates": {
+      "receipts": "No case regression or incomplete positive; reduce duplicate causal tools and generation rounds on identical cases.",
+      "prefetch": "Three-way patch-only/full/selective comparison. No case regression, lower rounds and no increase in total bytes/tools without benefit.",
+      "weighted": "Observe live envelopes; no production activation without allocation-pressure and durable borrowing evidence.",
+      "reuse": "No production activation without independently established dependency closure and invalidation evidence.",
+      "specialists": "No production activation without adjudicated incremental gain at fixed total effort."
+    },
+    "probe": false,
+    "routeDeployment": "e335278a-96b4-4a32-87d5-219ca80dd052",
+    "tracePayloads": false,
+    "cacheBypassed": true,
+    "image": "holon-repository-executor-holonsandbox:worker",
+    "imageDigest": "sha256:9ce240445a1a74d0e5fbbe3e8331b986dda4952590068a859cfca32ba940b0d0",
+    "sourceDigests": {
+      "src/review/review-agent.ts": "e65ec12ca1caf5bb01c5808dc76f2a4100d52c606070c55ed9ce2ffb5355a736",
+      "evaluation/live-fixtures.ts": "c7e4fd478cce5694775783f0ecccfcc4690b0ab1b3948c4bdba61871bfec8664",
+      "../../packages/model/src/reviewer.ts": "e031341878c4e7202880965ba07056552769e2952d65421a9f128d8b6fe348a8",
+      "../../packages/model/src/causal-verification.ts": "126c635da2d054f32ebee4a805d3ef741c68f3820be0571ff5d36b7f5768f4d9"
+    },
+    "oracles": [
+      {
+        "caseId": "null-consumer.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "literal-contract.positive",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": true
+        }
+      },
+      {
+        "caseId": "null-consumer.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      },
+      {
+        "caseId": "literal-contract.negative",
+        "base": {
+          "executed": true,
+          "failed": false
+        },
+        "head": {
+          "executed": true,
+          "failed": false
+        }
+      }
+    ]
+  },
+  "budget": {
+    "calls": 4,
+    "inputBytes": 55362,
+    "reservedOutputTokens": 8204,
+    "denied": 0
+  },
+  "modelEvents": [
+    {
+      "status": 200,
+      "inputBytes": 12601,
+      "maxOutputTokens": 2051,
+      "durationMs": 5479.9215,
+      "firstByteMs": 4478.858749999999,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2524,
+      "outputTokens": 19,
+      "cost": 0.00018314
+    },
+    {
+      "status": 200,
+      "inputBytes": 13380,
+      "maxOutputTokens": 2051,
+      "durationMs": 2099.8139580000006,
+      "firstByteMs": 1341.4294160000009,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2844,
+      "outputTokens": 20,
+      "cost": 0.00020588
+    },
+    {
+      "status": 200,
+      "inputBytes": 13998,
+      "maxOutputTokens": 2051,
+      "durationMs": 1937.9091670000016,
+      "firstByteMs": 1203.3715420000008,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 2965,
+      "outputTokens": 26,
+      "cost": 0.00021639
+    },
+    {
+      "status": 200,
+      "inputBytes": 15383,
+      "maxOutputTokens": 2051,
+      "durationMs": 2353.1147500000006,
+      "firstByteMs": 1610.1028750000005,
+      "model": "google/gemma-4-26b-a4b-it",
+      "inputTokens": 3376,
+      "outputTokens": 19,
+      "cost": 0.00024278
+    }
+  ],
+  "results": [
+    {
+      "caseId": "null-consumer.positive",
+      "variant": "repeated",
+      "runId": "github:4242:pr:11:head:9250a64cc25d966d514c74efbc470275328c8bf4:base:0a1cbe94be515afce4f58613c482b33827237af6",
+      "passed": false,
+      "expectedDefect": true,
+      "failure": "model_output_missing",
+      "durationMs": 14707,
+      "usage": {
+        "generations": 4,
+        "inputBytes": 54271,
+        "outputTokens": 84,
+        "settled": 4,
+        "logicalTools": 2
+      },
+      "rejections": [],
+      "draft": null,
+      "final": null,
+      "phases": [],
+      "executor": {
+        "logicalTools": 2,
+        "physicalTools": 2,
+        "cacheHits": 0,
+        "events": [
+          {
+            "tool": "read_file",
+            "path": "src/producer.ts",
+            "reused": false,
+            "durationMs": 1297.0247920000002
+          },
+          {
+            "tool": "search_text",
+            "reused": false,
+            "durationMs": 1283.982500000002
+          }
+        ]
+      },
+      "modelEventEnd": 4
+    }
+  ]
+}

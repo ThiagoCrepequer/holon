@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-09
 ---
 
 # Decisões
@@ -108,3 +108,9 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0053 — Alinhar admissão de shards ao orçamento de geração](0053-align-review-admission-with-generation-budget.md) — trabalho admitido, quotas por shard e causas duráveis de falha.
 
 - [ADR-0054 — Estabelecer as fundações do dashboard dos usuários](0054-establish-user-dashboard-foundations.md) — SSR/API, UI, persistência por autoridade, email privado e gates locais.
+
+- [ADR-0055 — Preservar evidência e agendar análise em lanes estáveis](0055-preserve-review-evidence-and-schedule-stable-lanes.md) — complementa evidência, tools e publicação; substitui o agrupamento/agendamento anterior, preservando quotas de modelo da ADR-0053.
+
+- [ADR-0056 — Rastrear declarações cujo corpo mudou no HEAD verificado](0056-trace-edited-declarations-in-verified-head.md).
+
+- [ADR-0057 — Selecionar receipts do host nos assessments causais](0057-select-host-evidence-receipts-in-causal-assessments.md).

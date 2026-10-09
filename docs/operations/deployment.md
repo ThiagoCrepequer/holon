@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-03
+last-reviewed: 2026-10-08
 ---
 
 # Provisionamento e deploy
@@ -294,7 +294,7 @@ diretas e outros administradores também devem respeitar a janela exclusiva.
 ### Aceitação remota da correção
 
 Executar primeiro PR pequeno sem defeito e PR pequeno com defeito isolado. Depois,
-uma revisão em duas ondas e o PR grande. Conferir reservas de modelo e tools no
+uma revisão com mais de três shards e o PR grande. Conferir reservas de modelo e tools no
 ledger, cobertura, estados do `ReviewShardWorkflow`, tracing e cleanup por runId.
 Injetar perda do container apenas em ambiente de teste: após a primeira falha
 fatal não devem surgir novas chamadas ao provider, embora chamadas já em trânsito

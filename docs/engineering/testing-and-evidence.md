@@ -55,6 +55,34 @@ de cada `package.json` antes de escolher comando filtrado.
    [avaliações](../operations/evaluations.md) para corpus e live manual,
    distinguindo sua evidência de integração GitHub/Cloudflare real.
 
+## Composição, cobertura e avaliação
+
+O teste de cada etapa não substitui a prova da transformação entre etapas.
+Quando fragmentação, normalização, dedupe ou reconciliação puderem mudar a
+decisão, manter uma regressão que use produtores e consumidores reais. Doubles
+externos devem recusar operações inesperadas; não aceitar todo comando com
+sucesso. Um helper que pula terminalização prova apenas o recorte que executou.
+
+Declarar inventário de produção e denominador de cobertura; conferir arquivos
+ausentes, entrypoints, fixtures incluídas e diferenças Node/Workerd. Limiares
+globais não garantem cobertura de módulos críticos. Não esconder lacunas alterando
+thresholds ou excluindo produção. Provar falhas de maior risco antes de perseguir
+mais linhas executadas. A configuração `coverage.include` permite incluir arquivos
+não importados: [Vitest coverage](https://vitest.dev/guide/coverage.html), conferido
+em 2026-10-08. Qualquer ajuste precisa respeitar o provider do runtime.
+
+Avaliação de modelo deve distinguir candidatos brutos, rejeições do host e
+findings publicados. Falha do subject não desaparece do recall operacional;
+feedback repetido não aumenta quantidade de findings avaliados. Thread resolvida
+não prova falso positivo. Recordings exercitam runner/grader, não o motor live.
+Manter ground truth adjudicado, desenvolvimento/holdout separados e comparação
+por categoria/severidade. Para otimizações, medir também completude, falhas,
+tools lógicas/executadas, bytes e latência, com incerteza explícita.
+
+O [guia do core](review-core-quality.md) detalha propriedades e provas verticais;
+a [auditoria de 2026-10-08](../research/2026-10-08-review-core-audit.md) contém
+exemplos reproduzidos em que testes verdes e alta cobertura não detectaram defeitos.
+
 ## Comandos e escopo
 
 Na raiz, `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
@@ -65,12 +93,12 @@ execute primeiro o script do workspace afetado e amplie quando a integração
 atravessar pacotes/deployables. Os exemplos e pré-requisitos estão em
 [desenvolvimento local](../operations/local-development.md).
 
-O Turbo limita a concorrência de tarefas a `100%` dos processadores lógicos
-disponíveis, conforme `turbo.json`. Esse orçamento acompanha a capacidade do
-ambiente em vez de admitir o default de dez tarefas em runners menores.
-Cada tarefa mantém sua configuração de Workers ou browsers e seus testes de
-concorrência interna. A CI registra CPU disponível, memória e configuração
-de concorrência antes do gate; uma falha continua encerrando a execução.
+O Turbo usa `100%` dos processadores lógicos como limite geral de tarefas,
+conforme `turbo.json`. O script `test:coverage` aplica um limite mais restrito
+de um workspace por vez porque a instrumentação e as suites browser
+também criam workers. Cada tarefa mantém sua configuração de Workers/browsers
+e seus testes de concorrência interna. A CI registra CPU disponível, memória
+e configuração de concorrência antes do gate; uma falha encerra a execução.
 Não aumente timeouts nem acrescente retries para ocultar contenção do runner.
 Fonte oficial, conferida em 2026-10-08:
 [concorrência do Turborepo](https://turborepo.dev/docs/reference/configuration#concurrency).
@@ -352,3 +380,27 @@ completa. A suite inclui largura 375 px; 320 px, zoom, dispositivos reais, duas
 versões estáveis e os fluxos privados completos permanecem gates da entrega UI.
 Local preference via URL não prova perfil persistido; health não prova readiness
 de auth ou banco; reserva OAuth local não comprova callback real do GitHub.
+
+## Inventário e composição do core de revisão
+
+As configurações de cobertura do core incluem `src/**/*.{ts,tsx}` explicitamente,
+para fontes não importadas não desaparecerem do cálculo. O executor executa Node
+policies e Workerd adapters em projetos do mesmo comando
+`pnpm --filter @holon/repository-executor test:coverage`, produzindo um relatório
+Istanbul conjunto. A cobertura mantém os thresholds originais. Não usar dois
+relatórios isolados como se nenhum deles deixasse fontes de runtime sem prova.
+
+A fatia vertical local usa `ReviewAgent`/Think/Workflow e orçamento real, com
+provider controlado somente no `getProviderModel`. Tools, reserva/settlement,
+evidência, agregação e ledger de publicação permanecem reais. O executor externo
+controlado recusa operações inesperadas. O adapter Sandbox tem testes próprios
+em Workerd com lifecycle externo controlado. Isso comprova composição e política,
+sem comprovar container/provedor remotos ou qualidade do modelo.
+
+O runner de cobertura admite um workspace por vez. Suites browser
+já abrem workers próprios; admitir todos os pacotes junto pode saturar CPU durante
+instrumentação/cold start e causar timeout de RPC. Limitar a três pacotes ainda
+produziu timeout intermitente na primeira revogação de instalação; o runner
+serializa pacotes, mantendo os workers internos de cada suite.
+Isso limita processos, não reduz thresholds, assertions, engines ou deadlines.
+Registrar falhas/transientes observados, mesmo quando a reexecução controlada passa.

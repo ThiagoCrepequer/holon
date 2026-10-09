@@ -1,0 +1,52 @@
+export class LiveBenchmarkBudget {
+  private calls = 0;
+  private inputBytes = 0;
+  private reservedOutputTokens = 0;
+  private denied = 0;
+
+  constructor(
+    private readonly limits: {
+      readonly calls: number;
+      readonly inputBytes: number;
+      readonly outputTokens: number;
+    },
+  ) {
+    if (
+      Object.values(limits).some(
+        (value) => !Number.isSafeInteger(value) || value < 1,
+      )
+    )
+      throw new RangeError("Invalid live benchmark limits");
+  }
+
+  /** Reserve before transport. An uncertain request never releases its reservation. */
+  admit(inputBytes: number, outputTokens: number): boolean {
+    if (
+      ![inputBytes, outputTokens].every(
+        (value) => Number.isSafeInteger(value) && value > 0,
+      )
+    )
+      throw new RangeError("Invalid live request size");
+    if (
+      this.calls >= this.limits.calls ||
+      this.inputBytes + inputBytes > this.limits.inputBytes ||
+      this.reservedOutputTokens + outputTokens > this.limits.outputTokens
+    ) {
+      this.denied++;
+      return false;
+    }
+    this.calls++;
+    this.inputBytes += inputBytes;
+    this.reservedOutputTokens += outputTokens;
+    return true;
+  }
+
+  snapshot() {
+    return {
+      calls: this.calls,
+      inputBytes: this.inputBytes,
+      reservedOutputTokens: this.reservedOutputTokens,
+      denied: this.denied,
+    };
+  }
+}

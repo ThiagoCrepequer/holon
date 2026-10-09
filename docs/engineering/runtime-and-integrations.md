@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-04
+last-reviewed: 2026-10-08
 ---
 
 # Runtime e integrações do Holon
@@ -97,6 +97,33 @@ Publique veredito e achados inline novos em uma única review; depois recupere
 os IDs dos comentários dessa review para manter o acompanhamento entre commits.
 Em aprovações seguintes sem achados novos, o corpo curto reduz a repetição no PR;
 o Check Run mantém o diagnóstico completo.
+
+## Incerteza, capacidade e otimização
+
+Busca limitada, timeout ou resposta truncada não provam ausência. Uma fronteira
+que usa essa conclusão para autorizar efeito externo deve distinguir resultado
+encontrado, ausência comprovada e investigação inconclusiva. Limitar paginação é
+legítimo; retornar ausência ao atingir o limite pode repetir publicação aceita
+com resposta perdida. Manter obrigação de reconciliação e atualizar porta,
+adapter e consumidores juntos.
+
+Tools devem alinhar schema, command builder, parser, escopo e capacidade real.
+Recusar linguagem/operação indisponível explicitamente, sem transformar filtragem
+em busca completa vazia. Reuso de contexto precisa de snapshot/escopo
+identificados e revalidação de autoridade, inclusive em cache hit.
+
+Medir provider, tools, DO/RPC, preparação, espera e cleanup antes de mudar
+concorrência. Não retirar guards nem abandonar trabalho com `Promise.race` para
+obter menor latência. Quotas, reservas e settlement continuam duráveis; bytes,
+tokens, gerações, tools e tempo têm denominadores diferentes. Uma operação
+composta deve preservar autorização causal e atomicidade, sem cache global de
+permissão. Scheduling/cache novos precisam das provas e decisões aplicáveis.
+
+O [guia de qualidade do core](review-core-quality.md) define os critérios;
+o [plano](../planning/review-core-improvement-proposal.md) conserva alternativas
+os gates de evoluções ainda experimentais. A implementação de cache/receipts/lanes
+segue a [ADR-0055](../decisions/0055-preserve-review-evidence-and-schedule-stable-lanes.md).
+Timings/contadores não devem acrescentar payload privado aos logs.
 
 ## Configuração de deploy e operação
 
