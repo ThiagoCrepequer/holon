@@ -157,6 +157,7 @@ export async function reviewShard({
           findingsReceived: modelOutput.findings.length,
           evidenceRejectedCount:
             modelOutput.findings.length - verifiedFindings.length,
+          evidenceRejectionStage: "publication",
           limitationCodes: [
             ...(modelOutput.outputLimitations ?? []),
             ...(reviewResult.promptTruncated ? ["input_context_omitted"] : []),

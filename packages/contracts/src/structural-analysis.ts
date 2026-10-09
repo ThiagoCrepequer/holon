@@ -19,6 +19,8 @@ export const changedSymbolSchema = z.strictObject({
   isExported: z.boolean(),
   kind: changedSymbolKindSchema,
   line: positiveIntegerSchema,
+  // A body edit can be canonical even when the declaration line is outside the diff.
+  patchLine: positiveIntegerSchema.optional(),
   name: z.string().min(1).max(150),
   path: repositoryPathSchema,
 });
@@ -72,12 +74,28 @@ export const securitySurfaceSignalSchema = z.strictObject({
 
 export type SecuritySurfaceSignal = z.infer<typeof securitySurfaceSignalSchema>;
 
+/** Inventory transport caps; prompt projections retain their separate byte budget. */
+export const structuralReportLimits = {
+  changedSymbols: 1000,
+  contractBreaks: 500,
+  downstreamReferences: 1000,
+  securitySurfaces: 500,
+} as const;
+
 export const structuralImpactReportSchema = z.strictObject({
-  changedSymbols: z.array(changedSymbolSchema).max(100),
-  contractBreaks: z.array(contractBreakSignalSchema).max(50),
-  downstreamReferences: z.array(downstreamReferenceSchema).max(100),
+  changedSymbols: z
+    .array(changedSymbolSchema)
+    .max(structuralReportLimits.changedSymbols),
+  contractBreaks: z
+    .array(contractBreakSignalSchema)
+    .max(structuralReportLimits.contractBreaks),
+  downstreamReferences: z
+    .array(downstreamReferenceSchema)
+    .max(structuralReportLimits.downstreamReferences),
   repositoryScanTruncated: z.boolean().optional(),
-  securitySurfaces: z.array(securitySurfaceSignalSchema).max(50),
+  securitySurfaces: z
+    .array(securitySurfaceSignalSchema)
+    .max(structuralReportLimits.securitySurfaces),
   totalDownstreamReferencesCount: z.number().int().nonnegative().optional(),
   omittedSignals: z
     .strictObject({

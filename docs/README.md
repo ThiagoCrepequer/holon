@@ -56,6 +56,10 @@ A [continuação de 2026-10-09](research/2026-10-09-review-core-code-follow-up.m
 separa novos defeitos corrigidos no código/benchmark das hipóteses sobre a
 capacidade do Gemma e registra as provas correspondentes.
 
+O [ajuste de cobertura após o PR #184](research/2026-10-09-review-context-coverage.md)
+registra a separação de omissões, janelas compartilhadas e a política de
+severidade fornecida ao modelo, com regressões locais e par sintético no Gateway.
+
 A verificação de candidatos antes da publicação segue a
 [ADR-0050](decisions/0050-verify-finding-causality-before-publication.md), o
 [contrato de qualidade](product/review-quality-contract.md#verificação-causal-antes-da-publicação)

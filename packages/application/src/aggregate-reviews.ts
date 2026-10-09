@@ -8,6 +8,7 @@ import {
   type ReconciliationSummary,
   type ReviewFinding,
   type ReviewPlan,
+  type ReviewPlanOmission,
   type ReviewScopeStatus,
   type ShardReviewResult,
   type StructuralImpactReport,
@@ -48,6 +49,23 @@ export interface AggregateShardReviewOptions {
   readonly reconciliation?: ReconciliationSummary | undefined;
   readonly structuralImpact?: StructuralImpactReport | undefined;
   readonly verdictPolicy?: ReviewVerdictPolicyOptions | undefined;
+}
+
+function formatPlanOmission(
+  reason: ReviewPlanOmission,
+  language: ReviewLanguage,
+): string {
+  if (reason.code === "structural_inventory")
+    return reviewMessage(language, reason.code, {
+      count: reason.count,
+      repositoryScanTruncated: String(reason.repositoryScanTruncated),
+    });
+  if (reason.code === "contract_checks")
+    return reviewMessage(language, reason.code, {
+      count: reason.count,
+      ...reason.reasons,
+    });
+  return reviewMessage(language, reason.code, reason);
 }
 
 export function formatCleanFollowUpReview(
@@ -253,7 +271,7 @@ export function aggregateShardReviews(
     return aggregatedReviewResultSchema.parse({
       findings: [],
       omissionReasons: plan.omissionReasons.map((reason) =>
-        reviewMessage(options.language ?? "en", reason.code, reason),
+        formatPlanOmission(reason, options.language ?? "en"),
       ),
       scopeStatus: "unsupported",
       shardsAnalyzed: 0,
@@ -281,7 +299,7 @@ export function aggregateShardReviews(
   }
 
   const omissionReasons = plan.omissionReasons.map((reason) =>
-    reviewMessage(options.language ?? "en", reason.code, reason),
+    formatPlanOmission(reason, options.language ?? "en"),
   );
   let scopeStatus: ReviewScopeStatus = plan.scopeStatus;
   if (options.budgetStopReason !== undefined) {

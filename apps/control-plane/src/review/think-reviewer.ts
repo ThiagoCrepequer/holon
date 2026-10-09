@@ -21,6 +21,11 @@ import {
 import { getAgentByName } from "agents";
 
 import {
+  emitEvidenceRejections,
+  emitDiagnostic,
+  type EmitReviewEvent,
+} from "./review-diagnostics.js";
+import {
   reviewFailureReasonSchema,
   type ReviewFailureReason,
 } from "./review-failure.js";
@@ -46,6 +51,7 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
     private readonly wait: (milliseconds: number) => Promise<void> = (
       milliseconds,
     ) => scheduler.wait(milliseconds),
+    private readonly emit?: EmitReviewEvent,
   ) {}
 
   async review(job: ReviewJob, context: ReviewContext) {
@@ -65,7 +71,23 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
     const draft = modelReviewOutputSchema.parse(
       redactModelReviewOutput(modelReviewOutputSchema.parse(investigation.raw)),
     );
+    if (draft.outputLimitations?.includes("evidence_rejected"))
+      emitDiagnostic(this.emit, "model.output_normalized", {
+        shardIndex: this.shardIndex,
+        stage: "transport",
+        findingsRetained: draft.findings.length,
+        resolutionsRetained: draft.resolutions?.length ?? 0,
+        limitationCodes: draft.outputLimitations.join(","),
+        exactRejectedCountAvailable: false,
+      });
     const { candidates, rejections } = prepareCausalCandidates(draft, context);
+    emitEvidenceRejections(
+      this.emit,
+      this.shardIndex,
+      "finding",
+      rejections,
+      "causal_admission",
+    );
     const language = context.repositoryGuidance?.output.language ?? "en";
     let output = candidates;
     if (candidates.findings.length) {

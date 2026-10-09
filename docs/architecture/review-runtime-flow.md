@@ -106,8 +106,11 @@ admite todas as partes e fixa um perfil por quantidade e tamanho estimado dos
 prompts. O plano efetivo fixa `totalShards` antes do digest e conserva os totais
 elegíveis. Referências estruturais unem produtor/consumidor alterados; até oito
 partes adicionais investigam relações separadas por limites, com janelas
-canônicas de até 80 linhas por arquivo. `contract_checks` registra relações que
-não couberam; contexto omitido permanece explícito e não conta como cobertura.
+canônicas de até 80 linhas por arquivo. Janelas idênticas são compartilhadas e
+pares são agrupados dentro dos tetos da parte; janelas diferentes do mesmo
+arquivo permanecem separadas. Patches completos colocalizados dispensam checks
+redundantes. `contract_checks` discrimina capacidade, ausência de janela e teto
+de evidências. Consulte a [ADR-0060](../decisions/0060-separate-review-inventory-and-pack-contract-windows.md).
 
 O coordenador mantém contexto validado, plano e digest apenas na memória da
 invocação de análise. Lanes compartilham uma barreira de preparação; cada shard
@@ -141,9 +144,14 @@ incluindo `$`, letras Unicode e join controls, sem tratar nomes maiores como
 referências ao fragmento. Ela continua lexical nos consumidores: não resolve aliases arbitrários de import,
 reexports encadeados ou imports dinâmicos nem demonstra fechamento de dependências. Consulte a
 [ADR-0057](../decisions/0057-trace-edited-declarations-in-verified-head.md).
-Tetos do relatório registram `omittedSignals` antes de cortar os arrays;
-projeções preservam essas contagens, acrescentam suas perdas e indicam contexto
-limitado. Varredura incompleta permanece um sinal distinto.
+Tetos compartilhados do relatório conservam até 1.000 símbolos e referências,
+500 pistas de contrato e superfícies de segurança. Registram `omittedSignals`
+antes dos cortes. O plano mantém `structural_inventory` quando há perdas ou
+varredura incompleta. A projeção preserva esses fatos, mas conta apenas suas
+perdas locais em `omitted`/`truncated`, sob 24.000 bytes UTF-8 de contexto
+estrutural. Lacuna global não marca automaticamente todos os prompts truncados.
+Edits de corpo fora da declaração recebem `patchLine` comprovada no patch;
+`line` continua apontando para a declaração. Os tetos de leitura não mudam.
 A verificação de símbolos exportados removidos utiliza a AST completa do módulo
 em HEAD (`@babel/parser`): declarações movidas e reexportadas (inclusive via
 fachadas multiline e aliases públicos) não disparam alerta se o nome público e o
@@ -317,9 +325,12 @@ publicados.
 O control plane ignora `workflow_run`. Não baixa ZIP/LCOV/JUnit, não persiste
 novas evidências de CI e não acrescenta esse bloco ao comentário. Tabelas
 históricas do ledger permanecem sem leitores. A avaliação live do motor antigo
-foi retirada; a avaliação offline recorded permanece. Um smoke remoto com a
-rota e o modelo reais ainda é necessário para provar streaming, tool calling e
-`think_final_answer`; build local e testes Workerd não comprovam essa integração.
+foi retirada; a avaliação offline recorded permanece. O
+[harness manual Think/Sandbox](../operations/evaluations.md#harness-think-real-e-orçamento-de-campanha-2026-10-09)
+usa o Gateway real para validar streaming, tools e `think_final_answer` em
+fixtures sintéticas no runtime local. Build e testes mockados não comprovam essa
+integração; o harness também não substitui um smoke do fluxo completo implantado,
+com GitHub App, coordenação, publicação e limpeza remotas.
 
 ## Memória incremental — 2026-10-04
 

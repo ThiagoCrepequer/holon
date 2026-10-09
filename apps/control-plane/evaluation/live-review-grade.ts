@@ -3,6 +3,7 @@ import type { ModelReviewOutput } from "@holon/contracts";
 interface LiveReviewCase {
   readonly family: string;
   readonly positive: boolean;
+  readonly findingLine?: number;
 }
 
 const diagnosticRubrics: Readonly<
@@ -92,7 +93,7 @@ export function gradeLiveReview(
       if (finding) {
         if (
           finding.location.path !== "src/producer.ts" ||
-          finding.location.line !== 2 ||
+          finding.location.line !== (fixture.findingLine ?? 2) ||
           finding.location.side !== "RIGHT"
         )
           failures.push("location_mismatch");

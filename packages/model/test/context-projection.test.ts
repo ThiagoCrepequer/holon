@@ -49,7 +49,7 @@ it("shares structural context across categories without losing the partial-inven
   expect(limited.truncated).toBe(true);
 });
 
-it("combines producer omissions with prompt omissions instead of reporting full context", () => {
+it("preserves producer gaps separately from omissions made by the prompt projection", () => {
   const result = projectStructuralImpact(
     {
       changedSymbols: ["symbol"],
@@ -66,7 +66,7 @@ it("combines producer omissions with prompt omissions instead of reporting full 
     400,
   );
   expect(result.truncated).toBe(true);
-  expect(result.omitted).toBe(11);
+  expect(result.omitted).toBe(1);
   expect(JSON.parse(result.content)).toMatchObject({
     contractBreaks: [],
     omittedSignals: {
@@ -75,9 +75,34 @@ it("combines producer omissions with prompt omissions instead of reporting full 
       downstreamReferences: 3,
       securitySurfaces: 4,
     },
-    omitted: 11,
+    omitted: 1,
   });
   expect(
     new TextEncoder().encode(result.content).byteLength,
   ).toBeLessThanOrEqual(400);
+});
+
+it("reports global inventory gaps without claiming that the local prompt was truncated", () => {
+  const result = projectStructuralImpact(
+    {
+      changedSymbols: [],
+      contractBreaks: [],
+      downstreamReferences: [],
+      securitySurfaces: [],
+      repositoryScanTruncated: true,
+      omittedSignals: {
+        changedSymbols: 351,
+        contractBreaks: 0,
+        downstreamReferences: 0,
+        securitySurfaces: 0,
+      },
+    },
+    10_000,
+  );
+  expect(result.truncated).toBe(false);
+  expect(result.omitted).toBe(0);
+  expect(JSON.parse(result.content)).toMatchObject({
+    repositoryScanTruncated: true,
+    omittedSignals: { changedSymbols: 351 },
+  });
 });

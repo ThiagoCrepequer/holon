@@ -48,10 +48,8 @@ export function projectStructuralImpact(
     securitySurfaces: [] as unknown[],
     repositoryScanTruncated: input.repositoryScanTruncated ?? false,
     ...(input.omittedSignals ? { omittedSignals: input.omittedSignals } : {}),
-    omitted: Object.values(input.omittedSignals ?? {}).reduce(
-      (sum, count) => sum + count,
-      0,
-    ),
+    // Producer gaps describe the run's inventory, not bytes lost by this projection.
+    omitted: 0,
   };
   const groups = [
     "contractBreaks",

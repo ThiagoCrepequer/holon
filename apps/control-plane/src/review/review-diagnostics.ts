@@ -25,6 +25,7 @@ export function emitEvidenceRejections(
   shardIndex: number,
   candidateKind: "finding" | "resolution",
   rejections: readonly EvidenceRejection[],
+  stage: "causal_admission" | "publication" = "publication",
 ): void {
   for (const rejection of rejections) {
     try {
@@ -34,6 +35,7 @@ export function emitEvidenceRejections(
           severity: "warning",
           shardIndex,
           candidateKind,
+          stage,
           ...rejection,
         },
         `${shardIndex}:${candidateKind}:${rejection.findingIndex}`,

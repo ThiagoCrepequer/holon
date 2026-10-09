@@ -61,6 +61,11 @@ informaram custo. O spending local não deve ser apagado; o snapshot versionado
 serve como seed conservador se ele faltar. Valores conhecidos não são fatura
 completa dos attempts internos do provider.
 
+Atualização de 2026-10-09: o CLI passou a recuperar o
+[seed acumulado de cobertura](../2026-10-09-review-context-coverage/campaign-spend.json),
+que conserva essas 253 reservas e acrescenta 19 novas. O seed e o resumo desta
+campanha histórica permanecem intactos para sua reconciliação original.
+
 Amostras de 4/4 ocorreram em desenvolvimento e no primeiro holdout; a repetição
 falhou e uma confirmação nova expôs falso positivo. Dados já usados para ajustar
 prompt passam a desenvolvimento. Nunca tratar repetições ajustadas como holdout

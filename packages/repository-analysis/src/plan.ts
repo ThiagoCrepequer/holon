@@ -361,6 +361,20 @@ export function buildReviewPlan(
   const omissionReasons: ReviewPlan["omissionReasons"] = [];
   let scopeStatus: "complete" | "partial_by_policy" = "complete";
 
+  const omittedSignals = Object.values(
+    options?.structuralImpact?.omittedSignals ?? {},
+  ).reduce((sum, count) => sum + count, 0);
+  const repositoryScanTruncated =
+    options?.structuralImpact?.repositoryScanTruncated === true;
+  if (omittedSignals || repositoryScanTruncated) {
+    scopeStatus = "partial_by_policy";
+    omissionReasons.push({
+      code: "structural_inventory",
+      count: omittedSignals,
+      repositoryScanTruncated,
+    });
+  }
+
   if (oversizedFileCount > 0) {
     scopeStatus = "partial_by_policy";
     omissionReasons.push({
@@ -418,7 +432,11 @@ export function buildReviewPlan(
   for (const shard of shards) shard.totalShards = shards.length;
   if (cross.omitted) {
     scopeStatus = "partial_by_policy";
-    omissionReasons.push({ code: "contract_checks", count: cross.omitted });
+    omissionReasons.push({
+      code: "contract_checks",
+      count: cross.omitted,
+      reasons: cross.reasons,
+    });
   }
 
   return reviewPlanSchema.parse({

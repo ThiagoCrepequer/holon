@@ -2,6 +2,7 @@ import { reviewJobSchema } from "@holon/contracts";
 import { expect, it, vi } from "vitest";
 
 import type { ReviewAgentConfig } from "../src/review/review-agent.js";
+import type { EmitReviewEvent } from "../src/review/review-diagnostics.js";
 import type { ReviewFailureReason } from "../src/review/review-failure.js";
 import {
   ThinkReviewFailure,
@@ -46,6 +47,7 @@ function reviewerFor(
     error?: { name: string; message: string };
   }>,
   failure: ReviewFailureReason | null = null,
+  emit?: EmitReviewEvent,
 ) {
   const startReview = vi.fn(
     async (_config: ReviewAgentConfig) => "workflow-test",
@@ -70,7 +72,7 @@ function reviewerFor(
     REVIEW_SHARD_WORKFLOW: workflow,
   } as unknown as Cloudflare.Env;
   return {
-    reviewer: new ThinkReviewModelReviewer(env, 0, 1, wait),
+    reviewer: new ThinkReviewModelReviewer(env, 0, 1, wait, emit),
     namespace,
     startReview,
     cancelReview,
@@ -95,6 +97,37 @@ const nullFinding = {
   location: { line: 10, path: "src/index.ts", side: "RIGHT" },
   severity: "high",
 };
+
+it("reports transport limitations without inventing original rejection counts or logging private narrative", async () => {
+  const emit = vi.fn();
+  const fixture = reviewerFor(
+    [
+      {
+        status: "complete",
+        output: {
+          findings: [],
+          summary: "PRIVATE NARRATIVE",
+          outputLimitations: ["evidence_rejected"],
+          isDegraded: true,
+        },
+      },
+    ],
+    null,
+    emit,
+  );
+  const result = await fixture.reviewer.review(job, context);
+  expect(result.output.outputLimitations).toEqual(["evidence_rejected"]);
+  expect(emit).toHaveBeenCalledWith(
+    "model.output_normalized",
+    expect.objectContaining({
+      stage: "transport",
+      findingsRetained: 0,
+      exactRejectedCountAvailable: false,
+    }),
+    undefined,
+  );
+  expect(JSON.stringify(emit.mock.calls)).not.toContain("PRIVATE NARRATIVE");
+});
 
 it("withholds a candidate refuted by the caller's existing null guard", async () => {
   const fixture = reviewerFor([
@@ -250,22 +283,27 @@ it("propagates parent cancellation during causal verification and terminates its
 });
 
 it("rejects fabricated canonical evidence before spending inference on verification", async () => {
-  const fixture = reviewerFor([
-    {
-      status: "complete",
-      output: {
-        findings: [
-          {
-            ...nullFinding,
-            evidence: [
-              { ...nullFinding.evidence[0], excerpt: "return undefined;" },
-            ],
-          },
-        ],
-        summary: "A fabricated candidate.",
+  const emit = vi.fn();
+  const fixture = reviewerFor(
+    [
+      {
+        status: "complete",
+        output: {
+          findings: [
+            {
+              ...nullFinding,
+              evidence: [
+                { ...nullFinding.evidence[0], excerpt: "return undefined;" },
+              ],
+            },
+          ],
+          summary: "A fabricated candidate.",
+        },
       },
-    },
-  ]);
+    ],
+    null,
+    emit,
+  );
   const result = await fixture.reviewer.review(job, context);
   expect(fixture.startReview).toHaveBeenCalledOnce();
   expect(result.output.findings).toEqual([]);
@@ -274,6 +312,17 @@ it("rejects fabricated canonical evidence before spending inference on verificat
     "causal_verification_incomplete",
   ]);
   expect(result.output.summary).not.toContain("fabricated candidate");
+  expect(emit).toHaveBeenCalledWith(
+    "model.evidence_rejected",
+    expect.objectContaining({
+      stage: "causal_admission",
+      candidateKind: "finding",
+      shardIndex: 0,
+      reason: "evidence_excerpt_mismatch",
+    }),
+    expect.any(String),
+  );
+  expect(JSON.stringify(emit.mock.calls)).not.toContain("return undefined");
 });
 
 it("withholds candidates after the shared analysis deadline without granting a new verification deadline", async () => {

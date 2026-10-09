@@ -23,8 +23,8 @@
     "test:deploy": "node --test tooling/deploy/*.test.mjs",
     "test:deploy:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/deploy/*.mjs\" --test-coverage-exclude=\"tooling/deploy/*.test.mjs\" tooling/deploy/*.test.mjs",
     "deploy:guarded": "node tooling/deploy/cli.mjs",
-    "test:evidence": "node --test tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null",
-    "test:evidence:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/evidence/archive.mjs\" tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null"
+    "test:evidence": "node --test tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null && node docs/research/experiments/2026-10-09-review-context-coverage/analyze.mjs > /dev/null",
+    "test:evidence:coverage": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"tooling/evidence/archive.mjs\" tooling/evidence/*.test.mjs && node docs/research/experiments/2026-10-08-live-review/analyze.mjs > /dev/null && node docs/research/experiments/2026-10-09-review-context-coverage/analyze.mjs > /dev/null"
   },
   "devDependencies": {
     "@babel/parser": "8.0.6",

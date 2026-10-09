@@ -1,0 +1,1362 @@
+{
+  "policy": {
+    "limitUSD": 0.5,
+    "inputNanodollarsPerToken": 150,
+    "outputNanodollarsPerToken": 600,
+    "templateTokenAllowance": 2048,
+    "routeAttempts": 2,
+    "marginPercent": 125
+  },
+  "records": [
+    {
+      "id": "diagnostic-probe:0",
+      "reservedNanodollars": 8468625,
+      "chargedNanodollars": 224550
+    },
+    {
+      "id": "diagnostic-probe:1",
+      "reservedNanodollars": 8760750,
+      "chargedNanodollars": 255700
+    },
+    {
+      "id": "diagnostic-probe:2",
+      "reservedNanodollars": 9616500,
+      "chargedNanodollars": 303950
+    },
+    {
+      "id": "diagnostic-probe:3",
+      "reservedNanodollars": 9359250,
+      "chargedNanodollars": 402813
+    },
+    {
+      "id": "ablation:0",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 228925
+    },
+    {
+      "id": "ablation:1",
+      "reservedNanodollars": 8862000,
+      "chargedNanodollars": 257350
+    },
+    {
+      "id": "ablation:2",
+      "reservedNanodollars": 9093750,
+      "chargedNanodollars": 270488
+    },
+    {
+      "id": "ablation:3",
+      "reservedNanodollars": 9613125,
+      "chargedNanodollars": 303475
+    },
+    {
+      "id": "ablation:4",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 228925
+    },
+    {
+      "id": "ablation:5",
+      "reservedNanodollars": 8862000,
+      "chargedNanodollars": 257525
+    },
+    {
+      "id": "ablation:6",
+      "reservedNanodollars": 9093000,
+      "chargedNanodollars": 270663
+    },
+    {
+      "id": "ablation:7",
+      "reservedNanodollars": 9611250,
+      "chargedNanodollars": 303388
+    },
+    {
+      "id": "ablation:8",
+      "reservedNanodollars": 10593375,
+      "chargedNanodollars": 420163
+    },
+    {
+      "id": "ablation:9",
+      "reservedNanodollars": 11449500,
+      "chargedNanodollars": 596925
+    },
+    {
+      "id": "ablation:10",
+      "reservedNanodollars": 8812500,
+      "chargedNanodollars": 258413
+    },
+    {
+      "id": "ablation:11",
+      "reservedNanodollars": 9104625,
+      "chargedNanodollars": 288463
+    },
+    {
+      "id": "ablation:12",
+      "reservedNanodollars": 9426000,
+      "chargedNanodollars": 426200
+    },
+    {
+      "id": "ablation:13",
+      "reservedNanodollars": 8568000,
+      "chargedNanodollars": 229675
+    },
+    {
+      "id": "ablation:14",
+      "reservedNanodollars": 9445875,
+      "chargedNanodollars": 280675
+    },
+    {
+      "id": "ablation:15",
+      "reservedNanodollars": 9805500,
+      "chargedNanodollars": 363300
+    },
+    {
+      "id": "ablation:16",
+      "reservedNanodollars": 8568000,
+      "chargedNanodollars": 228400
+    },
+    {
+      "id": "ablation:17",
+      "reservedNanodollars": 8863125,
+      "chargedNanodollars": 257350
+    },
+    {
+      "id": "ablation:18",
+      "reservedNanodollars": 9096375,
+      "chargedNanodollars": 270488
+    },
+    {
+      "id": "ablation:19",
+      "reservedNanodollars": 9637125,
+      "chargedNanodollars": 304700
+    },
+    {
+      "id": "ablation:20",
+      "reservedNanodollars": 10611375,
+      "chargedNanodollars": 425050
+    },
+    {
+      "id": "ablation:21",
+      "reservedNanodollars": 10746000,
+      "chargedNanodollars": 426863
+    },
+    {
+      "id": "ablation:22",
+      "reservedNanodollars": 11947125,
+      "chargedNanodollars": 498513
+    },
+    {
+      "id": "ablation:23",
+      "reservedNanodollars": 11960250,
+      "chargedNanodollars": 540700
+    },
+    {
+      "id": "ablation:24",
+      "reservedNanodollars": 8830500,
+      "chargedNanodollars": 259375
+    },
+    {
+      "id": "ablation:25",
+      "reservedNanodollars": 9122625,
+      "chargedNanodollars": 289688
+    },
+    {
+      "id": "ablation:26",
+      "reservedNanodollars": 9462000,
+      "chargedNanodollars": 362425
+    },
+    {
+      "id": "ablation:27",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 233688
+    },
+    {
+      "id": "ablation:28",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 230288
+    },
+    {
+      "id": "ablation:29",
+      "reservedNanodollars": 9426000,
+      "chargedNanodollars": 279975
+    },
+    {
+      "id": "ablation:30",
+      "reservedNanodollars": 9765375,
+      "chargedNanodollars": 368075
+    },
+    {
+      "id": "ablation:31",
+      "reservedNanodollars": 8569125,
+      "chargedNanodollars": 229588
+    },
+    {
+      "id": "ablation:32",
+      "reservedNanodollars": 9447375,
+      "chargedNanodollars": 284925
+    },
+    {
+      "id": "ablation:33",
+      "reservedNanodollars": 9816750,
+      "chargedNanodollars": 345113
+    },
+    {
+      "id": "ablation:34",
+      "reservedNanodollars": 8569125,
+      "chargedNanodollars": 228313
+    },
+    {
+      "id": "ablation:35",
+      "reservedNanodollars": 8866125,
+      "chargedNanodollars": 256913
+    },
+    {
+      "id": "ablation:36",
+      "reservedNanodollars": 9099375,
+      "chargedNanodollars": 269625
+    },
+    {
+      "id": "ablation:37",
+      "reservedNanodollars": 9769875,
+      "chargedNanodollars": 337025
+    },
+    {
+      "id": "context-rejected:0",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 233600
+    },
+    {
+      "id": "context-rejected:1",
+      "reservedNanodollars": 8874750,
+      "chargedNanodollars": 292613
+    },
+    {
+      "id": "context-rejected:2",
+      "reservedNanodollars": 8568000,
+      "chargedNanodollars": 250347
+    },
+    {
+      "id": "context-rejected:3",
+      "reservedNanodollars": 9744750,
+      "chargedNanodollars": 294988
+    },
+    {
+      "id": "context-rejected:4",
+      "reservedNanodollars": 10036500,
+      "chargedNanodollars": 400113
+    },
+    {
+      "id": "context-rejected:5",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 229013
+    },
+    {
+      "id": "context-rejected:6",
+      "reservedNanodollars": 9032250,
+      "chargedNanodollars": 268000
+    },
+    {
+      "id": "context-rejected:7",
+      "reservedNanodollars": 9819750,
+      "chargedNanodollars": 315025
+    },
+    {
+      "id": "context-rejected:8",
+      "reservedNanodollars": 9625500,
+      "chargedNanodollars": 423450
+    },
+    {
+      "id": "context-rejected:9",
+      "reservedNanodollars": 8569125,
+      "chargedNanodollars": 228313
+    },
+    {
+      "id": "context-rejected:10",
+      "reservedNanodollars": 9036375,
+      "chargedNanodollars": 289813
+    },
+    {
+      "id": "thinking:0",
+      "reservedNanodollars": 8569500,
+      "chargedNanodollars": 349450
+    },
+    {
+      "id": "thinking:1",
+      "reservedNanodollars": 9787875,
+      "chargedNanodollars": 329388
+    },
+    {
+      "id": "thinking:2",
+      "reservedNanodollars": 10183500,
+      "chargedNanodollars": 599188
+    },
+    {
+      "id": "thinking:3",
+      "reservedNanodollars": 11771625
+    },
+    {
+      "id": "thinking:4",
+      "reservedNanodollars": 8567625,
+      "chargedNanodollars": 362950
+    },
+    {
+      "id": "thinking:5",
+      "reservedNanodollars": 9994500,
+      "chargedNanodollars": 386050
+    },
+    {
+      "id": "thinking:6",
+      "reservedNanodollars": 10573875
+    },
+    {
+      "id": "thinking:7",
+      "reservedNanodollars": 8569500,
+      "chargedNanodollars": 336363
+    },
+    {
+      "id": "thinking:8",
+      "reservedNanodollars": 9757125,
+      "chargedNanodollars": 326338
+    },
+    {
+      "id": "thinking:9",
+      "reservedNanodollars": 10175625,
+      "chargedNanodollars": 455475
+    },
+    {
+      "id": "thinking:10",
+      "reservedNanodollars": 10798500
+    },
+    {
+      "id": "thinking:11",
+      "reservedNanodollars": 8568750,
+      "chargedNanodollars": 363288
+    },
+    {
+      "id": "thinking:12",
+      "reservedNanodollars": 10026750,
+      "chargedNanodollars": 372788
+    },
+    {
+      "id": "thinking:13",
+      "reservedNanodollars": 10530375,
+      "chargedNanodollars": 417725
+    },
+    {
+      "id": "live-2026-10-09T02-08-50.272Z:0",
+      "reservedNanodollars": 8600250
+    },
+    {
+      "id": "live-2026-10-09T02-08-50.272Z:1",
+      "reservedNanodollars": 8598375
+    },
+    {
+      "id": "live-2026-10-09T02-08-50.272Z:2",
+      "reservedNanodollars": 8600250
+    },
+    {
+      "id": "live-2026-10-09T02-08-50.272Z:3",
+      "reservedNanodollars": 8599500
+    },
+    {
+      "id": "price-probe:2026-10-09T02:11:16.626Z:price-without-request",
+      "reservedNanodollars": 900375,
+      "chargedNanodollars": 1665
+    },
+    {
+      "id": "price-probe:2026-10-09T02:11:20.917Z:plain",
+      "reservedNanodollars": 874500,
+      "chargedNanodollars": 1665
+    },
+    {
+      "id": "live-2026-10-09T02-12-37.591Z:0",
+      "reservedNanodollars": 8595750
+    },
+    {
+      "id": "live-2026-10-09T02-12-37.591Z:1",
+      "reservedNanodollars": 8593875
+    },
+    {
+      "id": "live-2026-10-09T02-12-37.591Z:2",
+      "reservedNanodollars": 8595750
+    },
+    {
+      "id": "live-2026-10-09T02-12-37.591Z:3",
+      "reservedNanodollars": 8595000
+    },
+    {
+      "id": "live-2026-10-09T02-15-04.924Z-probe:0",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 233600
+    },
+    {
+      "id": "live-2026-10-09T02-15-04.924Z-probe:1",
+      "reservedNanodollars": 8704500,
+      "chargedNanodollars": 235838
+    },
+    {
+      "id": "live-2026-10-09T02-15-04.924Z-probe:2",
+      "reservedNanodollars": 9561750,
+      "chargedNanodollars": 284350
+    },
+    {
+      "id": "live-2026-10-09T02-15-04.924Z-probe:3",
+      "reservedNanodollars": 9304500,
+      "chargedNanodollars": 392563
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:0",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 233600
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:1",
+      "reservedNanodollars": 8704500,
+      "chargedNanodollars": 235838
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:2",
+      "reservedNanodollars": 9561750,
+      "chargedNanodollars": 284350
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:3",
+      "reservedNanodollars": 9304500,
+      "chargedNanodollars": 397663
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:4",
+      "reservedNanodollars": 8568000,
+      "chargedNanodollars": 228400
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:5",
+      "reservedNanodollars": 8863125,
+      "chargedNanodollars": 259900
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:6",
+      "reservedNanodollars": 9740625,
+      "chargedNanodollars": 309463
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:7",
+      "reservedNanodollars": 9521625,
+      "chargedNanodollars": 346000
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:8",
+      "reservedNanodollars": 8569875,
+      "chargedNanodollars": 233688
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:9",
+      "reservedNanodollars": 8704500,
+      "chargedNanodollars": 235925
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:10",
+      "reservedNanodollars": 9560250,
+      "chargedNanodollars": 284175
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:11",
+      "reservedNanodollars": 9321000,
+      "chargedNanodollars": 318538
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:12",
+      "reservedNanodollars": 8569125,
+      "chargedNanodollars": 228313
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:13",
+      "reservedNanodollars": 8866125,
+      "chargedNanodollars": 256913
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:14",
+      "reservedNanodollars": 9099375,
+      "chargedNanodollars": 270050
+    },
+    {
+      "id": "live-2026-10-09T02-16-05.035Z:15",
+      "reservedNanodollars": 9399000,
+      "chargedNanodollars": 295375
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:0",
+      "reservedNanodollars": 8849625,
+      "chargedNanodollars": 245850
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:1",
+      "reservedNanodollars": 8984250,
+      "chargedNanodollars": 248088
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:2",
+      "reservedNanodollars": 9841500,
+      "chargedNanodollars": 296600
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:3",
+      "reservedNanodollars": 9584250,
+      "chargedNanodollars": 409063
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:4",
+      "reservedNanodollars": 8847750,
+      "chargedNanodollars": 264025
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:5",
+      "reservedNanodollars": 8849625,
+      "chargedNanodollars": 245938
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:6",
+      "reservedNanodollars": 8984250,
+      "chargedNanodollars": 248175
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:7",
+      "reservedNanodollars": 9841500,
+      "chargedNanodollars": 296688
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:8",
+      "reservedNanodollars": 9602250,
+      "chargedNanodollars": 303425
+    },
+    {
+      "id": "live-2026-10-09T02-18-15.135Z:9",
+      "reservedNanodollars": 8848875,
+      "chargedNanodollars": 268613
+    },
+    {
+      "id": "live-2026-10-09T02-33-08.033Z-probe:0",
+      "reservedNanodollars": 9143250,
+      "chargedNanodollars": 257538
+    },
+    {
+      "id": "live-2026-10-09T02-33-08.033Z-probe:1",
+      "reservedNanodollars": 9464625,
+      "chargedNanodollars": 408688
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:0",
+      "reservedNanodollars": 9143250,
+      "chargedNanodollars": 257538
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:1",
+      "reservedNanodollars": 9464625,
+      "chargedNanodollars": 398913
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:2",
+      "reservedNanodollars": 9156375,
+      "chargedNanodollars": 257888
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:3",
+      "reservedNanodollars": 9451500,
+      "chargedNanodollars": 288113
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:4",
+      "reservedNanodollars": 9811125,
+      "chargedNanodollars": 424225
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:5",
+      "reservedNanodollars": 9143250,
+      "chargedNanodollars": 257188
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:6",
+      "reservedNanodollars": 9435375,
+      "chargedNanodollars": 287325
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:7",
+      "reservedNanodollars": 9774750,
+      "chargedNanodollars": 345513
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:8",
+      "reservedNanodollars": 9157500,
+      "chargedNanodollars": 257538
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:9",
+      "reservedNanodollars": 9454500,
+      "chargedNanodollars": 286713
+    },
+    {
+      "id": "live-2026-10-09T02-35-21.502Z:10",
+      "reservedNanodollars": 9814125,
+      "chargedNanodollars": 343988
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:0",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 269000
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:1",
+      "reservedNanodollars": 9697875,
+      "chargedNanodollars": 412925
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:2",
+      "reservedNanodollars": 8080500,
+      "chargedNanodollars": 371150
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:3",
+      "reservedNanodollars": 9391875,
+      "chargedNanodollars": 269525
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:4",
+      "reservedNanodollars": 9751500,
+      "chargedNanodollars": 418463
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:5",
+      "reservedNanodollars": 8143500,
+      "chargedNanodollars": 375800
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:6",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 268650
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:7",
+      "reservedNanodollars": 9715875,
+      "chargedNanodollars": 329888
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:8",
+      "reservedNanodollars": 9394875,
+      "chargedNanodollars": 269438
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:9",
+      "reservedNanodollars": 9691875,
+      "chargedNanodollars": 298613
+    },
+    {
+      "id": "live-2026-10-09T02-39-53.292Z:10",
+      "reservedNanodollars": 10051500,
+      "chargedNanodollars": 371613
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:0",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 269000
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:1",
+      "reservedNanodollars": 9697875,
+      "chargedNanodollars": 409100
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:2",
+      "reservedNanodollars": 8388750,
+      "chargedNanodollars": 389688
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:3",
+      "reservedNanodollars": 9391875,
+      "chargedNanodollars": 269525
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:4",
+      "reservedNanodollars": 9751500,
+      "chargedNanodollars": 411238
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:5",
+      "reservedNanodollars": 8437125,
+      "chargedNanodollars": 401863
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:6",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 268650
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:7",
+      "reservedNanodollars": 9715875,
+      "chargedNanodollars": 334563
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:8",
+      "reservedNanodollars": 9394875,
+      "chargedNanodollars": 269438
+    },
+    {
+      "id": "live-2026-10-09T02-43-32.790Z:9",
+      "reservedNanodollars": 9754500,
+      "chargedNanodollars": 332313
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:0",
+      "reservedNanodollars": 9391125,
+      "chargedNanodollars": 270400
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:1",
+      "reservedNanodollars": 9771750,
+      "chargedNanodollars": 421300
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:2",
+      "reservedNanodollars": 8460000,
+      "chargedNanodollars": 388925
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:3",
+      "reservedNanodollars": 9400125,
+      "chargedNanodollars": 269350
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:4",
+      "reservedNanodollars": 9779625,
+      "chargedNanodollars": 437350
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:5",
+      "reservedNanodollars": 8551500,
+      "chargedNanodollars": 406450
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:6",
+      "reservedNanodollars": 9397125,
+      "chargedNanodollars": 271275
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:7",
+      "reservedNanodollars": 9783750,
+      "chargedNanodollars": 341975
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:8",
+      "reservedNanodollars": 9402000,
+      "chargedNanodollars": 269088
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:9",
+      "reservedNanodollars": 9783375,
+      "chargedNanodollars": 303688
+    },
+    {
+      "id": "live-2026-10-09T02-46-01.130Z:10",
+      "reservedNanodollars": 10085625,
+      "chargedNanodollars": 359488
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:0",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 269000
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:1",
+      "reservedNanodollars": 9697875,
+      "chargedNanodollars": 425938
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:2",
+      "reservedNanodollars": 8157750,
+      "chargedNanodollars": 213263
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:3",
+      "reservedNanodollars": 7900500,
+      "chargedNanodollars": 328363
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:4",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 269000
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:5",
+      "reservedNanodollars": 9697875,
+      "chargedNanodollars": 417600
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:6",
+      "reservedNanodollars": 8413500,
+      "chargedNanodollars": 397213
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:7",
+      "reservedNanodollars": 11400000,
+      "chargedNanodollars": 577938
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:8",
+      "reservedNanodollars": 12462000,
+      "chargedNanodollars": 778038
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:9",
+      "reservedNanodollars": 9619125,
+      "chargedNanodollars": 412638
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:10",
+      "reservedNanodollars": 8658000,
+      "chargedNanodollars": 418288
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:11",
+      "reservedNanodollars": 9391875,
+      "chargedNanodollars": 269525
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:12",
+      "reservedNanodollars": 9751500,
+      "chargedNanodollars": 421863
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:13",
+      "reservedNanodollars": 9391875,
+      "chargedNanodollars": 269525
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:14",
+      "reservedNanodollars": 9751500,
+      "chargedNanodollars": 431725
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:15",
+      "reservedNanodollars": 8201625,
+      "chargedNanodollars": 215188
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:16",
+      "reservedNanodollars": 7982625,
+      "chargedNanodollars": 359775
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:17",
+      "reservedNanodollars": 11418000,
+      "chargedNanodollars": 489325
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:18",
+      "reservedNanodollars": 9637125,
+      "chargedNanodollars": 325188
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:19",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 268650
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:20",
+      "reservedNanodollars": 9715875,
+      "chargedNanodollars": 330388
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:21",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 268650
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:22",
+      "reservedNanodollars": 9715875,
+      "chargedNanodollars": 332863
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:23",
+      "reservedNanodollars": 9394875,
+      "chargedNanodollars": 269438
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:24",
+      "reservedNanodollars": 9754500,
+      "chargedNanodollars": 339538
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:25",
+      "reservedNanodollars": 9394875,
+      "chargedNanodollars": 269438
+    },
+    {
+      "id": "live-2026-10-09T02-48-37.361Z:26",
+      "reservedNanodollars": 9754500,
+      "chargedNanodollars": 341325
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:0",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 269000
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:1",
+      "reservedNanodollars": 9697875,
+      "chargedNanodollars": 422700
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:2",
+      "reservedNanodollars": 7620000,
+      "chargedNanodollars": 351000
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:3",
+      "reservedNanodollars": 9391875,
+      "chargedNanodollars": 269525
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:4",
+      "reservedNanodollars": 9751500,
+      "chargedNanodollars": 422288
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:5",
+      "reservedNanodollars": 7671000,
+      "chargedNanodollars": 332575
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:6",
+      "reservedNanodollars": 9376500,
+      "chargedNanodollars": 268650
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:7",
+      "reservedNanodollars": 9715875,
+      "chargedNanodollars": 332013
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:8",
+      "reservedNanodollars": 9394875,
+      "chargedNanodollars": 269438
+    },
+    {
+      "id": "live-2026-10-09T02-55-54.576Z:9",
+      "reservedNanodollars": 9754500,
+      "chargedNanodollars": 328063
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:0",
+      "reservedNanodollars": 9395250,
+      "chargedNanodollars": 270750
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:1",
+      "reservedNanodollars": 9747000,
+      "chargedNanodollars": 434288
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:2",
+      "reservedNanodollars": 7679250,
+      "chargedNanodollars": 335313
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:3",
+      "reservedNanodollars": 9414750,
+      "chargedNanodollars": 270925
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:4",
+      "reservedNanodollars": 9770250,
+      "chargedNanodollars": 405125
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:5",
+      "reservedNanodollars": 7625250,
+      "chargedNanodollars": 333750
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:6",
+      "reservedNanodollars": 9398250,
+      "chargedNanodollars": 271188
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:7",
+      "reservedNanodollars": 9753000,
+      "chargedNanodollars": 342938
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:8",
+      "reservedNanodollars": 9414750,
+      "chargedNanodollars": 271363
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:9",
+      "reservedNanodollars": 9769875,
+      "chargedNanodollars": 416638
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:10",
+      "reservedNanodollars": 7663875,
+      "chargedNanodollars": 211950
+    },
+    {
+      "id": "live-2026-10-09T02-59-55.235Z:11",
+      "reservedNanodollars": 7392750,
+      "chargedNanodollars": 300150
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:0",
+      "reservedNanodollars": 9478875,
+      "chargedNanodollars": 273813
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:1",
+      "reservedNanodollars": 9830625,
+      "chargedNanodollars": 430975
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:2",
+      "reservedNanodollars": 9498375,
+      "chargedNanodollars": 273988
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:3",
+      "reservedNanodollars": 9853875,
+      "chargedNanodollars": 431138
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:4",
+      "reservedNanodollars": 9481875,
+      "chargedNanodollars": 274250
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:5",
+      "reservedNanodollars": 9836625,
+      "chargedNanodollars": 343875
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:6",
+      "reservedNanodollars": 9498375,
+      "chargedNanodollars": 274425
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:7",
+      "reservedNanodollars": 9853500,
+      "chargedNanodollars": 309201
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:8",
+      "reservedNanodollars": 10161000,
+      "chargedNanodollars": 448938
+    },
+    {
+      "id": "live-2026-10-09T03-03-13.476Z:9",
+      "reservedNanodollars": 8126250,
+      "chargedNanodollars": 424938
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:0",
+      "reservedNanodollars": 9484875,
+      "chargedNanodollars": 273813
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:1",
+      "reservedNanodollars": 9836625,
+      "chargedNanodollars": 429275
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:2",
+      "reservedNanodollars": 7801500,
+      "chargedNanodollars": 333063
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:3",
+      "reservedNanodollars": 9504375,
+      "chargedNanodollars": 273988
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:4",
+      "reservedNanodollars": 9859875,
+      "chargedNanodollars": 416263
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:5",
+      "reservedNanodollars": 7790625,
+      "chargedNanodollars": 214750
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:6",
+      "reservedNanodollars": 7519500,
+      "chargedNanodollars": 353600
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:7",
+      "reservedNanodollars": 9487875,
+      "chargedNanodollars": 274250
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:8",
+      "reservedNanodollars": 9842625,
+      "chargedNanodollars": 425900
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:9",
+      "reservedNanodollars": 9504375,
+      "chargedNanodollars": 274425
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:10",
+      "reservedNanodollars": 9859500,
+      "chargedNanodollars": 436700
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:11",
+      "reservedNanodollars": 7887000,
+      "chargedNanodollars": 220875
+    },
+    {
+      "id": "live-2026-10-09T03-13-17.149Z:12",
+      "reservedNanodollars": 7615875,
+      "chargedNanodollars": 316725
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:0",
+      "reservedNanodollars": 9478875,
+      "chargedNanodollars": 273813
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:1",
+      "reservedNanodollars": 9830625,
+      "chargedNanodollars": 427575
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:2",
+      "reservedNanodollars": 9498375,
+      "chargedNanodollars": 273988
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:3",
+      "reservedNanodollars": 9853875,
+      "chargedNanodollars": 429863
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:4",
+      "reservedNanodollars": 9481875,
+      "chargedNanodollars": 274250
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:5",
+      "reservedNanodollars": 9836625,
+      "chargedNanodollars": 419525
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:6",
+      "reservedNanodollars": 9498375,
+      "chargedNanodollars": 274425
+    },
+    {
+      "id": "live-2026-10-09T03-21-09.438Z:7",
+      "reservedNanodollars": 9853500,
+      "chargedNanodollars": 448175
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:0",
+      "reservedNanodollars": 9540000,
+      "chargedNanodollars": 277050
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:1",
+      "reservedNanodollars": 9891750,
+      "chargedNanodollars": 451638
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:2",
+      "reservedNanodollars": 7674000,
+      "chargedNanodollars": 355800
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:3",
+      "reservedNanodollars": 9559500,
+      "chargedNanodollars": 277225
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:4",
+      "reservedNanodollars": 9915000,
+      "chargedNanodollars": 422050
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:5",
+      "reservedNanodollars": 7588875,
+      "chargedNanodollars": 340500
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:6",
+      "reservedNanodollars": 9543000,
+      "chargedNanodollars": 277488
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:7",
+      "reservedNanodollars": 9897750,
+      "chargedNanodollars": 418938
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:8",
+      "reservedNanodollars": 9559500,
+      "chargedNanodollars": 277663
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:9",
+      "reservedNanodollars": 9914625,
+      "chargedNanodollars": 440788
+    },
+    {
+      "id": "live-2026-10-09T03-24-15.217Z:10",
+      "reservedNanodollars": 7635750,
+      "chargedNanodollars": 310688
+    },
+    {
+      "id": "live-2026-10-09T13-51-43.927Z:0",
+      "reservedNanodollars": 9588375,
+      "chargedNanodollars": 0
+    },
+    {
+      "id": "live-2026-10-09T13-51-43.927Z:1",
+      "reservedNanodollars": 9897000,
+      "chargedNanodollars": 428425
+    },
+    {
+      "id": "live-2026-10-09T13-51-43.927Z:2",
+      "reservedNanodollars": 7594125,
+      "chargedNanodollars": 311350
+    },
+    {
+      "id": "live-2026-10-09T13-51-43.927Z:3",
+      "reservedNanodollars": 9588375,
+      "chargedNanodollars": 279150
+    },
+    {
+      "id": "live-2026-10-09T13-51-43.927Z:4",
+      "reservedNanodollars": 9928125,
+      "chargedNanodollars": 342288
+    },
+    {
+      "id": "live-2026-10-09T14-14-45.296Z:0",
+      "reservedNanodollars": 9588375,
+      "chargedNanodollars": 278975
+    },
+    {
+      "id": "live-2026-10-09T14-14-45.296Z:1",
+      "reservedNanodollars": 9910500,
+      "chargedNanodollars": 441175
+    },
+    {
+      "id": "live-2026-10-09T14-14-45.296Z:2",
+      "reservedNanodollars": 7642500,
+      "chargedNanodollars": 319088
+    },
+    {
+      "id": "live-2026-10-09T14-14-45.296Z:3",
+      "reservedNanodollars": 9588375,
+      "chargedNanodollars": 279150
+    },
+    {
+      "id": "live-2026-10-09T14-14-45.296Z:4",
+      "reservedNanodollars": 9928125,
+      "chargedNanodollars": 345263
+    },
+    {
+      "id": "live-2026-10-09T19-38-49.506Z:0",
+      "reservedNanodollars": 20905125,
+      "chargedNanodollars": 1091335
+    },
+    {
+      "id": "live-2026-10-09T19-38-49.506Z:1",
+      "reservedNanodollars": 21240375,
+      "chargedNanodollars": 639591
+    },
+    {
+      "id": "live-2026-10-09T19-38-49.506Z:2",
+      "reservedNanodollars": 23521125,
+      "chargedNanodollars": 887841
+    },
+    {
+      "id": "live-2026-10-09T19-38-49.506Z:3",
+      "reservedNanodollars": 18273000,
+      "chargedNanodollars": 1009997
+    },
+    {
+      "id": "live-2026-10-09T19-38-49.506Z:4",
+      "reservedNanodollars": 20905125,
+      "chargedNanodollars": 1171969
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:0",
+      "reservedNanodollars": 20905125,
+      "chargedNanodollars": 1091335
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:1",
+      "reservedNanodollars": 21240375,
+      "chargedNanodollars": 639591
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:2",
+      "reservedNanodollars": 23521125,
+      "chargedNanodollars": 889810
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:3",
+      "reservedNanodollars": 18280125,
+      "chargedNanodollars": 1007354
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:4",
+      "reservedNanodollars": 20905125,
+      "chargedNanodollars": 609694
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:5",
+      "reservedNanodollars": 23185875,
+      "chargedNanodollars": 785372
+    },
+    {
+      "id": "live-2026-10-09T19-40-53.357Z:6",
+      "reservedNanodollars": 23538750,
+      "chargedNanodollars": 760154
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:0",
+      "reservedNanodollars": 21341250,
+      "chargedNanodollars": 1107872
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:1",
+      "reservedNanodollars": 21676500,
+      "chargedNanodollars": 648929
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:2",
+      "reservedNanodollars": 23957250,
+      "chargedNanodollars": 901679
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:3",
+      "reservedNanodollars": 18307500,
+      "chargedNanodollars": 1002685
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:4",
+      "reservedNanodollars": 21341250,
+      "chargedNanodollars": 1017432
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:5",
+      "reservedNanodollars": 23622000,
+      "chargedNanodollars": 794710
+    },
+    {
+      "id": "live-2026-10-09T19-44-15.642Z:6",
+      "reservedNanodollars": 23974875,
+      "chargedNanodollars": 775397
+    }
+  ],
+  "exposureNanodollars": 196858445
+}

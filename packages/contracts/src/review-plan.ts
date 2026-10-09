@@ -60,8 +60,18 @@ export const reviewPlanOmissionSchema = z.discriminatedUnion("code", [
   }),
   z.strictObject({ code: z.literal("executor_budget") }),
   z.strictObject({
+    code: z.literal("structural_inventory"),
+    count: z.number().int().nonnegative().safe(),
+    repositoryScanTruncated: z.boolean(),
+  }),
+  z.strictObject({
     code: z.literal("contract_checks"),
     count: z.number().int().positive(),
+    reasons: z.strictObject({
+      capacity: z.number().int().nonnegative(),
+      missingWindow: z.number().int().nonnegative(),
+      evidenceWindows: z.number().int().nonnegative(),
+    }),
   }),
 ]);
 export type ReviewPlanOmission = z.infer<typeof reviewPlanOmissionSchema>;

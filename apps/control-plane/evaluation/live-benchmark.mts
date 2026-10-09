@@ -25,6 +25,7 @@ import {
 import { openModelCampaign } from "./live-campaign-spend.mjs";
 import { liveCodeRegressionFixtures } from "./live-code-regression-fixtures.js";
 import { liveConfirmationFixtures } from "./live-confirmation-fixtures.js";
+import { liveCoverageRegressionFixtures } from "./live-coverage-regression-fixtures.js";
 import {
   commitFixture,
   prepareFixtureInventory,
@@ -40,6 +41,7 @@ import {
   liveFixtures as developmentFixtures,
   liveCaseVariants,
   liveVariants,
+  type LiveReviewFixture,
 } from "./live-fixtures.js";
 import { verifyBenchmarkRoute } from "./live-gateway-route.mjs";
 import { liveHoldoutFixtures } from "./live-holdout-fixtures.js";
@@ -83,35 +85,46 @@ const thinking = process.argv.includes("--thinking");
 const holdout = process.argv.includes("--holdout");
 const confirmation = process.argv.includes("--confirmation");
 const codeRegression = process.argv.includes("--code-regression");
-if (Number(confirmation) + Number(holdout) + Number(codeRegression) > 1)
+const coverageRegression = process.argv.includes("--coverage-regression");
+if (
+  Number(confirmation) +
+    Number(holdout) +
+    Number(codeRegression) +
+    Number(coverageRegression) >
+  1
+)
   throw new Error("Select only one benchmark partition");
 if (confirmation && (!qualityCheck || holdout))
   throw new Error(
     "Confirmation requires quality-check and a separate partition",
   );
-const partition = codeRegression
-  ? "code-regression"
-  : confirmation
-    ? "confirmation"
-    : holdout
-      ? "holdout"
-      : "development";
+const partition = coverageRegression
+  ? "coverage-regression"
+  : codeRegression
+    ? "code-regression"
+    : confirmation
+      ? "confirmation"
+      : holdout
+        ? "holdout"
+        : "development";
 if (holdout && !qualityCheck)
   throw new Error("Holdout requires the bounded quality-check profile");
 if (
-  codeRegression &&
+  (codeRegression || coverageRegression) &&
   (!qualityCheck || !process.argv.includes("--structural-context"))
 )
   throw new Error(
     "Code regressions require quality-check and structural-context",
   );
-const liveFixtures = codeRegression
-  ? liveCodeRegressionFixtures
-  : confirmation
-    ? liveConfirmationFixtures
-    : holdout
-      ? liveHoldoutFixtures
-      : developmentFixtures;
+const liveFixtures: readonly LiveReviewFixture[] = coverageRegression
+  ? liveCoverageRegressionFixtures
+  : codeRegression
+    ? liveCodeRegressionFixtures
+    : confirmation
+      ? liveConfirmationFixtures
+      : holdout
+        ? liveHoldoutFixtures
+        : developmentFixtures;
 const structuralContext = process.argv.includes("--structural-context");
 const temperature = process.argv.includes("--temperature-zero") ? 0 : null;
 if (temperature !== null && !qualityCheck)
@@ -120,23 +133,24 @@ if (thinking && !qualityCheck)
   throw new Error(
     "Thinking experiment requires the bounded quality-check profile",
   );
-const limits = codeRegression
-  ? {
-      calls: 14,
-      inputBytes: 250_000,
-      outputTokens: 30_000,
-      requestMs: 45_000,
-      suiteMs: 4 * 60_000,
-    }
-  : qualityCheck
+const limits =
+  codeRegression || coverageRegression
     ? {
-        calls: 24,
-        inputBytes: 600_000,
-        outputTokens: 50_000,
+        calls: 14,
+        inputBytes: coverageRegression ? 600_000 : 250_000,
+        outputTokens: 30_000,
         requestMs: 45_000,
-        suiteMs: 6 * 60_000,
+        suiteMs: 4 * 60_000,
       }
-    : liveBenchmarkPlan.limits;
+    : qualityCheck
+      ? {
+          calls: 24,
+          inputBytes: 600_000,
+          outputTokens: 50_000,
+          requestMs: 45_000,
+          suiteMs: 6 * 60_000,
+        }
+      : liveBenchmarkPlan.limits;
 const outputDirectory = resolve(
   "../../artifacts/evaluation",
   `live-${new Date().toISOString().replaceAll(":", "-")}${probe ? "-probe" : ""}`,
@@ -146,7 +160,7 @@ const spendPath = resolve("../../artifacts/evaluation/live-spend.json");
 await using campaign = await openModelCampaign(
   spendPath,
   resolve(
-    "../../docs/research/experiments/2026-10-08-live-review/campaign-spend.json",
+    "../../docs/research/experiments/2026-10-09-review-context-coverage/campaign-spend.json",
   ),
 );
 const { spend, persistSpend } = campaign;
@@ -181,6 +195,7 @@ try {
               "holdout",
               "confirmation",
               "code-regression",
+              "coverage-regression",
             ]),
             thinking: z.boolean(),
             temperature: z.number().nullable(),
@@ -213,7 +228,13 @@ try {
     const base = resolve(fixtureRoot, fixture.id, "base");
     for (const [directory, files] of [
       [head, fixture.files],
-      [base, { ...fixture.files, "src/producer.ts": fixture.baseProducer }],
+      [
+        base,
+        fixture.baseFiles ?? {
+          ...fixture.files,
+          "src/producer.ts": fixture.baseProducer,
+        },
+      ],
     ] as const) {
       await mkdir(resolve(directory, "src"), { recursive: true });
       await Promise.all(
@@ -290,6 +311,7 @@ try {
           "../../packages/contracts/src/causal-verification.ts",
           "evaluation/live-benchmark.mts",
           "evaluation/review-core.live.ts",
+          "vitest.live.config.ts",
           "evaluation/live-fixture-executor.mts",
           "evaluation/live-benchmark-policy.ts",
           "evaluation/live-benchmark-budget.ts",
@@ -298,6 +320,13 @@ try {
           "evaluation/live-holdout-fixtures.ts",
           "evaluation/live-confirmation-fixtures.ts",
           "evaluation/live-code-regression-fixtures.ts",
+          "evaluation/live-coverage-regression-fixtures.ts",
+          "../../packages/repository-analysis/src/contract-checks.ts",
+          "../../packages/repository-analysis/src/plan.ts",
+          "../../packages/contracts/src/structural-analysis.ts",
+          "../../packages/contracts/src/review-plan.ts",
+          "../../packages/model/src/context-projection.ts",
+          "src/review/review-shard-context.ts",
           "evaluation/live-gateway-route.mts",
           "evaluation/live-model-relay.mts",
           "evaluation/live-campaign-spend.mts",

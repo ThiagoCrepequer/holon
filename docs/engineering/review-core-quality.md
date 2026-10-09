@@ -100,6 +100,13 @@ Um flag opcional não pode apagar timeout, ausência de shard ou rejeição de c
   Contabilizar perdas na etapa que aplica o teto e propagá-las às projeções,
   completude e apresentação. Omissão de sinais e varredura incompleta são fatos
   distintos; não usar um flag de scan para representar ambos.
+- Separar completude do inventário global de omissões de uma projeção local.
+  Preservar a primeira no plano/agregação; não atribuir o mesmo corte global a
+  cada parte. Compartilhar janelas canônicas antes de gastar outra parte ou
+  inferência. Preservar coordenadas da declaração e do edit no corpo.
+- Registrar estágio e motivo seguro de rejeições anteriores à publicação. Um
+  contador posterior zero não invalida uma rejeição anterior. Declarar quando
+  a normalização não preserva a contagem original.
 - Classificar contexto obrigatório e auxiliar. A ausência de uma obrigação de
   revalidação afeta completude; seleção de hints auxiliares precisa de contagem
   e política explícita, sem inflar artificialmente a cobertura prometida.
@@ -165,8 +172,11 @@ normalização que refutem o defeito. Preservar a conversa isolada da ADR-0050;
 não validar uma hipótese somente perguntando novamente se ela parece correta.
 
 Um candidato precisa identificar mudança, condição de ocorrência, cadeia causal,
-efeito e evidência. Severidade representa impacto; confiança representa suporte
-da conclusão. Nenhuma das duas pode substituir a outra.
+efeito e evidência. Forneça ao modelo a mesma política de severidade usada pelo
+produto e pelo grader: `reviewSeverityGuidance` integra as instruções e a descrição
+do schema. Uma exceção isolada não comprova indisponibilidade generalizada; use
+o menor nível demonstrado pelo caminho causal. Severidade representa impacto;
+confiança representa suporte da conclusão. Nenhuma das duas pode substituir a outra.
 
 O host conserva controle de IDs, evidência, budget, threshold, lifecycle e efeito
 GitHub. Output do modelo é entrada não confiável. A validade do schema prova

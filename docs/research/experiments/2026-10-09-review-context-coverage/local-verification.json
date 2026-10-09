@@ -1,0 +1,159 @@
+{
+  "completedAt": "2026-10-09T20:05:11.213Z",
+  "branch": "codex/review-core-quality-and-reliability",
+  "baseCommit": "d7eac181fe58b8e63aeab4622d11313795dee9e2",
+  "node": "v24.19.0",
+  "pnpm": "11.24.0",
+  "commands": [
+    {
+      "command": "pnpm config:schema:generate",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @holon/control-plane exec vitest run --config vitest.config.ts test/review-analysis.test.ts test/review-context-coverage.test.ts test/think-reviewer.test.ts",
+      "exitCode": 0,
+      "tests": 67
+    },
+    {
+      "command": "pnpm verify",
+      "exitCode": 0,
+      "scope": "Local checks, coverage, browser proofs and build dry-runs; no deploy."
+    }
+  ],
+  "components": {
+    "control-plane": {
+      "tests": 402,
+      "coverage": {
+        "lines": 93.55,
+        "statements": 92.33,
+        "functions": 94.21,
+        "branches": 86.9
+      }
+    },
+    "repository-executor": {
+      "tests": 130,
+      "coverage": {
+        "lines": 92.83,
+        "statements": 92.47,
+        "functions": 93.22,
+        "branches": 87.1
+      }
+    },
+    "repository-analysis": {
+      "tests": 226,
+      "coverage": {
+        "lines": 97.04,
+        "statements": 96.51,
+        "functions": 100,
+        "branches": 90.92
+      }
+    },
+    "contracts": {
+      "tests": 177,
+      "coverage": {
+        "lines": 98.78,
+        "statements": 97.64,
+        "functions": 96.59,
+        "branches": 92.85
+      }
+    },
+    "application": {
+      "tests": 158,
+      "coverage": {
+        "lines": 96.95,
+        "statements": 95.77,
+        "functions": 98.03,
+        "branches": 89.51
+      }
+    },
+    "model": {
+      "tests": 51,
+      "coverage": {
+        "lines": 98.12,
+        "statements": 97.36,
+        "functions": 98.24,
+        "branches": 93.37
+      }
+    }
+  },
+  "changedFiles": [
+    "apps/control-plane/evaluation/live-benchmark.mts",
+    "apps/control-plane/evaluation/live-coverage-regression-fixtures.ts",
+    "apps/control-plane/evaluation/live-fixtures.ts",
+    "apps/control-plane/evaluation/live-review-grade.ts",
+    "apps/control-plane/evaluation/review-core.live.ts",
+    "apps/control-plane/evaluation/test/live-fixture-typecheck.test.mts",
+    "apps/control-plane/package.json",
+    "apps/control-plane/src/review/review-diagnostics.ts",
+    "apps/control-plane/src/review/review-services.ts",
+    "apps/control-plane/src/review/review-shard-execution.ts",
+    "apps/control-plane/src/review/think-reviewer.ts",
+    "apps/control-plane/test/live-review-grade.test.ts",
+    "apps/control-plane/test/review-analysis.test.ts",
+    "apps/control-plane/test/review-context-coverage.test.ts",
+    "apps/control-plane/test/think-reviewer.test.ts",
+    "apps/control-plane/vitest.live.config.ts",
+    "docs/README.md",
+    "docs/architecture/review-runtime-flow.md",
+    "docs/decisions/0060-separate-review-inventory-and-pack-contract-windows.md",
+    "docs/decisions/README.md",
+    "docs/engineering/review-core-quality.md",
+    "docs/operations/evaluations.md",
+    "docs/operations/review-analysis-diagnostics.md",
+    "docs/planning/review-core-improvement-proposal.md",
+    "docs/research/2026-10-09-review-context-coverage.md",
+    "docs/research/2026-10-09-review-core-code-follow-up.md",
+    "docs/research/README.md",
+    "docs/research/experiments/2026-10-08-live-review/README.md",
+    "docs/research/experiments/2026-10-09-review-context-coverage/README.md",
+    "docs/research/experiments/2026-10-09-review-context-coverage/analyze.mjs",
+    "docs/research/experiments/2026-10-09-review-context-coverage/campaign-spend.json",
+    "docs/research/experiments/2026-10-09-review-context-coverage/evidence-manifest.json",
+    "docs/research/experiments/2026-10-09-review-context-coverage/evidence.json.gz",
+    "docs/research/experiments/2026-10-09-review-context-coverage/local-verification.json",
+    "package.json",
+    "packages/application/src/aggregate-reviews.ts",
+    "packages/contracts/src/repository-config/compiler-identity.ts",
+    "packages/contracts/src/review-output.ts",
+    "packages/contracts/src/review-plan.ts",
+    "packages/contracts/src/structural-analysis.ts",
+    "packages/domain/src/review-messages.ts",
+    "packages/model/src/context-projection.ts",
+    "packages/model/src/reviewer.ts",
+    "packages/model/test/context-projection.test.ts",
+    "packages/model/test/review-prompt.test.ts",
+    "packages/repository-analysis/src/changed-head-declarations.ts",
+    "packages/repository-analysis/src/contract-checks.ts",
+    "packages/repository-analysis/src/plan.ts",
+    "packages/repository-analysis/src/structural-analyzer.ts",
+    "packages/repository-analysis/test/changed-head-declarations.test.ts",
+    "packages/repository-analysis/test/plan.test.ts",
+    "packages/repository-analysis/test/structural-analyzer.test.ts",
+    "pnpm-lock.yaml"
+  ],
+  "sourceDigests": {
+    "apps/control-plane/evaluation/live-benchmark.mts": "25ba733f81aec25fd94aaf294ad5d2921a4236aea0199c1c83d1294530054b45",
+    "apps/control-plane/evaluation/live-coverage-regression-fixtures.ts": "ce49aaa32a98a06c8dd6fdbd75b6284a62c0f844e497c2db90349f05bb37c9a5",
+    "apps/control-plane/evaluation/live-fixtures.ts": "97ba5adac1fe0af80b5a03e1f17b694804ae93249e8894721c28d267080510f6",
+    "apps/control-plane/evaluation/live-review-grade.ts": "ce2e15c3fbcf6c51e1a8d82679a91343a503c654154a99218bcae8759b2a1d61",
+    "apps/control-plane/evaluation/review-core.live.ts": "1fa7a66e86da32505cecacac72a176e38c14fbcf2f043a8ca9b709de080139f2",
+    "apps/control-plane/evaluation/test/live-fixture-typecheck.test.mts": "02a4ac14cb4cb52548d34a764149a7e36817b41b1be0b71c889c94a571b52ed0",
+    "apps/control-plane/src/review/review-diagnostics.ts": "a8c646e13b689dadec50ca4f1a46f49a246b03f5860b5affa2356b8100fead23",
+    "apps/control-plane/src/review/review-services.ts": "76400fea472a157ddcb06db7fb52ff1d3953b34a96682380809f0e7f5e7519f2",
+    "apps/control-plane/src/review/review-shard-execution.ts": "2d8c824686e2019db0828b738cda2708b743cbcc4e8c135aa0e398b0b76fd3d5",
+    "apps/control-plane/src/review/think-reviewer.ts": "ffb9eefaac373681dcf09ff18b012921310c55448d1e8fd63fb5dc2d7b64373a",
+    "packages/application/src/aggregate-reviews.ts": "c371c26668d44264ff5e2c0b8d539343ee2ba3b4acc0132d442bf114cb1f78a2",
+    "packages/contracts/src/repository-config/compiler-identity.ts": "c6971ca9714e8f43536cf95428312724560e4438c94588e4cc720f7320dca63d",
+    "packages/contracts/src/review-output.ts": "f9a0eeaf4140204957fadddaa0226005d3d59819c0fcb9398e4758431557ab72",
+    "packages/contracts/src/review-plan.ts": "9d464e835471bff09547fc347803905778f880f1f293074b07d3e8561bf1c110",
+    "packages/contracts/src/structural-analysis.ts": "68412c6086ee76bffeadf01e7f6d89a45f2da883ce2efe16ac01effee4f96a8a",
+    "packages/domain/src/review-messages.ts": "732b9f3853d1b601d055b978562469a0ef851b3d9575f4ff036e566c6eafbc56",
+    "packages/model/src/context-projection.ts": "edccb88a5c11eeda906518f988e34177bc0fab1394c6124206e535a27bbb455c",
+    "packages/model/src/reviewer.ts": "8eaab72a9af48bb36e24cc8be5b0d76331461e622b36544e057c68ae77b42460",
+    "packages/repository-analysis/src/changed-head-declarations.ts": "a625767f660cb6dfd39fd61c11aec98ecc3644daba4b4f2e6021215967082174",
+    "packages/repository-analysis/src/contract-checks.ts": "7801969ab6178a469cfdc250affdd470e309f0f708d1443dcae087d372d58ea7",
+    "packages/repository-analysis/src/plan.ts": "8f2f2df655ee451b71f1e68d543b990eb0f6d0f7c04e772514f94fa7191ebb5c",
+    "packages/repository-analysis/src/structural-analyzer.ts": "f3d85748eaad17e872314bcb61450f8ef361628fa83ccadafc9f2c6e9e280379"
+  },
+  "limits": "Paid model runs retain their original source snapshots in the evidence archive. This summary identifies final local production/evaluation sources, not a complete Git snapshot. No production PR rerun or new publication occurred."
+}

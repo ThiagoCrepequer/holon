@@ -33,6 +33,15 @@ integrados às lanes pela ADR-0059; o gate real de R07 permanece aberto. Não
 converter o resultado 2/2 em prova dos perfis maiores nem em autorização de
 prefetch, skipping ou especialistas.
 
+Continuação após o PR #184: a
+[prova de cobertura](../research/2026-10-09-review-context-coverage.md) fecha
+regressões de inventário/projeção, coordenadas de corpo, checks redundantes e
+diagnósticos de estágio, conforme ADR-0060. A ausência da política de severidade
+no prompt/schema foi corrigida sem relaxar o grader. O par real terminou 2/2 após
+duas rodadas reprovadas preservadas. O orçamento acumulado agora inclui 272
+requests e exposição conservadora de US$ 0,196858445. A amostra ajustada não fecha
+os gates globais acima nem valida um rerun do PR #184 no ambiente implantado.
+
 ## Estado de partida
 
 O core usa Think com investigação e verificação causal isoladas, planejamento

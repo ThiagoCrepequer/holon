@@ -2,6 +2,7 @@ import {
   applyCausalVerification,
   prepareCausalCandidates,
   withholdUnverifiedFindings,
+  type ReviewContext,
 } from "@holon/application";
 import {
   modelReviewOutputSchema,
@@ -16,14 +17,20 @@ import {
   buildReviewPromptResult,
   buildCausalVerificationPrompt,
 } from "@holon/model";
+import {
+  buildReviewPlan,
+  splitPullRequestDiff,
+} from "@holon/repository-analysis";
 import { getAgentByName } from "agents";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, it, vi } from "vitest";
 import { z } from "zod";
 
+import { buildShardReviewContext } from "../src/review/review-shard-context.js";
 import { liveCodeRegressionFixtures } from "./live-code-regression-fixtures.js";
 import { liveConfirmationFixtures } from "./live-confirmation-fixtures.js";
+import { liveCoverageRegressionFixtures } from "./live-coverage-regression-fixtures.js";
 import {
   liveBenchmarkPlan,
   liveCaseVariants,
@@ -41,7 +48,8 @@ const bindings = env as Cloudflare.Env & {
     | "development"
     | "holdout"
     | "confirmation"
-    | "code-regression";
+    | "code-regression"
+    | "coverage-regression";
 };
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -79,13 +87,15 @@ it("measures the current Think host against paired executable synthetic cases wi
   const results = [];
   const completed = new Set(JSON.parse(bindings.LIVE_DONE) as string[]);
   const liveFixtures =
-    bindings.LIVE_PARTITION === "code-regression"
-      ? liveCodeRegressionFixtures
-      : bindings.LIVE_PARTITION === "confirmation"
-        ? liveConfirmationFixtures
-        : bindings.LIVE_PARTITION === "holdout"
-          ? liveHoldoutFixtures
-          : developmentFixtures;
+    bindings.LIVE_PARTITION === "coverage-regression"
+      ? liveCoverageRegressionFixtures
+      : bindings.LIVE_PARTITION === "code-regression"
+        ? liveCodeRegressionFixtures
+        : bindings.LIVE_PARTITION === "confirmation"
+          ? liveConfirmationFixtures
+          : bindings.LIVE_PARTITION === "holdout"
+            ? liveHoldoutFixtures
+            : developmentFixtures;
   for (const [fixtureIndex, fixture] of liveFixtures.entries()) {
     if (bindings.LIVE_PROBE && fixtureIndex !== 0) continue;
     // Rotate the predeclared order to distribute warm-up and route latency across variants.
@@ -130,7 +140,7 @@ it("measures the current Think host against paired executable synthetic cases wi
         now,
         `live:${variant}:start`,
       );
-      const context = preparedContext
+      let context: ReviewContext = preparedContext
         ? reviewContextSchema.parse(preparedContext)
         : {
             changedLines: [
@@ -145,6 +155,31 @@ it("measures the current Think host against paired executable synthetic cases wi
             ],
             truncated: false,
           };
+      let coverage: unknown;
+      if (bindings.LIVE_PARTITION === "coverage-regression") {
+        const plan = buildReviewPlan(splitPullRequestDiff(fixture.patch), {
+          structuralImpact: context.structuralImpact,
+        });
+        if (plan.scopeStatus !== "complete" || plan.shards.length !== 1)
+          throw new Error("Synthetic coverage plan is incomplete");
+        context = buildShardReviewContext(
+          plan.shards[0]!,
+          context.structuralImpact,
+          [],
+          undefined,
+          context.truncated,
+        );
+        const projected = buildReviewPromptResult(job, context);
+        if (projected.truncated)
+          throw new Error("Synthetic shard context was omitted");
+        coverage = {
+          scopeStatus: plan.scopeStatus,
+          shards: plan.shards.length,
+          omissions: plan.omissionReasons,
+          retainedSymbols: context.structuralImpact?.changedSymbols.length,
+          promptTruncated: projected.truncated,
+        };
+      }
       const deadlineAt = Date.now() + 180_000;
       const phaseResults: Array<{
         phase: string;
@@ -313,6 +348,7 @@ it("measures the current Think host against paired executable synthetic cases wi
         draft: draft ?? null,
         final: final ?? null,
         phases: phaseResults,
+        coverage,
       };
       results.push(result);
       await request("/result", result);

@@ -14,9 +14,14 @@ export function changedHeadDeclarations(
   if (!ast) return [];
   const additions = new Set<number>();
   const deletions = new Set<number>();
+  const ranges: Array<{ start: number; end: number }> = [];
   try {
     for (const parsed of parsePatch(patch)) {
       for (const hunk of parsed.hunks) {
+        ranges.push({
+          start: hunk.newStart,
+          end: hunk.newStart + hunk.newLines - 1,
+        });
         let line = hunk.newStart;
         for (const raw of hunk.lines) {
           if (raw.startsWith("+")) additions.add(line++);
@@ -63,11 +68,22 @@ export function changedHeadDeclarations(
       [...additions].some((line) => line >= start.line && line <= end.line) ||
       [...deletions].some((line) => line > start.line && line <= end.line);
     if (containsEdit) {
+      const patchLine = ranges.some(
+        (range) => start.line >= range.start && start.line <= range.end,
+      )
+        ? undefined
+        : [...additions, ...deletions].find(
+            (line) =>
+              line >= start.line &&
+              line <= end.line &&
+              ranges.some((range) => line >= range.start && line <= range.end),
+          );
       symbols.push({
         path,
         name,
         kind,
         line: start.line,
+        ...(patchLine === undefined ? {} : { patchLine }),
         isExported: isExported || exported.has(name),
         change: "modified",
       });
@@ -79,6 +95,7 @@ export function changedHeadDeclarations(
           name: alias,
           kind,
           line: start.line,
+          ...(patchLine === undefined ? {} : { patchLine }),
           isExported: true,
           change: "modified",
         });
