@@ -82,33 +82,38 @@ Preview local: CID resolvido somente na renderização de teste. Não comprova G
 
 [Referência fornecida pelo usuário](layout-reference.png).
 
-[Laboratório local de bytes e interação](performance-lab.json): Chromium, CPU 4x, loopback sem modelagem de rede remota, cinco amostras frias/quentes. Não representa métricas de campo.
+[Laboratório local de bytes e interação](https://github.com/ThiagoCrepequer/holon/blob/f86a6289864fc5956119fc4252aac6ffd9522000/docs/planning/dashboard-seven-assets/performance-lab.json): Chromium, CPU 4x, loopback sem modelagem de rede remota, cinco amostras frias/quentes. Não representa métricas de campo.
 
 ## Arquivo das capturas anteriores
 
 As 30 capturas anteriores que não são as duas prévias principais estão em
-[before-captures.json.gz](before-captures.json.gz), com
-[manifesto legível](before-captures.manifest.json). Seus bytes foram comparados
+[evidence.json.gz](evidence.json.gz), com
+[manifesto legível](evidence.manifest.json). Seus bytes foram comparados
 com o commit `37a7c087a3b88c28475c01477d9832f304a552e3`, antes da compactação;
 a restauração também foi comparada byte a byte. Os links “Antes” da tabela
 apontam para esse commit imutável quando a captura está no arquivo.
 
-O PR havia chegado a 323 arquivos e a API de diff do GitHub recusou sua leitura
-com HTTP 406/`too_large`, informando o teto de 300 arquivos. A compactação reduz
+A API recusou o PR com HTTP 406/`too_large`: primeiro o teto de 300 arquivos
+(323 arquivos), depois o de 20.000 linhas. O mesmo arquivo preserva seis
+relatórios/resultados datados: M6, M7, auditoria, método, JSON e laboratório.
+Seus bytes correspondem ao commit `f86a6289864fc5956119fc4252aac6ffd9522000`. A compactação reduz
 somente evidência visual histórica; o código, os testes, as duas prévias
 principais, todas as capturas atuais, os controles e os previews de email
 continuam legíveis diretamente. Nada foi rebaseado ou removido do histórico.
 
 O leitor existente valida tamanho e SHA-256 do arquivo e de cada captura, com
-limite de expansão. Para conferir as 30 entradas sem extrair arquivos, na raiz:
+limite de expansão. Para conferir as 36 entradas (30 capturas e seis documentos/resultados) sem
+extrair arquivos, na raiz:
 
 ```sh
 node --input-type=module <<'JS'
 import { readFileSync } from "node:fs";
 import { unpackEvidence } from "./tooling/evidence/archive.mjs";
 const root = "docs/planning/dashboard-seven-assets/";
-const manifest = JSON.parse(readFileSync(root + "before-captures.manifest.json", "utf8"));
-const captures = unpackEvidence(manifest, readFileSync(root + "before-captures.json.gz"));
-console.log(`${captures.size} capturas verificadas`);
+const manifest = JSON.parse(readFileSync(root + "evidence.manifest.json", "utf8"));
+const captures = unpackEvidence(manifest, readFileSync(root + "evidence.json.gz"));
+console.log(`${captures.size} entradas verificadas`);
+// Para ler um relatório integral, sem extração:
+// process.stdout.write(captures.get("docs/planning/dashboard-milestone-seven-evidence.md"));
 JS
 ```

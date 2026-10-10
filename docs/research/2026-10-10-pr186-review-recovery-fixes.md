@@ -76,8 +76,17 @@ capturas históricas foram compactadas com o leitor já existente. Manifesto,
 tamanhos e SHA-256 preservam os bytes originais; o replay foi comparado com os
 blobs de `37a7c08`. As duas prévias principais, capturas atuais e previews de
 email permanecem diretos. A [galeria](../planning/dashboard-seven-assets/README.md#arquivo-das-capturas-anteriores)
-mantém acesso às outras imagens pelo commit imutável e pelo arquivo. Isso
-reduz o diff a 295 arquivos; não altera código nem limites de execução.
+mantém acesso às outras imagens pelo commit imutável e pelo arquivo. Essa etapa
+reduziu o diff a 295 arquivos, mas a API passou a informar outro teto:
+20.000 linhas, ainda com HTTP 406/`too_large` no HEAD `f86a628`.
+
+O arquivo foi ampliado para 36 entradas: as mesmas 30 capturas e seis
+documentos/resultados datados. M6, M7, auditoria, método, JSON sanitizado e lab
+foram comparados byte a byte com `f86a628`; índices legíveis apontam ao relatório
+integral no commit imutável e ao replay local. Código, testes, ADRs e runbooks
+continuam diretamente no diff. O manifesto e o leitor validam integridade e
+expansão; `pnpm test:evidence`, formatação e replay passaram. A descrição do PR
+registra a confirmação independente da leitura do diff após o push final.
 
 ## Pendências de evidência remota
 
