@@ -57,7 +57,7 @@ const allowed = {
 const allowedPureLayerUtilities = {
   "packages/domain": [],
   "packages/application": ["@renovatebot/pep440", "semver"],
-  "packages/contracts": ["zod"],
+  "packages/contracts": ["zod", "zod/mini"],
 };
 
 async function sourceFiles(directory) {

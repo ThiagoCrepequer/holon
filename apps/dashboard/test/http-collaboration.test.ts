@@ -84,6 +84,11 @@ function setup() {
       workspaceId: "team",
       repositories: [{ installationId: 77, repositoryId: 91 }],
     })),
+    listRepositories: vi.fn(async () => ({
+      repositories: [
+        { installationId: 77, repositoryId: 91, fullName: "synthetic/reviews" },
+      ],
+    })),
     connectionStatus: vi.fn(async () => ({ status: "connected" as const })),
     createConnectionReauth: vi.fn(async () => ({
       reauthIntentId: "proof",
@@ -170,7 +175,15 @@ it("all collaboration APIs enforce the same admission, CSRF and DTOs", async () 
     ["/api/workspaces/team/invitations", [invitation]],
     [
       "/api/workspaces/team/github/repositories",
-      { repositories: [{ installationId: 77, repositoryId: 91 }] },
+      {
+        repositories: [
+          {
+            installationId: 77,
+            repositoryId: 91,
+            fullName: "synthetic/reviews",
+          },
+        ],
+      },
     ],
   ] as const) {
     const response = await f.request(path);

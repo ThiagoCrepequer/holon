@@ -1,6 +1,7 @@
 import {
   workspaceDtoSchema,
   dashboardIdSchema,
+  dashboardCursorSchema,
   workspaceMemberPageSchema,
   type WorkspaceMemberPage,
   workspaceMembershipDtoSchema,
@@ -522,7 +523,7 @@ export function createTenancyPersistence(
       cursor: string | null,
     ) {
       dashboardIdSchema.parse(workspaceId);
-      dashboardIdSchema.nullable().parse(cursor);
+      dashboardCursorSchema.parse(cursor);
       const guard = `EXISTS(SELECT 1 FROM membership admission
         JOIN session s ON s.userId=admission.user_id
         JOIN account a ON a.userId=s.userId AND a.providerId='github'

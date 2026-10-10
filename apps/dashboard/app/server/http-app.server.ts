@@ -5,10 +5,12 @@ export type { DashboardServices } from "./http-context.server.js";
 import {
   createTeamWorkspaceInputSchema,
   dashboardIdSchema,
+  dashboardCursorSchema,
   workspaceMemberPageSchema,
   demoteMemberInputSchema,
   leaveWorkspaceInputSchema,
   personalWorkspaceInputSchema,
+  workspaceCreationSchema,
   promoteMemberInputSchema,
   reauthInitInputSchema,
   reauthReceiptSchema,
@@ -444,7 +446,10 @@ export function createDashboardHandler(
     );
     const result =
       await c.env.services.tenancyPersistence!.provisionPersonalWorkspace(user);
-    return respondWithCookies(result, c.env.sessionCookies);
+    return respondWithCookies(
+      workspaceCreationSchema.parse(result),
+      c.env.sessionCookies,
+    );
   });
 
   api.post("/api/workspaces/team", async (c) => {
@@ -459,7 +464,10 @@ export function createDashboardHandler(
       user,
       payload,
     );
-    return respondWithCookies(result, c.env.sessionCookies);
+    return respondWithCookies(
+      workspaceCreationSchema.parse(result),
+      c.env.sessionCookies,
+    );
   });
 
   api.all("/api/workspaces/leave", () => {
@@ -468,9 +476,9 @@ export function createDashboardHandler(
 
   api.get("/api/workspaces/:id/members", async (c) => {
     const parsedId = dashboardIdSchema.safeParse(c.req.param("id"));
-    const parsedCursor = dashboardIdSchema
-      .nullable()
-      .safeParse(c.req.query("cursor") ?? null);
+    const parsedCursor = dashboardCursorSchema.safeParse(
+      c.req.query("cursor") ?? null,
+    );
     if (!parsedId.success || !parsedCursor.success)
       throw new HttpBoundaryError("invalid_request", 400);
     const id = parsedId.data,

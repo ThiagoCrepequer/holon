@@ -1,10 +1,13 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 // Disable JIT compilation to satisfy strict CSP without 'unsafe-eval'
 z.config({ jitless: true });
 
 // IDs are opaque; parsing them never grants authority.
-export const dashboardIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u);
+export const dashboardIdSchema = z
+  .string()
+  .check(z.regex(/^[A-Za-z0-9_-]{1,128}$/u));
+export const dashboardCursorSchema = z.nullable(dashboardIdSchema);
 export const dashboardLocaleSchema = z.enum(["en", "pt-BR"]);
 export const dashboardErrorCodeSchema = z.enum([
   "invalid_request",
@@ -34,30 +37,44 @@ export const workspaceTypeSchema = z.enum(["personal", "team"]);
 export const workspaceDtoSchema = z.strictObject({
   id: dashboardIdSchema,
   type: workspaceTypeSchema,
-  name: z.string().min(1).max(128),
+  name: z.string().check(z.minLength(1)).check(z.maxLength(128)),
 });
 export const workspaceMembershipDtoSchema = z.strictObject({
   workspaceId: dashboardIdSchema,
   userId: dashboardIdSchema,
   role: workspaceRoleSchema,
 });
+export const workspaceCreationSchema = z
+  .strictObject({
+    workspace: workspaceDtoSchema,
+    membership: workspaceMembershipDtoSchema,
+  })
+  .check(
+    z.refine((value) => value.workspace.id === value.membership.workspaceId, {
+      message: "workspace_scope_mismatch",
+    }),
+  );
 export const workspaceMemberPageSchema = z.strictObject({
   members: z
     .array(
       z.strictObject({
         userId: dashboardIdSchema,
-        name: z.string().min(1).max(256),
+        name: z.string().check(z.minLength(1)).check(z.maxLength(256)),
         role: workspaceRoleSchema,
       }),
     )
-    .max(100),
+    .check(z.maxLength(100)),
   actorRole: workspaceRoleSchema,
-  ownerCount: z.number().int().positive().safe(),
-  nextCursor: dashboardIdSchema.nullable(),
+  ownerCount: z.number().check(z.int()).check(z.positive()),
+  nextCursor: z.nullable(dashboardIdSchema),
 });
 export type WorkspaceMemberPage = z.infer<typeof workspaceMemberPageSchema>;
 export const createTeamWorkspaceInputSchema = z.strictObject({
-  name: z.string().trim().min(1).max(128),
+  name: z
+    .string()
+    .check(z.trim())
+    .check(z.minLength(1))
+    .check(z.maxLength(128)),
   operationId: dashboardIdSchema,
 });
 export const personalWorkspaceInputSchema = z.strictObject({});
@@ -65,13 +82,13 @@ export const tenancyOperationReceiptSchema = z.strictObject({
   operation_id: dashboardIdSchema,
   actor_user_id: dashboardIdSchema,
   action: z.literal("create_team"),
-  payload_hash: z.string().length(64),
+  payload_hash: z.string().check(z.length(64)),
   target_workspace_id: dashboardIdSchema,
 });
 
 export const sessionUserDtoSchema = z.strictObject({
   id: dashboardIdSchema,
-  name: z.string().min(1).max(256),
+  name: z.string().check(z.minLength(1)).check(z.maxLength(256)),
 });
 export const sessionDtoSchema = z.strictObject({
   id: dashboardIdSchema,
@@ -96,9 +113,9 @@ export const sessionDeviceDtoSchema = z.strictObject({
   label: deviceBrowserLabelSchema,
 });
 export const sessionDeviceListDtoSchema = z.strictObject({
-  sessions: z.array(sessionDeviceDtoSchema).max(100),
+  sessions: z.array(sessionDeviceDtoSchema).check(z.maxLength(100)),
   currentSessionId: dashboardIdSchema,
-  nextCursor: dashboardIdSchema.nullable(),
+  nextCursor: z.nullable(dashboardIdSchema),
 });
 export const revokeSessionInputSchema = z.strictObject({});
 export const revokeAllSessionsInputSchema = z.strictObject({});
@@ -107,7 +124,7 @@ export const revokeSessionOutputSchema = z.strictObject({
   revoked: z.boolean(),
 });
 export const revokeAllSessionsOutputSchema = z.strictObject({
-  revokedCount: z.number().int().nonnegative().safe(),
+  revokedCount: z.number().check(z.int()).check(z.nonnegative()),
 });
 export const reauthActionSchema = z.enum([
   "promote",
@@ -141,16 +158,16 @@ export const leaveWorkspaceInputSchema = z.strictObject({
 });
 export const admittedUserSchema = z.strictObject({
   id: dashboardIdSchema,
-  name: z.string().min(1).max(256),
+  name: z.string().check(z.minLength(1)).check(z.maxLength(256)),
   sessionId: dashboardIdSchema,
   expiresAt: z.iso.datetime(),
-  githubAccountId: z.string().min(1),
+  githubAccountId: z.string().check(z.minLength(1)),
 });
 export const authSocialSignInInputSchema = z.strictObject({
   provider: z.literal("github"),
-  callbackURL: z.string().optional(),
-  disableRedirect: z.boolean().optional(),
-  reauthIntentId: dashboardIdSchema.optional(),
+  callbackURL: z.optional(z.string()),
+  disableRedirect: z.optional(z.boolean()),
+  reauthIntentId: z.optional(dashboardIdSchema),
 });
 export const authEnvironmentSchema = z.enum([
   "development",
@@ -158,14 +175,14 @@ export const authEnvironmentSchema = z.enum([
   "production",
 ]);
 export const authRegisteredOriginsSchema = z.strictObject({
-  preview: z.array(z.string().url()),
-  production: z.array(z.string().url()),
+  preview: z.array(z.string().check(z.url())),
+  production: z.array(z.string().check(z.url())),
 });
 export const authEnabledSchema = z.enum(["true", "false"]);
 export const githubAppAuthConfigSchema = z.strictObject({
-  clientId: z.string().trim().min(1),
-  clientSecret: z.string().trim().min(1),
-  appOrigin: z.string().url(),
+  clientId: z.string().check(z.trim()).check(z.minLength(1)),
+  clientSecret: z.string().check(z.trim()).check(z.minLength(1)),
+  appOrigin: z.string().check(z.url()),
   environment: authEnvironmentSchema,
 });
 

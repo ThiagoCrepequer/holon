@@ -62,7 +62,10 @@ export function collaborationCases(database: () => D1Database) {
       repositories: vi.fn(async () => ({
         accountId: "account",
         generation: 1,
-        repositoryIds: [901, 902],
+        repositories: [
+          { id: 901, fullName: "synthetic/repository-901" },
+          { id: 902, fullName: "synthetic/repository-902" },
+        ],
       })),
     } satisfies GitHubUserService;
     return {
@@ -159,6 +162,50 @@ export function collaborationCases(database: () => D1Database) {
       (await service.authorizeReviews(actor, "team")).repositories,
     ).toEqual([]);
   });
+  it("repository names are read under current human authority even with a warm grant cache", async () => {
+    const { service, github } = fixture();
+    await service.linkInstallation(
+      actor,
+      "team",
+      await confirmed("catalog_link"),
+    );
+    await service.authorizeReviews(actor, "team");
+    github.repositories.mockResolvedValueOnce({
+      accountId: "account",
+      generation: 1,
+      repositories: [
+        { id: 903, fullName: "synthetic/new-repository" },
+        { id: 901, fullName: "synthetic/renamed-repository" },
+      ],
+    });
+    expect(await service.listRepositories(actor, "team")).toEqual({
+      repositories: [
+        {
+          installationId: 77,
+          repositoryId: 903,
+          fullName: "synthetic/new-repository",
+        },
+        {
+          installationId: 77,
+          repositoryId: 901,
+          fullName: "synthetic/renamed-repository",
+        },
+      ],
+    });
+    expect(
+      (await service.authorizeReviews(actor, "team")).repositories,
+    ).toEqual([
+      { installationId: 77, repositoryId: 901 },
+      { installationId: 77, repositoryId: 903 },
+    ]);
+    expect(github.repositories).toHaveBeenCalledTimes(2);
+    github.repositories.mockClear();
+    await expect(
+      service.listRepositories({ ...actor, id: "outsider" }, "team"),
+    ).rejects.toMatchObject({ code: "denied" });
+    expect(github.repositories).not.toHaveBeenCalled();
+  });
+
   it("records/cancels invitation and verifies recipient before acceptance", async () => {
     const { service } = fixture();
     const invite = await service.createInvitation(actor, "team", {
@@ -190,7 +237,7 @@ export function collaborationCases(database: () => D1Database) {
     github.repositories.mockResolvedValue({
       accountId: "account",
       generation: 1,
-      repositoryIds: [],
+      repositories: [],
     });
     expect(
       (await service.authorizeReviews(actor, "team")).repositories,
@@ -209,7 +256,7 @@ export function collaborationCases(database: () => D1Database) {
     github.repositories.mockResolvedValue({
       accountId: "account",
       generation: 2,
-      repositoryIds: [901],
+      repositories: [{ id: 901, fullName: "synthetic/repository-901" }],
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       {
@@ -232,7 +279,11 @@ export function collaborationCases(database: () => D1Database) {
         installationId: 77,
         action: "suspended",
       });
-      return { accountId: "account", generation: 1, repositoryIds: [901] };
+      return {
+        accountId: "account",
+        generation: 1,
+        repositories: [{ id: 901, fullName: "synthetic/repository-901" }],
+      };
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       {
@@ -261,7 +312,11 @@ export function collaborationCases(database: () => D1Database) {
           "UPDATE github_grant_cache SET expires_at=0 WHERE installation_id=77",
         )
         .run();
-      return { accountId: "account", generation: 1, repositoryIds: [903] };
+      return {
+        accountId: "account",
+        generation: 1,
+        repositories: [{ id: 903, fullName: "synthetic/repository-903" }],
+      };
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       { code: "denied" },

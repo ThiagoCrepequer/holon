@@ -27,60 +27,15 @@ import {
   timestampSchema,
 } from "./shared.js";
 
-export const reviewFindingSchema = z.strictObject({
-  confidence: z.number().min(0).max(1),
-  diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
-  evidence: z
-    .array(
-      z
-        .strictObject({
-          endLine: positiveIntegerSchema.optional(),
-          excerpt: z.string().min(1).max(reviewTextLimits.excerpt),
-          path: repositoryPathSchema,
-          reason: z.string().min(1).max(reviewTextLimits.reason),
-          startLine: positiveIntegerSchema,
-        })
-        .refine(
-          (evidence) =>
-            evidence.endLine === undefined ||
-            evidence.endLine >= evidence.startLine,
-          {
-            message: "endLine must not precede startLine",
-            path: ["endLine"],
-          },
-        ),
-    )
-    .min(1)
-    .max(reviewTextLimits.evidence),
-  location: z
-    .strictObject({
-      line: positiveIntegerSchema,
-      path: repositoryPathSchema,
-      side: z.literal("RIGHT"),
-      startLine: positiveIntegerSchema.optional(),
-    })
-    .refine(
-      (location) =>
-        location.startLine === undefined || location.startLine <= location.line,
-      {
-        message: "startLine must not follow line",
-        path: ["startLine"],
-      },
-    ),
-  severity: z.enum(["critical", "high", "medium", "low"]),
-  suggestion: z
-    .string()
-    .trim()
-    .min(1)
-    .max(reviewTextLimits.suggestion)
-    .optional(),
-});
+export { reviewFindingSchema } from "./review-finding.js";
+import { reviewFindingSchema } from "./review-finding.js";
 
-export const reviewResolutionSchema = reviewFindingSchema
-  .omit({ severity: true, suggestion: true })
-  .extend({
-    fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
-  });
+export const reviewResolutionSchema = z.strictObject({
+  ...z
+    .object(reviewFindingSchema.shape)
+    .omit({ severity: true, suggestion: true }).shape,
+  fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
+});
 export const modelReviewOutputSchema = z
   .strictObject({
     investigations: z.array(investigationObservationSchema).max(4).optional(),
@@ -114,7 +69,7 @@ const resilientNullablePositiveInteger = z.preprocess(
     typeof val === "string" && /^\d+$/u.test(val.trim())
       ? Number(val.trim())
       : val,
-  positiveIntegerSchema.nullable().optional(),
+  z.optional(z.nullable(positiveIntegerSchema)),
 );
 
 const resilientConfidence = z.preprocess(
@@ -500,7 +455,7 @@ export const runTransitionSchema = z.strictObject({
 export const publicationRecordSchema = z
   .strictObject({
     findingId: z.union([findingIdSchema, z.literal("summary")]),
-    githubCommentId: positiveIntegerSchema.optional(),
+    githubCommentId: z.optional(positiveIntegerSchema),
     kind: z.enum(["inline", "summary"]),
     marker: z.string().regex(/^<!-- holon;run=[^;]+;finding=[^ ]+ -->$/u),
     id: publicationIdSchema,

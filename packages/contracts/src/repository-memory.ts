@@ -44,7 +44,7 @@ export const memoryObservationSchema = z
     kind: z.enum(["finding", "investigation", "feedback"]),
     source: memoryRunIdentitySchema,
     path: repositoryPathSchema,
-    line: positiveIntegerSchema.optional(),
+    line: z.optional(positiveIntegerSchema),
     summary: z.string().trim().min(1).max(1500),
     createdAt: timestampSchema,
     fingerprint: z
@@ -53,7 +53,7 @@ export const memoryObservationSchema = z
       .optional(),
     feedbackReason: z.string().trim().min(1).max(1000).optional(),
     authorLogin: z.string().min(1).max(100).optional(),
-    commentId: positiveIntegerSchema.optional(),
+    commentId: z.optional(positiveIntegerSchema),
     label: z
       .enum([
         "helpful",

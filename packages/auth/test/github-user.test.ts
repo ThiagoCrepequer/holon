@@ -127,7 +127,10 @@ function provider(overrides: Record<string, unknown> = {}): typeof fetch {
       return Response.json(
         overrides.repositories ?? {
           total_count: 2,
-          repositories: [{ id: 901 }, { id: 902 }],
+          repositories: [
+            { id: 901, full_name: "synthetic/repository-901" },
+            { id: 902, full_name: "synthetic/repository-902" },
+          ],
         },
       );
     throw new Error("unexpected fixture request");
@@ -151,7 +154,10 @@ it("reads stable subject, verified non-primary emails and complete human grants 
   expect(await github.repositories(actor, 55)).toEqual({
     accountId: "github_account",
     generation: 1,
-    repositoryIds: [901, 902],
+    repositories: [
+      { id: 901, fullName: "synthetic/repository-901" },
+      { id: 902, fullName: "synthetic/repository-902" },
+    ],
   });
   expect(JSON.stringify(await github.identity(actor))).not.toContain("access");
 });
@@ -240,15 +246,16 @@ it("paginates installations, organization ownership and repos past the first pag
         total_count: 101,
         repositories:
           page === "1"
-            ? Array.from({ length: 100 }, (_, i) => ({ id: 3000 + i }))
-            : [{ id: 4001 }],
+            ? Array.from({ length: 100 }, (_, i) => ({
+                id: 3000 + i,
+                full_name: `synthetic/repository-${3000 + i}`,
+              }))
+            : [{ id: 4001, full_name: "synthetic/repository-4001" }],
       });
     return base(input, init);
   });
   expect((await github.verifyInstallation(actor, 55)).accountOwnerId).toBe(999);
-  expect((await github.repositories(actor, 55)).repositoryIds).toHaveLength(
-    101,
-  );
+  expect((await github.repositories(actor, 55)).repositories).toHaveLength(101);
   expect(calls).toBe(6);
 });
 it.each([
@@ -269,9 +276,18 @@ it.each([
           : undefined,
     repositories:
       kind === "truncated_repositories"
-        ? { total_count: 3, repositories: [{ id: 901 }] }
+        ? {
+            total_count: 3,
+            repositories: [{ id: 901, full_name: "synthetic/repository-901" }],
+          }
         : kind === "duplicate_repositories"
-          ? { total_count: 2, repositories: [{ id: 901 }, { id: 901 }] }
+          ? {
+              total_count: 2,
+              repositories: [
+                { id: 901, full_name: "synthetic/repository-901" },
+                { id: 901, full_name: "synthetic/repository-901" },
+              ],
+            }
           : undefined,
     emails:
       kind === "invalid_email"

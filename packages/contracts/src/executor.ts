@@ -38,9 +38,9 @@ function utf8ByteLength(value: string): number {
 
 export const readFileArgumentsSchema = z
   .strictObject({
-    endLine: positiveIntegerSchema.optional(),
+    endLine: z.optional(positiveIntegerSchema),
     path: repositoryPathSchema,
-    startLine: positiveIntegerSchema.optional(),
+    startLine: z.optional(positiveIntegerSchema),
   })
   .superRefine((input, context) => {
     const startLine = input.startLine ?? 1;
@@ -274,7 +274,9 @@ const preparedRepositoryShape = {
     .int()
     .nonnegative()
     .max(reviewExecutionLimits.contextLines),
-  contextBytes: positiveIntegerSchema.max(reviewExecutionLimits.contextBytes),
+  contextBytes: positiveIntegerSchema.check(
+    z.lte(reviewExecutionLimits.contextBytes),
+  ),
   fileCount: z
     .number()
     .int()

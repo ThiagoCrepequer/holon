@@ -32,8 +32,8 @@ export const findingFeedbackRecordSchema: z.ZodType<FindingFeedbackRecord> =
     authorLogin: z.string().trim().min(1).max(100),
     createdAt: timestampSchema,
     fingerprint: findingFingerprintSchema,
-    githubCommentId: positiveIntegerSchema.optional(),
-    id: positiveIntegerSchema.optional(),
+    githubCommentId: z.optional(positiveIntegerSchema),
+    id: z.optional(positiveIntegerSchema),
     label: feedbackLabelSchema,
     prKey: prKeySchema as z.ZodType<PrKey>,
     reason: z.string().trim().max(1000).optional(),
@@ -43,8 +43,8 @@ export const findingFeedbackRecordSchema: z.ZodType<FindingFeedbackRecord> =
 export const parsedFeedbackCommandSchema: z.ZodType<ParsedFeedbackCommand> =
   z.strictObject({
     label: feedbackLabelSchema,
-    line: positiveIntegerSchema.optional(),
-    path: repositoryPathSchema.optional(),
+    line: z.optional(positiveIntegerSchema),
+    path: z.optional(repositoryPathSchema),
     reason: z.string().trim().max(1000).optional(),
     targetSeverity: z.enum(["critical", "high", "medium", "low"]).optional(),
   });

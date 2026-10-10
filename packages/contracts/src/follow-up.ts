@@ -33,7 +33,7 @@ export const feedbackCommentEventSchema = z.strictObject({
   body: z.string().max(65536),
   commentId: positiveIntegerSchema,
   createdAt: z.iso.datetime(),
-  inReplyToId: positiveIntegerSchema.optional(),
+  inReplyToId: z.optional(positiveIntegerSchema),
 });
 export const feedbackThreadEventSchema = z.strictObject({
   ...feedbackBase,

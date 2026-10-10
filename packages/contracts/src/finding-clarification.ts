@@ -95,7 +95,7 @@ export const clarificationRecordSchema = z.strictObject({
   state: z.enum(["pending", "answered", "published", "obsolete"]),
   answer: clarificationAnswerSchema.optional(),
   correctionApplied: z.boolean(),
-  replyCommentId: positiveIntegerSchema.optional(),
+  replyCommentId: z.optional(positiveIntegerSchema),
 });
 export type ClarificationRecord = z.infer<typeof clarificationRecordSchema>;
 export const clarificationAgentConfigSchema = z.strictObject({
@@ -115,7 +115,7 @@ export const findingDiscussionCommentSchema = z.object({
   body: z.string().max(65536),
   path: repositoryPathSchema,
   commit_id: gitShaSchema,
-  in_reply_to_id: positiveIntegerSchema.optional(),
+  in_reply_to_id: z.optional(positiveIntegerSchema),
   pull_request_url: z.string().max(1000),
   user,
 });
