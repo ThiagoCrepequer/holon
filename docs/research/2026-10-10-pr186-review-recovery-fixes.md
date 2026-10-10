@@ -55,6 +55,30 @@ O harness pago usa o resultado atual `{ output, evidence }`, sem uma leitura
 pós-modelo independente que pudesse reproduzir o problema original; ele não
 foi executado nesta iteração.
 
+## Falha de integração observada após o push
+
+O push de `37a7c08` acionou outra execução do Holon. O Check Run
+`114273722345` falhou entre `2026-10-10T17:43:19Z` e
+`2026-10-10T17:43:23Z`. O Workflow falhou em `prepare-repository`, com
+`HOLON_GITHUB_NON_RETRYABLE:upstream_permanent`, antes de qualquer análise do
+modelo. Cleanup foi concluído. A coleta focada retornou 12 eventos, com
+`abr_level=1`; o core ativo era `0837989c-47f8-405b-8451-828d7fc3b5b5`,
+tag `b7dd6b4`, anterior às correções deste PR.
+
+A leitura independente do endpoint usado por `pullRequestDiff` retornou
+HTTP 406, `resource:PullRequest`, `field:diff`, `code:too_large`, informando
+limite de 300 arquivos. O diff local passou de 279 arquivos em `4001031`
+para 323 em `37a7c08`. Essa falha é de admissão pela integração GitHub;
+não demonstra incapacidade do modelo nem testa a coleta de evidências.
+
+Para recuperar a admissão sem ocultar código ou descartar evidências, 30
+capturas históricas foram compactadas com o leitor já existente. Manifesto,
+tamanhos e SHA-256 preservam os bytes originais; o replay foi comparado com os
+blobs de `37a7c08`. As duas prévias principais, capturas atuais e previews de
+email permanecem diretos. A [galeria](../planning/dashboard-seven-assets/README.md#arquivo-das-capturas-anteriores)
+mantém acesso às outras imagens pelo commit imutável e pelo arquivo. Isso
+reduz o diff a 295 arquivos; não altera código nem limites de execução.
+
 ## Pendências de evidência remota
 
 - A promoção deve seguir o runbook e exigir Workflows/cleanup drenados. Não houve

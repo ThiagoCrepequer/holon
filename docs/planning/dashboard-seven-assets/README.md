@@ -4,40 +4,40 @@ Referência e fixtures sintéticas; nenhum repositório ou usuário produtivo ap
 
 ## Comparação por jornada
 
-| Jornada    | Idioma | Tema  | Viewport | Antes                                              | Depois                                             |
-| ---------- | ------ | ----- | -------- | -------------------------------------------------- | -------------------------------------------------- |
-| account    | pt-BR  | light | desktop  | [Antes](before-account-pt-BR-light-desktop.png)    | [Depois](after-pt-BR-account-light-desktop.png)    |
-| account    | pt-BR  | light | mobile   | [Antes](before-account-pt-BR-light-mobile.png)     | [Depois](after-pt-BR-account-light-mobile.png)     |
-| account    | pt-BR  | dark  | desktop  | [Antes](before-account-pt-BR-dark-desktop.png)     | [Depois](after-pt-BR-account-dark-desktop.png)     |
-| account    | pt-BR  | dark  | mobile   | [Antes](before-account-pt-BR-dark-mobile.png)      | [Depois](after-pt-BR-account-dark-mobile.png)      |
-| account    | en     | light | desktop  | [Antes](before-account-en-light-desktop.png)       | [Depois](after-en-account-light-desktop.png)       |
-| account    | en     | light | mobile   | [Antes](before-account-en-light-mobile.png)        | [Depois](after-en-account-light-mobile.png)        |
-| account    | en     | dark  | desktop  | [Antes](before-account-en-dark-desktop.png)        | [Depois](after-en-account-dark-desktop.png)        |
-| account    | en     | dark  | mobile   | [Antes](before-account-en-dark-mobile.png)         | [Depois](after-en-account-dark-mobile.png)         |
-| list       | pt-BR  | light | desktop  | [Antes](before-list-pt-BR-light-desktop.png)       | [Depois](after-pt-BR-list-light-desktop.png)       |
-| list       | pt-BR  | light | mobile   | [Antes](before-list-pt-BR-light-mobile.png)        | [Depois](after-pt-BR-list-light-mobile.png)        |
-| list       | pt-BR  | dark  | desktop  | [Antes](before-list-pt-BR-dark-desktop.png)        | [Depois](after-pt-BR-list-dark-desktop.png)        |
-| list       | pt-BR  | dark  | mobile   | [Antes](before-list-pt-BR-dark-mobile.png)         | [Depois](after-pt-BR-list-dark-mobile.png)         |
-| list       | en     | light | desktop  | [Antes](before-list-en-light-desktop.png)          | [Depois](after-en-list-light-desktop.png)          |
-| list       | en     | light | mobile   | [Antes](before-list-en-light-mobile.png)           | [Depois](after-en-list-light-mobile.png)           |
-| list       | en     | dark  | desktop  | [Antes](before-list-en-dark-desktop.png)           | [Depois](after-en-list-dark-desktop.png)           |
-| list       | en     | dark  | mobile   | [Antes](before-list-en-dark-mobile.png)            | [Depois](after-en-list-dark-mobile.png)            |
-| detail     | pt-BR  | light | desktop  | [Antes](before-detail-pt-BR-light-desktop.png)     | [Depois](after-pt-BR-detail-light-desktop.png)     |
-| detail     | pt-BR  | light | mobile   | [Antes](before-detail-pt-BR-light-mobile.png)      | [Depois](after-pt-BR-detail-light-mobile.png)      |
-| detail     | pt-BR  | dark  | desktop  | [Antes](before-detail-pt-BR-dark-desktop.png)      | [Depois](after-pt-BR-detail-dark-desktop.png)      |
-| detail     | pt-BR  | dark  | mobile   | [Antes](before-detail-pt-BR-dark-mobile.png)       | [Depois](after-pt-BR-detail-dark-mobile.png)       |
-| detail     | en     | light | desktop  | [Antes](before-detail-en-light-desktop.png)        | [Depois](after-en-detail-light-desktop.png)        |
-| detail     | en     | light | mobile   | [Antes](before-detail-en-light-mobile.png)         | [Depois](after-en-detail-light-mobile.png)         |
-| detail     | en     | dark  | desktop  | [Antes](before-detail-en-dark-desktop.png)         | [Depois](after-en-detail-dark-desktop.png)         |
-| detail     | en     | dark  | mobile   | [Antes](before-detail-en-dark-mobile.png)          | [Depois](after-en-detail-dark-mobile.png)          |
-| invitation | pt-BR  | light | desktop  | [Antes](before-invitation-pt-BR-light-desktop.png) | [Depois](after-pt-BR-invitation-light-desktop.png) |
-| invitation | pt-BR  | light | mobile   | [Antes](before-invitation-pt-BR-light-mobile.png)  | [Depois](after-pt-BR-invitation-light-mobile.png)  |
-| invitation | pt-BR  | dark  | desktop  | [Antes](before-invitation-pt-BR-dark-desktop.png)  | [Depois](after-pt-BR-invitation-dark-desktop.png)  |
-| invitation | pt-BR  | dark  | mobile   | [Antes](before-invitation-pt-BR-dark-mobile.png)   | [Depois](after-pt-BR-invitation-dark-mobile.png)   |
-| invitation | en     | light | desktop  | [Antes](before-invitation-en-light-desktop.png)    | [Depois](after-en-invitation-light-desktop.png)    |
-| invitation | en     | light | mobile   | [Antes](before-invitation-en-light-mobile.png)     | [Depois](after-en-invitation-light-mobile.png)     |
-| invitation | en     | dark  | desktop  | [Antes](before-invitation-en-dark-desktop.png)     | [Depois](after-en-invitation-dark-desktop.png)     |
-| invitation | en     | dark  | mobile   | [Antes](before-invitation-en-dark-mobile.png)      | [Depois](after-en-invitation-dark-mobile.png)      |
+| Jornada    | Idioma | Tema  | Viewport | Antes                                                                                                                                                                          | Depois                                             |
+| ---------- | ------ | ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| account    | pt-BR  | light | desktop  | [Antes](before-account-pt-BR-light-desktop.png)                                                                                                                                | [Depois](after-pt-BR-account-light-desktop.png)    |
+| account    | pt-BR  | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-pt-BR-light-mobile.png)     | [Depois](after-pt-BR-account-light-mobile.png)     |
+| account    | pt-BR  | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-pt-BR-dark-desktop.png)     | [Depois](after-pt-BR-account-dark-desktop.png)     |
+| account    | pt-BR  | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-pt-BR-dark-mobile.png)      | [Depois](after-pt-BR-account-dark-mobile.png)      |
+| account    | en     | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-en-light-desktop.png)       | [Depois](after-en-account-light-desktop.png)       |
+| account    | en     | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-en-light-mobile.png)        | [Depois](after-en-account-light-mobile.png)        |
+| account    | en     | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-en-dark-desktop.png)        | [Depois](after-en-account-dark-desktop.png)        |
+| account    | en     | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-account-en-dark-mobile.png)         | [Depois](after-en-account-dark-mobile.png)         |
+| list       | pt-BR  | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-pt-BR-light-desktop.png)       | [Depois](after-pt-BR-list-light-desktop.png)       |
+| list       | pt-BR  | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-pt-BR-light-mobile.png)        | [Depois](after-pt-BR-list-light-mobile.png)        |
+| list       | pt-BR  | dark  | desktop  | [Antes](before-list-pt-BR-dark-desktop.png)                                                                                                                                    | [Depois](after-pt-BR-list-dark-desktop.png)        |
+| list       | pt-BR  | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-pt-BR-dark-mobile.png)         | [Depois](after-pt-BR-list-dark-mobile.png)         |
+| list       | en     | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-en-light-desktop.png)          | [Depois](after-en-list-light-desktop.png)          |
+| list       | en     | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-en-light-mobile.png)           | [Depois](after-en-list-light-mobile.png)           |
+| list       | en     | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-en-dark-desktop.png)           | [Depois](after-en-list-dark-desktop.png)           |
+| list       | en     | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-list-en-dark-mobile.png)            | [Depois](after-en-list-dark-mobile.png)            |
+| detail     | pt-BR  | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-pt-BR-light-desktop.png)     | [Depois](after-pt-BR-detail-light-desktop.png)     |
+| detail     | pt-BR  | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-pt-BR-light-mobile.png)      | [Depois](after-pt-BR-detail-light-mobile.png)      |
+| detail     | pt-BR  | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-pt-BR-dark-desktop.png)      | [Depois](after-pt-BR-detail-dark-desktop.png)      |
+| detail     | pt-BR  | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-pt-BR-dark-mobile.png)       | [Depois](after-pt-BR-detail-dark-mobile.png)       |
+| detail     | en     | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-en-light-desktop.png)        | [Depois](after-en-detail-light-desktop.png)        |
+| detail     | en     | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-en-light-mobile.png)         | [Depois](after-en-detail-light-mobile.png)         |
+| detail     | en     | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-en-dark-desktop.png)         | [Depois](after-en-detail-dark-desktop.png)         |
+| detail     | en     | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-detail-en-dark-mobile.png)          | [Depois](after-en-detail-dark-mobile.png)          |
+| invitation | pt-BR  | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-pt-BR-light-desktop.png) | [Depois](after-pt-BR-invitation-light-desktop.png) |
+| invitation | pt-BR  | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-pt-BR-light-mobile.png)  | [Depois](after-pt-BR-invitation-light-mobile.png)  |
+| invitation | pt-BR  | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-pt-BR-dark-desktop.png)  | [Depois](after-pt-BR-invitation-dark-desktop.png)  |
+| invitation | pt-BR  | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-pt-BR-dark-mobile.png)   | [Depois](after-pt-BR-invitation-dark-mobile.png)   |
+| invitation | en     | light | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-en-light-desktop.png)    | [Depois](after-en-invitation-light-desktop.png)    |
+| invitation | en     | light | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-en-light-mobile.png)     | [Depois](after-en-invitation-light-mobile.png)     |
+| invitation | en     | dark  | desktop  | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-en-dark-desktop.png)     | [Depois](after-en-invitation-dark-desktop.png)     |
+| invitation | en     | dark  | mobile   | [Antes](https://github.com/ThiagoCrepequer/holon/blob/37a7c087a3b88c28475c01477d9832f304a552e3/docs/planning/dashboard-seven-assets/before-invitation-en-dark-mobile.png)      | [Depois](after-en-invitation-dark-mobile.png)      |
 
 ## Estados e controles
 
@@ -83,3 +83,32 @@ Preview local: CID resolvido somente na renderização de teste. Não comprova G
 [Referência fornecida pelo usuário](layout-reference.png).
 
 [Laboratório local de bytes e interação](performance-lab.json): Chromium, CPU 4x, loopback sem modelagem de rede remota, cinco amostras frias/quentes. Não representa métricas de campo.
+
+## Arquivo das capturas anteriores
+
+As 30 capturas anteriores que não são as duas prévias principais estão em
+[before-captures.json.gz](before-captures.json.gz), com
+[manifesto legível](before-captures.manifest.json). Seus bytes foram comparados
+com o commit `37a7c087a3b88c28475c01477d9832f304a552e3`, antes da compactação;
+a restauração também foi comparada byte a byte. Os links “Antes” da tabela
+apontam para esse commit imutável quando a captura está no arquivo.
+
+O PR havia chegado a 323 arquivos e a API de diff do GitHub recusou sua leitura
+com HTTP 406/`too_large`, informando o teto de 300 arquivos. A compactação reduz
+somente evidência visual histórica; o código, os testes, as duas prévias
+principais, todas as capturas atuais, os controles e os previews de email
+continuam legíveis diretamente. Nada foi rebaseado ou removido do histórico.
+
+O leitor existente valida tamanho e SHA-256 do arquivo e de cada captura, com
+limite de expansão. Para conferir as 30 entradas sem extrair arquivos, na raiz:
+
+```sh
+node --input-type=module <<'JS'
+import { readFileSync } from "node:fs";
+import { unpackEvidence } from "./tooling/evidence/archive.mjs";
+const root = "docs/planning/dashboard-seven-assets/";
+const manifest = JSON.parse(readFileSync(root + "before-captures.manifest.json", "utf8"));
+const captures = unpackEvidence(manifest, readFileSync(root + "before-captures.json.gz"));
+console.log(`${captures.size} capturas verificadas`);
+JS
+```
