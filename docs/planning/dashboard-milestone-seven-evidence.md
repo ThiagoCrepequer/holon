@@ -275,9 +275,15 @@ Workerd; a renderização de template separada passou em 48 combinações de eng
 locale, tema, viewport e imagens. Não foram alterados os mínimos de cobertura.
 
 Turbo reutilizou tasks locais cujos inputs não mudaram; a matriz browser e os
-controles alterados foram executados. Tipos: 21/21 tasks, 20 reutilizadas; cobertura: 32/32 tasks, 30 reutilizadas; build: 17/17 tasks, 13 reutilizadas. A CI do SHA entregue é
-conferida e ligada no PR e nas issues; o resultado local não é apresentado como
-aprovação da CI.
+controles alterados foram executados. Tipos: 21/21 tasks, 20 reutilizadas; cobertura: 32/32 tasks, 30 reutilizadas; build: 17/17 tasks, 13 reutilizadas. A [CI de `beffa84`](https://github.com/ThiagoCrepequer/holon/actions/runs/38023542532)
+confirmou no Linux **131 jornadas sem falhas, dois labs CDP ignorados** e zoom
+nativo: JUnit `133` testes, `0` failures/errors, duração `1127,033s`. A matriz
+consumiu 18,8 minutos; o job de 30 minutos foi cancelado durante as suítes
+posteriores, antes do build final e da qualificação do artefato. Isso não é CI
+integral aprovada. O tempo máximo do **job** passa para 45 minutos para comportar
+matriz, cobertura e build frios. Timeouts/retries dos testes, tetos de interação,
+bytes e mínimos de cobertura permanecem iguais. A nova CI do SHA entregue é
+conferida e ligada no PR/issues; prova local não substitui seu resultado.
 
 | Artefato                  | Antes `750c108` |  Depois | Teto atual | Diferença |
 | ------------------------- | --------------: | ------: | ---------: | --------: |
