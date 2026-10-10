@@ -488,7 +488,7 @@ heading/fonts, TTFB e DOM. Filtro/refresh aguardam resposta real e estado visív
 SDK oficial `web-vitals` 6.2.3 é dev-only, injeta instrumentação apenas no
 harness sintético e conserva somente valores numéricos, sem attribution/DOM.
 
-Os ceilings são JS gzip 210000, CSS gzip 12000, WOFF 160000; lab SSR p95 1500ms,
+Os ceilings dessa execução M6 foram JS gzip 210000, CSS gzip 12000, WOFF 160000; lab SSR p95 1500ms,
 filter/refresh p95 500ms, DOM1200, LCP p75 2500ms, CLS p75 0.1 e INP200ms.
 Derivam do build/browser medido, com margem de CI e testes de violação
 independente; o limite de JS foi mantido após trocar a implementação de Markdown
@@ -497,6 +497,10 @@ SSR detalhe cold p95 447ms no desktop e 486ms no viewport móvel; warm p95
 319/326ms, filtro p95 95ms, refresh p95 62ms e INP sintético 16ms. Os relatórios anexados são a fonte dos números da
 execução correspondente. INP do lab é de uma navegação/interações sintéticas,
 não p75 de usuários. LCP/CLS de dez navegações locais também não são CWV de campo.
+
+O [milestone 7](dashboard-milestone-seven-evidence.md#contratos-e-orçamento)
+registra a revisão posterior autorizada do teto de JS para 240000 bytes gzip,
+necessária ao Dropdown Menu Base UI solicitado. Os outros limites permanecem.
 
 O workload D1 usa dois repositórios de 10000 PRs cada, mesma SQL/contrato de
 produção, contains raro/sem resultado/curto e filtro combinado. O índice de
