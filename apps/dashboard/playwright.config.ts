@@ -7,6 +7,8 @@ export default defineConfig({
     "milestone-three.spec.ts",
     "milestone-five.spec.ts",
     "milestone-six.spec.ts",
+    "milestone-seven.spec.ts",
+    "native-zoom.spec.ts",
     "performance-lab.spec.ts",
   ],
   retries: 0,

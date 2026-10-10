@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 export function ReviewCode({ children }: { children: ReactNode }) {
   return (
     <pre
+      className="max-w-full overflow-auto rounded-md bg-muted p-4 font-mono text-small"
       tabIndex={0}
       onKeyDown={(event) => {
         const node = event.currentTarget;

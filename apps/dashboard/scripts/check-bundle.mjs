@@ -44,7 +44,9 @@ for (const token of [
   "--holon-action-bg",
   "--holon-motion-slow",
   ".inline-flex",
-  ".holon-button",
+  ".bg-primary",
+  ".min-h-control",
+  ".focus-visible\\:outline-ring",
   ".holon-dialog",
 ])
   assert(css.includes(token), `Missing UI CSS: ${token}`);

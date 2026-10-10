@@ -96,7 +96,7 @@ export function ErrorBoundary() {
       ? error.status
       : 503;
   return (
-    <main className="holon-welcome holon-reviews">
+    <main className="min-w-0">
       <ReviewRecovery status={status} />
     </main>
   );

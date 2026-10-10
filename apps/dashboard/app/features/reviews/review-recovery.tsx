@@ -23,6 +23,7 @@ export function ReviewRecovery({ status = 503 }: { status?: number }) {
   const destination = location.pathname + location.search;
   return (
     <section
+      className="grid gap-4 rounded-lg border border-border bg-card p-6"
       aria-label={i18n._({
         id: "reviews.unavailable",
         message: "Review data unavailable. Check your access and try again.",

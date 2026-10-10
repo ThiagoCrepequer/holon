@@ -27,9 +27,13 @@ import { resolveLocale } from "./i18n/locale.js";
 import { loadMessages } from "./i18n/messages.server.js";
 import { nonceContext, viewerServicesContext } from "./request-context.js";
 import { readDashboardViewer } from "./server/viewer.server.js";
+import { DashboardShell } from "./shell/dashboard-shell.js";
 import type { DashboardViewerData } from "./viewer-data.js";
 
 import stylesheet from "./styles.css?url";
+export function meta() {
+  return [{ title: "Holon" }];
+}
 export function links() {
   return [
     { rel: "stylesheet", href: stylesheet },
@@ -81,7 +85,9 @@ export default function Root() {
   return (
     <I18nProvider i18n={i18n}>
       <QueryClientProvider client={queryClient}>
-        <Outlet />
+        <DashboardShell data={data}>
+          <Outlet />
+        </DashboardShell>
       </QueryClientProvider>
     </I18nProvider>
   );
@@ -114,7 +120,7 @@ export function ErrorBoundary() {
   const error = useRouteError();
   const i18n = translator(data?.locale ?? "en", data?.messages ?? {});
   return (
-    <main className="holon-welcome">
+    <main className="mx-auto max-w-reading px-5 py-12">
       <p role="alert">
         {isRouteErrorResponse(error) && error.status === 404
           ? i18n._({ id: "error.page", message: "Page unavailable" })

@@ -1,62 +1,54 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { signIn } from "../support/browser-journey.js";
+import {
+  signIn,
+  accountTrigger,
+  chooseWorkspace,
+  loadWorkspaces,
+  openCreateWorkspace,
+  openPreferences,
+  workspaceId,
+} from "../support/browser-journey.js";
 
 for (const locale of ["en", "pt-BR"]) {
-  test(`${locale}: personal workspace command waits for the current read and accepts its first click`, async ({
+  const pt = locale === "pt-BR";
+  test(`${locale}: workspace menu waits for its manual read before enabling creation`, async ({
     page,
   }, info) => {
-    const pt = locale === "pt-BR";
     const subject =
       308001 +
       ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
       (pt ? 1 : 0);
-    const workspace = await signIn(page, subject, locale);
+    await signIn(page, subject, locale);
     await page.goto(`/account?lang=${locale}`);
-    let blocked = Promise.withResolvers<void>();
-    let release = Promise.withResolvers<void>();
+    const blocked = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
     await page.route("**/api/workspaces", async (route) => {
-      const current = release;
       blocked.resolve();
-      await current.promise;
+      await release.promise;
       await route.continue();
     });
-    const manage = page.getByRole("button", {
-      name: pt ? "Gerenciar workspaces" : "Manage workspaces",
-      exact: true,
-    });
-    const personal = page.getByRole("button", {
-      name: pt ? "Criar meu workspace pessoal" : "Create my personal workspace",
-      exact: true,
-    });
     try {
-      for (const cancelRead of [false, true]) {
-        if (cancelRead) {
-          blocked = Promise.withResolvers<void>();
-          release = Promise.withResolvers<void>();
-        }
-        await manage.click();
-        await blocked.promise;
-        await expect(personal).toBeDisabled();
-        if (cancelRead)
-          await page
-            .getByLabel("Workspace", { exact: true })
-            .selectOption(workspace);
-        release.resolve();
-        await expect(personal).toBeEnabled();
-        const response = page.waitForResponse(
-          (r) =>
-            new URL(r.url()).pathname === "/api/workspaces/personal" &&
-            r.request().method() === "POST",
-        );
-        await personal.click();
-        expect((await response).status()).toBe(200);
-        await expect(
-          page.getByLabel("Workspace", { exact: true }).locator("option"),
-        ).toHaveCount(2);
-        await expect(manage).toBeEnabled();
-      }
+      await page
+        .getByRole("button", { name: "Workspace", exact: true })
+        .click();
+      await blocked.promise;
+      const create = page.getByRole("menuitem", {
+        name: pt ? "Criar workspace" : "Create a workspace",
+        exact: true,
+      });
+      await expect(create).toHaveAttribute("aria-disabled", "true");
+      await page.keyboard.press("Escape");
+      release.resolve();
+      await openCreateWorkspace(page);
+      await expect(
+        page.getByLabel(pt ? "Nome da equipe" : "Team name", { exact: true }),
+      ).toBeEnabled();
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "Workspace", exact: true }),
+      ).toBeFocused();
     } finally {
       release.resolve();
     }
@@ -65,18 +57,13 @@ for (const locale of ["en", "pt-BR"]) {
     page,
     browser,
   }, info) => {
-    const pt = locale === "pt-BR";
     const subject =
       307001 +
       ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10 +
       (pt ? 1 : 0);
     const signInName = pt ? "Entrar com GitHub" : "Sign in with GitHub";
-    const accountNames = [
-      pt ? "Preferências" : "Preferences",
-      pt ? "Sessões ativas" : "Active sessions",
-      pt ? "Sair" : "Sign out",
-    ] as const;
-    for (const action of ["signin", "preferences", "devices", "signout"]) {
+    const accountName = pt ? "Menu da conta" : "Account menu";
+    for (const action of ["signin", "preferences", "signout"]) {
       if (action === "preferences") await signIn(page, subject, locale);
       // Fresh contexts prevent WebKit's warm module cache from bypassing interception.
       const context = await browser.newContext({
@@ -100,7 +87,7 @@ for (const locale of ["en", "pt-BR"]) {
           { waitUntil: "commit" },
         );
         await blocked.promise;
-        const names = action === "signin" ? [signInName] : accountNames;
+        const names = action === "signin" ? [signInName] : [accountName];
         for (const name of names)
           await expect(
             cold.getByRole("button", { name, exact: true }),
@@ -131,39 +118,27 @@ for (const locale of ["en", "pt-BR"]) {
             new URL((await authorization).url()).searchParams.get("state"),
           ).toBeTruthy();
         } else if (action === "preferences") {
-          await cold
-            .getByRole("button", { name: accountNames[0], exact: true })
-            .click();
+          await openPreferences(cold);
           await expect(cold.getByRole("dialog")).toBeVisible();
-        } else if (action === "devices") {
-          const response = cold.waitForResponse(
-            (r) =>
-              r.url().includes("/api/auth/sessions") &&
-              r.request().method() === "GET",
-          );
-          await cold
-            .getByRole("button", { name: accountNames[1], exact: true })
-            .click();
-          expect((await response).status()).toBe(200);
-          await expect(cold.getByRole("dialog")).toBeVisible();
-          await expect(cold.getByRole("dialog")).toContainText(
-            pt ? "(este dispositivo)" : "(this device)",
-          );
         } else {
           const response = cold.waitForResponse(
             (r) =>
               r.url().includes("/api/auth/sign-out") &&
               r.request().method() === "POST",
           );
+          await accountTrigger(cold).click();
           await cold
-            .getByRole("button", { name: accountNames[2], exact: true })
+            .getByRole("menuitem", {
+              name: pt ? "Sair" : "Sign out",
+              exact: true,
+            })
             .click();
           expect((await response).status()).toBe(200);
           await expect(
             cold.getByRole("button", { name: signInName, exact: true }),
           ).toBeVisible();
           await expect(
-            cold.getByRole("button", { name: accountNames[1], exact: true }),
+            cold.getByRole("button", { name: accountName, exact: true }),
           ).toHaveCount(0);
         }
       } finally {
@@ -241,12 +216,7 @@ for (const locale of ["en", "pt-BR"]) {
     await page.screenshot({
       path: `proof-results/m6-${info.project.name}-${locale}-account-desktop.png`,
     });
-    await page
-      .getByRole("button", {
-        name: pt ? "Gerenciar workspaces" : "Manage workspaces",
-        exact: true,
-      })
-      .click();
+    await openCreateWorkspace(page);
     const name = page.getByLabel(pt ? "Nome da equipe" : "Team name", {
       exact: true,
     });
@@ -267,16 +237,15 @@ for (const locale of ["en", "pt-BR"]) {
       exact: true,
     });
     await create.click();
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
       pt ? "Resultado desconhecido" : "Result unknown",
     );
     await expect(name).toBeDisabled();
     await create.click();
-    const workspace = page.getByLabel("Workspace", { exact: true });
-    await expect(workspace.locator("option")).toHaveCount(3);
+    await expect(page.getByRole("dialog")).not.toBeVisible();
     expect(operations).toHaveLength(2);
     expect(new Set(operations).size).toBe(1);
-    await workspace.selectOption({ label: "Synthetic recovery team" });
+    await chooseWorkspace(page, { label: "Synthetic recovery team" });
     await page
       .getByRole("button", {
         name: pt ? "Atualizar membros" : "Refresh members",
@@ -295,7 +264,7 @@ for (const locale of ["en", "pt-BR"]) {
     await expect(
       page.getByRole("button", { name: /^(Remove member|Remover membro):/ }),
     ).toBeDisabled();
-    await workspace.selectOption({ label: "Personal" });
+    await chooseWorkspace(page, { label: "Personal" });
     await page
       .getByRole("button", {
         name: pt ? "Escolher um repositório" : "Choose a repository",
@@ -327,7 +296,13 @@ for (const locale of ["en", "pt-BR"]) {
         .click();
       await expect(repositoryLinks).toHaveCount(1);
     }
-    const personal = await workspace.inputValue();
+    const personal = await workspaceId(page);
+    await page
+      .getByText(
+        pt ? "Gerenciar instalação do GitHub" : "Manage GitHub installation",
+        { exact: true },
+      )
+      .click();
     await page
       .getByLabel(pt ? "ID da instalação GitHub" : "GitHub installation ID")
       .fill(String(subject + 100001));
@@ -356,13 +331,8 @@ for (const locale of ["en", "pt-BR"]) {
         (connection: { installationId: number }) => connection.installationId,
       ),
     ).toEqual([subject + 100000]);
-    await page
-      .getByRole("button", {
-        name: pt ? "Gerenciar workspaces" : "Manage workspaces",
-        exact: true,
-      })
-      .click();
-    await workspace.selectOption(personal);
+    await loadWorkspaces(page);
+    await chooseWorkspace(page, personal);
     await page
       .getByRole("button", {
         name: pt ? "Escolher um repositório" : "Choose a repository",
@@ -489,7 +459,7 @@ for (const locale of ["en", "pt-BR"]) {
     const reflow = await page.evaluate(() => ({
       width: document.documentElement.clientWidth,
       scroll: document.documentElement.scrollWidth,
-      overflow: [...document.querySelectorAll("main *")]
+      overflow: [...document.querySelectorAll("body *")]
         .filter(
           (node) =>
             !node.closest("pre") &&
@@ -519,27 +489,20 @@ for (const locale of ["en", "pt-BR"]) {
       )
       .toBeGreaterThan(0);
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await expect(page.locator(".holon-panel")).toHaveCSS(
-      "animation-name",
-      "none",
-    );
+    await expect(page.getByRole("main")).toHaveCSS("animation-name", "none");
     await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();
     await page
       .getByRole("link", {
-        name: pt ? "Conta e workspaces" : "Account and workspaces",
+        name: "Dashboard",
         exact: true,
       })
       .click();
-    const preferences = page.getByRole("button", {
-      name: pt ? "Preferências" : "Preferences",
-      exact: true,
-    });
-    await preferences.click();
+    const preferences = await openPreferences(page);
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.keyboard.press("Escape");
-    await preferences.click();
+    await openPreferences(page);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(page.getByRole("dialog")).toHaveCSS(
       "transition-duration",
@@ -619,14 +582,14 @@ for (const locale of ["en", "pt-BR"]) {
     }
     await page
       .getByRole("link", {
-        name: pt ? "Conta e workspaces" : "Account and workspaces",
+        name: "Dashboard",
         exact: true,
       })
       .click();
     await expect(page).toHaveURL(/\/account\?/);
     await expect(
       page.getByRole("heading", {
-        name: pt ? "Conta e workspaces" : "Account and workspaces",
+        name: "Dashboard",
         exact: true,
         level: 1,
       }),
@@ -651,12 +614,7 @@ for (const locale of ["en", "pt-BR"]) {
       (pt ? 2 : 0);
     await signIn(page, subject, locale);
     await page.goto(`/account?lang=${locale}`);
-    await page
-      .getByRole("button", {
-        name: pt ? "Gerenciar workspaces" : "Manage workspaces",
-        exact: true,
-      })
-      .click();
+    await openCreateWorkspace(page);
     await page
       .getByLabel(pt ? "Nome da equipe" : "Team name", { exact: true })
       .fill("Synthetic governance");
@@ -666,12 +624,8 @@ for (const locale of ["en", "pt-BR"]) {
         exact: true,
       })
       .click();
-    await page
-      .getByLabel("Workspace", { exact: true })
-      .selectOption({ label: "Synthetic governance" });
-    const workspace = await page
-      .getByLabel("Workspace", { exact: true })
-      .inputValue();
+    await chooseWorkspace(page, { label: "Synthetic governance" });
+    const workspace = await workspaceId(page);
     await page
       .getByLabel(pt ? "Email do destinatário" : "Recipient email", {
         exact: true,
@@ -703,12 +657,7 @@ for (const locale of ["en", "pt-BR"]) {
         pt ? "Convite aceito" : "Invitation accepted",
       );
       await recipient.goto(`/account?workspace=${workspace}&lang=${locale}`);
-      await recipient
-        .getByRole("button", {
-          name: pt ? "Gerenciar workspaces" : "Manage workspaces",
-          exact: true,
-        })
-        .click();
+      await loadWorkspaces(recipient);
       await recipient
         .getByRole("button", {
           name: pt ? "Atualizar membros" : "Refresh members",

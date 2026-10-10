@@ -8,6 +8,8 @@ export default defineConfig({
     "milestone-three.spec.ts",
     "milestone-five.spec.ts",
     "milestone-six.spec.ts",
+    "milestone-seven.spec.ts",
+    "native-zoom.spec.ts",
     "performance-lab.spec.ts",
   ],
   workers: 1,
@@ -26,8 +28,16 @@ export default defineConfig({
   outputDir: "proof-results/auth-browser",
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
-    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] },
+      testIgnore: "native-zoom.spec.ts",
+    },
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      testIgnore: "native-zoom.spec.ts",
+    },
   ],
   webServer: {
     command: "node test/support/native-browser-server.mjs",

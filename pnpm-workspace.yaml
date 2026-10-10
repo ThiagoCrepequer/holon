@@ -53,6 +53,8 @@ linkWorkspacePackages: false
 minimumReleaseAgeExclude:
   - "@cloudflare/workers-types@5.20260830.1"
   - zod@4.5.4
+  - "@base-ui/react@1.9.0"
+  - "@base-ui/utils@0.5.0"
 preferWorkspacePackages: true
 saveExact: true
 strictPeerDependencies: true

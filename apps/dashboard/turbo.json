@@ -2,6 +2,11 @@
   "extends": ["//"],
   "tasks": {
     "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/brand/tokens/**",
+        "$TURBO_ROOT$/docs/brand/assets/fonts/**"
+      ],
       "outputs": ["build/**", "app/locales/*/messages.ts"]
     },
     "typecheck": {
@@ -9,11 +14,21 @@
     },
     "test": {
       "cache": false,
-      "outputs": ["proof-results/**"]
+      "outputs": ["proof-results/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/brand/tokens/**",
+        "$TURBO_ROOT$/docs/brand/assets/fonts/**"
+      ]
     },
     "test:coverage": {
       "cache": false,
-      "outputs": ["coverage/**", "proof-results/**"]
+      "outputs": ["coverage/**", "proof-results/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/brand/tokens/**",
+        "$TURBO_ROOT$/docs/brand/assets/fonts/**"
+      ]
     }
   }
 }

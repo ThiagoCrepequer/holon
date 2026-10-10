@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 
-// Qualified on the M6 production browser build. A whole-build ceiling also bounds every route.
+// M7: Base UI menus authorized on 2026-10-10; whole-build gzip still bounds every route.
 export const assetBudget = Object.freeze({
-  js: 210_000,
+  js: 240_000,
   css: 12_000,
   fonts: 160_000,
 });

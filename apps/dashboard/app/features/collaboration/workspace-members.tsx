@@ -1,92 +1,15 @@
-import {
-  workspaceMemberPageSchema,
-  reauthReceiptSchema,
-  type WorkspaceMemberPage,
-  type ReauthAction,
-} from "@holon/contracts/dashboard";
+import type { ReauthAction } from "@holon/contracts/dashboard";
 import { Button } from "@holon/ui/button";
+import { Card, CardHeader, CardTitle } from "@holon/ui/card";
 import { useLingui } from "@lingui/react";
-import { useEffect, useRef, useState } from "react";
 
-import { collaborationRequest, oauthRedirect } from "./collaboration-client.js";
-import type { CollaborationRun, Workspace } from "./workspace-types.js";
+import { useWorkspace } from "./workspace-state.js";
 
-export function WorkspaceMembers({
-  workspace,
-  userId,
-  csrf,
-  busy,
-  run,
-}: {
-  workspace: Workspace;
-  userId: string;
-  csrf: string;
-  busy: boolean;
-  run: CollaborationRun;
-}) {
+export function WorkspaceMembers() {
   const { i18n } = useLingui();
-  const [page, setPage] = useState<WorkspaceMemberPage | null>(null);
-  const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState(false);
-  const pending = useRef<AbortController | null>(null);
-  useEffect(() => () => pending.current?.abort(), []);
-  const load = (cursor: string | null = null) => {
-    setPage(null);
-    return run(
-      `/api/workspaces/${workspace.workspace.id}/members${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
-      undefined,
-      (data) => setPage(workspaceMemberPageSchema.parse(data)),
-    );
-  };
-  async function verify(action: ReauthAction, targetUserId: string) {
-    if (pending.current) return;
-    setVerifying(true);
-    setError(false);
-    const controller = new AbortController();
-    pending.current = controller;
-    try {
-      const proof = await collaborationRequest(
-        "/api/auth/reauth/init",
-        controller.signal,
-        {
-          csrf,
-          body: {
-            workspaceId: workspace.workspace.id,
-            action,
-            targetUserId,
-          },
-        },
-      );
-      if (proof.status !== "ready") throw new Error();
-      const receipt = reauthReceiptSchema.parse(proof.data);
-      const parameters = new URLSearchParams({
-        workspace: workspace.workspace.id,
-        memberAction: action,
-        targetUser: targetUserId,
-        reauth: receipt.reauthIntentId,
-      });
-      const locale = new URL(window.location.href).searchParams.get("lang");
-      if (locale) parameters.set("lang", locale);
-      const url = await oauthRedirect(
-        {
-          provider: "github",
-          callbackURL: `/account?${parameters}`,
-          reauthIntentId: receipt.reauthIntentId,
-          disableRedirect: true,
-        },
-        controller.signal,
-      );
-      if (!url) throw new Error();
-      if (!controller.signal.aborted) window.location.assign(url);
-    } catch {
-      if (!controller.signal.aborted) {
-        setError(true);
-        setVerifying(false);
-      }
-    } finally {
-      if (pending.current === controller) pending.current = null;
-    }
-  }
+  const state = useWorkspace();
+  const page = state.members;
+  const busy = state.status === "loading";
   const actionLabel = (action: ReauthAction) =>
     ({
       promote: i18n._({ id: "members.promote", message: "Promote to owner" }),
@@ -95,32 +18,40 @@ export function WorkspaceMembers({
       leave: i18n._({ id: "members.leave", message: "Leave workspace" }),
     })[action];
   return (
-    <section
+    <Card
       aria-label={i18n._({
         id: "members.title",
         message: "Members and owners",
       })}
     >
-      <h3>{i18n._({ id: "members.title", message: "Members and owners" })}</h3>
+      <CardHeader>
+        <CardTitle>
+          {i18n._({ id: "members.title", message: "Members and owners" })}
+        </CardTitle>
+      </CardHeader>
       <Button
         variant="quiet"
-        disabled={busy || verifying}
-        onClick={() => void load()}
+        disabled={busy}
+        onClick={() => void state.loadMembers()}
       >
         {i18n._({ id: "members.refresh", message: "Refresh members" })}
       </Button>
       {page && (
         <>
-          <p>
+          <p className="my-4 text-small text-secondary">
             {i18n._({
               id: "members.reauth",
               message:
                 "Role changes and leaving require confirmation with the same GitHub identity.",
             })}
           </p>
-          <ul>
+          <ul className="mt-4 divide-y divide-border">
             {page.members.map((member) => (
-              <li key={member.userId} data-member-id={member.userId}>
+              <li
+                key={member.userId}
+                className="grid gap-3 py-4"
+                data-member-id={member.userId}
+              >
                 <span>
                   {member.name} ·{" "}
                   {member.role === "owner"
@@ -128,7 +59,7 @@ export function WorkspaceMembers({
                     : i18n._({ id: "members.member", message: "Member" })}
                 </span>
                 {page.actorRole === "owner" && (
-                  <div className="holon-actions">
+                  <div className="flex flex-wrap gap-2">
                     {(["promote", "demote", "remove"] as const)
                       .filter(
                         (action) =>
@@ -141,11 +72,12 @@ export function WorkspaceMembers({
                           variant={action === "remove" ? "danger" : "quiet"}
                           disabled={
                             busy ||
-                            verifying ||
                             (member.role === "owner" && page.ownerCount === 1)
                           }
                           aria-label={`${actionLabel(action)}: ${member.name}`}
-                          onClick={() => void verify(action, member.userId)}
+                          onClick={() =>
+                            void state.verifyMember(action, member.userId)
+                          }
                         >
                           {actionLabel(action)}
                         </Button>
@@ -157,13 +89,13 @@ export function WorkspaceMembers({
           </ul>
           {page.nextCursor && (
             <Button
-              disabled={busy || verifying}
-              onClick={() => void load(page.nextCursor)}
+              disabled={busy}
+              onClick={() => void state.loadMembers(page.nextCursor)}
             >
               {i18n._({ id: "members.next", message: "Next members" })}
             </Button>
           )}
-          <p>
+          <p className="my-4 text-small text-secondary">
             {i18n._({
               id: "members.lastOwner",
               message:
@@ -173,25 +105,14 @@ export function WorkspaceMembers({
           <Button
             variant="danger"
             disabled={
-              busy ||
-              verifying ||
-              (page.actorRole === "owner" && page.ownerCount === 1)
+              busy || (page.actorRole === "owner" && page.ownerCount === 1)
             }
-            onClick={() => void verify("leave", userId)}
+            onClick={() => void state.verifyMember("leave", state.userId)}
           >
             {actionLabel("leave")}
           </Button>
         </>
       )}
-      {error && (
-        <p role="alert">
-          {i18n._({
-            id: "members.failed",
-            message:
-              "Unable to confirm this change. Refresh members and try again.",
-          })}
-        </p>
-      )}
-    </section>
+    </Card>
   );
 }

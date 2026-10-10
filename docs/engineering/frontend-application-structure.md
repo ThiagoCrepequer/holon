@@ -525,15 +525,14 @@ render preserva o UTC/valor salvo e não depende de catálogos ICU idênticos no
 servidor e no navegador. Preferência pessoal prevalece sobre a URL e o idioma
 negociado do navegador, sem alterar idioma da revisão nem disparar execução.
 
-`features/sessions` mantém login/reconexão, lista reduzida de dispositivos e
-revogação atual/global. Os módulos de transporte são internos à feature e
-validam DTOs antes de apresentar estado. Uma negação confirmada fecha somente
-a identidade que iniciou a request; callbacks antigos não removem uma sessão
-nova. O ID da sessão identifica a geração dos controles e AbortController
-cancela requests ao desmontar/trocar contexto. Leituras de dispositivos exigem
-que a sessão marcada atual corresponda à geração renderizada; diferença fecha
-o snapshot anterior e revalida SSR. Não há polling/refetch por foco/visibilidade
-nem renovação automática de uma aba parada.
+`features/sessions` mantém login/reconexão e o menu do usuário, que oferece
+preferências e saída do dispositivo atual. M7 remove a UI de dispositivos por
+solicitação explícita; transporte strict e APIs de revogação atual/global
+permanecem. Uma negação confirmada fecha somente a identidade que iniciou a
+request; callbacks antigos não removem uma sessão nova. O ID da sessão identifica
+a geração dos controles e AbortController cancela requests ao desmontar/trocar
+contexto. Não há polling/refetch por foco/visibilidade nem renovação automática
+de uma aba parada.
 
 `server/viewer.server.ts` usa as capabilities privadas passadas pela composição
 Workers, sem self-HTTP. O loader raiz devolve snapshot público validado e todos
@@ -577,3 +576,43 @@ source original; o contrato de retorno à review é puro e relativo. O SDK
 `web-vitals` é dev-only e instrumenta apenas o lab sintético. A
 [matriz M6](../planning/dashboard-milestone-six-evidence.md) delimita os gates
 locais e as provas operacionais pendentes.
+
+## Experiência materializada em Dashboard 7
+
+`app/shell/dashboard-shell.tsx` compõe a navegação, preferências, sessões e o
+contexto de workspace. O único menu lateral permite seleção e criação em Sheet;
+o menu do usuário reúne preferências e saída. A árvore é a mesma em desktop e
+mobile. O contexto é descartado ao mudar a identidade da sessão. Não existem
+menus duplicados com stores independentes ou refetch na hidratação.
+
+A interface de colaboração expõe provider, seletor e controles. Seus módulos
+privados separam `workspace-data` (operações de produto, transporte e validação
+runtime) e `workspace-state` (admissão, intenção, AbortSignal e geração causal).
+Views recebem DTOs e ações, sem interpretar respostas HTTP `unknown`. Mudança
+de workspace descarta snapshots, requests e provas de outro escopo. O parâmetro
+`workspace` na URL define o escopo; Voltar/Avançar avança a geração, cancela I/O
+e remove os dados incompatíveis sem realizar leitura automática. Entrada direta
+exibe um contexto neutro até a leitura manual confirmar nome e membership. Uma negação
+ou reconexão descarta dados privados; um 401 do provider mantém apenas o contexto
+escolhido para reconectar. Negação na leitura global de workspaces revalida a
+sessão que iniciou a request. Cada intenção de convite preserva operationId,
+email normalizado e locale até confirmação, inclusive ao sair e voltar ao
+workspace. Um sucesso HTTP sem recibo válido é resultado desconhecido.
+
+O catálogo de repositórios consulta a lista atual do GitHub e devolve IDs e
+`fullName` do mesmo snapshot autorizado. O cache de grants mantém somente IDs;
+nomes não são persistidos nem reutilizados sem a nova prova. A geração das
+conexões é revalidada após o provider antes de devolver o catálogo. SSR e API
+continuam usando a mesma autorização de leitura privada.
+
+`review-interaction` é dono da intenção manual, filtros/cursores, cancelamento
+e continuidade de foco/scroll; Query é o único dono do dataset. A geração da
+view usa identidade e chave de navegação, sem efeitos que copiem o dataset ou
+ressincronizem valores derivados da URL. `review-views` apresenta lista/detalhe;
+`review-screen` compõe bootstrap e as views. A superfície pública remove exports
+sem consumidor. Polling, refetch por foco e leitura na hidratação seguem ausentes.
+
+[UI Holon](../../packages/ui/README.md) documenta as adaptações shadcn reais,
+Tailwind, menus Base UI e dialog/Sheet nativos. [Contrato e evidência visual](../planning/dashboard-milestone-seven-evidence.md)
+registra a referência, critérios e limites da validação. Nenhuma skill externa
+altera o runtime, a política de autorização ou os ADRs aceitos.

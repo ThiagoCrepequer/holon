@@ -7,24 +7,30 @@ export default class ReviewFixture extends WorkerEntrypoint<Cloudflare.Env> {
   override async fetch(request: Request) {
     const {
       subject,
-      count = 65,
+      count = 10,
+      offset = 0,
       findingCount = 0,
     } = (await request.json()) as {
       subject: number;
       count?: number;
+      offset?: number;
       findingCount?: number;
     };
     if (
       !Number.isSafeInteger(subject) ||
       subject < 1 ||
-      count > 100 ||
+      !Number.isSafeInteger(count) ||
+      count > 10 ||
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      offset + count > 100 ||
       count < 1 ||
       !Number.isSafeInteger(findingCount) ||
       findingCount < 0 ||
       findingCount > 200
     )
       return new Response(null, { status: 400 });
-    for (let number = 1; number <= count; number++) {
+    for (let number = offset + 1; number <= offset + count; number++) {
       const repositoryId = subject + 200000,
         headSha = "a".repeat(40),
         baseSha = "b".repeat(40),

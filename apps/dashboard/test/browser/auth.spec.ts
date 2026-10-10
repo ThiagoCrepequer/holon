@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { openPreferences } from "../support/browser-journey.js";
+
 const origin = "https://127.0.0.1:8795";
 
 for (const locale of ["en", "pt-BR"] as const) {
@@ -67,9 +69,7 @@ for (const locale of ["en", "pt-BR"] as const) {
     await expect(page).toHaveURL(`${origin}/?lang=${locale}`);
     await expect(page.locator("html")).toHaveAttribute("lang", locale);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      locale === "en"
-        ? "Your reviews, in context."
-        : "Suas reviews, em contexto.",
+      "Dashboard",
     );
     expect(completed?.headers()["content-security-policy"]).not.toMatch(
       /unsafe-inline|unsafe-eval/u,
@@ -78,12 +78,7 @@ for (const locale of ["en", "pt-BR"] as const) {
     expect(html).not.toMatch(
       /synthetic-browser-(?:auth-secret|access|refresh|client-secret)/u,
     );
-    const preferences = page.getByRole("button", {
-      name: locale === "en" ? "Preferences" : "Preferências",
-      exact: true,
-    });
-    await preferences.focus();
-    await page.keyboard.press("Enter");
+    const preferences = await openPreferences(page);
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(preferences).toBeFocused();

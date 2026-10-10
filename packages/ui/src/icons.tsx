@@ -1,6 +1,42 @@
-import { Settings2, X, ArrowRight } from "lucide-react";
+import {
+  Settings2,
+  X,
+  ArrowRight,
+  PanelsTopLeft,
+  GitPullRequest,
+  Users,
+  Mail,
+  GitBranch,
+  Menu,
+  ChevronRight,
+  ChevronDown,
+  ShieldCheck,
+  RefreshCw,
+  ArrowLeft,
+  FolderGit2,
+  Plus,
+  LogOut,
+} from "lucide-react";
 
-const icons = { settings: Settings2, close: X, arrowRight: ArrowRight };
+const icons = {
+  settings: Settings2,
+  close: X,
+  arrowRight: ArrowRight,
+  dashboard: PanelsTopLeft,
+  reviews: GitPullRequest,
+  members: Users,
+  mail: Mail,
+  github: GitBranch,
+  menu: Menu,
+  chevronRight: ChevronRight,
+  chevronDown: ChevronDown,
+  shield: ShieldCheck,
+  refresh: RefreshCw,
+  arrowLeft: ArrowLeft,
+  repository: FolderGit2,
+  plus: Plus,
+  signout: LogOut,
+};
 export function Icon({
   name,
   label,

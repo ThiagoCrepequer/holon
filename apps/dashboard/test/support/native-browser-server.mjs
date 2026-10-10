@@ -87,7 +87,12 @@ async function provider(request) {
     if (/^\/user\/installations\/\d+\/repositories$/.test(url.pathname))
       return Response.json({
         total_count: 1,
-        repositories: [{ id: grant.subject + 200000 }],
+        repositories: [
+          {
+            id: grant.subject + 200000,
+            full_name: `synthetic-${grant.subject}/reviews`,
+          },
+        ],
       });
     if (url.pathname === "/user/emails")
       return Response.json([

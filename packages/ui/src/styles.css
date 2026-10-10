@@ -18,106 +18,73 @@
     format("woff");
   font-display: swap;
 }
-body {
-  margin: 0;
-  background: var(--holon-bg-page);
-  color: var(--holon-text-primary);
-  font-family: var(--holon-font-sans);
-  line-height: var(--holon-leading-body);
+@theme inline {
+  --font-sans: var(--holon-font-sans);
+  --font-editorial: var(--holon-font-editorial);
+  --font-mono: var(--holon-font-mono);
+  --color-background: var(--holon-bg-page);
+  --color-foreground: var(--holon-text-primary);
+  --color-card: var(--holon-bg-surface);
+  --color-card-foreground: var(--holon-text-primary);
+  --color-raised: var(--holon-bg-raised);
+  --color-muted: var(--holon-bg-subtle);
+  --color-muted-foreground: var(--holon-text-muted);
+  --color-secondary: var(--holon-text-secondary);
+  --color-primary: var(--holon-action-bg);
+  --color-primary-foreground: var(--holon-action-fg);
+  --color-primary-hover: var(--holon-action-hover);
+  --color-primary-pressed: var(--holon-action-pressed);
+  --color-selected: var(--holon-selected-bg);
+  --color-selected-foreground: var(--holon-selected-fg);
+  --color-link: var(--holon-link);
+  --color-border: var(--holon-border-subtle);
+  --color-input: var(--holon-border-control);
+  --color-ring: var(--holon-focus);
+  --color-disabled: var(--holon-disabled-bg);
+  --color-disabled-foreground: var(--holon-disabled-fg);
+  --color-danger: var(--holon-danger-bg);
+  --color-danger-foreground: var(--holon-danger-fg);
+  --color-success: var(--holon-success-bg);
+  --color-success-foreground: var(--holon-success-fg);
+  --color-warning: var(--holon-warning-bg);
+  --color-warning-foreground: var(--holon-warning-fg);
+  --color-info: var(--holon-info-bg);
+  --color-info-foreground: var(--holon-info-fg);
+  --radius-md: var(--holon-radius-control);
+  --radius-lg: var(--holon-radius-card);
+  --radius-xl: var(--holon-radius-panel);
+  --text-body: var(--holon-type-body);
+  --text-small: var(--holon-type-small);
+  --text-caption: var(--holon-type-caption);
+  --text-title-sm: var(--holon-type-title-sm);
+  --text-title-md: var(--holon-type-title-md);
+  --text-page: var(--holon-type-title-lg);
+  --leading-body: var(--holon-leading-body);
+  --leading-compact: var(--holon-leading-compact);
+  --leading-title: var(--holon-leading-title);
+  --spacing-control: var(--holon-size-control-md);
+  --spacing-sidebar: var(--holon-size-sidebar);
+  --container-reading: var(--holon-layout-reading);
+  --container-content: var(--holon-layout-content);
+  --ease-holon: var(--holon-motion-ease);
 }
-.holon-button {
-  min-height: var(--holon-size-control-md);
-  padding: 0 var(--holon-space-4);
-  border: 1px solid transparent;
-  border-radius: var(--holon-radius-control);
-  font: inherit;
-  font-weight: var(--holon-weight-semibold);
-  cursor: pointer;
-  transition:
-    color var(--holon-motion-fast) var(--holon-motion-ease),
-    background-color var(--holon-motion-fast) var(--holon-motion-ease),
-    border-color var(--holon-motion-fast) var(--holon-motion-ease);
+@layer base {
+  body {
+    background: var(--holon-bg-page);
+    color: var(--holon-text-primary);
+    font-family: var(--holon-font-sans);
+    line-height: var(--holon-leading-body);
+  }
+  :where(button, select, a, input, pre, summary):focus-visible {
+    outline: 2px solid var(--holon-focus);
+    outline-offset: 3px;
+  }
+  a {
+    color: var(--holon-link);
+  }
 }
-.holon-button-primary {
-  background: var(--holon-action-bg);
-  color: var(--holon-action-fg);
-}
-.holon-button-primary:hover {
-  background: var(--holon-action-hover);
-}
-.holon-button-primary:active {
-  background: var(--holon-action-pressed);
-}
-.holon-button-secondary {
-  background: var(--holon-bg-surface);
-  color: var(--holon-text-primary);
-  border-color: var(--holon-border-control);
-}
-.holon-button-quiet {
-  background: transparent;
-  color: var(--holon-link);
-}
-.holon-button-quiet:hover,
-.holon-button-secondary:hover {
-  background: var(--holon-bg-subtle);
-}
-.holon-button-danger {
-  color: var(--holon-danger-fg);
-  background: var(--holon-danger-bg);
-}
-.holon-button:disabled {
-  background: var(--holon-disabled-bg);
-  color: var(--holon-disabled-fg);
-  cursor: default;
-}
-:where(button, select, a):focus-visible {
-  outline: 2px solid var(--holon-focus);
-  outline-offset: 3px;
-}
-.holon-brand {
-  width: 44px;
-  height: 44px;
-}
-.holon-field {
-  display: grid;
-  gap: var(--holon-space-2);
-  margin-top: var(--holon-space-6);
-}
-.holon-field label {
-  font-weight: var(--holon-weight-semibold);
-}
-.holon-field select {
-  min-height: var(--holon-size-control-md);
-  border: 1px solid var(--holon-border-control);
-  border-radius: var(--holon-radius-control);
-  padding: 0 var(--holon-space-3);
-  font: inherit;
-  color: var(--holon-text-primary);
-  background: var(--holon-bg-surface);
-}
-.holon-field select[aria-invalid="true"] {
-  border-color: var(--holon-danger-fg);
-}
-.holon-hint {
-  color: var(--holon-text-secondary);
-  font-size: var(--holon-type-small);
-}
-.holon-field-error {
-  color: var(--holon-danger-fg);
-  margin: 0;
-  font-size: var(--holon-type-small);
-}
+/* Native top-layer motion cannot be expressed by a static utility alone (ADR-0054). */
 .holon-dialog {
-  width: min(28rem, calc(100vw - 2.5rem));
-  max-height: calc(100dvh - 2.5rem);
-  margin: auto;
-  overflow: auto;
-  padding: var(--holon-space-6);
-  border: 1px solid var(--holon-border-subtle);
-  border-radius: var(--holon-radius-panel);
-  background: var(--holon-bg-raised);
-  color: var(--holon-text-primary);
-  box-shadow: var(--holon-shadow-float);
   opacity: 0;
   transform: translateY(var(--holon-motion-distance-small));
   transition:
@@ -131,6 +98,12 @@ body {
   transform: none;
   transition-duration: var(--holon-motion-slow);
 }
+.holon-sheet {
+  transform: translateX(var(--holon-motion-distance-small));
+}
+.holon-sheet[open] {
+  transform: none;
+}
 .holon-dialog::backdrop {
   background: var(--holon-overlay);
   opacity: 0;
@@ -143,16 +116,6 @@ body {
   opacity: 1;
   transition-duration: var(--holon-motion-slow);
 }
-.holon-dialog-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--holon-space-4);
-}
-.holon-dialog h2 {
-  font-size: var(--holon-type-title-sm);
-  margin: 0;
-}
 @starting-style {
   .holon-dialog[open]::backdrop {
     opacity: 0;
@@ -161,38 +124,16 @@ body {
     opacity: 0;
     transform: translateY(var(--holon-motion-distance-small));
   }
+  .holon-sheet[open] {
+    transform: translateX(var(--holon-motion-distance-small));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .holon-button,
   .holon-dialog,
   .holon-dialog[open],
   .holon-dialog::backdrop,
   .holon-dialog[open]::backdrop {
     transition: none;
-    transform: none;
-  }
-}
-
-.holon-panel {
-  border: var(--holon-border-thin) solid var(--holon-border-subtle);
-  border-radius: var(--holon-radius-panel);
-  padding: var(--holon-space-4);
-  background: var(--holon-bg-surface);
-  animation: holon-reveal var(--holon-motion-base) var(--holon-motion-ease);
-}
-@keyframes holon-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(var(--holon-motion-distance-small));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .holon-panel {
-    animation: none;
     transform: none;
   }
 }

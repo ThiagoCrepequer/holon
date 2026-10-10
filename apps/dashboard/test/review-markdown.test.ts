@@ -54,7 +54,7 @@ it("deep or excessive markup falls back to literal source with a single keyboard
     const html = renderToStaticMarkup(
       createElement(ReviewMarkdown, { children }),
     );
-    expect(html).toContain('<pre tabindex="0">');
+    expect(html).toMatch(/<pre[^>]*tabindex="0"[^>]*>/u);
     expect(html).not.toContain("<em>");
     expect(html).not.toContain("<blockquote>");
   }
