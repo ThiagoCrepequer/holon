@@ -102,6 +102,7 @@ test("200% native browser zoom preserves reflow, keyboard menus and modal focus"
           ).toEqual([]);
           await page.screenshot({
             path: `proof-results/m7-native-zoom-${locale}-${theme}-${path.startsWith("/reviews/") ? "detail" : path.slice(1)}.png`,
+            caret: "initial",
             fullPage: true,
           });
         }

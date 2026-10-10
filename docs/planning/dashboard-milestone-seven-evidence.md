@@ -86,6 +86,8 @@ A revisão iterativa incorporou as decisões do usuário: eliminar cabeçalhos e
 ações de workspace redundantes, concentrar criação no Sheet lateral e substituir
 sessões ativas por Preferências/Sair no menu do usuário. As capturas anteriores
 preservam o estado do HEAD `750c108`; o contrato acima descreve a composição final.
+O [índice visual](dashboard-seven-assets/README.md) reúne 32 comparações de
+conta/lista/detalhe/convite e os estados, controles e zoom complementares.
 
 | Observação anterior                                                                         | Correção e regressão observável                                                                                                                                             |
 | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -167,6 +169,22 @@ não certifica conformidade integral WCAG; teclado, leitura, foco e reflow têm
 assertions adicionais. Não inferir Core Web Vitals ou redução de CPU a partir
 somente das capturas.
 
+As capturas arquivadas são Chromium. A implementação instalada de Playwright
+1.63.0 injeta `<style>body {}</style>` sem nonce para sincronizar animações ao
+capturar WebKit; a CSP estrita corretamente bloqueia esse estilo da ferramenta.
+O teste mantém assertions de CSP/reflow/Axe/foco em todos os engines e captura
+somente Chromium, sem liberar inline styles nem excluir violações da aplicação.
+
+WebKit também expõe os guards internos de foco do Base UI como `role=button`
+sem nome para o cursor virtual do VoiceOver. O [mantenedor do motor de foco](https://github.com/floating-ui/floating-ui/issues/2823#issuecomment-2010715019)
+qualifica o alerta `aria-command-name` como falso positivo: o foco é imediatamente
+redirecionado, não permanece no guard. A versão 1.9.0 instalada usa essa mesma
+implementação. O teste aceita somente esse achado em WebKit após conferir **cada
+node**: span vazio, data attribute exato, tabindex/role e clipping/dimensões de
+1px. A regra continua ativa para qualquer controle real; outros achados falham.
+Menu/Escape/retorno de foco têm provas independentes. Isso não certifica VoiceOver
+físico, que continua no gate operacional #163.
+
 ## Contratos e orçamento
 
 Os contratos que chegam ao navegador usam Zod Mini 4.5.4, a API oficial funcional
@@ -203,6 +221,31 @@ pt-BR/en, claro/escuro, desktop/320px, logo/imagens bloqueadas e ausência de re
 externas. Recebimento real e cliente efetivamente usado são registrados
 separadamente, sem incluir endereço do destinatário, convite privado ou PII no
 repositório.
+
+### Ensaio autorizado em produção — 2026-10-10
+
+Foi atualizado somente o Worker existente `holon-email-delivery`, ambiente
+`production`, com autoridade privada `holon-dashboard#EmailDeliveryAuthority`,
+remetente restrito e filas existentes. Não houve deploy do novo layout do dashboard
+nesta etapa. Pré-flight e pós-flight conferiram bindings, modo de recuperação ativo,
+GitHub App ID confirmado, private ingress e integridade do D1 de identidade.
+
+- Código limpo congelado: `2137359d564d1a5ae840f697a574a50cacfc241b`.
+- Bundle SHA-256: `c478ab29336ec6ef90dae6396df0e872482a02551a524ecd7667ed120fc6e36c`.
+- Versão ativa a 100%: `4f4f1811-0ae0-46e5-83f8-2236210c1ab1`, publicada em
+  `2026-10-10T03:51:19Z`.
+- Fixture restrita: um owner sintético sem OAuth/session, um workspace vazio e
+  dois convites pt-BR/en destinados somente ao participante autorizado.
+- Cron → RPC → Queue → provedor → receipt: ambas as entregas `completed`, uma
+  tentativa registrada e uma aceitação cada. Na leitura `2026-10-10T03:54:10Z`,
+  após replay dos mesmos dois job references, contagens permaneceram em **1/1**;
+  os convites continuaram pendentes. Não houve novo envio nem novo convite.
+
+Aceitação pelo provedor não comprova entrega nem renderização no Gmail. A
+confirmação humana no Gmail do navegador e a limpeza scoped da fixture ainda
+serão registradas abaixo. Nenhum email, link de convite, token ou conteúdo
+produtivo foi versionado. A exceção operacional autorizada para Email content
+preview continua no runbook do milestone anterior; não foi desativada neste ensaio.
 
 ## Fontes verificadas em 2026-10-10
 

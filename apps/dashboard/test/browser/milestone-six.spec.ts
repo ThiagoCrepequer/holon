@@ -40,6 +40,7 @@ for (const locale of ["en", "pt-BR"]) {
       });
       await expect(create).toHaveAttribute("aria-disabled", "true");
       await page.keyboard.press("Escape");
+      await expect(page.getByRole("menu")).toHaveCount(0);
       release.resolve();
       await openCreateWorkspace(page);
       await expect(

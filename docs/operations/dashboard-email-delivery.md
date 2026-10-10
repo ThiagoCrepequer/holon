@@ -4,14 +4,16 @@ kind: runbook
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 ---
 
 # Entrega recuperável de convites
 
-Este documento descreve o código de Dashboard 4 (#150–#153), não um deploy.
-Nenhum recurso, DNS, migration remota ou email real foi operado nesta entrega.
-O estado implantado datado permanece no [runbook de ambientes](dashboard-environments-and-recovery.md).
+Este documento descreve o protocolo de Dashboard 4 (#150–#153) e o template
+de marca de Dashboard 7 (#193). O estado implantado datado permanece no
+[runbook de ambientes](dashboard-environments-and-recovery.md); o
+[ensaio do template novo](../planning/dashboard-milestone-seven-evidence.md#email)
+separa renderização local, aceitação do provedor e confirmação no cliente real.
 
 ## Autoridade e transporte
 
@@ -92,8 +94,11 @@ de email reais nem aprovação editorial humana presumida.
 
 ## Ativação autorizada
 
-Os manifests mantêm `EMAIL_SEND_ENABLED=false` e remetente sintético restrito.
-O worker não reserva claims nesse estado. Antes de habilitar, o operador da
+Os defaults locais mantêm `EMAIL_SEND_ENABLED=false` e remetente sintético
+restrito. O ambiente `production` tem envio habilitado e remetente aprovado,
+conforme a operação autorizada registrada no runbook de ambientes.
+O worker não reserva claims quando envio está desabilitado. Antes de habilitar
+um ambiente, o operador da
 `core-team` precisa de autorização separada e deve:
 
 1. Confirmar ambiente, SHA, disponibilidade do Email Sending beta, plano/quota,

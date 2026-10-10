@@ -264,24 +264,64 @@ for (const locale of ["en", "pt-BR"]) {
         reflow.scroll,
         `${name}: ${JSON.stringify(reflow)}`,
       ).toBeLessThanOrEqual(reflow.width);
+      const audit = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+      const voiceOverGuards =
+        info.project.name === "webkit"
+          ? audit.violations.find(
+              (finding) => finding.id === "aria-command-name",
+            )
+          : undefined;
+      if (voiceOverGuards) {
+        // Base UI's transient VoiceOver guards immediately redirect focus.
+        // Upstream qualification: floating-ui/floating-ui#2823, atomiks response.
+        // Do not suppress the rule for any real command or another engine.
+        for (const node of voiceOverGuards.nodes) {
+          expect(node.target).toHaveLength(1);
+          const selector = node.target[0];
+          if (typeof selector !== "string")
+            throw new Error("unexpected_axe_target");
+          expect(
+            await page.locator(selector).evaluate((element) => {
+              const style = getComputedStyle(element);
+              return (
+                element.matches(
+                  'span[data-base-ui-focus-guard=""][role="button"][tabindex="0"]',
+                ) &&
+                element.textContent === "" &&
+                style.clipPath === "inset(50%)" &&
+                style.width === "1px" &&
+                style.height === "1px"
+              );
+            }),
+          ).toBe(true);
+        }
+      }
       expect(
-        (
-          await new AxeBuilder({ page })
-            .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-            .analyze()
-        ).violations,
+        audit.violations.filter((finding) => finding !== voiceOverGuards),
       ).toEqual([]);
+      // Playwright's WebKit screenshot flush injects an unnonced `body {}` style.
+      // Keep strict CSP assertions in every engine; archive the Chromium renders.
+      if (info.project.name === "chromium")
+        await page.screenshot({
+          path: `proof-results/m7-${info.project.name}-${locale}-${name}.png`,
+          caret: "initial",
+          fullPage:
+            !(await dialog.count()) &&
+            !(await page.getByRole("menu").isVisible()),
+        });
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
       expect(
         await page.evaluate(() =>
           Number(document.documentElement.dataset.holonCspFailures ?? "0"),
         ),
       ).toBe(0);
-      await page.screenshot({
-        path: `proof-results/m7-${info.project.name}-${locale}-${name}.png`,
-        fullPage:
-          !(await dialog.count()) &&
-          !(await page.getByRole("menu").isVisible()),
-      });
     };
     for (const theme of ["light", "dark"]) {
       for (const viewport of [
@@ -369,6 +409,10 @@ for (const locale of ["en", "pt-BR"]) {
         );
         await page.keyboard.press("Escape");
         await expect(preferences).toBeFocused();
+        await page.goto(
+          `/invitations/synthetic-unknown?lang=${locale}&theme=${theme}`,
+        );
+        await capture(`invitation-${suffix}`);
       }
     }
     await page.setViewportSize({ width: 1280, height: 900 });

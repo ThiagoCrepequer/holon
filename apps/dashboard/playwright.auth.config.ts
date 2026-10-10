@@ -27,7 +27,11 @@ export default defineConfig({
   },
   outputDir: "proof-results/auth-browser",
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: "native-zoom.spec.ts",
+    },
     {
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
@@ -37,6 +41,12 @@ export default defineConfig({
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
       testIgnore: "native-zoom.spec.ts",
+    },
+    {
+      name: "chromium-native-zoom",
+      testMatch: "native-zoom.spec.ts",
+      // Native zoom uses a real window, without device emulation defaults.
+      use: { browserName: "chromium", viewport: null },
     },
   ],
   webServer: {
