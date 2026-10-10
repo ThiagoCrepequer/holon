@@ -449,14 +449,16 @@ it.each(["en", "pt-BR"])(
       base.EMAIL_FROM,
     );
     expect(message.html).toContain("&lt;img");
-    expect(message.html).not.toContain("<img");
+    expect(message.html?.match(/<img\b/g)).toHaveLength(1);
+    expect(message.html).not.toContain("<img src=x");
     expect(message.html).not.toContain("<script");
     expect(message.text).toContain(context.workspaceName);
     expect(message.html).toContain(
       "https://dashboard.example.invalid/invitations/invite_safe",
     );
     expect(message).not.toHaveProperty("headers");
-    expect(message).not.toHaveProperty("attachments");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments?.[0]?.type).toBe("image/png");
     for (const origin of [
       "http://dashboard.invalid",
       "https://evil.invalid/path",
@@ -485,6 +487,30 @@ it.each(["en", "pt-BR"])(
     ).toThrow();
   },
 );
+
+it("invitation embeds the official logo without a remote image request and retains a readable text alternative", () => {
+  const message = invitationMessage(
+    {
+      jobId: "invite_brand",
+      recipient: "target@example.invalid",
+      locale: "pt-BR",
+      workspaceName: "Synthetic team",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    },
+    base.APP_ORIGIN,
+    base.EMAIL_FROM,
+  );
+  expect(message.html).toContain('src="cid:holon-semente"');
+  expect(message.html).toContain('alt="Holon"');
+  expect(message.attachments).toHaveLength(1);
+  expect(message.attachments?.[0]).toMatchObject({
+    disposition: "inline",
+    contentId: "holon-semente",
+    type: "image/png",
+  });
+  expect(message.text).toContain("Abrir convite:");
+  expect(message.html).not.toMatch(/<img[^>]+src="https?:/);
+});
 it("unrecognized or malformed provider acknowledgement remains unknown", async () => {
   const message = invitationMessage(
     {

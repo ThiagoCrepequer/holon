@@ -74,8 +74,11 @@ pode ser registrado, seu efeito continua contabilizado; recuperação segue Q37.
 ## Templates e experiência
 
 HTML com tabelas e estilos inline e texto simples em `pt-BR`/`en`; sem imagem
-remota, tracking, CSS/browser do dashboard, anexos ou headers customizados.
-Cor, papel e tinta seguem os tokens Holon; fontes usam fallback local de email.
+remota, tracking, CSS/browser do dashboard ou headers customizados. O único attachment é a
+Semente oficial como PNG inline CID, sem fetch remoto; alt e assinatura textual
+preservam identidade com imagens bloqueadas. Cores/asset são gerados da fonte
+canônica por `pnpm brand:generate`, conferidos por `pnpm brand:check`.
+Cor, papel e tinta seguem os tokens Holon, com fallback claro e regra de dark mode; fontes usam fallback local de email.
 Nome de workspace é escapado em HTML, destinatário/remetente validados; assunto
 é fixo. Links usam exclusivamente `APP_ORIGIN` HTTPS sem path/credenciais e o
 ID validado. Idioma é escolhido explicitamente no convite pelo locale ativo do
