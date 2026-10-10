@@ -220,11 +220,13 @@ it.each([
   "missing_final",
   "invalid_suggestion",
   "missing_investigations",
+  "tool_protocol_invalid",
 ] as const)(
   "preserves the structured Think prompt outcome: %s",
   async (scenario) => {
     const unevidenced = scenario === "unevidenced";
-    const missingFinal = scenario === "missing_final";
+    const protocolInvalid = scenario === "tool_protocol_invalid";
+    const missingFinal = scenario === "missing_final" || protocolInvalid;
     const schemaInvalid =
       scenario === "invalid_suggestion" ||
       scenario === "missing_investigations";
@@ -277,9 +279,11 @@ it.each([
               });
             controller.enqueue({
               type: "finish",
-              finishReason: missingFinal
-                ? { unified: "stop", raw: "stop" }
-                : { unified: "tool-calls", raw: "tool_calls" },
+              finishReason: protocolInvalid
+                ? { unified: "other", raw: "error" }
+                : missingFinal
+                  ? { unified: "stop", raw: "stop" }
+                  : { unified: "tool-calls", raw: "tool_calls" },
               usage: {
                 inputTokens: {
                   total: 10,
@@ -301,6 +305,7 @@ it.each([
       "missing_final",
       "invalid_suggestion",
       "missing_investigations",
+      "tool_protocol_invalid",
     ].indexOf(scenario);
     const agent = await getAgentByName(
       env.REVIEW_AGENTS,
@@ -317,7 +322,7 @@ it.each([
           prompt: "Review this changed line.",
           runId,
           shardIndex,
-          totalShards: 5,
+          totalShards: 6,
         });
       },
     );
@@ -343,25 +348,32 @@ it.each([
           }
         : {
             status: "complete",
-            output: unevidenced
-              ? {
-                  findings: [],
-                  isDegraded: true,
-                  outputLimitations: ["evidence_rejected"],
-                }
-              : { findings: [], summary: "No verified regressions." },
+            output: {
+              evidence: [],
+              output: unevidenced
+                ? {
+                    findings: [],
+                    isDegraded: true,
+                    outputLimitations: ["evidence_rejected"],
+                  }
+                : { findings: [], summary: "No verified regressions." },
+            },
           },
     );
     if (missingFinal || schemaInvalid) {
       await evictDurableObject(agent);
       expect(await agent.getReviewFailure()).toBe(
-        schemaInvalid ? "model_schema_invalid" : "model_output_missing",
+        protocolInvalid
+          ? "model_tool_protocol_invalid"
+          : schemaInvalid
+            ? "model_schema_invalid"
+            : "model_output_missing",
       );
     }
     expect(model.doStreamCalls).toHaveLength(1);
     expect(
       await ledger.reserveModelGeneration(runId, {
-        shardCount: 5,
+        shardCount: 6,
         shardIndex,
         phase: "investigation",
         inputBytes: 1,
@@ -372,7 +384,7 @@ it.each([
       reason: "shard_output_tokens",
       consumed: 10,
       requested: 24_000,
-      limit: 24_000,
+      limit: 20_000,
     });
   },
   15_000,
@@ -515,7 +527,7 @@ it("emits allowlisted step telemetry without payload content and clarifies final
         | "usage"
       >;
 
-      instance.onStepEnd(contextFixture as StepContextType);
+      await instance.onStepEnd(contextFixture as StepContextType);
 
       expect(logSpy).toHaveBeenCalledTimes(1);
       const rawLog = logSpy.mock.calls[0]?.[0];
@@ -545,7 +557,7 @@ it("emits allowlisted step telemetry without payload content and clarifies final
 
       // Verify unallowlisted finishReason maps to "unknown" and invalid token counts are omitted
       logSpy.mockClear();
-      instance.onStepEnd({
+      await instance.onStepEnd({
         stepNumber: 3,
         finishReason: "custom-unsupported-reason",
         toolCalls: [],

@@ -7,15 +7,16 @@
     "dev": "react-router dev --port 8794 --host 127.0.0.1",
     "build": "pnpm i18n:check && react-router build && node scripts/check-bundle.mjs && wrangler deploy --dry-run --config build/server/wrangler.json",
     "typecheck": "wrangler types --check && pnpm i18n:check && react-router typegen && tsc --noEmit",
-    "test": "pnpm i18n:check && vitest run --config vitest.config.ts && pnpm test:workers && pnpm test:browser",
-    "test:coverage": "pnpm i18n:check && vitest run --config vitest.config.ts --coverage && pnpm test:coverage:workers && pnpm test:browser",
+    "test": "pnpm test:budgets && pnpm i18n:check && vitest run --config vitest.config.ts && pnpm test:workers && pnpm test:browser",
+    "test:coverage": "pnpm test:budgets && pnpm i18n:check && vitest run --config vitest.config.ts --coverage && pnpm test:coverage:workers && pnpm test:browser",
     "test:browser": "pnpm build && pnpm build:test-core && playwright test && playwright test --config playwright.auth.config.ts",
     "serve:test": "wrangler dev --config build/server/wrangler.json --local --port 8794 --ip 127.0.0.1",
     "i18n:extract": "lingui extract --clean --workers 1",
     "i18n:check": "lingui check sync && lingui check missing --mode catalog && lingui compile --strict --typescript --workers 1 && node scripts/check-i18n-gate.mjs",
     "test:workers": "vitest run --config vitest.worker.config.ts",
     "test:coverage:workers": "vitest run --config vitest.worker.config.ts --coverage",
-    "build:test-core": "wrangler deploy --dry-run --config ../control-plane/test/support/core-read.wrangler.jsonc --outdir ../../../dashboard/build/test-core"
+    "build:test-core": "wrangler deploy --dry-run --config ../control-plane/test/support/core-read.wrangler.jsonc --outdir ../../../dashboard/build/test-core",
+    "test:budgets": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"scripts/performance-budget.mjs\" scripts/performance-budget.test.mjs"
   },
   "dependencies": {
     "@holon/application": "workspace:*",
@@ -27,6 +28,7 @@
     "@lingui/react": "6.9.0",
     "@tanstack/react-query": "5.104.1",
     "hono": "catalog:",
+    "marked": "18.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "8.4.0"
@@ -51,6 +53,7 @@
     "typescript": "catalog:",
     "vite": "8.2.2",
     "vitest": "catalog:",
+    "web-vitals": "6.2.3",
     "wrangler": "4.147.0"
   }
 }

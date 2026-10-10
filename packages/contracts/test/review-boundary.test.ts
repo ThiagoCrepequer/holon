@@ -90,12 +90,13 @@ it.each([undefined, null, {}, "none"])(
 it.each(["85%", "0.9garbage", "2", "-1", "Infinity"])(
   "does not inflate confidence from %s",
   (confidence) => {
-    expect(() =>
-      parseModelReviewTransport({
-        summary: "Review completed",
-        findings: [{ ...finding, confidence }],
-      }),
-    ).toThrow();
+    const output = parseModelReviewTransport({
+      summary: "Review completed",
+      findings: [{ ...finding, confidence }],
+    });
+    expect(output.findings).toEqual([]);
+    expect(output.isDegraded).toBe(true);
+    expect(output.outputLimitations).toContain("candidate_rejected");
   },
 );
 it("accepts explicit silence and an exact numeric confidence representation", () => {

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 import { dashboardLocaleSchema } from "./dashboard.js";
 
@@ -16,9 +16,9 @@ function isSupportedTimezone(value: string): boolean {
 /** IANA region/alias names and UTC; numeric offsets are not personal timezones. */
 export const dashboardTimezoneSchema = z
   .string()
-  .min(1)
-  .max(100)
-  .refine(isSupportedTimezone);
+  .check(z.minLength(1))
+  .check(z.maxLength(100))
+  .check(z.refine(isSupportedTimezone));
 export const updatePreferencesInputSchema = z.strictObject({
   locale: dashboardLocaleSchema,
   timezone: dashboardTimezoneSchema,

@@ -2,6 +2,7 @@ import type { ChangedSymbol, ChangedSymbolKind } from "@holon/contracts";
 import { parsePatch } from "diff";
 
 import { changedHeadDeclarations } from "./changed-head-declarations.js";
+import { extractModuleExports } from "./module-exports.js";
 
 interface ExtractedRawSymbol {
   readonly isExported: boolean;
@@ -260,17 +261,24 @@ export function extractChangedSymbols(
       }
     }
 
+    const head = headByPath.get(file.path);
+    const exports =
+      head === undefined ? undefined : extractModuleExports(head, file.path);
     for (const [, removed] of removedSymbols.entries()) {
+      const preservedLine = removed.isExported
+        ? removed.kind === "interface" || removed.kind === "type"
+          ? exports?.types.get(removed.name)
+          : exports?.values.get(removed.name)
+        : undefined;
       changedSymbols.push({
-        change: "deleted",
+        change: preservedLine === undefined ? "deleted" : "modified",
         isExported: removed.isExported,
         kind: removed.kind,
-        line: removed.line,
+        line: preservedLine ?? removed.line,
         name: removed.name,
         path: file.path,
       });
     }
-    const head = headByPath.get(file.path);
     if (head !== undefined) {
       for (const symbol of changedHeadDeclarations(
         file.path,

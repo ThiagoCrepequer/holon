@@ -1,5 +1,12 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+
+import {
+  accountTrigger,
+  chooseWorkspace,
+  openCreateWorkspace,
+  workspaceId,
+} from "../support/browser-journey.js";
 const origin = "https://127.0.0.1:8795";
 test("workspace controls wait for hydration before accepting the first click", async ({
   page,
@@ -27,7 +34,7 @@ test("workspace controls wait for hydration before accepting the first click", a
     await coldPage.goto(origin + "/", { waitUntil: "commit" });
     await blocked.promise;
     const manage = coldPage.getByRole("button", {
-      name: "Manage workspaces",
+      name: "Workspace",
       exact: true,
     });
     await expect(manage).toBeVisible();
@@ -35,6 +42,8 @@ test("workspace controls wait for hydration before accepting the first click", a
     scripts.resolve();
     await expect(manage).toBeEnabled();
     await manage.click();
+    await expect(coldPage.getByRole("menu")).toBeVisible();
+    await openCreateWorkspace(coldPage);
     await expect(coldPage.getByLabel("Team name")).toBeVisible();
   } finally {
     scripts.resolve();
@@ -75,18 +84,12 @@ async function signIn(page: Page, subject: number, locale = "en") {
       exact: true,
     })
     .click();
-  await expect(
-    page.getByRole("button", { name: /^(Active sessions|Sessões ativas)$/ }),
-  ).toBeVisible();
+  await expect(accountTrigger(page)).toBeVisible();
   // OAuth navigates to an SSR document before its client scripts finish loading.
   await page.waitForLoadState("load");
 }
 async function createTeam(page: Page, name: string, portuguese = false) {
-  await page
-    .getByRole("button", {
-      name: portuguese ? "Gerenciar workspaces" : "Manage workspaces",
-    })
-    .click();
+  await openCreateWorkspace(page);
   await expect(
     page.getByLabel(portuguese ? "Nome da equipe" : "Team name"),
   ).toBeVisible();
@@ -100,9 +103,7 @@ async function createTeam(page: Page, name: string, portuguese = false) {
   await expect(page.getByLabel("Workspace", { exact: true })).toContainText(
     name,
   );
-  await page
-    .getByLabel("Workspace", { exact: true })
-    .selectOption({ label: name });
+  await chooseWorkspace(page, { label: name });
 }
 test("owner records invitation and a verified non-primary recipient accepts through the real API", async ({
   page,
@@ -168,23 +169,25 @@ test("connection requires native reauth, shows live state and receives private R
   await expect(page.getByLabel("Workspace", { exact: true })).toContainText(
     "Synthetic GitHub workspace",
   );
-  await page
-    .getByLabel("Workspace", { exact: true })
-    .selectOption({ label: "Synthetic GitHub workspace" });
+  await chooseWorkspace(page, { label: "Synthetic GitHub workspace" });
   await page.getByRole("button", { name: "Refresh connections" }).click();
-  await expect(page.getByRole("listitem")).toContainText(
-    `${subject + 100000}: Active`,
-  );
-  const workspace = await page
-    .getByLabel("Workspace", { exact: true })
-    .inputValue();
+  await expect(
+    page
+      .getByRole("listitem")
+      .filter({ hasText: `GitHub #${subject + 100000}` }),
+  ).toContainText("Active");
+  const workspace = await workspaceId(page);
   const scope = await page.request.get(
     `/api/workspaces/${workspace}/github/repositories`,
   );
   expect(scope.status()).toBe(200);
   expect(await scope.json()).toEqual({
     repositories: [
-      { installationId: subject + 100000, repositoryId: subject + 200000 },
+      {
+        installationId: subject + 100000,
+        repositoryId: subject + 200000,
+        fullName: `synthetic-${subject}/reviews`,
+      },
     ],
   });
   expect(
@@ -256,6 +259,14 @@ for (const locale of ["en", "pt-BR"])
     await signIn(page, subject, locale);
     await createTeam(page, "Synthetic delivery", locale === "pt-BR");
     const pt = locale === "pt-BR";
+    await page
+      .getByText(
+        pt
+          ? "Como funciona a entrega dos convites"
+          : "How invitation delivery works",
+        { exact: true },
+      )
+      .click();
     await expect(
       page.getByText(
         pt

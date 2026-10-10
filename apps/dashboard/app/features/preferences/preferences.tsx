@@ -51,6 +51,8 @@ export function PreferencesForm({
   useEffect(() => {
     // ICU catalogs can differ between Workerd and browsers: enumerate after hydration.
     setDeviceZones(Intl.supportedValuesOf("timeZone"));
+  }, []);
+  useEffect(() => {
     if (preferences.timezone === null) setTimezone(inferDeviceTimezone());
   }, [preferences.timezone]);
   const zones = Array.from(new Set(["UTC", timezone, ...deviceZones])).map(
@@ -59,6 +61,7 @@ export function PreferencesForm({
   const savedAccount = sessionId !== null && csrf !== null;
   return (
     <form
+      className="grid gap-5"
       onSubmit={async (event) => {
         event.preventDefault();
         if (!savedAccount || request.current) return;

@@ -5,7 +5,10 @@ import type {
 } from "@holon/contracts";
 import { parsePatch } from "diff";
 
-import { parseRepositoryModule } from "./repository-module.js";
+import {
+  extractModuleExports,
+  type PreservedModuleExports,
+} from "./module-exports.js";
 
 const sqlDestructivePatterns: readonly {
   readonly description: string;
@@ -48,164 +51,6 @@ function isContractBoundary(
   return true;
 }
 
-interface PreservedModuleExports {
-  readonly types: Set<string>;
-  readonly values: Set<string>;
-}
-
-function extractExportsFromAst(
-  source: string,
-  filePath: string,
-): PreservedModuleExports | undefined {
-  const ast = parseRepositoryModule(source, filePath);
-  if (!ast) return undefined;
-
-  const localTypeDeclarations = new Set<string>();
-  const localValueDeclarations = new Set<string>();
-
-  for (const rawStmt of ast.program.body) {
-    const isNamedExport = rawStmt.type === "ExportNamedDeclaration";
-    const isDefaultExport = rawStmt.type === "ExportDefaultDeclaration";
-    const stmt =
-      (isNamedExport || isDefaultExport) && "declaration" in rawStmt
-        ? rawStmt.declaration
-        : rawStmt;
-    if (!stmt) continue;
-
-    const isAmbient =
-      ("declare" in stmt && (stmt as { declare?: boolean }).declare) ||
-      (isNamedExport &&
-        (("declare" in rawStmt && (rawStmt as { declare?: boolean }).declare) ||
-          rawStmt.exportKind === "type"));
-
-    if (
-      stmt.type === "TSInterfaceDeclaration" ||
-      stmt.type === "TSTypeAliasDeclaration"
-    ) {
-      if (stmt.id?.name) localTypeDeclarations.add(stmt.id.name);
-    } else if (stmt.type === "ClassDeclaration") {
-      if (stmt.id?.name) {
-        localTypeDeclarations.add(stmt.id.name);
-        if (!isAmbient) {
-          localValueDeclarations.add(stmt.id.name);
-        }
-      }
-    } else if (stmt.type === "FunctionDeclaration") {
-      if (stmt.id?.name && !isAmbient) {
-        localValueDeclarations.add(stmt.id.name);
-      }
-    } else if (stmt.type === "VariableDeclaration") {
-      if (!isAmbient) {
-        for (const d of stmt.declarations) {
-          if (d.id.type === "Identifier") localValueDeclarations.add(d.id.name);
-        }
-      }
-    } else if (stmt.type === "TSEnumDeclaration") {
-      if (stmt.id?.name) {
-        localTypeDeclarations.add(stmt.id.name);
-        if (!isAmbient) {
-          localValueDeclarations.add(stmt.id.name);
-        }
-      }
-    }
-  }
-
-  const types = new Set<string>();
-  const values = new Set<string>();
-
-  for (const stmt of ast.program.body) {
-    if (stmt.type === "ExportNamedDeclaration") {
-      const isStatementTypeOnly = stmt.exportKind === "type";
-      const isExternalReexport =
-        stmt.source !== null && stmt.source !== undefined;
-
-      for (const spec of stmt.specifiers) {
-        if (spec.type === "ExportSpecifier") {
-          const isSpecTypeOnly = spec.exportKind === "type";
-          const localName =
-            spec.local.type === "Identifier"
-              ? spec.local.name
-              : spec.local.value;
-          const exportedName =
-            spec.exported.type === "Identifier"
-              ? spec.exported.name
-              : spec.exported.value;
-
-          if (isStatementTypeOnly || isSpecTypeOnly) {
-            if (isExternalReexport || localTypeDeclarations.has(localName)) {
-              types.add(exportedName);
-            }
-          } else if (isExternalReexport) {
-            values.add(exportedName);
-            types.add(exportedName);
-          } else {
-            if (localValueDeclarations.has(localName)) {
-              values.add(exportedName);
-            }
-            if (localTypeDeclarations.has(localName)) {
-              types.add(exportedName);
-            }
-          }
-        }
-      }
-
-      if (stmt.declaration) {
-        const decl = stmt.declaration;
-        const isAmbient = Boolean(
-          ("declare" in decl && (decl as { declare?: boolean }).declare) ||
-          ("declare" in stmt && (stmt as { declare?: boolean }).declare),
-        );
-
-        if (decl.type === "ClassDeclaration") {
-          if (decl.id?.name) {
-            types.add(decl.id.name);
-            if (!isAmbient && !isStatementTypeOnly) {
-              values.add(decl.id.name);
-            }
-          }
-        } else if (
-          decl.type === "FunctionDeclaration" ||
-          decl.type === "TSDeclareFunction"
-        ) {
-          if (decl.id?.name) {
-            if (
-              !isAmbient &&
-              !isStatementTypeOnly &&
-              decl.type === "FunctionDeclaration"
-            ) {
-              values.add(decl.id.name);
-            }
-          }
-        } else if (decl.type === "VariableDeclaration") {
-          if (!isAmbient && !isStatementTypeOnly) {
-            for (const d of decl.declarations) {
-              if (d.id.type === "Identifier") {
-                values.add(d.id.name);
-              }
-            }
-          }
-        } else if (
-          decl.type === "TSInterfaceDeclaration" ||
-          decl.type === "TSTypeAliasDeclaration"
-        ) {
-          if (decl.id?.name) {
-            types.add(decl.id.name);
-          }
-        } else if (decl.type === "TSEnumDeclaration") {
-          if (decl.id?.name) {
-            types.add(decl.id.name);
-            if (!isAmbient && !isStatementTypeOnly) {
-              values.add(decl.id.name);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return { types, values };
-}
-
 export function detectContractBreaks(
   files: readonly { readonly patch: string; readonly path: string }[],
   changedSymbols: readonly ChangedSymbol[],
@@ -241,7 +86,7 @@ export function detectContractBreaks(
       if (source !== undefined) {
         let exports = parsedExportsByPath.get(symbol.path);
         if (!parsedExportsByPath.has(symbol.path)) {
-          exports = extractExportsFromAst(source, symbol.path);
+          exports = extractModuleExports(source, symbol.path);
           parsedExportsByPath.set(symbol.path, exports);
         }
         if (exports !== undefined) {

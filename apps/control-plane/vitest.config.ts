@@ -26,6 +26,7 @@ export default defineConfig(async () => ({
             compatibilityDate: "2026-08-29",
             modules: true,
             scriptPath: "./dist/projection/projection-worker.js",
+            bindings: { DASHBOARD_RECOVERY_MODE: "active" },
             d1Databases: { PROJECTION_DB: "core-projection-test" },
           },
           {
@@ -41,6 +42,8 @@ export default defineConfig(async () => ({
             script: `
               import { WorkerEntrypoint, RpcTarget } from "cloudflare:workers";
               const reads = new Map();
+              const evidenceFailures = new Map();
+              const evidenceAttempts = new Map();
               const content = "if (value !== null) return value.id;";
               class ReadOperation extends RpcTarget {
                 result() { return { content, truncated: false }; }
@@ -48,6 +51,8 @@ export default defineConfig(async () => ({
                 [Symbol.dispose]() {}
               }
               export default class RepositoryExecutorCurrent extends WorkerEntrypoint {
+                configureEvidenceFailures(runId, count) { evidenceFailures.set(runId, count); evidenceAttempts.set(runId, 0); }
+                evidenceReadAttempts(runId) { return evidenceAttempts.get(runId) ?? 0; }
                 cleanup() {}
                 hasContext() { return false; }
                 loadContext() { throw new Error("unused"); }
@@ -59,6 +64,11 @@ export default defineConfig(async () => ({
                   return new ReadOperation();
                 }
                 async getEvidencePack(runId) {
+                  evidenceAttempts.set(runId, (evidenceAttempts.get(runId) ?? 0) + 1);
+                  if ((evidenceFailures.get(runId) ?? 0) > 0) {
+                    evidenceFailures.set(runId, evidenceFailures.get(runId) - 1);
+                    throw new Error("HOLON_SANDBOX_TRANSIENT:timed-out");
+                  }
                   if (!reads.has(runId)) return [];
                   const hash = async text => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), byte => byte.toString(16).padStart(2,"0")).join("");
                   const identity = { digest: await hash(content), runId, headSha: runId.split(":head:")[1].split(":base:")[0], path: "src/caller.ts", startLine: 1, endLine: 1, truncated: false };

@@ -76,6 +76,43 @@ function sandbox(
 }
 
 describe("structural repository inventory", () => {
+  it("explains omitted oversized modules without reporting repository paths or contents", async () => {
+    const fake = sandbox(
+      { exitCode: 1, stdout: "", truncated: false },
+      { stdout: `100644 blob ${"a".repeat(40)} 64001\tsrc/service.ts\0` },
+    );
+    const observe = vi.fn();
+    const result = await collectStructuralRepositoryInventory(
+      fake.port,
+      modifiedExportPatch,
+      [],
+      observe,
+    );
+    expect(result.truncated).toBe(true);
+    expect(fake.readFile).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledWith({
+      selectedFiles: 0,
+      readBytes: 0,
+      truncated: true,
+      limitationCodes: "file_bytes",
+    });
+    expect(JSON.stringify(observe.mock.calls)).not.toContain("src/service.ts");
+  });
+  it("covers 128 small edited modules within the unchanged byte budget", async () => {
+    const fake = sandbox({ exitCode: 1, stdout: "", truncated: false });
+    fake.readFile.mockResolvedValue(
+      "export function loadUser(id: number) { return id; }",
+    );
+    const diff = Array.from({ length: 128 }, (_, index) =>
+      modifiedExportPatch.replaceAll(
+        "src/service.ts",
+        `src/module-${index.toString().padStart(3, "0")}.ts`,
+      ),
+    ).join("\n");
+    const result = await collectStructuralRepositoryInventory(fake.port, diff);
+    expect(result.files).toHaveLength(128);
+    expect(result.truncated).toBe(false);
+  });
   it.each(["$load", "load$", "área", "用户"])(
     "discovers consumers of %s with an identifier-safe search",
     async (name) => {
@@ -302,9 +339,9 @@ describe("structural repository inventory", () => {
     });
   });
 
-  it("marks truncated when 100 changed files exhaust candidate quota without downstream search", async () => {
-    // Generate 100 changed files diff
-    const manyPatches = Array.from({ length: 100 }, (_, i) =>
+  it("marks truncated when 256 changed files exhaust candidate quota without downstream search", async () => {
+    // Saturate the bounded changed-file quota before discovering consumers.
+    const manyPatches = Array.from({ length: 256 }, (_, i) =>
       [
         `diff --git a/src/file${i}.ts b/src/file${i}.ts`,
         `--- a/src/file${i}.ts`,
@@ -330,7 +367,7 @@ describe("structural repository inventory", () => {
       manyPatches,
     );
 
-    expect(inventory.files).toHaveLength(100);
+    expect(inventory.files).toHaveLength(256);
     expect(inventory.truncated).toBe(true);
     // rg should not be called because remainingQuota is 0
     expect(fake.run).not.toHaveBeenCalledWith(
@@ -441,11 +478,11 @@ describe("structural repository inventory", () => {
     ]);
   });
 
-  it("prioritizes changed source inside the shared 100-file limit", async () => {
+  it("prioritizes changed source inside the shared 256-file limit", async () => {
     const fake = sandbox({
       exitCode: 0,
       stdout: Array.from(
-        { length: 101 },
+        { length: 257 },
         (_, i) => `src/a-consumer-${i}.ts`,
       ).join("\n"),
       truncated: false,
@@ -454,9 +491,9 @@ describe("structural repository inventory", () => {
       fake.port,
       modifiedExportPatch,
     );
-    expect(inventory.files).toHaveLength(100);
+    expect(inventory.files).toHaveLength(256);
     expect(inventory.files[0]?.path).toBe("src/service.ts");
-    expect(fake.readFile).toHaveBeenCalledTimes(100);
+    expect(fake.readFile).toHaveBeenCalledTimes(256);
     expect(inventory.truncated).toBe(true);
   });
 

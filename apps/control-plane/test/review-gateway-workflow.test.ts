@@ -182,7 +182,13 @@ it.each(["complete", "missing_final", "missing_usage"] as const)(
     expect(status).toMatchObject(
       missingFinal
         ? { status: "errored", error: { name: "WorkflowFatalError" } }
-        : { status: "complete", output: { findings: [], isDegraded: false } },
+        : {
+            status: "complete",
+            output: {
+              output: { findings: [], isDegraded: false },
+              evidence: [],
+            },
+          },
     );
     expect(fetcher).toHaveBeenCalledTimes(4);
     for (const request of requests)

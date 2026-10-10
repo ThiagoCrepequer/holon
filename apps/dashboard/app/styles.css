@@ -1,138 +1,40 @@
 @import "tailwindcss";
 @import "@holon/ui/styles.css";
 @source "../../../packages/ui/src";
-@theme inline {
-  --font-sans: var(--holon-font-sans);
-  --color-background: var(--holon-bg-page);
-  --color-foreground: var(--holon-text-primary);
-  --color-primary: var(--holon-action-bg);
-  --color-primary-foreground: var(--holon-action-fg);
-  --color-border: var(--holon-border-subtle);
-  --radius-md: var(--holon-radius-control);
+/* Hostile Markdown has no authored JSX classes: keep its bounded typography recipe here. */
+.holon-review-markdown {
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
-.holon-welcome {
-  max-width: var(--holon-layout-content);
-  margin: 0 auto;
-  padding: var(--holon-space-6) var(--holon-layout-gutter-mobile);
-}
-.holon-welcome header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--holon-space-4);
-}
-.holon-wordmark {
-  display: flex;
-  align-items: center;
-  gap: var(--holon-space-3);
-  font-size: var(--holon-type-title-md);
-  font-weight: var(--holon-weight-semibold);
-  letter-spacing: -0.04em;
-}
-.holon-welcome main {
-  max-width: var(--holon-layout-reading);
-  padding-top: clamp(5rem, 15vh, 10rem);
-}
-.holon-welcome h1 {
-  font: var(--holon-type-display-sm)/var(--holon-leading-title)
-    var(--holon-font-editorial);
-  font-weight: 400;
-  margin: 0 0 var(--holon-space-6);
-}
-.holon-welcome main p {
-  color: var(--holon-text-secondary);
-  font-size: var(--holon-type-lead);
-  max-width: 32rem;
-}
-@media (min-width: 48rem) {
-  .holon-welcome {
-    padding: var(--holon-space-8) var(--holon-layout-gutter-desktop);
-  }
-  .holon-welcome h1 {
-    font-size: var(--holon-type-display-lg);
-  }
-}
-
-.holon-collaboration {
-  margin-top: var(--holon-space-8);
-}
-.holon-collaboration h2 {
-  font-size: var(--holon-type-title-md);
-}
-.holon-collaboration h3 {
-  margin-top: var(--holon-space-6);
-}
-.holon-collaboration form {
-  display: grid;
-  gap: var(--holon-space-3);
+.holon-review-markdown :where(p, ul, ol, blockquote, pre, h1, h2, h3, h4) {
   margin-block: var(--holon-space-4);
 }
-.holon-collaboration li {
-  overflow-wrap: anywhere;
-  margin-block: var(--holon-space-3);
+.holon-review-markdown :where(h1, h2, h3, h4) {
+  font-size: var(--holon-type-title-sm);
+  font-weight: var(--holon-weight-semibold);
 }
-.holon-collaboration button {
-  margin-inline-end: var(--holon-space-2);
+.holon-review-markdown :where(ul, ol) {
+  padding-inline-start: var(--holon-space-6);
 }
-.holon-collaboration input {
-  width: 100%;
-  min-width: 0;
-  padding: var(--holon-space-3);
-  border: var(--holon-border-thin) solid var(--holon-border-subtle);
-  border-radius: var(--holon-radius-control);
-  background: var(--holon-bg-surface);
-  color: var(--holon-text-primary);
+.holon-review-markdown ul {
+  list-style: disc;
 }
-.holon-collaboration input:focus-visible {
-  outline: 2px solid var(--holon-focus-ring);
-  outline-offset: 2px;
+.holon-review-markdown ol {
+  list-style: decimal;
 }
-.holon-invitation {
-  padding-top: var(--holon-space-8);
-}
-
-.holon-reviews {
-  max-width: var(--holon-layout-content);
-  margin-inline: auto;
-}
-.holon-reviews h1 {
-  font-size: var(--holon-type-display-sm);
-  margin-block: var(--holon-space-6);
-}
-.holon-reviews form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--holon-space-4);
-  align-items: end;
-  margin-block: var(--holon-space-6);
-}
-.holon-reviews label {
-  display: grid;
-  gap: var(--holon-space-2);
-}
-.holon-reviews input,
-.holon-reviews select {
-  padding: var(--holon-space-3);
-  background: var(--holon-bg-surface);
-  color: var(--holon-text-primary);
-  border: var(--holon-border-thin) solid var(--holon-border-subtle);
-  border-radius: var(--holon-radius-control);
-}
-.holon-reviews li {
-  padding-block: var(--holon-space-4);
-  border-bottom: var(--holon-border-thin) solid var(--holon-border-subtle);
-  overflow-wrap: anywhere;
-}
-.holon-reviews pre {
+.holon-review-markdown pre {
   max-width: 100%;
   overflow: auto;
   padding: var(--holon-space-4);
-  background: var(--holon-bg-surface);
+  background: var(--holon-bg-subtle);
+  border-radius: var(--holon-radius-control);
   font-family: var(--holon-font-mono);
+  overflow-wrap: normal;
 }
-.holon-reviews a:focus-visible,
-.holon-reviews input:focus-visible,
-.holon-reviews select:focus-visible {
-  outline: 2px solid var(--holon-focus-ring);
-  outline-offset: 2px;
+.holon-review-markdown pre code {
+  overflow-wrap: normal;
+}
+.holon-review-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

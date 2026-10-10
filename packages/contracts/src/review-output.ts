@@ -27,60 +27,15 @@ import {
   timestampSchema,
 } from "./shared.js";
 
-export const reviewFindingSchema = z.strictObject({
-  confidence: z.number().min(0).max(1),
-  diagnostic: z.string().trim().min(30).max(reviewTextLimits.diagnostic),
-  evidence: z
-    .array(
-      z
-        .strictObject({
-          endLine: positiveIntegerSchema.optional(),
-          excerpt: z.string().min(1).max(reviewTextLimits.excerpt),
-          path: repositoryPathSchema,
-          reason: z.string().min(1).max(reviewTextLimits.reason),
-          startLine: positiveIntegerSchema,
-        })
-        .refine(
-          (evidence) =>
-            evidence.endLine === undefined ||
-            evidence.endLine >= evidence.startLine,
-          {
-            message: "endLine must not precede startLine",
-            path: ["endLine"],
-          },
-        ),
-    )
-    .min(1)
-    .max(reviewTextLimits.evidence),
-  location: z
-    .strictObject({
-      line: positiveIntegerSchema,
-      path: repositoryPathSchema,
-      side: z.literal("RIGHT"),
-      startLine: positiveIntegerSchema.optional(),
-    })
-    .refine(
-      (location) =>
-        location.startLine === undefined || location.startLine <= location.line,
-      {
-        message: "startLine must not follow line",
-        path: ["startLine"],
-      },
-    ),
-  severity: z.enum(["critical", "high", "medium", "low"]),
-  suggestion: z
-    .string()
-    .trim()
-    .min(1)
-    .max(reviewTextLimits.suggestion)
-    .optional(),
-});
+export { reviewFindingSchema } from "./review-finding.js";
+import { reviewFindingSchema } from "./review-finding.js";
 
-export const reviewResolutionSchema = reviewFindingSchema
-  .omit({ severity: true, suggestion: true })
-  .extend({
-    fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
-  });
+export const reviewResolutionSchema = z.strictObject({
+  ...z
+    .object(reviewFindingSchema.shape)
+    .omit({ severity: true, suggestion: true }).shape,
+  fingerprint: z.string().regex(/^fp:[a-f0-9]{64}$/u),
+});
 export const modelReviewOutputSchema = z
   .strictObject({
     investigations: z.array(investigationObservationSchema).max(4).optional(),
@@ -114,7 +69,7 @@ const resilientNullablePositiveInteger = z.preprocess(
     typeof val === "string" && /^\d+$/u.test(val.trim())
       ? Number(val.trim())
       : val,
-  positiveIntegerSchema.nullable().optional(),
+  z.optional(z.nullable(positiveIntegerSchema)),
 );
 
 const resilientConfidence = z.preprocess(
@@ -231,9 +186,9 @@ const reviewTransportFields = z
   })
   .strip();
 
-/** JSON Schema surface for Think's forced final-answer tool. Evidence remains
- * structurally permissive here so the host can reject unevidenced candidates
- * individually instead of aborting Think's entire prompt workflow. */
+/** Portable final-answer tool. Basic coordinates remain constrained; evidence
+ * and auxiliary observation text allow host-side rejection of individual items.
+ * Malformed envelopes or values outside this schema still fail the Think prompt. */
 export const modelReviewPromptSchema = z.object({
   findings: z
     .array(
@@ -247,11 +202,11 @@ export const modelReviewPromptSchema = z.object({
         evidence: z
           .array(
             z.object({
-              endLine: z.number().int().nullable(),
+              endLine: z.number().int().positive().nullable(),
               excerpt: z.string(),
-              path: z.string(),
+              path: z.string().min(1).max(1024),
               reason: z.string(),
-              startLine: z.number().int(),
+              startLine: z.number().int().positive(),
             }),
           )
           .describe(
@@ -261,11 +216,14 @@ export const modelReviewPromptSchema = z.object({
           line: z
             .number()
             .int()
+            .positive()
             .describe(
               "A supplied RIGHT-side changed line in the canonical patch.",
             ),
           path: z
             .string()
+            .min(1)
+            .max(1024)
             .describe(
               "The changed producer file from the supplied patch, including when its defect manifests in an unchanged consumer.",
             ),
@@ -274,7 +232,7 @@ export const modelReviewPromptSchema = z.object({
             .describe(
               'Use exactly "RIGHT" in uppercase; it identifies the changed HEAD line, never a consumer or base line.',
             ),
-          startLine: z.number().int().nullable(),
+          startLine: z.number().int().positive().nullable(),
         }),
         severity: z
           .enum(["critical", "high", "medium", "low"])
@@ -291,7 +249,18 @@ export const modelReviewPromptSchema = z.object({
       "Record confirmed defects here, even when also described in investigations or the summary. Use an empty array only when no concrete defect was demonstrated.",
     ),
   investigations: z
-    .array(investigationObservationSchema)
+    .array(
+      z.object({
+        summary: z
+          .string()
+          .describe(
+            "Provide at least 30 characters of factual observation. Invalid auxiliary observations are withheld by the host.",
+          ),
+        path: z.string().min(1).max(1024),
+        line: z.number().int().positive(),
+        excerpt: z.string(),
+      }),
+    )
     .max(4)
     .describe(
       "Required array of factual observations for revalidation; return [] when there are none. An observation never replaces a finding for a confirmed defect.",
@@ -305,11 +274,11 @@ export const modelReviewPromptSchema = z.object({
       evidence: z
         .array(
           z.object({
-            endLine: z.number().int().nullable(),
+            endLine: z.number().int().positive().nullable(),
             excerpt: z.string(),
-            path: z.string(),
+            path: z.string().min(1).max(1024),
             reason: z.string(),
-            startLine: z.number().int(),
+            startLine: z.number().int().positive(),
           }),
         )
         .describe(
@@ -317,10 +286,10 @@ export const modelReviewPromptSchema = z.object({
         ),
       fingerprint: z.string(),
       location: z.object({
-        line: z.number().int(),
-        path: z.string(),
+        line: z.number().int().positive(),
+        path: z.string().min(1).max(1024),
         side: z.literal("RIGHT"),
-        startLine: z.number().int().nullable(),
+        startLine: z.number().int().positive().nullable(),
       }),
     }),
   ),
@@ -341,9 +310,9 @@ export const reviewSummaryRecoverySchema = z.strictObject({
 export const modelReviewTransportSchema = z.preprocess((value) => {
   if (typeof value !== "object" || value === null) return value;
   const raw = value as Record<string, unknown>;
-  // Invalid envelopes still fail. Recovery applies only to candidate evidence.
+  // Invalid envelopes still fail; individual candidates never invent repairs.
   const envelope = reviewTransportFields
-    .omit({ findings: true, resolutions: true })
+    .omit({ findings: true, resolutions: true, investigations: true })
     .safeParse(raw);
   if (!envelope.success) return raw;
   const limitations = new Set([
@@ -351,8 +320,29 @@ export const modelReviewTransportSchema = z.preprocess((value) => {
     ...reviewOutputLimitations(raw),
   ]);
   let rejected = false;
-  const retainEvidenced = (candidate: unknown) => {
-    if (typeof candidate !== "object" || candidate === null) return true;
+  if (
+    raw.investigations !== undefined &&
+    (!Array.isArray(raw.investigations) || raw.investigations.length > 4)
+  )
+    return raw;
+  const investigations = Array.isArray(raw.investigations)
+    ? raw.investigations.flatMap((item) => {
+        const parsed = investigationObservationSchema.safeParse(item);
+        if (parsed.success) return [parsed.data];
+        rejected = true;
+        limitations.add("investigation_rejected");
+        return [];
+      })
+    : undefined;
+  const retainEvidenced = (
+    candidate: unknown,
+    kind: "findings" | "resolutions",
+  ) => {
+    if (typeof candidate !== "object" || candidate === null) {
+      rejected = true;
+      limitations.add("candidate_rejected");
+      return false;
+    }
     const evidence = resilientEvidence.safeParse(
       (candidate as Record<string, unknown>).evidence,
     );
@@ -364,27 +354,48 @@ export const modelReviewTransportSchema = z.preprocess((value) => {
           ...(item.endLine === null ? { endLine: undefined } : {}),
         })),
       ).success;
-    if (!valid) rejected = true;
-    return valid;
+    if (!valid) {
+      rejected = true;
+      limitations.add("evidence_rejected");
+      return false;
+    }
+    const parsed = reviewTransportFields.safeParse({
+      ...envelope.data,
+      findings: kind === "findings" ? [candidate] : [],
+      resolutions: kind === "resolutions" ? [candidate] : [],
+    });
+    if (parsed.success) {
+      try {
+        modelReviewOutputFromTransport(parsed.data);
+        return true;
+      } catch {
+        // Cross-field invariants are checked by the same public output contract.
+      }
+    }
+    rejected = true;
+    limitations.add("candidate_rejected");
+    return false;
   };
   const findings = Array.isArray(raw.findings)
-    ? raw.findings.slice(0, reviewTextLimits.findings).filter(retainEvidenced)
+    ? raw.findings
+        .slice(0, reviewTextLimits.findings)
+        .filter((item) => retainEvidenced(item, "findings"))
     : raw.findings;
   // Preserve the existing hard limit on the resolution envelope.
   const resolutions =
     Array.isArray(raw.resolutions) && raw.resolutions.length <= 8
-      ? raw.resolutions.filter(retainEvidenced)
+      ? raw.resolutions.filter((item) => retainEvidenced(item, "resolutions"))
       : raw.resolutions;
-  if (rejected) limitations.add("evidence_rejected");
   return {
     ...raw,
+    ...(investigations === undefined ? {} : { investigations }),
     findings,
     resolutions,
     ...(rejected
       ? {
           isDegraded: true,
           summary:
-            "Review incomplete: candidates without valid evidence were rejected. Retained candidates still require verification.",
+            "Review incomplete: invalid candidates or observations were rejected. Retained candidates still require verification.",
         }
       : {}),
     outputLimitations: [...limitations],
@@ -500,7 +511,7 @@ export const runTransitionSchema = z.strictObject({
 export const publicationRecordSchema = z
   .strictObject({
     findingId: z.union([findingIdSchema, z.literal("summary")]),
-    githubCommentId: positiveIntegerSchema.optional(),
+    githubCommentId: z.optional(positiveIntegerSchema),
     kind: z.enum(["inline", "summary"]),
     marker: z.string().regex(/^<!-- holon;run=[^;]+;finding=[^ ]+ -->$/u),
     id: publicationIdSchema,

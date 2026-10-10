@@ -1,5 +1,9 @@
-import { useId, type SelectHTMLAttributes } from "react";
-export interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+import type { ComponentPropsWithRef } from "react";
+
+import { cn } from "./classes.js";
+import { FieldFrame, fieldDescription, useFieldId } from "./field.js";
+import { Icon } from "./icons.js";
+export interface SelectFieldProps extends ComponentPropsWithRef<"select"> {
   label: string;
   options: readonly { value: string; label: string }[];
   hint?: string;
@@ -14,42 +18,41 @@ export function SelectField({
   className,
   ...props
 }: SelectFieldProps) {
-  const generated = useId();
-  const fieldId = id ?? generated;
-  const describedBy =
-    [
-      props["aria-describedby"],
-      hint ? `${fieldId}-hint` : undefined,
-      error ? `${fieldId}-error` : undefined,
-    ]
-      .filter(Boolean)
-      .join(" ") || undefined;
+  const fieldId = useFieldId(id);
   return (
-    <div className="holon-field">
-      <label htmlFor={fieldId}>{label}</label>
-      <select
-        {...props}
-        id={fieldId}
-        className={className}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {hint && (
-        <p id={`${fieldId}-hint`} className="holon-hint">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${fieldId}-error`} className="holon-field-error">
-          {error}
-        </p>
-      )}
-    </div>
+    <FieldFrame
+      id={fieldId}
+      label={label}
+      {...(hint ? { hint } : {})}
+      {...(error ? { error } : {})}
+    >
+      <div className="relative min-w-0">
+        <select
+          {...props}
+          id={fieldId}
+          data-slot="native-select"
+          className={cn(
+            "min-h-control w-full min-w-0 appearance-none rounded-md border border-input bg-card py-2 pr-10 pl-3 text-body text-foreground transition-[border-color] duration-(--holon-motion-fast) enabled:hover:border-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:bg-disabled disabled:text-disabled-foreground aria-invalid:border-danger-foreground aria-invalid:enabled:hover:border-danger-foreground motion-reduce:transition-none forced-colors:appearance-auto",
+            className,
+          )}
+          aria-invalid={error ? true : props["aria-invalid"]}
+          aria-describedby={fieldDescription(
+            fieldId,
+            hint,
+            error,
+            props["aria-describedby"],
+          )}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-secondary forced-colors:hidden">
+          <Icon name="chevronDown" />
+        </span>
+      </div>
+    </FieldFrame>
   );
 }

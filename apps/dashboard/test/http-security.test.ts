@@ -326,6 +326,12 @@ function createFakeTenancyPersistence() {
   let teamCreated = 0;
 
   const tenancy: TenancyPersistence = {
+    listMembers: async () => ({
+      members: [],
+      actorRole: "owner",
+      ownerCount: 1,
+      nextCursor: null,
+    }),
     async provisionPersonalWorkspace(actor: AdmittedUser) {
       const userId = actor.id;
       personalCreated += 1;
@@ -732,6 +738,12 @@ it("integrates tenancy routes: verifies admission and session CSRF on mutations,
 it("ORM and database exceptions return 503 unavailable without leaking SQL or schema internals and preserve cookies", async () => {
   const authService = createFakeAuthService({ admitted: true });
   const ormFaultPersistence: TenancyPersistence = {
+    listMembers: async () => ({
+      members: [],
+      actorRole: "owner",
+      ownerCount: 1,
+      nextCursor: null,
+    }),
     async createReauthIntent() {
       throw new Error("Unexpected governance command");
     },

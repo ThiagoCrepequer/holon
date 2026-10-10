@@ -63,6 +63,12 @@ function fixture() {
     pruneExpiredCodes: vi.fn(async () => {}),
   };
   const tenancyPersistence = {
+    listMembers: async () => ({
+      members: [],
+      actorRole: "owner" as const,
+      ownerCount: 1,
+      nextCursor: null,
+    }),
     provisionPersonalWorkspace: vi.fn(async () => ({
       workspace: {
         id: "review_personal",

@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 ---
 
 # Decisões
@@ -122,3 +122,5 @@ vigentes; os textos anteriores são preservados como histórico.
 - [ADR-0060 — Separar inventário de projeção e compartilhar janelas de contrato](0060-separate-review-inventory-and-pack-contract-windows.md) — substitui a seleção/organização das janelas da regra 7 da ADR-0055, mantendo os tetos de execução e geração.
 
 - [ADR-0061 — Agrupar partes considerando o orçamento estrutural](0061-pack-review-shards-with-structural-context-budget.md) — complementa a ADR-0060 com medição compartilhada antes do agrupamento e omissão explícita para contextos acima do teto.
+
+- [ADR-0062 — Recuperar evidência e isolar itens inválidos](0062-recover-review-evidence-and-isolate-invalid-items.md) — substitui coleta pós-modelo e caps de candidatos/checks das ADRs 0056, 0060 e 0061; preserva orçamento e gates.

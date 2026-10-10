@@ -5,8 +5,11 @@ export default defineConfig(async () => ({
     cloudflareTest({
       miniflare: {
         compatibilityDate: "2026-08-29",
-        d1Databases: ["IDENTITY_DB"],
+        d1Databases: ["IDENTITY_DB", "PROJECTION_DB"],
         bindings: {
+          PROJECTION_MIGRATIONS: await readD1Migrations(
+            "../../packages/db/migrations/projection",
+          ),
           IDENTITY_MIGRATIONS: await readD1Migrations(
             "../../packages/db/migrations/identity",
           ),

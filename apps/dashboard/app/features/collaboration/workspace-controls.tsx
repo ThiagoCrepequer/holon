@@ -1,112 +1,25 @@
 import {
-  workspaceDtoSchema,
-  workspaceRoleSchema,
+  dashboardIdSchema,
+  reauthActionSchema,
 } from "@holon/contracts/dashboard";
 import { connectionCommandSchema } from "@holon/contracts/dashboard-collaboration";
 import { Button } from "@holon/ui/button";
-import { SelectField } from "@holon/ui/select-field";
 import { useLingui } from "@lingui/react";
-import { useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 
-import {
-  collaborationRequest,
-  connectionOAuth,
-  reconnectGitHub,
-} from "./collaboration-client.js";
 import { WorkspaceConnections } from "./workspace-connections.js";
 import { WorkspaceInvitations } from "./workspace-invitations.js";
+import { WorkspaceMembers } from "./workspace-members.js";
 import { workspaceMessages } from "./workspace-messages.js";
-import type { Workspace } from "./workspace-types.js";
-type Props = {
-  sessionId: string;
-  csrf: string;
-  onSessionLost: (id: string) => void;
-};
-export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
+import { useWorkspace } from "./workspace-state.js";
+
+export function WorkspaceControls() {
   const { i18n } = useLingui();
-  const [parameters, setParameters] = useSearchParams();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [status, setStatus] = useState("idle");
-  const [open, setOpen] = useState(false);
-  const [interactive, setInteractive] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const pending = useRef<AbortController | null>(null);
-  const generation = useRef(0);
-  const teamOperation = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    setInteractive(true);
-    return () => {
-      generation.current++;
-      pending.current?.abort();
-    };
-  }, []);
-  function clearScope() {
-    setWorkspace(null);
-  }
-  async function run(
-    path: string,
-    body: unknown,
-    onReady: (data: unknown) => void,
-    global = false,
-  ) {
-    pending.current?.abort();
-    const controller = new AbortController();
-    pending.current = controller;
-    const current = ++generation.current;
-    setStatus("loading");
-    const result = await collaborationRequest(
-      path,
-      controller.signal,
-      body === undefined ? undefined : { csrf, body },
-    );
-    if (controller.signal.aborted || current !== generation.current) return;
-    pending.current = null;
-    if (result.status === "ready") {
-      try {
-        onReady(result.data);
-        if (current === generation.current) setStatus("ready");
-      } catch {
-        setStatus("unavailable");
-      }
-      return;
-    }
-    if (result.status === "denied") {
-      clearScope();
-      if (global) onSessionLost(sessionId);
-    }
-    setStatus(result.status);
-  }
-  async function loadWorkspaces() {
-    setOpen(true);
-    clearScope();
-    await run(
-      "/api/workspaces",
-      undefined,
-      (data) => {
-        if (
-          !data ||
-          typeof data !== "object" ||
-          !("workspaces" in data) ||
-          !Array.isArray(data.workspaces)
-        )
-          throw new Error();
-        setWorkspaces(
-          data.workspaces.map((row) => {
-            if (!row || typeof row !== "object") throw new Error();
-            return {
-              workspace: workspaceDtoSchema.parse(row.workspace),
-              role: workspaceRoleSchema.parse(row.role),
-            };
-          }),
-        );
-      },
-      true,
-    );
-  }
+  const [parameters] = useSearchParams();
+  const state = useWorkspace();
   const labels = workspaceMessages(i18n);
-  const messages: Record<string, string> = {
+  const busy = state.status === "loading";
+  const messages = {
     loading: labels.loading,
     ready: labels.ready,
     unavailable: labels.unavailable,
@@ -115,181 +28,125 @@ export function WorkspaceControls({ sessionId, csrf, onSessionLost }: Props) {
     unconfirmed: labels.unconfirmed,
     rate_limited: labels.rate,
   };
-  async function verify(action: "link" | "unlink", installation: string) {
-    const id = Number(installation);
-    if (!workspace || !Number.isSafeInteger(id) || id <= 0) {
-      setStatus("unavailable");
-      return;
-    }
-    pending.current?.abort();
-    const controller = new AbortController();
-    pending.current = controller;
-    const current = ++generation.current;
-    setStatus("loading");
-    const url = await connectionOAuth(
-      workspace.workspace.id,
-      id,
-      action,
-      csrf,
-      controller.signal,
-    );
-    if (controller.signal.aborted || generation.current !== current) return;
-    pending.current = null;
-    if (url) window.location.assign(url);
-    else setStatus("unavailable");
-  }
   const confirmation = connectionCommandSchema.safeParse({
     installationId: Number(parameters.get("installation")),
     reauthIntentId: parameters.get("reauth"),
   });
-  const confirmationAction = parameters.get("connectionAction");
-  const confirmationWorkspace = parameters.get("workspace");
+  const connectionAction = parameters.get("connectionAction");
+  const memberAction = reauthActionSchema.safeParse(
+    parameters.get("memberAction"),
+  );
+  const memberProof = dashboardIdSchema.safeParse(parameters.get("reauth"));
+  const memberTarget = dashboardIdSchema.safeParse(
+    parameters.get("targetUser"),
+  );
+  const proofWorkspace = dashboardIdSchema.safeParse(
+    parameters.get("workspace"),
+  );
+  const message = state.status === "idle" ? null : messages[state.status];
   return (
-    <section className="holon-collaboration" aria-label={labels.title}>
-      <Button
-        variant="quiet"
-        disabled={!interactive}
-        onClick={() => void loadWorkspaces()}
-        busy={status === "loading"}
-      >
-        {labels.load}
-      </Button>
-      {confirmation.success &&
-        confirmationWorkspace &&
-        (confirmationAction === "link" || confirmationAction === "unlink") && (
+    <section aria-label={labels.title} className="grid min-w-0 gap-6">
+      {state.workspace && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-title-md font-semibold tracking-tight">
+              {state.workspace.workspace.name}
+            </h2>
+            <p className="mt-1 text-small text-secondary">
+              {state.workspace.role === "owner"
+                ? i18n._({ id: "members.owner", message: "Owner" })
+                : i18n._({ id: "members.member", message: "Member" })}
+            </p>
+          </div>
+        </div>
+      )}
+      {proofWorkspace.success &&
+        memberAction.success &&
+        memberProof.success &&
+        memberTarget.success && (
           <Button
-            disabled={!interactive}
+            disabled={!state.interactive || busy}
             onClick={() =>
-              void run(
-                `/api/workspaces/${encodeURIComponent(confirmationWorkspace)}/github/${confirmationAction}`,
+              void state.confirmMember(
+                proofWorkspace.data,
+                memberAction.data,
+                memberProof.data,
+                memberTarget.data,
+              )
+            }
+          >
+            {i18n._({
+              id: "members.confirm",
+              message: "Confirm member change",
+            })}
+          </Button>
+        )}
+      {proofWorkspace.success &&
+        confirmation.success &&
+        (connectionAction === "link" || connectionAction === "unlink") && (
+          <Button
+            disabled={!state.interactive || busy}
+            onClick={() =>
+              void state.confirmConnection(
+                proofWorkspace.data,
+                connectionAction,
                 confirmation.data,
-                () => {
-                  setParameters({});
-                  void loadWorkspaces();
-                },
               )
             }
           >
             {labels.confirm}
           </Button>
         )}
-      {open && (
-        <>
-          <h2>{labels.title}</h2>
-          <SelectField
-            label={labels.workspace}
-            value={workspace?.workspace.id ?? ""}
-            options={[
-              { value: "", label: labels.choose },
-              ...workspaces.map((w) => ({
-                value: w.workspace.id,
-                label: w.workspace.name,
-              })),
-            ]}
-            onChange={(event) => {
-              generation.current++;
-              pending.current?.abort();
-              clearScope();
-              setWorkspace(
-                workspaces.find((w) => w.workspace.id === event.target.value) ??
-                  null,
-              );
-              setStatus("idle");
-            }}
-          />
-          <Button
-            variant="quiet"
-            onClick={() =>
-              void run(
-                "/api/workspaces/personal",
-                {},
-                () => void loadWorkspaces(),
-              )
-            }
-          >
-            {labels.personal}
-          </Button>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              teamOperation.current ??= crypto.randomUUID();
-              void run(
-                "/api/workspaces/team",
-                { name: teamName, operationId: teamOperation.current },
-                () => {
-                  teamOperation.current = null;
-                  setTeamName("");
-                  void loadWorkspaces();
-                },
-              );
-            }}
-          >
-            <div className="holon-field">
-              <label htmlFor="team-name">{labels.team}</label>
-              <input
-                id="team-name"
-                value={teamName}
-                maxLength={128}
-                required
-                onChange={(event) => {
-                  teamOperation.current = null;
-                  setTeamName(event.target.value);
-                }}
-              />
-            </div>
-            <Button type="submit" disabled={status === "loading"}>
-              {labels.createTeam}
-            </Button>
-          </form>
-          {workspace && (
-            <>
-              <WorkspaceConnections
-                key={workspace.workspace.id}
-                workspace={workspace}
-                labels={labels}
-                busy={status === "loading"}
-                run={run}
-                verify={verify}
-              />
-              {workspace.workspace.type === "team" &&
-                workspace.role === "owner" && (
-                  <WorkspaceInvitations
-                    key={workspace.workspace.id}
-                    workspaceId={workspace.workspace.id}
-                    labels={labels}
-                    busy={status === "loading"}
-                    run={run}
-                    onInvalid={() => setStatus("unavailable")}
-                  />
-                )}
-            </>
-          )}
-        </>
-      )}
-      {status === "reconnect" && (
-        <Button
-          onClick={async () => {
-            const controller = new AbortController();
-            pending.current = controller;
-            const url = await reconnectGitHub(controller.signal);
-            if (!controller.signal.aborted && url) window.location.assign(url);
-          }}
-        >
-          {labels.reconnectAction}
-        </Button>
-      )}
-      {messages[status] && (
+      {message && (
         <p
+          className={`${state.status === "ready" ? "sr-only" : "rounded-md border border-border px-4 py-3 text-small"} ${["denied", "unavailable", "unconfirmed", "reconnect"].includes(state.status) ? "bg-warning text-warning-foreground" : "bg-muted text-secondary"}`}
           role={
             ["denied", "unavailable", "unconfirmed", "reconnect"].includes(
-              status,
+              state.status,
             )
               ? "alert"
               : "status"
           }
         >
-          {messages[status]}
+          {message}
         </p>
+      )}
+      {state.status === "reconnect" && (
+        <Button onClick={() => void state.reconnect()}>
+          {labels.reconnectAction}
+        </Button>
+      )}
+      {state.workspace ? (
+        <div
+          className={`grid min-w-0 items-start gap-6 ${state.workspace.workspace.type === "team" ? "xl:grid-cols-2" : ""}`}
+        >
+          <WorkspaceConnections />
+          {state.workspace.workspace.type === "team" && (
+            <div className="grid min-w-0 gap-6">
+              <WorkspaceMembers />
+              {state.workspace.role === "owner" && (
+                <WorkspaceInvitations key={state.workspace.workspace.id} />
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
+      {!state.workspace && state.status !== "loading" && (
+        <div className="max-w-reading border-l-2 border-border pl-5">
+          <h2 className="text-title-sm font-semibold">
+            {i18n._({
+              id: "workspace.start",
+              message: "Bring your reviews together",
+            })}
+          </h2>
+          <p className="mt-2 text-secondary">
+            {i18n._({
+              id: "workspace.startHint",
+              message:
+                "Choose or create a workspace in the sidebar, then connect GitHub to open your repositories.",
+            })}
+          </p>
+        </div>
       )}
     </section>
   );

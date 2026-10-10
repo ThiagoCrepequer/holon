@@ -16,6 +16,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { publishReviewAuthorized } from "../src/review/authorized-publication.js";
+import { reviewAgentResultSchema } from "../src/review/review-agent-result.js";
 import type { ReviewAgent } from "../src/review/review-agent.js";
 
 afterEach(async () => {
@@ -169,7 +170,11 @@ it("runs Think through durable model/tool budgets, real host reads, evidence and
         interval: 50,
       })
       .toBe("complete");
-    outputs.push((await workflow.status()).output);
+    const result = reviewAgentResultSchema.parse(
+      (await workflow.status()).output,
+    );
+    expect(result.evidence).toEqual([{ receipt, content }]);
+    outputs.push(result);
     expect(model.doStreamCalls).toHaveLength(2);
     await evictDurableObject(agent);
   }
@@ -197,7 +202,7 @@ it("runs Think through durable model/tool budgets, real host reads, evidence and
     totalEligibleLines: 1,
     unsupportedFilesCount: 0,
   };
-  const actualDraft = modelReviewOutputSchema.parse(outputs[0]);
+  const actualDraft = modelReviewOutputSchema.parse(outputs[0]?.output);
   expect(actualDraft.findings).toEqual([finding]);
   expect(
     verifyFindingsWithCanonicalEvidence(actualDraft.findings, {
@@ -205,9 +210,12 @@ it("runs Think through durable model/tool budgets, real host reads, evidence and
       truncated: false,
     }).findings,
   ).toHaveLength(1);
-  const output = applyCausalVerification(actualDraft, outputs[1], "en", [
-    receipt,
-  ]);
+  const output = applyCausalVerification(
+    actualDraft,
+    outputs[1]?.output,
+    "en",
+    outputs[1]!.evidence.map((item) => item.receipt),
+  );
   const aggregated = aggregateShardReviews(plan, [
     { shardId: "shard-0", shardIndex: 0, status: "success", ...output },
   ]);

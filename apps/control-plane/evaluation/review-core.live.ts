@@ -27,6 +27,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, it, vi } from "vitest";
 import { z } from "zod";
 
+import { reviewAgentResultSchema } from "../src/review/review-agent-result.js";
 import { buildShardReviewContext } from "../src/review/review-shard-context.js";
 import { liveCodeRegressionFixtures } from "./live-code-regression-fixtures.js";
 import { liveConfirmationFixtures } from "./live-confirmation-fixtures.js";
@@ -213,13 +214,16 @@ it("measures the current Think host against paired executable synthetic cases wi
                 name: "read_file",
                 arguments: { path, startLine: 1, endLine: 100 },
               },
-              deadlineAt,
+              Math.min(deadlineAt, Date.now() + 60_000),
             );
             const outcome = await operation.result();
             if ("error" in outcome) throw new Error("prefetch_failed");
           }
           prefetch = await validateReviewEvidencePack(
-            await env.REPOSITORY_EXECUTOR.getEvidencePack(runId, deadlineAt),
+            await env.REPOSITORY_EXECUTOR.getEvidencePack(
+              runId,
+              Math.min(deadlineAt, Date.now() + 60_000),
+            ),
             runId,
           );
         }
@@ -251,12 +255,13 @@ it("measures the current Think host against paired executable synthetic cases wi
           while (Date.now() < deadlineAt) {
             const status = await workflow.status();
             if (status.status === "complete") {
+              const result = reviewAgentResultSchema.parse(status.output);
               phaseResults.push({
                 phase: name,
                 durationMs: Date.now() - start,
-                output: status.output,
+                output: result.output,
               });
-              return status.output;
+              return result;
             }
             if (status.status === "errored" || status.status === "terminated")
               throw new Error(
@@ -268,16 +273,12 @@ it("measures the current Think host against paired executable synthetic cases wi
           await agent.cancelReview();
           throw new Error("benchmark_deadline");
         };
-        draft = modelReviewOutputSchema.parse(
-          await phase("investigation", reviewPrompt),
-        );
+        const investigated = await phase("investigation", reviewPrompt);
+        draft = modelReviewOutputSchema.parse(investigated.output);
         const prepared = prepareCausalCandidates(draft, context);
         rejections = [...prepared.rejections];
         const candidates = prepared.candidates;
-        const evidence = await validateReviewEvidencePack(
-          await env.REPOSITORY_EXECUTOR.getEvidencePack(runId, deadlineAt),
-          runId,
-        );
+        const evidence = investigated.evidence;
         final = rejections.length
           ? withholdUnverifiedFindings(candidates)
           : candidates;
@@ -291,13 +292,10 @@ it("measures the current Think host against paired executable synthetic cases wi
               variant === "repeated" ? [] : evidence,
             ),
           );
-          const allEvidence = await validateReviewEvidencePack(
-            await env.REPOSITORY_EXECUTOR.getEvidencePack(runId, deadlineAt),
-            runId,
-          );
+          const allEvidence = raw.evidence;
           final = applyCausalVerification(
             candidates,
-            raw,
+            raw.output,
             "en",
             allEvidence.map((item) => item.receipt),
           );
@@ -309,6 +307,8 @@ it("measures the current Think host against paired executable synthetic cases wi
           "model_budget_exhausted",
           "model_shard_budget_exhausted",
           "model_output_missing",
+          "model_tool_protocol_invalid",
+          "evidence_collection_failed",
           "model_schema_invalid",
           "agent_deadline_exceeded",
           "workflow_failed",

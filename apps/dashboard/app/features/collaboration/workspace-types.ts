@@ -3,8 +3,12 @@ export type Workspace = {
   role: "owner" | "member";
 };
 
-export type CollaborationRun = (
-  path: string,
-  body: unknown,
-  onReady: (data: unknown) => void,
-) => Promise<void>;
+export type WorkspaceRequestStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "denied"
+  | "reconnect"
+  | "unconfirmed"
+  | "rate_limited"
+  | "unavailable";

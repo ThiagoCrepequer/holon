@@ -52,6 +52,23 @@ function harness(
   };
 }
 
+it("discards and releases evidence if authorization is lost during collection", async () => {
+  const { agent } = harness([]);
+  const dispose = vi.fn();
+  const pack = Object.assign([], { [Symbol.dispose]: dispose });
+  Object.assign(agent, {
+    env: { REPOSITORY_EXECUTOR: { getEvidencePack: async () => pack } },
+  });
+  agent.isReviewAuthorized = vi
+    .fn()
+    .mockResolvedValueOnce(true)
+    .mockResolvedValueOnce(false);
+  await expect(agent.collectReviewEvidence()).rejects.toThrow(
+    "Review run is obsolete",
+  );
+  expect(dispose).toHaveBeenCalledOnce();
+});
+
 it("allows a corrected query after a safe rejection but stops on infrastructure failure", async () => {
   const { agent, dispose, execute, startTool } = harness([
     { error: { kind: "query", code: "path_unavailable" } },

@@ -31,6 +31,7 @@
     "@vitest/coverage-istanbul": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "jsdom": "29.1.1",
+    "jsonc-parser": "3.3.1",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",

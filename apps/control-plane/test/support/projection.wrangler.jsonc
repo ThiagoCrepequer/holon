@@ -2,6 +2,7 @@
   "name": "holon-projection-test",
   "main": "projection-worker.ts",
   "compatibility_date": "2026-08-29",
+  "vars": { "DASHBOARD_RECOVERY_MODE": "active" },
   "d1_databases": [
     {
       "binding": "PROJECTION_DB",

@@ -136,9 +136,8 @@ describe("Think review prompt boundary", () => {
     expect(reviewInstructions).toContain(
       "A required field that accepts an empty string is still required",
     );
-    expect(reviewInstructions).toContain(
-      "A type-only re-export can preserve the public TypeScript contract",
-    );
+    expect(reviewInstructions).toContain("the required type/value namespace");
+    expect(reviewInstructions).toContain("not a runtime value");
     expect(reviewInstructions).toContain(
       "Do not turn a request to verify or ensure compatibility into a finding",
     );

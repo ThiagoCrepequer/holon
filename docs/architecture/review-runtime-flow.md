@@ -4,7 +4,7 @@ kind: architecture
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 related:
   - ../decisions/0004-adopt-workflows-do-ledger-and-sandbox-executor.md
   - ../decisions/0037-compile-repository-configuration-per-run.md
@@ -62,10 +62,11 @@ sequenceDiagram
         AG->>GW: um passo, somente final answer
         AG-->>AW: resumo e limitações, sem alterar candidatos
       end
-      AW-->>WF: candidatos do shard
+      AW->>AG: collect-evidence durável, até três tentativas
+      AG->>EX: pacote limitado, deadline de até 60 s
+      AW-->>WF: candidatos e evidência do shard
       WF->>WF: validar evidência no diff canônico
       opt Há candidatos válidos
-        WF->>EX: recuperar pacote limitado de reads canônicos
         WF->>AG: conversa isolada com dados/receipts, causal_verification
         AG->>AW: Workflow com identidade por fase
         AW->>AG: step.prompt para tentar refutar candidatos
@@ -73,7 +74,8 @@ sequenceDiagram
         AG->>GW: até dois passos de verificação
         AG->>EX: inspecionar guardas, chamadores e contratos
         AG-->>AW: confirmed/refuted/inconclusive por candidato
-        AW-->>WF: avaliações e resumo corrigido
+        AW->>AG: collect-evidence durável
+        AW-->>WF: avaliações, resumo e evidência
         WF->>WF: liberar apenas confirmados; incerteza gera parcialidade
       end
     end
@@ -104,8 +106,8 @@ com no máximo 64 shards estruturais e três análises simultâneas. Antes do
 despacho, a [ADR-0055](../decisions/0055-fund-large-reviews-with-protected-investigation.md)
 admite todas as partes e fixa um perfil por quantidade e tamanho estimado dos
 prompts. O plano efetivo fixa `totalShards` antes do digest e conserva os totais
-elegíveis. Referências estruturais unem produtor/consumidor alterados; até oito
-partes adicionais investigam relações separadas por limites, com janelas
+elegíveis. Referências estruturais unem produtor/consumidor alterados; checks
+adicionais usam slots restantes até 64 partes totais, com janelas
 canônicas de até 80 linhas por arquivo. Janelas idênticas são compartilhadas e
 pares são agrupados dentro dos tetos da parte; janelas diferentes do mesmo
 arquivo permanecem separadas. Patches completos colocalizados dispensam checks
@@ -157,6 +159,9 @@ acima do teto permanecem `structural_context`, com plano parcial, conforme a
 [ADR-0061](../decisions/0061-pack-review-shards-with-structural-context-budget.md).
 Edits de corpo fora da declaração recebem `patchLine` comprovada no patch;
 `line` continua apontando para a declaração. Os tetos de leitura não mudam.
+A classificação de símbolos removidos e a verificação de quebra de contrato
+compartilham a AST de exports do HEAD: export preservado no namespace correto
+é modificado, inclusive quando a declaração foi movida.
 A verificação de símbolos exportados removidos utiliza a AST completa do módulo
 em HEAD (`@babel/parser`): declarações movidas e reexportadas (inclusive via
 fachadas multiline e aliases públicos) não disparam alerta se o nome público e o
@@ -169,7 +174,7 @@ também não cria um tipo homônimo.
 Arquivo ausente do inventário, erro de parse ou
 namespace incerto conservam o alerta. O inventário do repositório prioriza a
 leitura dos módulos alterados antes dos consumidores downstream, respeitando os
-tetos de 100 arquivos, 64 kB por arquivo e 1 MB total; o esgotamento da cota
+tetos de 256 candidatos, 64 kB por arquivo e 1 MB total; o esgotamento da cota
 pelos módulos alterados marca truncamento de downstream. Arquivos que excedem
 os tetos não entram no inventário. Antes de ler conteúdo, o inventário consulta
 modo e tamanho no HEAD com `git ls-tree`: somente blobs regulares cabem nessa
@@ -243,7 +248,8 @@ o lifecycle quando a chamada acorda um objeto frio, conforme Agents 0.26.0.
 O adapter consulta `getReviewFailure()` quando o filho falha; não depende da
 mensagem de `Workflow.status()`, que pode virar `WorkflowFatalError`. Orçamento
 agregado e da parte são distinguidos, assim como `model_output_missing`,
-`model_schema_invalid` e `agent_deadline_exceeded`. Falhas sem causa reconhecida
+`model_schema_invalid`, `agent_deadline_exceeded`, `evidence_collection_failed`
+e `model_tool_protocol_invalid`. Falhas sem causa reconhecida
 continuam `agent_workflow_failed`. Ausência da ferramenta final não prova a causa
 no modelo ou na rota; não há parser de texto nem resposta limpa fabricada.
 
@@ -379,3 +385,18 @@ cada leitura completa e retém candidatos quando a seleção não corresponde ao
 receipts validados. A validação de pacote continua vinculada ao conteúdo e snapshot.
 Isso não comprova a verdade da inferência: alcance do cenário, proteções e contrato
 continuam responsabilidades da verificação causal e da avaliação de qualidade.
+
+## Recuperação após a resposta do modelo
+
+A [ADR-0062](../decisions/0062-recover-review-evidence-and-isolate-invalid-items.md)
+move a coleta para o filho durável. O resultado interno atual é
+`{ output, evidence }`, sem contrato legado. `collect-evidence` usa uma tentativa
+e dois retries e revalida autoridade; seu esgotamento conserva a falha daquele
+shard e a continuidade das lanes. O pacote limitado é privado, sensível e
+validado novamente pelo host. Não repete inferência nem serializa contexto completo.
+
+Candidatos e observações inválidos admitidos pelo schema portátil são retidos
+ou rejeitados individualmente no transporte; rejeição sempre degrada o resultado.
+Violação do schema do Think continua falhando o filho. Streams `other`/`error`
+sem tools têm código durável de protocolo, sem fallback pago automático.
+Notificações a filhos comprovadamente terminais são reconhecidas sem envio.

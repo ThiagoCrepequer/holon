@@ -1,95 +1,14 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import { seedReviews, signIn } from "../support/browser-journey.js";
 const origin = "https://127.0.0.1:8795";
-async function signIn(page: Page, subject: number) {
-  let flows = 0;
-  await page
-    .context()
-    .setExtraHTTPHeaders({ "X-Holon-Test-Client": String(subject) });
-  await page.route(
-    "https://github.com/login/oauth/authorize**",
-    async (route) => {
-      const authorizationURL = route.request().url(),
-        code = `m5-${subject}-${++flows}`;
-      expect(
-        (
-          await page.request.post("/__test/provider/authorize", {
-            data: { authorizationURL, code, subject },
-          })
-        ).status(),
-      ).toBe(200);
-      const authorization = new URL(authorizationURL),
-        callback = new URL(origin + "/__test/provider/authorization");
-      callback.searchParams.set("code", code);
-      callback.searchParams.set(
-        "state",
-        authorization.searchParams.get("state")!,
-      );
-      await route.continue({ url: callback.href });
-    },
-  );
-  await page.goto("/?lang=en");
-  await page
-    .getByRole("button", { name: "Sign in with GitHub", exact: true })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Active sessions", exact: true }),
-  ).toBeVisible();
-  await page.waitForLoadState("load");
-  await page
-    .getByRole("button", { name: "Manage workspaces", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Create my personal workspace", exact: true })
-    .click();
-  await expect(
-    page.getByLabel("Workspace", { exact: true }).locator("option"),
-  ).toHaveCount(2);
-  const personal = await page
-    .getByLabel("Workspace", { exact: true })
-    .locator("option")
-    .nth(1)
-    .getAttribute("value");
-  await page
-    .getByLabel("Workspace", { exact: true })
-    .selectOption(personal ?? "");
-  await expect(page.getByLabel("GitHub installation ID")).toBeVisible();
-  const workspace = await page
-    .getByLabel("Workspace", { exact: true })
-    .inputValue();
-  await page
-    .getByLabel("GitHub installation ID")
-    .fill(String(subject + 100000));
-  await page.getByRole("button", { name: "Verify ownership and link" }).click();
-  await expect(
-    page.getByRole("button", { name: "Confirm connection change" }),
-  ).toBeVisible();
-  await page.waitForLoadState("load");
-  await page.getByRole("button", { name: "Confirm connection change" }).click();
-  await expect
-    .poll(async () => {
-      const response = await page.request.get(
-        `/api/workspaces/${workspace}/github/repositories`,
-      );
-      return response.status() === 200
-        ? (await response.json()).repositories
-        : [];
-    })
-    .toEqual([
-      { installationId: subject + 100000, repositoryId: subject + 200000 },
-    ]);
-  return workspace;
-}
 test("native SSR: zero hydration reads, one explicit read per filter/page/detail/refresh and no hostile HTML execution", async ({
   page,
 }, info) => {
   const subject =
     170001 + ["chromium", "firefox", "webkit"].indexOf(info.project.name) * 10;
   const workspace = await signIn(page, subject);
-  expect(
-    (
-      await page.request.post("/__test/reviews/seed", { data: { subject } })
-    ).status(),
-  ).toBe(200);
+  await seedReviews(page, subject);
   await expect
     .poll(
       async () =>

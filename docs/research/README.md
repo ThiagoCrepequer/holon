@@ -4,7 +4,7 @@ kind: index
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 ---
 
 # Investigacoes
@@ -15,6 +15,8 @@ Nao criam uma decisao por si so.
 
 ## Relatorios
 
+- [PR #186: falhas de execução, cobertura e qualidade do modelo](2026-10-10-pr186-review-failures.md)
+- [Correções da recuperação e cobertura no PR #186](2026-10-10-pr186-review-recovery-fixes.md)
 - [Cobertura após o PR #184: inventário, janelas e benchmark real](2026-10-09-review-context-coverage.md)
 - [Continuação do core: defeitos de código e limites do Gemma](2026-10-09-review-core-code-follow-up.md)
 - [Preservação das evidências e redução do diff do PR #182](2026-10-09-pr-evidence-packaging.md)

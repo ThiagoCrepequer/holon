@@ -7,10 +7,7 @@ import {
   loadReviews,
   createReviewQueryClient,
 } from "../app/features/reviews/review-client.js";
-import {
-  reviewQueryKey,
-  reviewParameters,
-} from "../app/features/reviews/review-parameters.js";
+import { reviewQueryKey, reviewParameters } from "../app/review-parameters.js";
 const identity = reviewIdentity("actor", "session"),
   date = "2026-10-09T00:00:00.000Z";
 const url = new URL(

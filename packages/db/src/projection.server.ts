@@ -148,6 +148,7 @@ export function createProjectionPersistence(
         term,
       ];
       const join = `FROM review_projection p JOIN review_projection_scope c ON c.installation_id=p.installation_id AND c.repository_id=p.repository_id`;
+      const startedAt = Date.now();
       const result = await database.batch<Record<string, unknown>>([
         database
           .prepare(`SELECT p.payload ${join} WHERE ${condition} AND
@@ -167,6 +168,17 @@ export function createProjectionPersistence(
       ]);
       if (!result.every((x) => x.success) || !result[0] || !result[1])
         throw new Error("Invalid projection list result");
+      console.info(
+        JSON.stringify({
+          event: "projection_read",
+          duration_ms: Date.now() - startedAt,
+          rows_read: result.reduce(
+            (sum, query) => sum + (query.meta.rows_read ?? 0),
+            0,
+          ),
+          returned: result[0].results.length,
+        }),
+      );
       const rows = result[0].results.map((x) =>
         privateReviewSummarySchema.parse(JSON.parse(String(x.payload))),
       );

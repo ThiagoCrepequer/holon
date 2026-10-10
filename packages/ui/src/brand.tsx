@@ -3,7 +3,7 @@ export function BrandMark({ decorative = false }: { decorative?: boolean }) {
   return (
     <svg
       viewBox="8.5 10.5 80 80"
-      className="holon-brand"
+      className="holon-brand size-11 shrink-0"
       role={decorative ? undefined : "img"}
       aria-hidden={decorative || undefined}
       aria-label={decorative ? undefined : "Holon"}

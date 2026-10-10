@@ -20,7 +20,7 @@ export const changedSymbolSchema = z.strictObject({
   kind: changedSymbolKindSchema,
   line: positiveIntegerSchema,
   // A body edit can be canonical even when the declaration line is outside the diff.
-  patchLine: positiveIntegerSchema.optional(),
+  patchLine: z.optional(positiveIntegerSchema),
   name: z.string().min(1).max(150),
   path: repositoryPathSchema,
 });

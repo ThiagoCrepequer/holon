@@ -53,7 +53,7 @@ export interface GitHubUserService {
   ): Promise<{
     accountId: string;
     generation: number;
-    repositoryIds: number[];
+    repositories: { id: number; fullName: string }[];
   }>;
   recipient(actor: AdmittedUser): Promise<RecipientProof>;
   identity(
@@ -330,7 +330,7 @@ export function createGitHubUserService(options: {
         if (String(subject.id) !== actor.githubAccountId)
           throw new CollaborationError("reconnect_required");
         await activeInstallation(actor, record, token, id);
-        const ids: number[] = [];
+        const repositories: { id: number; fullName: string }[] = [];
         let expected: number | null = null;
         for (let page = 1; page <= 100; page++) {
           const data = githubRepositoriesSchema.parse(
@@ -344,17 +344,25 @@ export function createGitHubUserService(options: {
           if (expected !== null && expected !== data.total_count)
             throw new CollaborationError("unavailable");
           expected = data.total_count;
-          ids.push(...data.repositories.map((r) => r.id));
-          if (ids.length === expected) {
-            if (new Set(ids).size !== ids.length)
+          repositories.push(
+            ...data.repositories.map((r) => ({
+              id: r.id,
+              fullName: r.full_name,
+            })),
+          );
+          if (repositories.length === expected) {
+            if (
+              new Set(repositories.map((row) => row.id)).size !==
+              repositories.length
+            )
               throw new CollaborationError("unavailable");
             return {
               accountId: record.accountId,
               generation: record.generation,
-              repositoryIds: ids,
+              repositories,
             };
           }
-          if (data.repositories.length < 100 || ids.length > expected)
+          if (data.repositories.length < 100 || repositories.length > expected)
             throw new CollaborationError("unavailable");
         }
         throw new CollaborationError("unavailable");

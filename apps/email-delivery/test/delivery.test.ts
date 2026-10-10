@@ -302,23 +302,30 @@ it("a short persistence outage retries the same known result without another pro
   expect(send).toHaveBeenCalledTimes(1);
   expect(writes).toBe(2);
 });
-it("DLQ replay remains terminal and logs only a bounded signal", async () => {
-  const i = await invite();
-  await createInvitationPersistence(db).cancel(owner, "team", i.id);
-  const send = vi.fn(async () => ({ messageId: "synthetic" }));
-  const { sender, ctx } = worker(send);
-  const signal = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const messages = createMessageBatch("holon-email-dlq", [
-    { id: "dlq", timestamp: new Date(), attempts: 99, body: { jobId: i.id } },
-  ]);
-  await sender.queue(messages);
-  expect((await getQueueResult(messages, ctx)).explicitAcks).toEqual(["dlq"]);
-  expect(send).not.toHaveBeenCalled();
-  expect(signal).toHaveBeenCalledWith(
-    JSON.stringify({ event: "email_dlq", messages: 1 }),
-  );
-  signal.mockRestore();
-});
+it.each([
+  "holon-email-dlq",
+  "holon-email-dlq-local",
+  "holon-email-dlq-preview",
+])(
+  "%s replay remains terminal and logs only a bounded signal",
+  async (queue) => {
+    const i = await invite();
+    await createInvitationPersistence(db).cancel(owner, "team", i.id);
+    const send = vi.fn(async () => ({ messageId: "synthetic" }));
+    const { sender, ctx } = worker(send);
+    const signal = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const messages = createMessageBatch(queue, [
+      { id: "dlq", timestamp: new Date(), attempts: 99, body: { jobId: i.id } },
+    ]);
+    await sender.queue(messages);
+    expect((await getQueueResult(messages, ctx)).explicitAcks).toEqual(["dlq"]);
+    expect(send).not.toHaveBeenCalled();
+    expect(signal).toHaveBeenCalledWith(
+      JSON.stringify({ event: "email_dlq", messages: 1 }),
+    );
+    signal.mockRestore();
+  },
+);
 it("mixed batch acknowledges only individual durable results and invalid payloads", async () => {
   const success = await invite();
   const missing = await createInvitationPersistence(db).create(owner, "team", {
@@ -442,14 +449,16 @@ it.each(["en", "pt-BR"])(
       base.EMAIL_FROM,
     );
     expect(message.html).toContain("&lt;img");
-    expect(message.html).not.toContain("<img");
+    expect(message.html?.match(/<img\b/g)).toHaveLength(1);
+    expect(message.html).not.toContain("<img src=x");
     expect(message.html).not.toContain("<script");
     expect(message.text).toContain(context.workspaceName);
     expect(message.html).toContain(
       "https://dashboard.example.invalid/invitations/invite_safe",
     );
     expect(message).not.toHaveProperty("headers");
-    expect(message).not.toHaveProperty("attachments");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments?.[0]?.type).toBe("image/png");
     for (const origin of [
       "http://dashboard.invalid",
       "https://evil.invalid/path",
@@ -478,6 +487,30 @@ it.each(["en", "pt-BR"])(
     ).toThrow();
   },
 );
+
+it("invitation embeds the official logo without a remote image request and retains a readable text alternative", () => {
+  const message = invitationMessage(
+    {
+      jobId: "invite_brand",
+      recipient: "target@example.invalid",
+      locale: "pt-BR",
+      workspaceName: "Synthetic team",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    },
+    base.APP_ORIGIN,
+    base.EMAIL_FROM,
+  );
+  expect(message.html).toContain('src="cid:holon-semente"');
+  expect(message.html).toContain('alt="Holon"');
+  expect(message.attachments).toHaveLength(1);
+  expect(message.attachments?.[0]).toMatchObject({
+    disposition: "inline",
+    contentId: "holon-semente",
+    type: "image/png",
+  });
+  expect(message.text).toContain("Abrir convite:");
+  expect(message.html).not.toMatch(/<img[^>]+src="https?:/);
+});
 it("unrecognized or malformed provider acknowledgement remains unknown", async () => {
   const message = invitationMessage(
     {

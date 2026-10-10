@@ -1,72 +1,41 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { sessionOutputDtoSchema } from "@holon/contracts/dashboard";
 import { expect, test, type Page } from "@playwright/test";
+
+import { accountTrigger, openPreferences } from "../support/browser-journey.js";
 const origin = "https://127.0.0.1:8795";
 test.use({ timezoneId: "Asia/Tokyo" });
 
-test("device pages replace the visible batch and keep generation checks outside the page", async ({
+test("the user menu contains only preferences and sign out, with keyboard dismissal and no device reads", async ({
   page,
 }, info) => {
   const subject =
     99000 + ["chromium", "firefox", "webkit"].indexOf(info.project.name);
-  await signIn(page, subject, `m2-pages-${subject}`);
-  const session = sessionOutputDtoSchema.parse(
-    await page.evaluate(
-      async () => await (await fetch("/api/auth/session")).json(),
-    ),
-  );
-  const firstPage = Array.from({ length: 100 }, (_, index) => ({
-    id: index === 0 ? session.session.id : `paged_device_${index}`,
-    createdAt: "2026-10-01T00:00:00.000Z",
-    expiresAt: session.session.expiresAt,
-    isCurrent: index === 0,
-    label: "chrome",
-  }));
+  await signIn(page, subject, `m2-menu-${subject}`);
   const reads: string[] = [];
-  await page.route("**/api/auth/sessions?*", async (route) => {
-    const cursor = new URL(route.request().url()).searchParams.get("cursor");
-    expect(cursor).toBe("paged_device_99");
-    reads.push(cursor!);
-    await route.fulfill({
-      json: {
-        sessions: [
-          { ...firstPage[99], id: "paged_device_100", isCurrent: false },
-        ],
-        currentSessionId: session.session.id,
-        nextCursor: null,
-      },
-    });
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/auth/sessions")
+      reads.push(request.url());
   });
-  await page.route("**/api/auth/sessions", async (route) => {
-    reads.push("first");
-    await route.fulfill({
-      json: {
-        sessions: firstPage,
-        currentSessionId: session.session.id,
-        nextCursor: "paged_device_99",
-      },
-    });
-  });
-  await page
-    .getByRole("button", { name: "Active sessions", exact: true })
-    .click();
-  const devices = page.getByRole("dialog").getByRole("listitem");
-  await expect(devices).toHaveCount(100);
-  await page
-    .getByRole("button", { name: "Next sessions", exact: true })
-    .click();
-  await expect(devices).toHaveCount(1);
+  const trigger = accountTrigger(page);
+  await expect(trigger).toBeEnabled();
+  await trigger.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem")).toHaveCount(2);
   await expect(
-    page.getByRole("button", { name: "Next sessions", exact: true }),
-  ).toHaveCount(0);
+    page.getByRole("menuitem", { name: "Preferences", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    page.getByRole("menuitem", { name: "Sign out", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
   await expect(
     page.getByRole("button", { name: "Active sessions", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Refresh sessions", exact: true })
-    .click();
-  await expect(devices).toHaveCount(100);
-  expect(reads).toEqual(["first", "paged_device_99", "first"]);
+  ).toHaveCount(0);
+  expect(reads).toEqual([]);
 });
 
 test("an idle document does not probe or renew the session automatically", async ({
@@ -77,7 +46,7 @@ test("an idle document does not probe or renew the session automatically", async
   await page.clock.install();
   await signIn(page, subject, `m2-idle-${subject}`);
   // Open an interactive dialog to ensure hydration and effects have completed.
-  await page.getByRole("button", { name: "Preferences", exact: true }).click();
+  await openPreferences(page);
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   const probes: string[] = [];
@@ -89,7 +58,7 @@ test("an idle document does not probe or renew the session automatically", async
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect.poll(() => probes.length).toBe(0);
   await expect(
-    page.getByRole("button", { name: "Active sessions", exact: true }),
+    page.getByRole("button", { name: "Account menu", exact: true }),
   ).toBeVisible();
 });
 async function signIn(
@@ -131,7 +100,7 @@ async function signIn(
     .click();
   await expect(
     page.getByRole("button", {
-      name: /^(Active sessions|Sessões ativas)$/u,
+      name: /^(Account menu|Menu da conta)$/u,
       exact: true,
     }),
   ).toBeVisible();
@@ -159,12 +128,7 @@ for (const locale of ["en", "pt-BR"] as const) {
       "data-holon-timezone",
       "UTC",
     );
-    await page
-      .getByRole("button", {
-        name: locale === "en" ? "Preferences" : "Preferências",
-        exact: true,
-      })
-      .click();
+    await openPreferences(page);
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS("opacity", "1");
@@ -224,12 +188,7 @@ for (const locale of ["en", "pt-BR"] as const) {
       const device = await second.newPage();
       await signIn(device, subject, `m2-preferences-device-${subject}`, locale);
       await expect(device.locator("html")).toHaveAttribute("lang", next);
-      await device
-        .getByRole("button", {
-          name: next === "en" ? "Preferences" : "Preferências",
-          exact: true,
-        })
-        .click();
+      await openPreferences(device);
       await expect(
         device.getByRole("combobox", {
           name: next === "en" ? "Time zone" : "Fuso horário",
@@ -250,12 +209,7 @@ for (const locale of ["en", "pt-BR"] as const) {
         "UTC",
       );
       await device.reload();
-      await device
-        .getByRole("button", {
-          name: next === "en" ? "Preferences" : "Preferências",
-          exact: true,
-        })
-        .click();
+      await openPreferences(device);
       await expect(
         device.getByRole("combobox", {
           name: next === "en" ? "Time zone" : "Fuso horário",
@@ -280,7 +234,7 @@ test("failed preference command stays unconfirmed; retry saves and expired sessi
   const subject =
     96000 + ["chromium", "firefox", "webkit"].indexOf(info.project.name);
   await signIn(page, subject, `m2-retry-${subject}`);
-  await page.getByRole("button", { name: "Preferences", exact: true }).click();
+  await openPreferences(page);
   await page.getByRole("combobox", { name: "Language" }).selectOption("pt-BR");
   await page
     .getByRole("combobox", { name: "Time zone" })
@@ -314,12 +268,7 @@ test("failed preference command stays unconfirmed; retry saves and expired sessi
       })
     ).status(),
   ).toBe(200);
-  await page
-    .getByRole("button", {
-      name: /^(Active sessions|Sessões ativas)$/u,
-      exact: true,
-    })
-    .click();
+  await page.getByRole("button", { name: "Workspace", exact: true }).click();
   await expect(
     page.getByRole("button", {
       name: /^(Sign in with GitHub|Entrar com GitHub)$/u,
@@ -328,7 +277,7 @@ test("failed preference command stays unconfirmed; retry saves and expired sessi
   ).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: /^(Active sessions|Sessões ativas)$/u,
+      name: /^(Account menu|Menu da conta)$/u,
       exact: true,
     }),
   ).toHaveCount(0);
@@ -356,39 +305,43 @@ test("device revocation and global logout remove each affected session on its ne
     expect(sessionOutputDtoSchema.parse(firstId).session.id).not.toBe(
       sessionOutputDtoSchema.parse(secondId).session.id,
     );
-    await page
-      .getByRole("button", { name: "Active sessions", exact: true })
-      .click();
-    const sessions = page.getByRole("dialog").getByRole("listitem");
-    await expect(sessions).toHaveCount(2);
-    await sessions
-      .filter({ hasNotText: "(this device)" })
-      .getByRole("button", { name: "Revoke session", exact: true })
-      .click();
-    await expect(sessions).toHaveCount(1);
-    await device.bringToFront();
+    const csrf = (await page.context().cookies()).find(
+      (cookie) => cookie.name === "holon_csrf",
+    )?.value;
+    expect(typeof csrf === "string" && csrf.length >= 32).toBe(true);
+    const target = sessionOutputDtoSchema.parse(secondId);
+    const devices = await page.request.get("/api/auth/sessions");
+    expect((await devices.json()).sessions).toHaveLength(2);
+    const revoked = await page.request.post(
+      `/api/auth/sessions/${target.session.id}/revoke`,
+      { data: {}, headers: { "X-CSRF-Token": csrf!, Origin: origin } },
+    );
+    expect(revoked.status()).toBe(200);
+    expect(
+      (await (await page.request.get("/api/auth/sessions")).json()).sessions,
+    ).toHaveLength(1);
     await device
-      .getByRole("button", { name: "Active sessions", exact: true })
+      .getByRole("button", { name: "Workspace", exact: true })
       .click();
     await expect(
       device.getByRole("button", { name: "Sign in with GitHub", exact: true }),
     ).toBeVisible();
     expect((await page.request.get("/api/auth/session")).status()).toBe(200);
-    await page.keyboard.press("Escape");
     await signIn(device, subject, `m2-devices-reconnect-${subject}`);
-    await page
-      .getByRole("button", { name: "Active sessions", exact: true })
-      .click();
-    await expect(page.getByRole("dialog").getByRole("listitem")).toHaveCount(2);
-    await page
-      .getByRole("button", { name: "Sign out on all devices", exact: true })
-      .click();
+    expect(
+      (await (await page.request.get("/api/auth/sessions")).json()).sessions,
+    ).toHaveLength(2);
+    const revokedAll = await page.request.post("/api/auth/sign-out/all", {
+      data: {},
+      headers: { "X-CSRF-Token": csrf!, Origin: origin },
+    });
+    expect(revokedAll.status()).toBe(200);
+    await page.getByRole("button", { name: "Workspace", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Sign in with GitHub", exact: true }),
     ).toBeVisible();
-    await device.bringToFront();
     await device
-      .getByRole("button", { name: "Active sessions", exact: true })
+      .getByRole("button", { name: "Workspace", exact: true })
       .click();
     await expect(
       device.getByRole("button", { name: "Sign in with GitHub", exact: true }),

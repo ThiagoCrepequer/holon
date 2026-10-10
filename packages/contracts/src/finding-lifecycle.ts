@@ -1,6 +1,5 @@
 import type {
   FindingFingerprint,
-  FindingStatus,
   PrKey,
   ReconciledFinding,
   ReconciliationSummary,
@@ -9,8 +8,8 @@ import type {
 } from "@holon/domain";
 import { z } from "zod";
 
+import { reviewFindingSchema } from "./review-finding.js";
 import { reviewTextLimits } from "./review-limits.js";
-import { reviewFindingSchema } from "./review-output.js";
 import {
   gitShaSchema,
   positiveIntegerSchema,
@@ -27,18 +26,12 @@ export const findingFingerprintSchema: z.ZodType<FindingFingerprint> = z
     "Expected a canonical finding fingerprint (fp:<sha256>)",
   ) as z.ZodType<FindingFingerprint>;
 
-export const findingStatusSchema: z.ZodType<FindingStatus> = z.enum([
-  "new",
-  "persistent",
-  "resolved",
-  "obsolete",
-  "reintroduced",
-  "dismissed",
-]);
+export { findingStatusSchema } from "./finding-status.js";
+import { findingStatusSchema } from "./finding-status.js";
 
+export type { FindingStatus } from "@holon/domain";
 export type {
   FindingFingerprint,
-  FindingStatus,
   ReconciledFinding,
   ReconciliationSummary,
   TrackedFinding,
@@ -52,10 +45,10 @@ export const trackedFindingSchema: z.ZodType<TrackedFinding> = z.strictObject({
   filePath: repositoryPathSchema,
   fingerprint: findingFingerprintSchema,
   firstSeenHeadSha: gitShaSchema,
-  firstSeenRunId: runIdSchema as z.ZodType<RunId>,
-  githubCommentId: positiveIntegerSchema.optional(),
+  firstSeenRunId: runIdSchema as z.core.$ZodType<RunId>,
+  githubCommentId: z.optional(positiveIntegerSchema),
   lastSeenHeadSha: gitShaSchema,
-  lastSeenRunId: runIdSchema as z.ZodType<RunId>,
+  lastSeenRunId: runIdSchema as z.core.$ZodType<RunId>,
   line: positiveIntegerSchema,
   prKey: prKeySchema as z.ZodType<PrKey>,
   severity: z.enum(["critical", "high", "medium", "low"]),
@@ -75,11 +68,12 @@ export const reconciliationSummarySchema: z.ZodType<ReconciliationSummary> =
     totalActiveCount: z.number().int().nonnegative(),
   });
 
-export const reconciledFindingSchema = reviewFindingSchema.extend({
+export const reconciledFindingSchema = z.strictObject({
+  ...reviewFindingSchema.shape,
   identityAmbiguous: z.boolean().optional(),
   evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
   fingerprint: findingFingerprintSchema,
   firstSeenHeadSha: gitShaSchema.optional(),
-  previousCommentId: positiveIntegerSchema.optional(),
+  previousCommentId: z.optional(positiveIntegerSchema),
   status: findingStatusSchema,
 });

@@ -77,7 +77,7 @@ it("only documented GitHub authorization redirects are used after scoped reauth"
   expect(JSON.parse(fetch.mock.calls[1]?.[1].body)).toMatchObject({
     reauthIntentId: "reauth_synthetic",
     callbackURL:
-      "/?workspace=workspace&installation=77&connectionAction=link&reauth=reauth_synthetic",
+      "/account?workspace=workspace&installation=77&connectionAction=link&reauth=reauth_synthetic",
   });
 });
 it.each([null, {}, { reauthIntentId: 42 }])(

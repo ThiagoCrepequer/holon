@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
+
+import { assertAssetBudget, measureAssets } from "./performance-budget.mjs";
 async function files(directory) {
   const result = [];
   for (const item of await readdir(directory, { withFileTypes: true })) {
@@ -28,8 +30,9 @@ for (const file of assets.filter((value) => value.endsWith(".js"))) {
       `${file}: server-only symbol ${forbidden}`,
     );
 }
-// Base document only. Review/diff/chart budgets will be qualified by their owning features.
-// Record the measured baseline before selecting a regression budget.
+const { measured } = await measureAssets("build/client/assets");
+assertAssetBudget(measured);
+console.log(JSON.stringify({ event: "dashboard_asset_budget", ...measured }));
 const css = (
   await Promise.all(
     assets
@@ -41,7 +44,9 @@ for (const token of [
   "--holon-action-bg",
   "--holon-motion-slow",
   ".inline-flex",
-  ".holon-button",
+  ".bg-primary",
+  ".min-h-control",
+  ".focus-visible\\:outline-ring",
   ".holon-dialog",
 ])
   assert(css.includes(token), `Missing UI CSS: ${token}`);
@@ -53,7 +58,18 @@ const config = JSON.parse(await readFile("build/server/wrangler.json", "utf8"));
 const expectedEnv = process.env.CLOUDFLARE_ENV;
 const targetEnv = config.targetEnvironment;
 
-if (expectedEnv === "production") {
+if (expectedEnv === "preview") {
+  assert.equal(targetEnv, "preview");
+  assert.equal(config.name, "holon-dashboard-preview");
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.equal(config.vars.AUTH_ENVIRONMENT, "preview");
+  assert.equal(config.vars.AUTH_ENABLED, "false");
+  assert.equal(config.vars.DASHBOARD_RECOVERY_MODE, "closed");
+  assert(
+    config.d1_databases.every((b) => b.database_name.endsWith("-preview")),
+  );
+} else if (expectedEnv === "production") {
   assert.equal(
     targetEnv,
     "production",
@@ -129,7 +145,10 @@ if (expectedEnv === "production") {
 assert.deepEqual(config.services, [
   {
     binding: "REVIEW_CORE",
-    service: "holon-control-plane",
+    service:
+      targetEnv === "preview"
+        ? "holon-control-plane-preview"
+        : "holon-control-plane",
     entrypoint: "DashboardReviewReader",
   },
   {
@@ -137,7 +156,9 @@ assert.deepEqual(config.services, [
     service:
       targetEnv === "production"
         ? "holon-email-delivery"
-        : "holon-email-delivery-local",
+        : targetEnv === "preview"
+          ? "holon-email-delivery-preview"
+          : "holon-email-delivery-local",
   },
 ]);
 console.log(

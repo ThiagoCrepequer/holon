@@ -34,7 +34,7 @@ export function workspaceMessages(i18n: I18n) {
     unconfirmed: i18n._({
       id: "collaboration.unconfirmed",
       message:
-        "Result unknown. Retry the same invitation to confirm its original intention.",
+        "Result unknown. Retry the same action to confirm its original intention.",
     }),
     rate: i18n._({
       id: "collaboration.rate",

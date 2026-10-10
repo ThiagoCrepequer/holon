@@ -96,6 +96,13 @@ async function runSandboxOperation<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
+function disposeRpcResult(value: unknown): void {
+  if (value !== null && typeof value === "object" && Symbol.dispose in value) {
+    const dispose = value[Symbol.dispose];
+    if (typeof dispose === "function") dispose.call(value);
+  }
+}
+
 export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
   public override enableInternet = false;
   private readonly toolCache = new SnapshotToolCache();
@@ -135,8 +142,18 @@ export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
     runIdSchema.parse(runId);
     await this.assertReviewLease(deadlineAt);
     const pack = [];
-    const execution = new ToolExecution(deadlineAt, (work) =>
-      this.ctx.waitUntil(work),
+    const execution = new ToolExecution(
+      deadlineAt,
+      (work) => this.ctx.waitUntil(work),
+      (fields) =>
+        console.info(
+          JSON.stringify({
+            event: "repository.tool_operation",
+            runId,
+            operation: "evidence_pack",
+            ...fields,
+          }),
+        ),
     );
     const sandbox = new CloudflareSandboxPort(
       getSandbox(this.env.SANDBOXES, createSandboxId(runId)),
@@ -194,7 +211,15 @@ export class HolonSandbox extends Sandbox<RepositoryExecutorEnv> {
     const execution = new ToolExecution(
       deadlineAt,
       (work) => this.ctx.waitUntil(work),
-      () => {},
+      (fields) =>
+        console.info(
+          JSON.stringify({
+            event: "repository.tool_operation",
+            runId,
+            operation: "tool_read",
+            ...fields,
+          }),
+        ),
     );
     const sandbox = new CloudflareSandboxPort(
       getSandbox(this.env.SANDBOXES, createSandboxId(runId)),
@@ -290,7 +315,11 @@ export class CloudflareSandboxPort implements SandboxPort {
     stage?: string,
   ): Promise<T> {
     return this.execution
-      ? this.execution.wait(start, discard, stage)
+      ? this.execution.wait(
+          start,
+          discard ?? (async (value) => disposeRpcResult(value)),
+          stage,
+        )
       : start();
   }
 
@@ -311,16 +340,18 @@ export class CloudflareSandboxPort implements SandboxPort {
   }
 
   public async exists(path: string): Promise<boolean> {
-    return await runSandboxOperation(
-      async () =>
-        (
-          await this.wait(
-            () => this.sandbox.exists(path),
-            undefined,
-            "context_exists",
-          )
-        ).exists,
-    );
+    return runSandboxOperation(async () => {
+      const result = await this.wait(
+        () => this.sandbox.exists(path),
+        undefined,
+        "context_exists",
+      );
+      try {
+        return result.exists;
+      } finally {
+        disposeRpcResult(result);
+      }
+    });
   }
 
   public async readFile(path: string): Promise<string> {
@@ -330,12 +361,19 @@ export class CloudflareSandboxPort implements SandboxPort {
         undefined,
         "read_file",
       );
-      return result.content;
+      try {
+        return result.content;
+      } finally {
+        disposeRpcResult(result);
+      }
     });
   }
 
   public async writeFile(path: string, content: string): Promise<void> {
-    await runSandboxOperation(() => this.sandbox.writeFile(path, content));
+    await runSandboxOperation(async () => {
+      const result = await this.sandbox.writeFile(path, content);
+      disposeRpcResult(result);
+    });
   }
 
   public blockGitHubEgress(): Promise<void> {
@@ -362,10 +400,14 @@ export class CloudflareSandboxPort implements SandboxPort {
               ? {}
               : { timeout: options.timeoutMs }),
           }),
-        (late) =>
-          this.execution
-            ? this.execution.cleanup(() => late.kill())
-            : late.kill(),
+        async (late) => {
+          try {
+            if (this.execution) await this.execution.cleanup(() => late.kill());
+            else await late.kill();
+          } finally {
+            disposeRpcResult(late);
+          }
+        },
         "command_start",
       );
       const activeProcess = process;
@@ -384,13 +426,17 @@ export class CloudflareSandboxPort implements SandboxPort {
         undefined,
         "command_output",
       );
-      return {
-        exitCode: output.exitCode,
-        stderr: output.stderr,
-        stdout: output.stdout,
-        timedOut: output.timedOut,
-        truncated: output.truncated,
-      };
+      try {
+        return {
+          exitCode: output.exitCode,
+          stderr: output.stderr,
+          stdout: output.stdout,
+          timedOut: output.timedOut,
+          truncated: output.truncated,
+        };
+      } finally {
+        disposeRpcResult(output);
+      }
     } catch (error) {
       try {
         if (process) {
@@ -403,6 +449,8 @@ export class CloudflareSandboxPort implements SandboxPort {
         // The process may already have exited or the container may be gone.
       }
       throw mapSandboxSdkError(error);
+    } finally {
+      disposeRpcResult(process);
     }
   }
 }

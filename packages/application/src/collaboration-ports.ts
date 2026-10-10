@@ -4,6 +4,7 @@ import type {
   InvitationDto,
   ConnectionCommand,
   ConnectionDto,
+  AuthorizedRepositoryList,
 } from "@holon/contracts/dashboard-collaboration";
 
 import type { AuthorizedReviewScope } from "./dashboard-ports.js";
@@ -44,6 +45,10 @@ export interface WorkspaceCollaborationPort {
     actor: AdmittedUser,
     workspaceId: string,
   ): Promise<AuthorizedReviewScope>;
+  listRepositories(
+    actor: AdmittedUser,
+    workspaceId: string,
+  ): Promise<AuthorizedRepositoryList>;
   connectionStatus(
     actor: AdmittedUser,
   ): Promise<{ status: "connected" | "refreshing" | "reconnect_required" }>;

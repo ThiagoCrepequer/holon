@@ -1,3 +1,3 @@
 /** Generated from compiler inputs by config:schema:generate. */
 export const configurationCompilerIdentity =
-  "352943d8efb77f962df3506caf57d38a3dad51f6110d800407c4e1358a6804fb";
+  "8c140c0297043bfc63ce3e31340d6b077285f9d519bfa36894347358b6d90cc9";

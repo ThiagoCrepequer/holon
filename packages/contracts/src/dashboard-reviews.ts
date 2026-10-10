@@ -1,34 +1,34 @@
 import { runStates } from "@holon/domain";
-import { z } from "zod";
+import { z, _default as withDefault } from "zod/mini";
 
 // Configure CSP-safe Zod before the dependent core schemas construct objects.
 import { dashboardIdSchema } from "./dashboard.js";
-import { findingStatusSchema } from "./finding-lifecycle.js";
-import { reviewFindingSchema } from "./review-output.js";
-import { runIdSchema } from "./shared.js";
+import { findingStatusSchema } from "./finding-status.js";
+import { reviewFindingSchema } from "./review-finding.js";
+import { runIdSchema } from "./review-primitives.js";
 
-const id = z.number().int().positive().safe();
-const sha = z.string().regex(/^[a-f0-9]{40}$/);
+const id = z.number().check(z.int()).check(z.positive());
+const sha = z.string().check(z.regex(/^[a-f0-9]{40}$/));
 export const reviewCoordinatesSchema = z.strictObject({
   installationId: id,
   repositoryId: id,
   pullRequestNumber: id,
 });
-export const pullRequestMetadataSchema = reviewCoordinatesSchema.extend({
-  title: z.string().max(1024),
-  author: z.string().min(1).max(100),
+export const pullRequestMetadataSchema = z.extend(reviewCoordinatesSchema, {
+  title: z.string().check(z.maxLength(1024)),
+  author: z.string().check(z.minLength(1)).check(z.maxLength(100)),
   pullRequestState: z.enum(["open", "closed", "merged"]),
   headSha: sha,
   baseSha: sha,
   sourceUpdatedAt: z.iso.datetime(),
 });
-export const privateReviewSummarySchema = reviewCoordinatesSchema.extend({
-  title: z.string().max(1024),
-  author: z.string().min(1).max(100),
+export const privateReviewSummarySchema = z.extend(reviewCoordinatesSchema, {
+  title: z.string().check(z.maxLength(1024)),
+  author: z.string().check(z.minLength(1)).check(z.maxLength(100)),
   pullRequestState: z.enum(["open", "closed", "merged"]),
   headSha: sha,
   baseSha: sha,
-  runId: runIdSchema.nullable(),
+  runId: z.nullable(runIdSchema),
   state: z.enum(["awaiting_review", "metadata_conflict", ...runStates]),
   snapshotRevision: id,
   activityAt: z.iso.datetime(),
@@ -49,46 +49,59 @@ export const reviewListInputSchema = z.strictObject({
   workspaceId: dashboardIdSchema,
   installationId: id,
   repositoryId: id,
-  status: privateReviewSummarySchema.shape.state.nullable().default(null),
-  search: z.string().max(200).default(""),
-  cursor: z.string().min(1).max(1024).nullable().default(null),
-  limit: z.number().int().min(1).max(50).default(50),
+  status: withDefault(z.nullable(privateReviewSummarySchema.shape.state), null),
+  search: withDefault(z.string().check(z.maxLength(200)), ""),
+  cursor: withDefault(
+    z.nullable(z.string().check(z.minLength(1)).check(z.maxLength(1024))),
+    null,
+  ),
+  limit: withDefault(
+    z.number().check(z.int()).check(z.gte(1)).check(z.lte(50)),
+    50,
+  ),
 });
 export const privateReviewPageSchema = z.strictObject({
-  items: z.array(privateReviewSummarySchema).max(50),
-  nextCursor: z.string().max(1024).nullable(),
-  total: z.number().int().nonnegative().safe(),
+  items: z.array(privateReviewSummarySchema).check(z.maxLength(50)),
+  nextCursor: z.nullable(z.string().check(z.maxLength(1024))),
+  total: z.number().check(z.int()).check(z.nonnegative()),
   observedAt: z.iso.datetime(),
 });
-export const reviewDetailInputSchema = reviewCoordinatesSchema.extend({
+export const reviewDetailInputSchema = z.extend(reviewCoordinatesSchema, {
   workspaceId: dashboardIdSchema,
-  cursor: z.string().min(1).max(512).nullable().default(null),
+  cursor: withDefault(
+    z.nullable(z.string().check(z.minLength(1)).check(z.maxLength(512))),
+    null,
+  ),
 });
-export const coreReviewDetailInputSchema = reviewCoordinatesSchema.extend({
+export const coreReviewDetailInputSchema = z.extend(reviewCoordinatesSchema, {
   cursor: reviewDetailInputSchema.shape.cursor,
 });
 export const privateReviewDetailSchema = z.strictObject({
   review: privateReviewSummarySchema,
-  summary: z.string().max(16000).nullable(),
+  summary: z.nullable(z.string().check(z.maxLength(16000))),
   findings: z
     .array(
-      reviewFindingSchema.extend({
-        fingerprint: z.string().max(200),
+      z.extend(reviewFindingSchema, {
+        fingerprint: z.string().check(z.maxLength(200)),
         status: findingStatusSchema,
       }),
     )
-    .max(10),
-  totalFindings: z.number().int().nonnegative().max(10000),
-  nextCursor: z.string().max(512).nullable(),
+    .check(z.maxLength(10)),
+  totalFindings: z
+    .number()
+    .check(z.int())
+    .check(z.nonnegative())
+    .check(z.lte(10000)),
+  nextCursor: z.nullable(z.string().check(z.maxLength(512))),
 });
 export const recoveryScopeSchema = z.strictObject({
   installationId: id,
   repositoryId: id,
   expectedGeneration: id,
 });
-export const resumeProjectionSchema = recoveryScopeSchema
-  .extend({ generation: id })
-  .refine((x) => x.generation > x.expectedGeneration);
+export const resumeProjectionSchema = z
+  .extend(recoveryScopeSchema, { generation: id })
+  .check(z.refine((x) => x.generation > x.expectedGeneration));
 /** Accent-insensitive contains; NFD and Unicode mark removal are applied on both sides. */
 export function normalizeReviewSearch(value: string): string {
   return value.normalize("NFD").toLowerCase().replace(/\p{M}/gu, "");
@@ -113,12 +126,16 @@ export interface PrivateReviewCorePort {
 
 export const reviewCursorPositionSchema = z.strictObject({
   activityAt: z.iso.datetime(),
-  pullRequestNumber: z.number().int().positive().safe(),
+  pullRequestNumber: z
+    .number()
+    .check(z.int())
+    .check(z.positive())
+    .check(z.int()),
 });
 
 export const reviewReadIdentitySchema = z.strictObject({
-  userId: z.string().min(1).max(200),
-  sessionId: z.string().min(1).max(200),
+  userId: z.string().check(z.minLength(1)).check(z.maxLength(200)),
+  sessionId: z.string().check(z.minLength(1)).check(z.maxLength(200)),
 });
 export const reviewListResponseSchema = z.strictObject({
   identity: reviewReadIdentitySchema,

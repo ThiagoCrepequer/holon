@@ -57,7 +57,11 @@ export default class EmailDelivery extends WorkerEntrypoint<DeliveryBindings> {
     }
   }
   override async queue(batch: MessageBatch<unknown>): Promise<void> {
-    if (batch.queue.endsWith("-dlq") || batch.queue.endsWith("-dlq-local"))
+    if (
+      batch.queue.endsWith("-dlq") ||
+      batch.queue.endsWith("-dlq-local") ||
+      batch.queue.endsWith("-dlq-preview")
+    )
       console.warn(
         JSON.stringify({
           event: "email_dlq",

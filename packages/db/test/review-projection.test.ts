@@ -245,6 +245,30 @@ it("queries two repositories of 10,000 PRs before LIMIT; records native D1 work 
     0,
   );
   expect((await reader.list({ ...input, search: "o" })).total).toBe(9999);
+  expect(
+    (await reader.list({ ...input, search: "rare late", status: "completed" }))
+      .total,
+  ).toBe(0);
+  expect(
+    (
+      await reader.list({
+        ...input,
+        repositoryId: 3,
+        search: "rare late",
+        status: "awaiting_review",
+      })
+    ).items.map((x) => x.pullRequestNumber),
+  ).toEqual([1]);
+  expect(
+    (
+      await reader.list({
+        ...input,
+        repositoryId: 3,
+        search: "nonexistent",
+        status: "awaiting_review",
+      })
+    ).total,
+  ).toBe(0);
   const plan = await bindings.PROJECTION_DB.prepare(
     "EXPLAIN QUERY PLAN SELECT payload FROM review_projection WHERE installation_id=? AND repository_id=? AND generation=? ORDER BY activity_at DESC,pull_request_number DESC LIMIT 51",
   )

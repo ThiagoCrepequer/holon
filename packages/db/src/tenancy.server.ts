@@ -1,5 +1,9 @@
 import {
   workspaceDtoSchema,
+  dashboardIdSchema,
+  dashboardCursorSchema,
+  workspaceMemberPageSchema,
+  type WorkspaceMemberPage,
   workspaceMembershipDtoSchema,
   createTeamWorkspaceInputSchema,
   tenancyOperationReceiptSchema,
@@ -25,6 +29,12 @@ import { TenancyError, type TenancyErrorCode } from "./tenancy-error.server.js";
 export { TenancyError, type TenancyErrorCode, type PendingReauthContext };
 
 export interface TenancyPersistence {
+  /** Atomically admits current session/account/membership with the returned page. */
+  listMembers(
+    actor: AdmittedUser,
+    workspaceId: string,
+    cursor: string | null,
+  ): Promise<WorkspaceMemberPage>;
   provisionPersonalWorkspace(actor: AdmittedUser): Promise<{
     workspace: WorkspaceDto;
     membership: WorkspaceMembershipDto;
@@ -505,6 +515,57 @@ export function createTenancyPersistence(
 
         throw new TenancyError("team_workspace_creation_failed");
       }
+    },
+
+    async listMembers(
+      actor: AdmittedUser,
+      workspaceId: string,
+      cursor: string | null,
+    ) {
+      dashboardIdSchema.parse(workspaceId);
+      dashboardCursorSchema.parse(cursor);
+      const guard = `EXISTS(SELECT 1 FROM membership admission
+        JOIN session s ON s.userId=admission.user_id
+        JOIN account a ON a.userId=s.userId AND a.providerId='github'
+        WHERE admission.workspace_id=? AND admission.user_id=? AND s.id=? AND s.expiresAt>CAST(unixepoch('subsec') * 1000 AS INTEGER) AND a.accountId=?)`;
+      const params = [
+        workspaceId,
+        actor.id,
+        actor.sessionId,
+        actor.githubAccountId,
+      ];
+      const results = await database.batch([
+        database
+          .prepare(
+            `SELECT role FROM membership WHERE workspace_id=? AND user_id=? AND ${guard}`,
+          )
+          .bind(workspaceId, actor.id, ...params),
+        database
+          .prepare(`SELECT m.user_id AS userId,u.name,m.role FROM membership m JOIN user u ON u.id=m.user_id
+          WHERE m.workspace_id=? AND ${guard} AND (? IS NULL OR m.user_id>?) ORDER BY m.user_id LIMIT 101`)
+          .bind(workspaceId, ...params, cursor, cursor),
+        database
+          .prepare(
+            `SELECT count(*) AS owners FROM membership WHERE workspace_id=? AND role='owner' AND ${guard}`,
+          )
+          .bind(workspaceId, ...params),
+      ]);
+      if (!results.every((r) => r.success))
+        throw new TenancyError("storage_corrupted");
+      const admission = results[0]?.results[0];
+      if (!admission) throw new TenancyError("user_not_admitted");
+      const rows = results[1]?.results ?? [];
+      return workspaceMemberPageSchema.parse({
+        members: rows.slice(0, 100),
+        actorRole: (admission as Record<string, unknown>).role,
+        ownerCount: (
+          results[2]?.results[0] as Record<string, unknown> | undefined
+        )?.owners,
+        nextCursor:
+          rows.length > 100
+            ? (rows[99] as Record<string, unknown> | undefined)?.userId
+            : null,
+      });
     },
 
     async listUserWorkspaces(userId: string) {

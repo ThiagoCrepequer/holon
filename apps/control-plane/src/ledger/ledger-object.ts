@@ -289,6 +289,15 @@ export class ReviewLedgerObject
       return result;
     });
     if (!claim) return;
+    const startedAt = Date.now();
+    consoleLogger.emit("dashboard.projection_attempt", {
+      attempt: claim.attempt,
+      source_age_ms: Math.max(
+        0,
+        startedAt - Date.parse(claim.input.snapshot.observedAt),
+      ),
+    });
+    let failureReason = "writer_unavailable";
     try {
       const writer = (
         this.env as unknown as {
@@ -299,20 +308,34 @@ export class ReviewLedgerObject
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let reply: unknown;
       try {
+        failureReason = "writer_rpc";
+        const pending = writer.write(claim.input);
+        // The RPC can complete after the local deadline. Its idempotent write
+        // remains owned, but only this attempt's timely reply can acknowledge.
+        this.ctx.waitUntil(pending.catch(() => {}));
         reply = await Promise.race([
-          writer.write(claim.input),
+          pending,
           new Promise<never>((_, reject) => {
-            timeout = setTimeout(
-              () => reject(new Error("projection_deadline")),
-              10000,
-            );
+            timeout = setTimeout(() => {
+              failureReason = "deadline";
+              reject(new Error("projection_deadline"));
+            }, 10000);
           }),
         ]);
       } finally {
         if (timeout !== undefined) clearTimeout(timeout);
       }
+      failureReason = "invalid_reply";
       const result = projectionWriteResultSchema.parse(reply);
+      consoleLogger.emit("dashboard.projection_result", {
+        duration_ms: Date.now() - startedAt,
+        result,
+      });
+      consoleLogger.emit("dashboard.projection_health", {
+        code: result === "applied" || result === "duplicate" ? 0 : 1,
+      });
       if (result === "applied" || result === "duplicate") {
+        failureReason = "acknowledgement";
         await this.ctx.storage.transaction(async () => {
           new ReviewReadModel(this.ctx.storage).acknowledge(
             claim.input.generation,
@@ -327,10 +350,12 @@ export class ReviewLedgerObject
           revision: claim.input.snapshot.snapshotRevision,
           result,
         });
-    } catch (error) {
+    } catch {
       consoleLogger.emit("dashboard.projection_retry", {
         attempt: claim.attempt,
-        errorKind: errorKind(error),
+        duration_ms: Date.now() - startedAt,
+        code: claim.attempt >= 6 ? 2 : 1,
+        reason: failureReason,
       });
     }
   }
@@ -1063,9 +1088,15 @@ export class ReviewLedgerObject
   private async ensureMaintenanceAlarm(): Promise<void> {
     const next = this.nextMaintenanceAt();
     if (next === undefined) return;
-    const scheduled = await this.ctx.storage.getAlarm();
-    if (scheduled === null || scheduled > next) {
-      await this.ctx.storage.setAlarm(next);
+    try {
+      const scheduled = await this.ctx.storage.getAlarm();
+      if (scheduled === null || scheduled > next) {
+        await this.ctx.storage.setAlarm(next);
+      }
+      consoleLogger.emit("dashboard.alarm_health", { code: 0 });
+    } catch (error) {
+      consoleLogger.emit("dashboard.alarm_health", { code: 1 });
+      throw error;
     }
   }
 

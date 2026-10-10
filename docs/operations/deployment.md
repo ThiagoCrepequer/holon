@@ -115,6 +115,13 @@ os comandos de CI. O executor usa `wrangler deploy`, pois `wrangler versions upl
 não atualiza imagens de Containers. Mantenha o include watch path `*` para validar
 mudanças compartilhadas.
 
+O manifest produtivo do executor fixa a imagem já publicada por digest imutável,
+conferido na conta Holon em 2026-10-09. Um deploy de TypeScript reutiliza essa
+imagem; não reconstrói o Dockerfile implicitamente. Mudanças no Sandbox exigem
+build/publicação autorizados da imagem, validação do novo digest e atualização
+explícita do manifest antes do rollout coordenado. Preview mantém Dockerfile
+local e só pode ser promovido depois de qualificar sua própria imagem por digest.
+
 A autorização inicial do Cloudflare GitHub App é interativa no dashboard. Após
 essa autorização única, as conexões, triggers e variáveis de build também podem
 ser administradas pela Workers Builds API com um token de usuário que tenha

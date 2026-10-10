@@ -9,7 +9,7 @@ import {
   reviewScope,
   reviewQueryKey,
   type ReviewResource,
-} from "./review-parameters.js";
+} from "../../review-parameters.js";
 
 export class ReviewClientError extends Error {
   constructor(public readonly status: number) {

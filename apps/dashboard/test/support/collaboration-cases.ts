@@ -1,6 +1,9 @@
 import type { GitHubUserService } from "@holon/auth/server";
 import type { AdmittedUser } from "@holon/contracts/dashboard";
-import { createConnectionPersistence } from "@holon/db/identity/server";
+import {
+  createConnectionPersistence,
+  CollaborationError,
+} from "@holon/db/identity/server";
 import { expect, it, vi } from "vitest";
 
 import { createWorkspaceCollaboration } from "../../app/server/collaboration.server.js";
@@ -59,7 +62,10 @@ export function collaborationCases(database: () => D1Database) {
       repositories: vi.fn(async () => ({
         accountId: "account",
         generation: 1,
-        repositoryIds: [901, 902],
+        repositories: [
+          { id: 901, fullName: "synthetic/repository-901" },
+          { id: 902, fullName: "synthetic/repository-902" },
+        ],
       })),
     } satisfies GitHubUserService;
     return {
@@ -88,6 +94,37 @@ export function collaborationCases(database: () => D1Database) {
       .run();
     return { installationId: 77, reauthIntentId: id };
   }
+  it("signals reconnect, grants, provider outage and recovery without private coordinates or errors", async () => {
+    const { github, service } = fixture();
+    await service.linkInstallation(actor, "team", await confirmed("signals"));
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    github.identity.mockRejectedValueOnce(
+      new CollaborationError("reconnect_required"),
+    );
+    await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
+      {
+        code: "reconnect_required",
+      },
+    );
+    github.repositories.mockRejectedValueOnce(
+      new Error("private provider body"),
+    );
+    await expect(service.authorizeReviews(actor, "team")).rejects.toThrow();
+    await service.authorizeReviews(actor, "team");
+    await expect(service.authorizeReviews(actor, "foreign")).rejects.toThrow();
+    const signals = log.mock.calls
+      .map(([line]) => JSON.parse(String(line)))
+      .filter((event) => event.event === "github_authority_health");
+    expect(signals.map((event) => event.code)).toEqual([2, 3, 0, 1]);
+    expect(
+      signals.every((event) =>
+        Object.entries(event).every(
+          ([key, value]) => key === "event" || typeof value === "number",
+        ),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(signals)).not.toMatch(/actor|team|901|provider body/);
+  });
   it("composes link, current status, full grants and cache before projection pagination", async () => {
     const { github, service } = fixture();
     expect(await service.connectionStatus(actor)).toEqual({
@@ -125,6 +162,50 @@ export function collaborationCases(database: () => D1Database) {
       (await service.authorizeReviews(actor, "team")).repositories,
     ).toEqual([]);
   });
+  it("repository names are read under current human authority even with a warm grant cache", async () => {
+    const { service, github } = fixture();
+    await service.linkInstallation(
+      actor,
+      "team",
+      await confirmed("catalog_link"),
+    );
+    await service.authorizeReviews(actor, "team");
+    github.repositories.mockResolvedValueOnce({
+      accountId: "account",
+      generation: 1,
+      repositories: [
+        { id: 903, fullName: "synthetic/new-repository" },
+        { id: 901, fullName: "synthetic/renamed-repository" },
+      ],
+    });
+    expect(await service.listRepositories(actor, "team")).toEqual({
+      repositories: [
+        {
+          installationId: 77,
+          repositoryId: 903,
+          fullName: "synthetic/new-repository",
+        },
+        {
+          installationId: 77,
+          repositoryId: 901,
+          fullName: "synthetic/renamed-repository",
+        },
+      ],
+    });
+    expect(
+      (await service.authorizeReviews(actor, "team")).repositories,
+    ).toEqual([
+      { installationId: 77, repositoryId: 901 },
+      { installationId: 77, repositoryId: 903 },
+    ]);
+    expect(github.repositories).toHaveBeenCalledTimes(2);
+    github.repositories.mockClear();
+    await expect(
+      service.listRepositories({ ...actor, id: "outsider" }, "team"),
+    ).rejects.toMatchObject({ code: "denied" });
+    expect(github.repositories).not.toHaveBeenCalled();
+  });
+
   it("records/cancels invitation and verifies recipient before acceptance", async () => {
     const { service } = fixture();
     const invite = await service.createInvitation(actor, "team", {
@@ -156,7 +237,7 @@ export function collaborationCases(database: () => D1Database) {
     github.repositories.mockResolvedValue({
       accountId: "account",
       generation: 1,
-      repositoryIds: [],
+      repositories: [],
     });
     expect(
       (await service.authorizeReviews(actor, "team")).repositories,
@@ -175,7 +256,7 @@ export function collaborationCases(database: () => D1Database) {
     github.repositories.mockResolvedValue({
       accountId: "account",
       generation: 2,
-      repositoryIds: [901],
+      repositories: [{ id: 901, fullName: "synthetic/repository-901" }],
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       {
@@ -198,7 +279,11 @@ export function collaborationCases(database: () => D1Database) {
         installationId: 77,
         action: "suspended",
       });
-      return { accountId: "account", generation: 1, repositoryIds: [901] };
+      return {
+        accountId: "account",
+        generation: 1,
+        repositories: [{ id: 901, fullName: "synthetic/repository-901" }],
+      };
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       {
@@ -227,7 +312,11 @@ export function collaborationCases(database: () => D1Database) {
           "UPDATE github_grant_cache SET expires_at=0 WHERE installation_id=77",
         )
         .run();
-      return { accountId: "account", generation: 1, repositoryIds: [903] };
+      return {
+        accountId: "account",
+        generation: 1,
+        repositories: [{ id: 903, fullName: "synthetic/repository-903" }],
+      };
     });
     await expect(service.authorizeReviews(actor, "team")).rejects.toMatchObject(
       { code: "denied" },

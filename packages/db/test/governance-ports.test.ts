@@ -22,6 +22,112 @@ afterEach(async () => {
   await reset();
 });
 
+it("lists bounded member names/roles only for a current admitted workspace member", async () => {
+  const { database, alice, carol, tenancy } = await setupFixture();
+  const page = await tenancy.listMembers(carol, "ws_team", null);
+  expect(page.members).toEqual([
+    { userId: "alice", name: "alice", role: "owner" },
+    { userId: "bob", name: "bob", role: "owner" },
+    { userId: "carol", name: "carol", role: "member" },
+  ]);
+  expect(page.ownerCount).toBe(2);
+  expect(page.actorRole).toBe("member");
+  expect(page.nextCursor).toBeNull();
+  expect(JSON.stringify(page)).not.toMatch(/token|email|gh_alice/u);
+  await expect(
+    tenancy.listMembers(carol, "ws_personal", null),
+  ).rejects.toThrow();
+  await database
+    .prepare("DELETE FROM session WHERE id=?")
+    .bind(alice.sessionId)
+    .run();
+  await expect(tenancy.listMembers(alice, "ws_team", null)).rejects.toThrow();
+});
+
+it("member pagination is bounded, stable, complete and expires with the actor session", async () => {
+  const { database, alice, tenancy } = await setupFixture();
+  for (let index = 0; index < 102; index++) {
+    const id = `extra${String(index).padStart(3, "0")}`;
+    await database.batch([
+      database
+        .prepare(
+          "INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES(?,?,?,1,0,0)",
+        )
+        .bind(id, `Synthetic ${index}`, `${id}@example.invalid`),
+      database
+        .prepare("INSERT INTO membership VALUES('ws_team',?,'member',0,0)")
+        .bind(id),
+    ]);
+  }
+  const first = await tenancy.listMembers(alice, "ws_team", null);
+  expect(first.members).toHaveLength(100);
+  expect(first.nextCursor).not.toBeNull();
+  const second = await tenancy.listMembers(alice, "ws_team", first.nextCursor);
+  expect(second.members).toHaveLength(5);
+  expect(second.nextCursor).toBeNull();
+  expect(
+    new Set(
+      [...first.members, ...second.members].map((member) => member.userId),
+    ).size,
+  ).toBe(105);
+  await database
+    .prepare("UPDATE session SET expiresAt=0 WHERE id=?")
+    .bind(alice.sessionId)
+    .run();
+  await expect(
+    tenancy.listMembers(alice, "ws_team", first.nextCursor),
+  ).rejects.toThrow();
+});
+
+it.each(["membership", "session"])(
+  "member admission rejects %s revocation during the final data read",
+  async (authority) => {
+    const { database, alice } = await setupFixture();
+    const proxy = new Proxy(database, {
+      get(target, property) {
+        if (property === "batch")
+          return async (statements: D1PreparedStatement[]) => {
+            await database
+              .prepare(
+                authority === "session"
+                  ? "DELETE FROM session WHERE userId='alice'"
+                  : "DELETE FROM membership WHERE workspace_id='ws_team' AND user_id='alice'",
+              )
+              .run();
+            return database.batch(statements);
+          };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await expect(
+      createTenancyPersistence(proxy).listMembers(alice, "ws_team", null),
+    ).rejects.toMatchObject({ code: "user_not_admitted" });
+  },
+);
+
+it("member session expiry uses the SQL snapshot clock after a delayed batch", async () => {
+  const { database, alice } = await setupFixture();
+  const proxy = new Proxy(database, {
+    get(target, property) {
+      if (property === "batch")
+        return async (statements: D1PreparedStatement[]) => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          await database
+            .prepare("UPDATE session SET expiresAt=? WHERE id=?")
+            .bind(Date.now() - 1, alice.sessionId)
+            .run();
+          return database.batch(statements);
+        };
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  await expect(
+    createTenancyPersistence(proxy).listMembers(alice, "ws_team", null),
+  ).rejects.toMatchObject({ code: "user_not_admitted" });
+});
+
 async function setupFixture() {
   const database = bindings.IDENTITY_DB;
   await applyD1Migrations(database, bindings.IDENTITY_MIGRATIONS);
