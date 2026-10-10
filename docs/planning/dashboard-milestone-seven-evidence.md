@@ -262,6 +262,23 @@ preview continua no runbook do milestone anterior; não foi desativada neste ens
 - [GitHub repositories](https://docs.github.com/en/rest/apps/installations?apiVersion=2026-03-10#list-repositories-accessible-to-the-user-access-token): `full_name` no catálogo autorizado.
 - [Cloudflare Workers Email API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/) e [attachments](https://developers.cloudflare.com/email-service/examples/email-sending/email-attachments/): PNG inline com contentId.
 
+### Sincronização da seleção no harness
+
+A [CI de `e2fa50b`](https://github.com/ThiagoCrepequer/holon/actions/runs/38060573767)
+concluiu a matriz com 129 casos aprovados, dois labs CDP ignorados e duas falhas
+no mesmo helper, em Chromium/WebKit. O trace mostra fechamento do menu antes
+do commit da navegação: `getAttribute(data-workspace-id)` leu uma string vazia;
+o snapshot posterior já mostrava a equipe escolhida. Não houve falha de provider,
+retry, permissão ou contrato de convite nesse cenário.
+
+`chooseWorkspace` agora captura o ID da opção antes do clique e espera o trigger
+confirmar **exatamente esse ID**, além do fechamento do menu. É a condição
+observável necessária antes de executar um comando no novo escopo. Não usa sleep,
+retry da suíte, tolerância nova ou alteração do timeout. O cenário de resposta
+perdida/retry passou nos três engines após essa correção, mantendo um único
+convite/intent e payloads idênticos. O gate completo é repetido para os demais
+consumidores do helper e a CI final continua registrada no PR/issues.
+
 ## Resultados finais
 
 `pnpm verify` completo passou em 2026-10-10, com Node 24.11.0 e pnpm 11.24.0:
@@ -282,8 +299,8 @@ consumiu 18,8 minutos; o job de 30 minutos foi cancelado durante as suítes
 posteriores, antes do build final e da qualificação do artefato. Isso não é CI
 integral aprovada. O tempo máximo do **job** passa para 45 minutos para comportar
 matriz, cobertura e build frios. Timeouts/retries dos testes, tetos de interação,
-bytes e mínimos de cobertura permanecem iguais. A nova CI do SHA entregue é
-conferida e ligada no PR/issues; prova local não substitui seu resultado.
+bytes e mínimos de cobertura permanecem iguais. As CIs posteriores e suas correções são registradas acima e ligadas no PR/issues;
+prova local não substitui a conclusão do gate remoto.
 
 | Artefato                  | Antes `750c108` |  Depois | Teto atual | Diferença |
 | ------------------------- | --------------: | ------: | ---------: | --------: |
@@ -306,6 +323,11 @@ O [índice visual](dashboard-seven-assets/README.md) contém 32 pares antes/depo
 65 capturas finais de jornadas/estados, 12 de zoom nativo, três previews de email
 e a referência original. A revisão visual conferiu conta/lista/detalhe, menu,
 Sheet mobile e assinatura/CTA do email. Todos os arquivos usam fixtures sintéticas.
+
+A suíte completa do core também passou **sem cache** com Node 24.19.0: 51 arquivos,
+417 testes, linhas 93,58%, branches 87,05%, funções 94,02% e statements 92,4%.
+O congelamento do artefato local pelo SHA `e2fa50b` conferiu 71 arquivos, sem
+publicar recursos. Esses resultados são distintos da CI.
 
 As revisões de padrões e especificação foram feitas separadamente sobre o diff
 do milestone; a auditoria de arquitetura orientou as seams de colaboração e

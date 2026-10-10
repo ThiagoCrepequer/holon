@@ -44,8 +44,13 @@ export async function chooseWorkspace(
           .getByRole("menuitemradio")
           .and(page.locator(`[data-workspace-id="${choice}"]`))
       : page.getByRole("menuitemradio", { name: choice.label, exact: true });
+  const selectedId = await item.getAttribute("data-workspace-id");
+  expect(selectedId).toBeTruthy();
   await item.click();
   await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Workspace", exact: true }),
+  ).toHaveAttribute("data-workspace-id", selectedId!);
 }
 export async function openCreateWorkspace(page: Page) {
   if (!(await page.getByRole("menu").isVisible())) await openWorkspaces(page);
