@@ -241,9 +241,14 @@ GitHub App ID confirmado, private ingress e integridade do D1 de identidade.
   após replay dos mesmos dois job references, contagens permaneceram em **1/1**;
   os convites continuaram pendentes. Não houve novo envio nem novo convite.
 
-Aceitação pelo provedor não comprova entrega nem renderização no Gmail. A
-confirmação humana no Gmail do navegador e a limpeza scoped da fixture ainda
-serão registradas abaixo. Nenhum email, link de convite, token ou conteúdo
+Aceitação pelo provedor não comprova entrega nem renderização no Gmail. A confirmação humana no Gmail do navegador permanece pendente. A primeira
+limpeza foi revertida integralmente pela proteção do último owner: contagens
+conferidas após a falha continuaram em um user/workspace/membership e dois
+convites/intents/attempts. A remoção correta do workspace com cascade foi
+bloqueada pela revisão automática por exigir autorização explícita adicional;
+nenhum trigger foi removido e as duas fixtures permanecem restritas, pendentes e
+sem OAuth, sessões ou conexões. A confirmação solicitada ao operador ainda não
+foi recebida. Nenhum email, link de convite, token ou conteúdo
 produtivo foi versionado. A exceção operacional autorizada para Email content
 preview continua no runbook do milestone anterior; não foi desativada neste ensaio.
 
@@ -259,6 +264,49 @@ preview continua no runbook do milestone anterior; não foi desativada neste ens
 
 ## Resultados finais
 
-A preencher depois da execução do gate e da revisão do SHA entregue. Este
-milestone não encerra por inferência #157/#163–#167 nem #127; suas métricas,
-PITR, smokes de governança e qualificação remota permanecem nas issues donas.
+`pnpm verify` completo passou em 2026-10-10, com Node 24.11.0 e pnpm 11.24.0:
+brand/config schema/config validate, formatação, lint, tipos, arquitetura, deploy,
+evidência, cobertura e build/dry-runs. O gate executou as jornadas nativas do app:
+**131 passaram e dois labs CDP foram ignorados nos engines sem CDP**, sem retries.
+Inclui o projeto exclusivo Chromium de zoom nativo. As 12 provas browser de
+fundação também passaram; as suites do dashboard tiveram 169 testes puros e 102
+Workerd, e a suíte de contratos teve 178 testes. Tests de email tiveram 24 casos
+Workerd; a renderização de template separada passou em 48 combinações de engine,
+locale, tema, viewport e imagens. Não foram alterados os mínimos de cobertura.
+
+Turbo reutilizou tasks locais cujos inputs não mudaram; a matriz browser e os
+controles alterados foram executados. Tipos: 21/21 tasks, 20 reutilizadas; cobertura: 32/32 tasks, 30 reutilizadas; build: 17/17 tasks, 13 reutilizadas. A CI do SHA entregue é
+conferida e ligada no PR e nas issues; o resultado local não é apresentado como
+aprovação da CI.
+
+| Artefato                  | Antes `750c108` |  Depois | Teto atual | Diferença |
+| ------------------------- | --------------: | ------: | ---------: | --------: |
+| JavaScript completo, gzip |         195.256 | 231.131 |    240.000 |   +35.875 |
+| CSS completo, gzip        |           5.553 |   7.197 |     12.000 |    +1.644 |
+| Fontes locais, bytes      |         159.732 | 159.732 |    160.000 |         0 |
+
+O [receipt numérico](dashboard-seven-assets/performance-lab.json), coletado em
+`2026-10-10T04:10:46Z`, usa Chromium 153.0.8010.12, macOS ARM64/Apple M4, CPU
+throttle 4x, loopback sem network shaping e cinco amostras frias/quentes por rota
+nos viewports 1280px e 320px. Entre as rotas, os maiores p95 foram 680ms frio e
+831ms quente (teto 1.500ms); filtros 124ms e refresh 141ms (teto 500ms). LCP p75
+máximo 196ms, CLS p75 máximo 0,000804, INP 24ms e DOM máximo 789 respeitaram os
+limites 2.500ms/0,1/200ms/1.200. São medidas locais; não representam CWV de campo,
+latência regional ou CPU HTTP do Worker produtivo. O aumento de bytes corresponde
+à composição solicitada, com a revisão explícita do orçamento de JS; não se
+atribui ganho de performance ao redesenho.
+
+O [índice visual](dashboard-seven-assets/README.md) contém 32 pares antes/depois,
+65 capturas finais de jornadas/estados, 12 de zoom nativo, três previews de email
+e a referência original. A revisão visual conferiu conta/lista/detalhe, menu,
+Sheet mobile e assinatura/CTA do email. Todos os arquivos usam fixtures sintéticas.
+
+As revisões de padrões e especificação foram feitas separadamente sobre o diff
+do milestone; a auditoria de arquitetura orientou as seams de colaboração e
+reviews. Os defeitos comportamentais acima possuem regressões e não há bloqueio
+de implementação identificado. Recebimento/renderização Gmail e limpeza de
+fixture possuem estado explícito na seção de email. #193/#194 só podem ser
+consideradas integralmente qualificadas com a confirmação humana e CI descritas
+nessas issues. Este milestone não encerra por inferência #157/#163–#167 nem #127;
+suas métricas, PITR, smokes de governança e qualificação remota permanecem nas
+issues donas.
