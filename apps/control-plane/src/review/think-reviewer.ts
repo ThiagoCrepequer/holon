@@ -20,6 +20,7 @@ import {
 } from "@holon/model";
 import { getAgentByName } from "agents";
 
+import { reviewAgentResultSchema } from "./review-agent-result.js";
 import {
   emitEvidenceRejections,
   emitDiagnostic,
@@ -71,7 +72,14 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
     const draft = modelReviewOutputSchema.parse(
       redactModelReviewOutput(modelReviewOutputSchema.parse(investigation.raw)),
     );
-    if (draft.outputLimitations?.includes("evidence_rejected"))
+    if (
+      draft.outputLimitations?.some(
+        (code) =>
+          code === "evidence_rejected" ||
+          code === "candidate_rejected" ||
+          code === "investigation_rejected",
+      )
+    )
       emitDiagnostic(this.emit, "model.output_normalized", {
         shardIndex: this.shardIndex,
         stage: "transport",
@@ -164,17 +172,12 @@ export class ThinkReviewModelReviewer implements ModelReviewer {
           const state = await workflow.status();
           context.abortSignal?.throwIfAborted();
           if (state.status === "complete") {
-            const evidence =
-              Date.now() >= deadlineAt
-                ? []
-                : await validateReviewEvidencePack(
-                    await this.env.REPOSITORY_EXECUTOR.getEvidencePack(
-                      job.runId,
-                      Math.min(deadlineAt, Date.now() + 90_000),
-                    ),
-                    job.runId,
-                  );
-            return { raw: state.output, evidence };
+            const result = reviewAgentResultSchema.parse(state.output);
+            const evidence = await validateReviewEvidencePack(
+              result.evidence,
+              job.runId,
+            );
+            return { raw: result.output, evidence };
           }
           if (state.status === "errored" || state.status === "terminated")
             throw new ThinkReviewFailure(

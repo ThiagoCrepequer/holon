@@ -177,6 +177,14 @@ export class RepositoryExecutorService {
         sandbox,
         request.canonicalDiff,
         request.effectivePolicy.additionalExcludes,
+        (fields) =>
+          console.info(
+            JSON.stringify({
+              event: "repository.structural_inventory",
+              runId: request.runId,
+              ...fields,
+            }),
+          ),
       );
       const artifacts = buildReviewArtifacts(
         request,

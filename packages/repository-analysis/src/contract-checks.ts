@@ -207,7 +207,7 @@ export function buildContractChecks(
       break;
     }
     if (packed) continue;
-    if (checks.length >= 8 || shards.length + checks.length >= maxShards) {
+    if (shards.length + checks.length >= maxShards) {
       reasons.capacity++;
       continue;
     }

@@ -4,7 +4,7 @@ kind: reference
 status: current
 owners:
   - core-team
-last-reviewed: 2026-10-09
+last-reviewed: 2026-10-10
 ---
 
 # Diagnóstico de análise parcial ou interrompida
@@ -245,3 +245,30 @@ Separe problemas de protocolo das demais limitações observadas:
 O gate continua exigindo saída estruturada válida, evidência verificável e
 cobertura completa. Texto livre, respostas fabricadas ou retries adicionais
 não substituem esse contrato.
+
+## Recuperação e diagnóstico da ADR-0062
+
+- `collect-evidence` fica depois do prompt durável no Workflow do filho. Até três
+  leituras não representam três inferências. `evidence_collection_failed` indica
+  esgotamento; a run pode concluir parcial sem cancelar trabalho posterior.
+- `candidate_rejected`, `evidence_rejected` e `investigation_rejected` são perdas
+  explícitas em `model.output_normalized`, sem contagem exata dos descartados.
+- `model_tool_protocol_invalid` identifica stream `other`/`error` sem tools.
+  HTTP 200 não comprova cumprimento do protocolo, nem essa causa define sozinha
+  incapacidade geral do modelo.
+- `review.workflow_notification_discarded` indica status terminal comprovado;
+  não conta como nova inferência nem substitui a causa inicial do filho.
+- `repository.tool_operation` inclui `operation:evidence_pack`/`tool_read`;
+  `deadline_expired` e `deadline_out_of_range` preservam `remainingMs`/`budgetMs`.
+- `repository.structural_inventory` informa arquivos retidos, bytes e códigos
+  de capacidade, busca, metadados, limite de arquivo/inventário e leitura.
+  Não registra paths nem conteúdo. O teto de candidatos agora é 256; checks
+  usam capacidade restante até 64 partes, com orçamento financeiro preservado.
+- `dashboard.projection_retry.reason` distingue `writer_unavailable`,
+  `writer_rpc`, `deadline`, `invalid_reply` e `acknowledgement`. Um RPC pode
+  terminar depois do deadline: só resposta tempestiva reconhece a obrigação;
+  a escrita tardia permanece idempotente e a outbox conserva retry.
+
+O [relatório de correções do PR #186](../research/2026-10-10-pr186-review-recovery-fixes.md)
+distingue as provas locais da validação remota ainda necessária. Não imprimir
+resultados privados dos steps para confirmar contagens ou causas.

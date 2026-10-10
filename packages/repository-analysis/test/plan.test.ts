@@ -338,6 +338,58 @@ it("adds bounded canonical contract windows when a relationship crosses partitio
   expect(plan.totalEligibleLines).toBe(1200);
   expect(plan.scopeStatus).toBe("complete");
 });
+it("uses available plan capacity for nine distinct contract checks without increasing the total cap", () => {
+  const targets = Array.from(
+    { length: 9 },
+    (_, i) => `packages/core/src/producer-${i}.ts`,
+  );
+  const callers = Array.from(
+    { length: 9 },
+    (_, i) => `apps/web/src/consumer-${i}.ts`,
+  );
+  const files = splitPullRequestDiff(
+    [...targets, ...callers]
+      .map(
+        (path) =>
+          `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1,500 @@\n${"+export const value = 1;\n".repeat(500)}`,
+      )
+      .join(""),
+  );
+  const original = connectedImpact();
+  const impact = {
+    ...original,
+    changedSymbols: targets.map((path, i) => ({
+      ...original.changedSymbols[0]!,
+      path,
+      name: `send${i}`,
+    })),
+    downstreamReferences: callers.map((callerPath, i) => ({
+      ...original.downstreamReferences[0]!,
+      callerPath,
+      targetPath: targets[i]!,
+      symbolName: `send${i}`,
+    })),
+  };
+  const plan = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardFiles: 2,
+  });
+  expect(
+    plan.shards.filter((s) => s.id.startsWith("contract-check-")).length,
+  ).toBe(9);
+  expect(plan.scopeStatus).toBe("complete");
+  const bounded = buildReviewPlan(files, {
+    structuralImpact: impact,
+    maxShardFiles: 2,
+    maxShards: 24,
+  });
+  expect(bounded.shards.length).toBe(24);
+  expect(bounded.omissionReasons).toContainEqual({
+    code: "contract_checks",
+    count: 3,
+    reasons: { capacity: 3, missingWindow: 0, evidenceWindows: 0 },
+  });
+});
 it("pairs the verified body edit with a canonical caller instead of omitting its unchanged import", () => {
   const files = splitPullRequestDiff(
     ["apps/web/src/client.ts", "packages/core/src/api.ts"]

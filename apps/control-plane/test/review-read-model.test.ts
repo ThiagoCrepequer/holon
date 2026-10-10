@@ -266,6 +266,7 @@ it("returns all 200 long findings through bounded coherent pages after temporary
 });
 
 it("prearms durable retries beyond seven writer failures and preserves independent cleanup", async () => {
+  const logs = vi.spyOn(console, "log").mockImplementation(() => {});
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);
   await runInDurableObject(ledger, async (object, state) => {
     const bindings = (
@@ -329,6 +330,13 @@ it("prearms durable retries beyond seven writer failures and preserves independe
     ).toHaveLength(0),
   );
   expect(await ledger.runState(run.id)).toBe("failed_terminal");
+  const events = logs.mock.calls
+    .map(([raw]) => (typeof raw === "string" ? JSON.parse(raw) : {}))
+    .filter((event) => event.event === "dashboard.projection_retry");
+  expect(events.length).toBeGreaterThanOrEqual(7);
+  expect(events.every((event) => event.reason === "writer_rpc")).toBe(true);
+  expect(JSON.stringify(events)).not.toContain("synthetic outage");
+  logs.mockRestore();
 });
 it("lost acknowledgement retries idempotently; old acknowledgement cannot clear a newer obligation", async () => {
   const ledger = env.REVIEW_LEDGERS.getByName(run.prKey);

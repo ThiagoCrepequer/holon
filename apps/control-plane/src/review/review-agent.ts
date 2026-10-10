@@ -20,6 +20,7 @@ import {
   runIdSchema,
   prKeySchema,
   createReviewEvidenceReceipt,
+  validateReviewEvidencePack,
   type RepositoryToolOperation,
   type RepositoryToolCall,
 } from "@holon/contracts";
@@ -36,6 +37,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import { z } from "zod";
 
 import { consoleLogger } from "../observability.js";
+import { reviewAgentResultSchema } from "./review-agent-result.js";
 import {
   thinkPromptFailure,
   reviewFailureReasonSchema,
@@ -129,6 +131,56 @@ export class ReviewAgent extends Think<
 
   getReviewPhase(): ReviewAgentConfig["phase"] {
     return this.reviewConfig().phase;
+  }
+
+  async collectReviewEvidence() {
+    if (!(await this.isReviewAuthorized()))
+      throw new Error("Review run is obsolete");
+    const config = this.reviewConfig();
+    const pack = await this.env.REPOSITORY_EXECUTOR.getEvidencePack(
+      config.runId,
+      Math.min(config.deadlineAt, Date.now() + 60_000),
+    );
+    try {
+      const evidence = await validateReviewEvidencePack(pack, config.runId);
+      if (!(await this.isReviewAuthorized()))
+        throw new Error("Review run is obsolete");
+      return evidence;
+    } finally {
+      if (pack !== null && typeof pack === "object" && Symbol.dispose in pack) {
+        const dispose = pack[Symbol.dispose];
+        if (typeof dispose === "function") dispose.call(pack);
+      }
+    }
+  }
+
+  override async sendWorkflowEvent(
+    ...args: Parameters<Think["sendWorkflowEvent"]>
+  ): Promise<void> {
+    const [binding, id] = args;
+    if (binding === "REVIEW_SHARD_WORKFLOW") {
+      const workflow = await this.env.REVIEW_SHARD_WORKFLOW.get(id);
+      const { status } = await workflow.status();
+      if (
+        status === "complete" ||
+        status === "errored" ||
+        status === "terminated"
+      ) {
+        try {
+          const config = this.reviewConfig();
+          consoleLogger.emit("review.workflow_notification_discarded", {
+            runId: config.runId,
+            shardIndex: config.shardIndex,
+            phase: config.phase,
+            status,
+          });
+        } catch {
+          /* Notification cleanup does not depend on telemetry. */
+        }
+        return;
+      }
+    }
+    await super.sendWorkflowEvent(...args);
   }
 
   async prepareSummaryRecovery(): Promise<number> {
@@ -428,6 +480,18 @@ export class ReviewAgent extends Think<
         // Step telemetry failures must never disrupt review execution
       }
     }
+    if (
+      ctx &&
+      (ctx.finishReason === "other" || ctx.finishReason === "error") &&
+      ctx.toolCalls.length === 0
+    ) {
+      return this.recordReviewFailure("model_tool_protocol_invalid").then(
+        () => {
+          throw this.failReview("model_tool_protocol_invalid");
+        },
+      );
+    }
+    return undefined;
   }
 
   override beforeStep(_context: Parameters<Think["beforeStep"]>[0]) {
@@ -467,7 +531,26 @@ export class ReviewShardWorkflow extends ThinkWorkflow<
     step: ThinkWorkflowStep,
   ) {
     try {
-      return await this.review(event, step);
+      const output = await this.review(event, step);
+      let evidence;
+      try {
+        evidence = await step.do(
+          "collect-evidence",
+          {
+            retries: { backoff: "exponential", delay: "1 second", limit: 2 },
+            timeout: "90 seconds",
+            sensitive: "output",
+          },
+          async () => this.agent.collectReviewEvidence(),
+        );
+      } catch (error) {
+        if (await this.agent.isReviewAuthorized())
+          await this.agent.recordReviewFailure("evidence_collection_failed");
+        throw error;
+      }
+      if (!(await this.agent.isReviewAuthorized()))
+        throw new Error("Review run is obsolete");
+      return reviewAgentResultSchema.parse({ output, evidence });
     } catch (error) {
       const reason =
         (await this.agent.getReviewFailure()) ?? thinkPromptFailure(error);

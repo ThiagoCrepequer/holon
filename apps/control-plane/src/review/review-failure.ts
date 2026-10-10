@@ -11,6 +11,8 @@ const reviewFailureReasons = [
   "model_output_missing",
   "model_schema_invalid",
   "agent_deadline_exceeded",
+  "evidence_collection_failed",
+  "model_tool_protocol_invalid",
 ] as const;
 export type ReviewFailureReason = (typeof reviewFailureReasons)[number];
 export const reviewFailureReasonSchema = z.enum(reviewFailureReasons);

@@ -15,6 +15,75 @@ import {
 describe("Cloudflare Sandbox adapter in workerd", () => {
   const platformContainerId = "f".repeat(64);
 
+  it("releases RPC capabilities after copying read and command results", async () => {
+    const existsDisposed = vi.fn();
+    const readDisposed = vi.fn();
+    const outputDisposed = vi.fn();
+    const processDisposed = vi.fn();
+    const port = new CloudflareSandboxPort({
+      exists: async () => ({ exists: true, [Symbol.dispose]: existsDisposed }),
+      readFile: async () => ({
+        content: "snapshot",
+        [Symbol.dispose]: readDisposed,
+      }),
+      exec: async () => ({
+        output: async () => ({
+          exitCode: 0,
+          stdout: "result",
+          stderr: "",
+          timedOut: false,
+          truncated: false,
+          [Symbol.dispose]: outputDisposed,
+        }),
+        kill: async () => {},
+        [Symbol.dispose]: processDisposed,
+      }),
+    } as never);
+    await expect(port.exists("src/a.ts")).resolves.toBe(true);
+    await expect(port.readFile("src/a.ts")).resolves.toBe("snapshot");
+    await expect(port.run(["git", "status"])).resolves.toMatchObject({
+      stdout: "result",
+      exitCode: 0,
+    });
+    for (const disposed of [
+      existsDisposed,
+      readDisposed,
+      outputDisposed,
+      processDisposed,
+    ])
+      expect(disposed).toHaveBeenCalledOnce();
+  });
+
+  it("kills and releases a process whose output RPC fails", async () => {
+    const dispose = vi.fn();
+    const kill = vi.fn(async () => {});
+    const port = new CloudflareSandboxPort({
+      exec: async () => ({
+        output: async () => {
+          throw new Error("private output failure");
+        },
+        kill,
+        [Symbol.dispose]: dispose,
+      }),
+    } as never);
+    await expect(port.run(["git", "status"])).rejects.toMatchObject({
+      reason: "unavailable",
+    });
+    expect(kill).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("releases the acknowledgement capability after a file write", async () => {
+    const dispose = vi.fn();
+    const port = new CloudflareSandboxPort({
+      writeFile: async () => ({ success: true, [Symbol.dispose]: dispose }),
+    } as never);
+    await expect(
+      port.writeFile("/workspace/context.json", "{}"),
+    ).resolves.toBeUndefined();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   it("maps current exported transient SDK errors without inspecting messages", () => {
     const stale = new StaleProcessHandleError({
       code: "STALE_PROCESS_HANDLE",
@@ -146,6 +215,32 @@ describe("Cloudflare Sandbox adapter in workerd", () => {
 
 import { RepositoryToolTask } from "../src/repository-tool-task.js";
 import { ToolExecution } from "../src/tool-execution.js";
+
+it("releases a file RPC result arriving after tool cancellation", async () => {
+  const retained: Promise<unknown>[] = [];
+  const execution = new ToolExecution(Date.now() + 10_000, (work) =>
+    retained.push(work),
+  );
+  const dispose = vi.fn();
+  let release!: (value: { content: string; [Symbol.dispose](): void }) => void;
+  const port = new CloudflareSandboxPort(
+    {
+      readFile: () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    } as never,
+    execution,
+  );
+  const pending = port.readFile("src/a.ts");
+  await Promise.resolve();
+  execution.cancel();
+  await expect(pending).rejects.toMatchObject({ reason: "timed-out" });
+  release({ content: "late snapshot", [Symbol.dispose]: dispose });
+  await Promise.all(retained);
+  expect(dispose).toHaveBeenCalledOnce();
+  execution.dispose();
+});
 
 it("cancels a running tool process without destroying the shared sandbox", async () => {
   const retained: Promise<unknown>[] = [];

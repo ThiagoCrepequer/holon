@@ -9,6 +9,36 @@ import {
 } from "../src/index.js";
 
 describe("symbol-extractor", () => {
+  it.each([
+    ['export { runIdSchema } from "./run-id.js";', "modified"],
+    ['export { identity as runIdSchema } from "./run-id.js";', "modified"],
+    ['export type { runIdSchema } from "./run-id.js";', "deleted"],
+    ['export { runIdSchema as identity } from "./run-id.js";', "deleted"],
+  ] as const)(
+    "classifies a moved runtime export from its verified HEAD: %s",
+    (content, change) => {
+      expect(
+        extractChangedSymbols(
+          [
+            {
+              path: "src/review.ts",
+              patch: `@@ -10 +1 @@\n-export const runIdSchema = makeSchema();\n+${content}`,
+            },
+          ],
+          [{ path: "src/review.ts", content }],
+        ),
+      ).toEqual([
+        {
+          name: "runIdSchema",
+          path: "src/review.ts",
+          line: change === "deleted" ? 10 : 1,
+          kind: "constant",
+          isExported: true,
+          change,
+        },
+      ]);
+    },
+  );
   it("finds consumers of a public alias when its local implementation changes", () => {
     const report = analyzeStructuralImpact({
       changedFiles: [
@@ -452,7 +482,7 @@ describe("contract-break-detector", () => {
     expect(report.changedSymbols).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          change: "deleted",
+          change: "modified",
           kind: "interface",
           name: "GitHubAppCredentials",
           path: "packages/github/src/client.ts",

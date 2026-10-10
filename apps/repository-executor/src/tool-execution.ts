@@ -17,12 +17,26 @@ export class ToolExecution {
       stage: string;
       durationMs: number;
       outcome: string;
+      remainingMs?: number;
+      budgetMs?: number;
     }) => void = () => {},
   ) {
     this.deadlineAt = repositoryDeadlineSchema.parse(deadlineAt);
     const remaining = deadlineAt - Date.now();
-    if (remaining <= 0 || remaining > repositoryExecutionLimits.toolMs)
+    if (remaining <= 0 || remaining > repositoryExecutionLimits.toolMs) {
+      try {
+        this.observe({
+          stage: remaining <= 0 ? "deadline_expired" : "deadline_out_of_range",
+          durationMs: 0,
+          outcome: "rejected",
+          remainingMs: remaining,
+          budgetMs: repositoryExecutionLimits.toolMs,
+        });
+      } catch {
+        /* Advisory metadata must not alter execution. */
+      }
       throw new SandboxRuntimeError(true, "timed-out");
+    }
     this.timer = setTimeout(() => this.cancel(), remaining);
   }
   get signal(): AbortSignal {

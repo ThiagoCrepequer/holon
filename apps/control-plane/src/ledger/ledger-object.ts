@@ -297,6 +297,7 @@ export class ReviewLedgerObject
         startedAt - Date.parse(claim.input.snapshot.observedAt),
       ),
     });
+    let failureReason = "writer_unavailable";
     try {
       const writer = (
         this.env as unknown as {
@@ -307,18 +308,24 @@ export class ReviewLedgerObject
       let timeout: ReturnType<typeof setTimeout> | undefined;
       let reply: unknown;
       try {
+        failureReason = "writer_rpc";
+        const pending = writer.write(claim.input);
+        // The RPC can complete after the local deadline. Its idempotent write
+        // remains owned, but only this attempt's timely reply can acknowledge.
+        this.ctx.waitUntil(pending.catch(() => {}));
         reply = await Promise.race([
-          writer.write(claim.input),
+          pending,
           new Promise<never>((_, reject) => {
-            timeout = setTimeout(
-              () => reject(new Error("projection_deadline")),
-              10000,
-            );
+            timeout = setTimeout(() => {
+              failureReason = "deadline";
+              reject(new Error("projection_deadline"));
+            }, 10000);
           }),
         ]);
       } finally {
         if (timeout !== undefined) clearTimeout(timeout);
       }
+      failureReason = "invalid_reply";
       const result = projectionWriteResultSchema.parse(reply);
       consoleLogger.emit("dashboard.projection_result", {
         duration_ms: Date.now() - startedAt,
@@ -328,6 +335,7 @@ export class ReviewLedgerObject
         code: result === "applied" || result === "duplicate" ? 0 : 1,
       });
       if (result === "applied" || result === "duplicate") {
+        failureReason = "acknowledgement";
         await this.ctx.storage.transaction(async () => {
           new ReviewReadModel(this.ctx.storage).acknowledge(
             claim.input.generation,
@@ -347,6 +355,7 @@ export class ReviewLedgerObject
         attempt: claim.attempt,
         duration_ms: Date.now() - startedAt,
         code: claim.attempt >= 6 ? 2 : 1,
+        reason: failureReason,
       });
     }
   }

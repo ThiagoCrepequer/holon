@@ -57,7 +57,12 @@ function reviewerFor(
   );
   const cancelReview = vi.fn(async () => {});
   const terminate = vi.fn(async () => {});
-  const status = vi.fn(async () => statuses.shift() ?? { status: "running" });
+  const status = vi.fn(async () => {
+    const state = statuses.shift() ?? { status: "running" };
+    return state.status === "complete"
+      ? { ...state, output: { output: state.output, evidence: [] } }
+      : state;
+  });
   const wait = vi.fn(async () => {});
   const namespace = {
     idFromName: vi.fn((name: string) => name),
@@ -268,7 +273,10 @@ it("propagates parent cancellation during causal verification and terminates its
   fixture.status
     .mockImplementationOnce(async () => ({
       status: "complete",
-      output: { findings: [nullFinding], summary: "Candidate." },
+      output: {
+        output: { findings: [nullFinding], summary: "Candidate." },
+        evidence: [],
+      },
     }))
     .mockImplementationOnce(async () => {
       controller.abort(new Error("superseded during verification"));
@@ -337,7 +345,10 @@ it("withholds candidates after the shared analysis deadline without granting a n
     now = deadlineAt;
     return {
       status: "complete",
-      output: { findings: [nullFinding], summary: "Candidate." },
+      output: {
+        output: { findings: [nullFinding], summary: "Candidate." },
+        evidence: [],
+      },
     };
   });
   const result = await fixture.reviewer.review(job, { ...context, deadlineAt });
@@ -378,6 +389,8 @@ it.each([
   "model_shard_budget_exhausted",
   "model_output_missing",
   "model_schema_invalid",
+  "evidence_collection_failed",
+  "model_tool_protocol_invalid",
 ] as const)("retains the safe child failure code %s", async (reason) => {
   const fixture = reviewerFor(
     [

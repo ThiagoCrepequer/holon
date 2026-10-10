@@ -981,6 +981,35 @@ it("publishes an incomplete result when the shared deadline expires before infer
   );
 });
 
+it.each(["evidence_collection_failed", "model_tool_protocol_invalid"] as const)(
+  "continues every later shard after a bounded child failure: %s",
+  async (reason) => {
+    const services = createMockServices({
+      ...revalidationContext(),
+      files: Array.from({ length: 7 }, (_, index) => ({
+        mode: "structural" as const,
+        path: `src/part-${index}.ts`,
+        patch: `@@ -0,0 +1,600 @@\n${"+// context\n".repeat(600)}`,
+      })),
+    });
+    const review = vi.fn(async (_job, context) => {
+      if (context.files[0].path === "src/part-0.ts")
+        throw new ThinkReviewFailure(reason);
+      return {
+        output: { findings: [], summary: "Checked this synthetic part." },
+        promptTruncated: false,
+      };
+    });
+    services.model.review = review;
+    const output = await analyzeReview(job, services, vi.fn());
+    expect(review).toHaveBeenCalledTimes(7);
+    expect(output.totalShards).toBe(7);
+    expect(output.shardsAnalyzed).toBe(6);
+    expect(output.scopeStatus).toBe("partial_by_failure");
+    expect(output.verdict).toBe("COMMENT");
+  },
+);
+
 it("runs successive shards in stable lanes with bounded concurrency", async () => {
   const services = createMockServices({
     changedLines: [],

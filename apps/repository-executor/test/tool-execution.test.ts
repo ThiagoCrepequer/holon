@@ -59,6 +59,31 @@ it("rejects invalid, expired and excessively distant deadlines", () => {
   }
 });
 
+it("identifies the two rejected deadline branches with numeric metadata", () => {
+  vi.useFakeTimers();
+  const observe = vi.fn();
+  for (const remaining of [-1, 100_000])
+    expect(
+      () => new ToolExecution(Date.now() + remaining, () => {}, observe),
+    ).toThrow();
+  expect(observe.mock.calls.map(([fields]) => fields)).toEqual([
+    {
+      stage: "deadline_expired",
+      durationMs: 0,
+      outcome: "rejected",
+      remainingMs: -1,
+      budgetMs: 90_000,
+    },
+    {
+      stage: "deadline_out_of_range",
+      durationMs: 0,
+      outcome: "rejected",
+      remainingMs: 100_000,
+      budgetMs: 90_000,
+    },
+  ]);
+});
+
 it("returns successful work even when logging fails, and bounds cleanup acknowledgement", async () => {
   vi.useFakeTimers();
   const retained: Promise<unknown>[] = [];

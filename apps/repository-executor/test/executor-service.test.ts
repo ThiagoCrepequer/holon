@@ -235,13 +235,15 @@ describe("RepositoryExecutorService", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "TenancyError",
-          change: "deleted",
+          change: "modified",
           kind: "class",
+          line: 3,
         }),
         expect.objectContaining({
           name: "TenancyErrorCode",
-          change: "deleted",
+          change: "modified",
           kind: "type",
+          line: 2,
         }),
       ]),
     );

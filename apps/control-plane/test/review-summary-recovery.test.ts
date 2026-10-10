@@ -221,9 +221,9 @@ it.each(scenarios)(
       expect(status.status).toBe("errored");
     } else {
       expect(status.status).toBe("complete");
-      const output = status.output as ReturnType<
-        typeof parseModelReviewTransport
-      >;
+      const { output } = status.output as {
+        output: ReturnType<typeof parseModelReviewTransport>;
+      };
       expect(output.findings).toEqual(
         parseModelReviewTransport(initial).findings,
       );
